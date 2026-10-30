@@ -29,123 +29,124 @@
     <!-- ============================================================ -->
     <!-- FORM -->
     <!-- ============================================================ -->
+    @if (CanEntry || CanUpdate)
+    {
+        <div class="main-card mf-form-card">
 
-    <div class="main-card mf-form-card">
+            <div class="section-header">
 
-        <div class="section-header">
+                <h3 class="section-title">
+                    @(_isEditing
+                        ? "Edit CSR Exceeding Day Setting"
+                        : "Add CSR Exceeding Day Setting")
+                </h3>
 
-            <h3 class="section-title">
-                @(_isEditing
-                    ? "Edit CSR Exceeding Day Setting"
-                    : "Add CSR Exceeding Day Setting")
-            </h3>
-
-        </div>
-
-
-        <div class="row g-3 mb-4 mf-form-row">
+            </div>
 
 
-            <!-- CSR1 Day -->
+            <div class="row g-3 mb-4 mf-form-row">
 
-            <div class="col-md-4">
+
+                <!-- CSR1 Day -->
+
+                <div class="col-md-4">
 
                 <label class="form-label-custom">
                     CSR1 Day <span class="text-danger">*</span>
                 </label>
 
-                <input type="number"
-                       class="form-control-custom w-100"
-                       placeholder="Enter CSR1 Day"
-                       min="1"
-                       max="31"
-                       @bind="_formModel.CSR1Day" />
+                    <input type="number"
+                           class="form-control-custom w-100"
+                           placeholder="Enter CSR1 Day"
+                           min="1"
+                           max="31"
+                           @bind="_formModel.CSR1Day"
+                           disabled="@(!CanEditForm)" />
 
-            </div>
+                </div>
 
 
-            <!-- CSR2 Day -->
+                <!-- CSR2 Day -->
 
-            <div class="col-md-4">
+                <div class="col-md-4">
 
                 <label class="form-label-custom">
                     CSR2 Day <span class="text-danger">*</span>
                 </label>
 
-                <input type="number"
-                       class="form-control-custom w-100"
-                       placeholder="Enter CSR2 Day"
-                       min="1"
-                       max="31"
-                       @bind="_formModel.CSR2Day" />
+                    <input type="number"
+                           class="form-control-custom w-100"
+                           placeholder="Enter CSR2 Day"
+                           min="1"
+                           max="31"
+                           @bind="_formModel.CSR2Day"
+                           disabled="@(!CanEditForm)" />
 
-            </div>
+                </div>
 
 
-            <!-- Active -->
+                <!-- Active -->
 
-            <div class="col-md-4">
+                <div class="col-md-4">
 
-                <label class="form-label-custom d-block mf-align-label">
-                    Status
-                </label>
-
-                <div class="status-toggle-box @(_formModel.IsActive ? "" : "status-toggle-inactive")">
-
-                    <span>
-                        @(_formModel.IsActive
-                            ? "Active"
-                            : "Inactive")
-                    </span>
-
-                    <label class="switch">
-
-                        <input type="checkbox"
-                               @bind="_formModel.IsActive">
-
-                        <span class="slider"></span>
-
+                    <label class="form-label-custom d-block mf-align-label">
+                        Status
                     </label>
+
+                    <div class="status-toggle-box @(_formModel.IsActive ? "" : "status-toggle-inactive")">
+
+                        <span>
+                            @(_formModel.IsActive
+                                ? "Active"
+                                : "Inactive")
+                        </span>
+
+                        <label class="switch">
+
+                            <input type="checkbox"
+                                   @bind="_formModel.IsActive"
+                                   disabled="@(!CanEditForm)">
+
+                            <span class="slider"></span>
+
+                        </label>
+
+                    </div>
 
                 </div>
 
             </div>
 
-        </div>
 
+            <div class="d-flex justify-content-end pt-2 mt-4 mf-form-actions">
 
-        <div class="d-flex justify-content-end pt-2 mt-4 mf-form-actions">
+                <button type="button"
+                        class="btn-cancel mt-3"
+                        @onclick="ResetForm">
+
+                    <i class="bi bi-x"></i>
+                    Cancel
+
+                </button>
+
 
             <button type="button"
-                    class="btn-cancel mt-3"
-                    @onclick="ResetForm">
+                    class="btn-save mt-3"
+                    @onclick="HandleSave"
+                    disabled="@_isSaving">
 
-                <i class="bi bi-x"></i>
-                Cancel
+                <i class="bi bi-save"></i>
+
+                @(_isSaving
+                    ? "Saving..."
+                    : "Save")
 
             </button>
 
-
-            @if ((!_isEditing && LoginState.Can(PagePermission.CSRExceedingDaySetting, "Entry"))
-                || (_isEditing && LoginState.Can(PagePermission.CSRExceedingDaySetting, "Update")))
-            {
-                <button type="button"
-                        class="btn-save mt-3"
-                        @onclick="HandleSave"
-                        disabled="@_isSaving">
-
-                    <i class="bi bi-save"></i>
-
-                    @(_isSaving
-                        ? "Saving..."
-                        : "Save")
-
-                </button>
-            }
+            </div>
 
         </div>
-
-    </div>
+    }
 
 
     <!-- ============================================================ -->
@@ -271,7 +272,10 @@
 
             <th>Created At</th>
 
-            <th>Action</th>
+            @if (CanUpdate || CanDelete)
+            {
+                <th>Action</th>
+            }
 
         </TableHeader>
 
@@ -466,6 +470,11 @@
     private const string ApiBase =
         "api/CSRExceedingDaySetting";
 
+    private bool CanEntry => LoginState.Can(SPIC.Core.Entities.PagePermission.CSRExceedingDaySetting, "Entry");
+    private bool CanUpdate => LoginState.Can(SPIC.Core.Entities.PagePermission.CSRExceedingDaySetting, "Update");
+    private bool CanDelete => LoginState.Can(SPIC.Core.Entities.PagePermission.CSRExceedingDaySetting, "Delete");
+    private bool CanEditForm => _isEditing ? CanUpdate : CanEntry;
+
 
     // =========================================================
     // DATA
@@ -611,6 +620,12 @@
 
     private async Task HandleSave()
     {
+        if (_isSaving) return;
+        if (!CanEditForm)
+        {
+            ShowMessage("You do not have permission to save this setting.", true);
+            return;
+        }
         if (_formModel.CSR1Day < 1 ||
             _formModel.CSR1Day > 31)
         {
@@ -739,6 +754,7 @@
     private void EditItem(
         CSRExceedingDaySettingDto item)
     {
+        if (!CanUpdate) return;
         _isEditing = true;
 
         _editingId = item.Id;
@@ -763,6 +779,11 @@
     private async Task ToggleStatus(
         CSRExceedingDaySettingDto item)
     {
+        if (!CanUpdate)
+        {
+            ShowMessage("You do not have permission to change status.", true);
+            return;
+        }
         try
         {
             var newStatus =
@@ -812,6 +833,7 @@
     private void DeleteItem(
         CSRExceedingDaySettingDto item)
     {
+        if (!CanDelete) return;
         _deleteTarget = item;
 
         _showDeleteConfirm = true;
@@ -820,6 +842,13 @@
 
     private async Task ConfirmDelete()
     {
+        if (_isDeleting) return;
+        if (!CanDelete)
+        {
+            CancelDelete();
+            ShowMessage("You do not have permission to delete this setting.", true);
+            return;
+        }
         if (_deleteTarget == null)
             return;
 

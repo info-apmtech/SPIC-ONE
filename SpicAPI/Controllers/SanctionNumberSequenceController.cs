@@ -14,7 +14,7 @@ namespace SpicAPI.Controllers
 {
     [ApiController]
     [Route("api/SanctionNumberSequence")]
-    [Authorize(Roles = "Admin,SuperAdmin")]
+    [Authorize] // Do not require Admin/SuperAdmin just to read sequence data.
     public class SanctionNumberSequenceController : ControllerBase
     {
         private readonly AppDbContext _db;
@@ -27,8 +27,7 @@ namespace SpicAPI.Controllers
         private string? UserId =>
             User.FindFirstValue(ClaimTypes.NameIdentifier);
 
-        // One read projection for list and individual sequence responses.
-        // Left joins keep legacy rows visible if a master reference needs repair.
+        // Left joins preserve legacy rows even when master references need repair.
         private IQueryable<SanctionNumberSequenceDto> SequenceQuery()
         {
             return
@@ -119,7 +118,11 @@ namespace SpicAPI.Controllers
             return row == null ? NotFound() : Ok(row);
         }
 
+        // Preserve the existing API write restriction. The UI's Entry permission
+        // is not a substitute for backend authorization. Integrate an API-side
+        // designation/page permission check before enabling non-admin Entry roles.
         [HttpPost]
+        [Authorize(Roles = "Admin,SuperAdmin")]
         public async Task<IActionResult> Create(
             [FromBody] CreateSanctionNumberSequenceDto dto,
             CancellationToken ct)
@@ -231,8 +234,6 @@ namespace SpicAPI.Controllers
                 });
             }
 
-            // Use the masters already validated above for the create response.
-            // This avoids another database read after the insert has committed.
             var result = new SanctionNumberSequenceDto
             {
                 Id = row.Id,
@@ -253,8 +254,7 @@ namespace SpicAPI.Controllers
             return CreatedAtAction(nameof(Get), new { id = row.Id }, result);
         }
 
-        // Codes are maintained in the State/Region masters, so no code-edit PUT.
-        // No delete, reset or increment endpoint is exposed here.
+        // No delete, reset, increment or code-edit endpoint is exposed here.
         // Only final CSR-1 approval may atomically advance a sequence.
     }
 }

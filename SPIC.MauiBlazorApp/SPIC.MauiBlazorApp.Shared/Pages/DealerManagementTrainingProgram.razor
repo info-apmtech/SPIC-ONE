@@ -521,9 +521,9 @@ else if (csr1Plan != null)
                                       title="@video.FileName">
                                     @video.FileName
                                     (@FormatVideoSize(
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                video.Bytes.LongLength > 0
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    ? video.Bytes.LongLength
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    : video.SavedFileSize))
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    video.Bytes.LongLength > 0
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        ? video.Bytes.LongLength
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        : video.SavedFileSize))
                                 </span>
 
                                 <input type="text"
@@ -870,7 +870,12 @@ else if (csr1Plan != null)
                                                             <span title="@proof.FileName"><i class="bi bi-paperclip"></i> @proof.FileName</span>
                                                             @if (CanEditCurrentCSR2)
                                                             {
-                                                                <button type="button" class="dmtp-link-remove" @onclick="() => RemoveExpenseProof(item, proof)">Remove</button>
+                                                                <button type="button"
+                                                                        class="dmtp-link-remove"
+                                                                        disabled="@proofDeleteBusy"
+                                                                        @onclick="() => DeleteExpenseProofAsync(item, proof)">
+                                                                    <i class="bi bi-trash"></i> Delete
+                                                                </button>
                                                             }
                                                         </div>
                                                     }
@@ -3059,11 +3064,49 @@ else if (csr1Plan != null)
         }
     }
 
-    private void RemoveExpenseProof(ExpenseItem item, ExpenseProofItem proof)
+    private bool proofDeleteBusy;
+
+    private async Task DeleteExpenseProofAsync(ExpenseItem item, ExpenseProofItem proof)
     {
-        if (proof.ProofId.HasValue) removedProofIds.Add(proof.ProofId.Value);
-        item.Proofs.Remove(proof);
+        if (proofDeleteBusy || !CanEditCurrentCSR2)
+            return;
+
+        proofDeleteBusy = true;
         item.Error = "";
+
+        try
+        {
+            // Newly selected proof that is not yet saved in DB.
+            if (!proof.ProofId.HasValue || proof.ProofId.Value <= 0)
+            {
+                item.Proofs.Remove(proof);
+                return;
+            }
+
+            using var response = await Http.DeleteAsync($"api/CSR2/proof/{proof.ProofId.Value}");
+
+            if (!response.IsSuccessStatusCode &&
+                response.StatusCode != System.Net.HttpStatusCode.NotFound)
+            {
+                var message = await response.Content.ReadAsStringAsync();
+                throw new Exception(string.IsNullOrWhiteSpace(message)
+                    ? $"HTTP {(int)response.StatusCode}"
+                    : message);
+            }
+
+            // Delete succeeded (or proof was already absent), so update UI immediately.
+            removedProofIds.RemoveAll(x => x == proof.ProofId.Value);
+            item.Proofs.Remove(proof);
+        }
+        catch (Exception ex)
+        {
+            item.Error = $"Unable to delete proof '{proof.FileName}': {ex.Message}";
+            ShowCsr2Alert(item.Error);
+        }
+        finally
+        {
+            proofDeleteBusy = false;
+        }
     }
 
     // API: GET api/CSR2/all
