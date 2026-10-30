@@ -1624,11 +1624,19 @@ namespace SpicAPI.Controllers
                 string.IsNullOrWhiteSpace(report.ActualLocation))
                 return BadRequest("Complete all mandatory actual event details before applying.");
 
-            if (!report.Media.Any(x => x.MediaType == "Photo"))
-                return BadRequest("At least one Event Photo is required.");
+            // JMDO may apply CSR-2 without event media. For all other roles,
+            // retain the existing mandatory photo and video validation.
+            var effectiveRoles = await GetEffectiveCSR2RolesAsync();
+            var isJmdoLogin = HasRole(effectiveRoles, "JMDO");
 
-            if (!report.Media.Any(x => x.MediaType == "Video"))
-                return BadRequest("At least one Event Video is required.");
+            if (!isJmdoLogin)
+            {
+                if (!report.Media.Any(x => x.MediaType == "Photo"))
+                    return BadRequest("At least one Event Photo is required.");
+
+                if (!report.Media.Any(x => x.MediaType == "Video"))
+                    return BadRequest("At least one Event Video is required.");
+            }
 
             if (!report.Participants.Any())
                 return BadRequest("At least one Participant is required.");
@@ -1862,7 +1870,7 @@ namespace SpicAPI.Controllers
             var extensions = isPhoto
                 ? new[] { ".jpg", ".jpeg", ".png" }
                 : isVideo
-                    ? new[] { ".mp4", ".mov" }
+                    ? new[] { ".mp4", ".mov", ".webm" }
                     : new[] { ".pdf", ".doc", ".docx" };
 
             if (file == null ||
@@ -2037,6 +2045,7 @@ namespace SpicAPI.Controllers
                 ".doc" => "application/msword",
                 ".docx" => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                 ".mov" => "video/quicktime",
+                ".webm" => "video/webm",
                 _ => "video/mp4"
             };
             var key = $"{reportId}/{Guid.NewGuid():N}{ext}";
