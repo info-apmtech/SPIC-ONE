@@ -5,95 +5,383 @@
 @inject HttpClient Http
 
 <PageTitle>Budget Reallocations</PageTitle>
-<div class="container-fluid py-4">
-    <div class="alert alert-info">Budget availability and State/Region/HQ access checks must be mapped to the existing allocation schema before Apply or Approve can succeed. The API blocks these operations until configured.</div>
-    <div class="card shadow-sm border-0">
-        <div class="card-body p-4">
-            <h4 class="mb-1">Budget Reallocations</h4>
-            <p class="text-muted">Request, review and approve budget transfers</p>
-            @if (!string.IsNullOrWhiteSpace(message))
-            {
-                <div class="alert @(isError ? "alert-danger" : "alert-success")" role="alert">@message</div>
-            }
-            <h5 class="mt-4 mb-3">New Reallocation Request</h5>
-            @if (applyContext is null)
-            {
-                <div class="alert alert-warning">Initiator applyContext unavailable. Sign in as RM, SMM or Admin, and verify API access.</div>
-            }
-            else
-            {
-                <div class="mb-3"><label class="form-label">Initiated by</label><div class="fw-semibold">@applyContext.InitiatorRole</div></div>
-                <EditForm Model="form" OnValidSubmit="ApplyAsync">
-                    <DataAnnotationsValidator />
-                    <ValidationSummary />
-                    <div class="row g-3">
-                        <div class="col-md-6">
-                            <label class="form-label">From Budget - Level</label>
-                            <InputSelect class="form-select" @bind-Value="form.SourceLevel">
-                                <option value="1">State</option>
-                                <option value="2">Region</option>
-                                <option value="3">HQ</option>
-                            </InputSelect>
-                            <label class="form-label mt-2">From Budget - State/Region/HQ ID</label>
-                            <InputNumber class="form-control" @bind-Value="form.SourceId" />
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label">To Budget - Level</label>
-                            <InputSelect class="form-select" @bind-Value="form.DestinationLevel">
-                                <option value="1">State</option>
-                                <option value="2">Region</option>
-                                <option value="3">HQ</option>
-                            </InputSelect>
-                            <label class="form-label mt-2">To Budget - State/Region/HQ ID</label>
-                            <InputNumber class="form-control" @bind-Value="form.DestinationId" />
-                        </div>
-                        <div class="col-md-6"><label class="form-label">Reallocation Amount (₹)</label><InputNumber class="form-control" @bind-Value="form.Amount" /></div>
-                        <div class="col-md-6"><label class="form-label">Financial Year ID</label><InputNumber class="form-control" @bind-Value="form.FinancialYearId" /></div>
-                        <div class="col-12"><label class="form-label">Reason for Reallocation</label><InputTextArea class="form-control" rows="3" @bind-Value="form.Reason" /></div>
-                    </div>
-                    <div class="mt-3 mb-3"><label class="form-label">Approval route</label><div class="fw-semibold">@string.Join(" → ", applyContext.ApprovalRoute)</div></div>
-                    <button type="submit" disabled="@busy" class="btn btn-dark w-100">@(busy ? "Applying..." : "Apply Reallocation")</button>
-                </EditForm>
-            }
+<style>
+    .br-shell {
+        max-width: 1180px;
+        margin: auto;
+    }
+
+    .br-card {
+        border: 1px solid #e5e9ef;
+        border-radius: 14px;
+        padding: 24px;
+        background: #fff;
+        margin-bottom: 18px;
+    }
+
+    .br-muted {
+        color: #687484;
+        font-size: .88rem
+    }
+
+    .br-info {
+        border: 1px solid #f2d9d9;
+        background: #fff7f7;
+        border-radius: 10px;
+        padding: 15px
+    }
+
+    .br-kpi {
+        border: 1px solid #e5e9ef;
+        border-radius: 10px;
+        padding: 14px;
+        background: #fafcff;
+        height: 100%
+    }
+
+        .br-kpi strong {
+            font-size: 1.16rem;
+            display: block;
+            margin-top: 4px
+        }
+
+    .br-route {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap
+    }
+
+        .br-route span {
+            background: #edf1f5;
+            border-radius: 20px;
+            padding: 6px 12px;
+            font-size: .83rem;
+            font-weight: 600
+        }
+
+    .br-label {
+        font-size: .85rem;
+        color: #526172;
+        margin-bottom: 5px;
+        display: block
+    }
+
+    .br-section-title {
+        font-size: 1.03rem;
+        font-weight: 600;
+        margin-bottom: 13px
+    }
+</style>
+<div class="container-fluid py-4 br-shell">
+    <div class="br-card">
+        <div class="d-flex justify-content-between align-items-start mb-4">
+            <div><h4 class="mb-1">Budget Reallocations</h4><div class="br-muted">Request, review and approve budget transfers</div></div>
+            <span class="badge bg-light text-dark border">SPIC</span>
         </div>
-    </div>
-    <div class="card shadow-sm border-0 mt-4">
-        <div class="card-body">
-            <div class="d-flex align-items-center justify-content-between mb-3"><h5 class="mb-0">Reallocation Requests</h5><button class="btn btn-outline-secondary btn-sm" @onclick="LoadRequestsAsync">Refresh</button></div>
-            <div class="table-responsive">
-                <table class="table table-striped align-middle">
-                    <thead><tr><th>Request</th><th>FY ID</th><th>From</th><th>To</th><th>Amount</th><th>Status</th><th>Action</th></tr></thead>
-                    <tbody>
-                        @foreach (var item in requests)
-                        {
-                            <tr>
-                                <td>@item.Id</td>
-                                <td>@item.FinancialYearId</td>
-                                <td>@item.SourceLevel / @item.SourceId</td>
-                                <td>@item.DestinationLevel / @item.DestinationId</td>
-                                <td>₹@item.Amount.ToString("N2")</td>
-                                <td>@item.Status</td>
-                                <td>
-                                    @if (contextRoleCanApprove(item.Status))
-                                    {
-                                        <button class="btn btn-sm btn-outline-success me-1" disabled="@busy" @onclick="() => DecideAsync(item.Id, true)">Approve</button>
-                                        <button class="btn btn-sm btn-outline-danger" disabled="@busy" @onclick="() => DecideAsync(item.Id, false)">Reject</button>
-                                    }
-                                </td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
+        @if (!string.IsNullOrWhiteSpace(message))
+        {
+            <div class="alert @(isError ? "alert-danger" : "alert-success")">@message</div>
+        }
+        <h5 class="br-section-title">New Reallocation Request</h5>
+        @if (applyContext is null)
+        {
+            <div class="alert alert-warning">Apply permissions are unavailable for this login. Verify the authenticated role and API access.</div>
+        }
+        else
+        {
+            <div class="rounded-3 p-3 bg-light mb-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <div><span class="br-muted">Initiated by</span><div class="fw-bold">@applyContext.InitiatorRole</div></div>
+                <span class="badge rounded-pill text-bg-secondary">@ReallocationTypeLabel</span>
             </div>
-            <label class="form-label">Approval / Rejection Remarks</label><InputTextArea class="form-control" @bind-Value="remarks" />
+            <EditForm Model="form" OnValidSubmit="ApplyAsync">
+                <DataAnnotationsValidator />
+                <ValidationSummary />
+                <div class="row g-3 mb-3">
+                    <div class="col-md-6">
+                        <label class="br-label">Financial Year</label>
+                        <InputSelect class="form-select" TValue="int" Value="form.FinancialYearId" ValueChanged="OnFinancialYearChanged" ValueExpression="() => form.FinancialYearId">
+                            <option value="0">Select Financial Year</option>
+                            @foreach (var year in financialYears)
+                            {
+                                <option value="@year.Id">@year.Label</option>
+                            }
+                        </InputSelect>
+                    </div>
+                    @if (selectedLevel != ReallocationLevel.State)
+                    {
+                        <div class="col-md-6">
+                            <label class="br-label">State</label>
+                            <select class="form-select" value="@selectedStateId" @onchange="OnStateChanged" disabled="@(form.FinancialYearId <= 0 || IsAssignedStateRole)">
+                                <option value="0">Select State</option>
+                                @foreach (var opt in states)
+                                {
+                                    <option value="@opt.Id">@opt.Label</option>
+                                }
+                            </select>
+                        </div>
+                    }
+                    @if (selectedLevel == ReallocationLevel.Headquarters)
+                    {
+                        <div class="col-md-6">
+                            <label class="br-label">Region</label>
+                            <select class="form-select" value="@selectedRegionId" @onchange="OnRegionChanged" disabled="@(selectedStateId <= 0 || IsAssignedRmRole)">
+                                <option value="0">Select Region</option>
+                                @foreach (var opt in regions)
+                                {
+                                    <option value="@opt.Id">@opt.Label</option>
+                                }
+                            </select>
+                        </div>
+                    }
+                </div>
+                <div class="br-info mb-3">
+                    <div class="d-flex align-items-center gap-2 mb-1"><i class="bi bi-exclamation-triangle text-danger"></i><strong>CSR-2 Budget Shortage</strong></div>
+                    <div class="br-muted mb-2">When a CSR-2 approval is blocked by insufficient funds, transfer an available budget to the affected destination. Recheck approval after MD HOD approval.</div>
+                    <div class="row g-2">
+                        <div class="col-sm-6"><div class="br-kpi"><span class="br-muted">Selected destination</span><strong>@(budgets.FirstOrDefault(x => x.Id == form.DestinationId)?.Label ?? "Not selected")</strong></div></div>
+                        <div class="col-sm-6"><div class="br-kpi"><span class="br-muted">Destination remaining after approved CSR-2 expenses</span><strong>@Money(budgets.FirstOrDefault(x => x.Id == form.DestinationId)?.Available)</strong></div></div>
+                    </div>
+                </div>
+                <h5 class="br-section-title">Reallocation Details</h5>
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="br-label">From @LevelLabel</label>
+                        <InputSelect class="form-select" TValue="int" @bind-Value="form.SourceId" disabled="@(budgets.Count == 0)">
+                            <option value="0">Select From Budget</option>
+                            @foreach (var opt in budgets)
+                            {
+                                <option value="@opt.Id">@opt.Label</option>
+                            }
+                        </InputSelect>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="br-label">To @LevelLabel</label>
+                        <InputSelect class="form-select" TValue="int" @bind-Value="form.DestinationId" disabled="@(budgets.Count == 0)">
+                            <option value="0">Select To Budget</option>
+                            @foreach (var opt in budgets.Where(x => x.Id != form.SourceId))
+                            {
+                                <option value="@opt.Id">@opt.Label</option>
+                            }
+                        </InputSelect>
+                    </div>
+                    @if (form.FinancialYearId > 0 && budgets.Count == 0)
+                    {
+                        <div class="col-12"><div class="alert alert-warning py-2 mb-0">No eligible budgets found. Check approved allocation status and your assigned State/Region scope.</div></div>
+                    }
+                    <div class="col-md-6"><div class="br-kpi"><span class="br-muted">Source Available Budget</span><strong>@Money(budgets.FirstOrDefault(x => x.Id == form.SourceId)?.Available)</strong><small class="br-muted">After approved CSR-2 expenses; excludes pending commitments</small>@if (form.SourceId > 0 && budgets.FirstOrDefault(x => x.Id == form.SourceId)?.AvailabilityIssue is string availabilityIssue) {
+                        <div class="text-danger small mt-1">@availabilityIssue</div>
+                    }
+                </div></div>
+                @if (selectedLevel == ReallocationLevel.State)
+                {
+                    <div class="col-md-6"><div class="br-kpi"><span class="br-muted">Source State Budget Allocation</span><strong>@Money(budgets.FirstOrDefault(x => x.Id == form.SourceId)?.StateAllocatedBudget)</strong><small class="br-muted">Total records from StateBudgetAllocations for selected State and financial year; not necessarily spendable</small></div></div>
+                }
+                <div class="col-md-6"><div class="br-kpi"><span class="br-muted">Source Balance After Transfer (estimate)</span><strong>@Money(EstimatedSourceRemaining)</strong><small class="br-muted">Final balance is rechecked by the API</small></div></div>
+                <div class="col-md-6"><div class="br-kpi"><span class="br-muted">Source Approved CSR-2 Expenses</span><strong>@Money(budgets.FirstOrDefault(x => x.Id == form.SourceId)?.ApprovedCSR2Expense)</strong></div></div>
+                <div class="col-md-6"><div class="br-kpi"><span class="br-muted">Destination Approved CSR-2 Expenses</span><strong>@Money(budgets.FirstOrDefault(x => x.Id == form.DestinationId)?.ApprovedCSR2Expense)</strong></div></div>
+                <div class="col-12"><label class="br-label">Reallocation Amount (₹)</label><InputNumber class="form-control" min="0" step="0.01" @bind-Value="form.Amount" /></div>
+                @if (form.SourceId > 0 && form.Amount > 0 && budgets.FirstOrDefault(x => x.Id == form.SourceId)?.Available is decimal available && form.Amount > available)
+                {
+                    <div class="col-12"><div class="text-danger small">Source budget shortage: @((form.Amount - available).ToString("N2"))</div></div>
+                }
+                <div class="col-12"><label class="br-label">Reason for Reallocation</label><InputTextArea class="form-control" rows="3" @bind-Value="form.Reason" placeholder="Explain the budget requirement and related CSR-2 shortage" /></div>
+            </div>
+            <div class="mt-3 mb-3">
+                <label class="br-label">Approval route</label><div class="br-route">
+                @foreach (var stage in applyContext.ApprovalRoute)
+                {
+                    <span>@stage</span>
+                }
+            </div>
         </div>
+        <button type="submit" disabled="@(busy || form.SourceId == 0 || form.DestinationId == 0 || form.SourceId == form.DestinationId || form.FinancialYearId == 0 || !budgets.Any(x => x.Id == form.SourceId && x.Available.HasValue && x.Available.Value >= form.Amount && form.Amount > 0))" class="btn btn-dark w-100">@(busy ? "Applying..." : "Apply Reallocation")</button>
+    </EditForm>
+}
+</div>
+<div class="br-card">
+    <div class="d-flex align-items-center justify-content-between mb-3"><h5 class="mb-0">Reallocation Requests</h5><button class="btn btn-outline-secondary btn-sm" @onclick="LoadRequestsAsync">Refresh</button></div>
+    <div class="table-responsive">
+        <table class="table table-striped align-middle">
+            <thead><tr><th>Request</th><th>FY ID</th><th>From</th><th>To</th><th>Amount</th><th>Status</th><th>Action</th></tr></thead>
+            <tbody>
+                @foreach (var item in requests)
+                {
+                    <tr>
+                        <td>@item.Id</td>
+                        <td>@item.FinancialYearId</td>
+                        <td>@item.SourceLevel / @item.SourceId</td>
+                        <td>@item.DestinationLevel / @item.DestinationId</td>
+                        <td>₹@item.Amount.ToString("N2")</td>
+                        <td>@item.Status</td>
+                        <td>
+                            @if (contextRoleCanApprove(item.Status))
+                            {
+                                <button class="btn btn-sm btn-outline-success me-1" disabled="@busy" @onclick="() => DecideAsync(item.Id, true)">Approve</button>
+                                <button class="btn btn-sm btn-outline-danger" disabled="@busy" @onclick="() => DecideAsync(item.Id, false)">Reject</button>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
     </div>
+    <label class="form-label">Approval / Rejection Remarks</label><InputTextArea class="form-control" @bind-Value="remarks" />
+</div>
 </div>
 
 @code {
+    private string LevelLabel => selectedLevel == ReallocationLevel.State ? "State" : selectedLevel == ReallocationLevel.Region ? "Region" : "Headquarters";
+    private string ReallocationTypeLabel => $"{LevelLabel} to {LevelLabel}";
+    private static string Money(decimal? value) => value.HasValue ? $"₹{value.Value:N2}" : "—";
+    private decimal? EstimatedSourceRemaining => budgets.FirstOrDefault(x => x.Id == form.SourceId)?.Available - form.Amount;
     private CreateBudgetReallocationDto form = NewForm();
     private ApplyContextDto? applyContext;
     private List<RequestRow> requests = new();
+    private List<BudgetOption> financialYears = new();
+    private List<BudgetOption> states = new();
+    private List<BudgetOption> regions = new();
+    private List<BudgetOption> budgets = new();
+    private int selectedStateId;
+    private int selectedRegionId;
+    private ReallocationLevel selectedLevel = ReallocationLevel.Region;
+    private sealed class BudgetOption
+    {
+        public int Id { get; set; }
+        public string Label { get; set; } = string.Empty;
+        public decimal? Available { get; set; }
+        public decimal? StateAllocatedBudget { get; set; }
+        public string? AvailabilityIssue { get; set; }
+        public decimal? ApprovedCSR2Expense { get; set; }
+    }
+    private bool IsAssignedStateRole => currentRoles.Contains("SMM") || currentRoles.Contains("RM");
+    private bool IsAssignedRmRole => currentRoles.Contains("RM");
+    private sealed class AssignedGeography { public int StateId { get; set; } public int RegionId { get; set; } }
+    private sealed class RegionLookup { public int RegionId { get; set; } public string RegionName { get; set; } = string.Empty; }
+    private sealed class HeadquartersLookup { public int HeadquarterId { get; set; } public string HeadquarterName { get; set; } = string.Empty; }
+    private async Task<List<BudgetOption>> LoadRegionOptionsAsync()
+    {
+        if (selectedStateId <= 0 || form.FinancialYearId <= 0) return new();
+        // State Budget Management is the existing authoritative geography/name lookup.
+        var lookup = await Http.GetFromJsonAsync<List<RegionLookup>>(
+            $"api/Budget/regions-budget?stateId={selectedStateId}&fy={form.FinancialYearId}") ?? new();
+        var spendable = await GetOptionsAsync($"api/budget-reallocations/budget-options?financialYearId={form.FinancialYearId}&level=2&stateId={selectedStateId}");
+        return lookup.Select(r =>
+        {
+            var approved = spendable.FirstOrDefault(x => x.Id == r.RegionId);
+            return new BudgetOption
+            {
+                Id = r.RegionId,
+                Label = r.RegionName,
+                Available = approved?.Available,
+                ApprovedCSR2Expense = approved?.ApprovedCSR2Expense,
+                AvailabilityIssue = approved?.AvailabilityIssue ?? "No matching Region allocation record for this financial year."
+            };
+        }).ToList();
+    }
+    private async Task<List<BudgetOption>> LoadHeadquartersOptionsAsync()
+    {
+        if (selectedRegionId <= 0 || form.FinancialYearId <= 0) return new();
+        var lookup = await Http.GetFromJsonAsync<List<HeadquartersLookup>>(
+            $"api/Budget/hq-budget?regionId={selectedRegionId}&fy={form.FinancialYearId}") ?? new();
+        var spendable = await GetOptionsAsync($"api/budget-reallocations/budget-options?financialYearId={form.FinancialYearId}&level=3&stateId={selectedStateId}&regionId={selectedRegionId}");
+        return lookup.Select(h =>
+        {
+            var approved = spendable.FirstOrDefault(x => x.Id == h.HeadquarterId);
+            return new BudgetOption
+            {
+                Id = h.HeadquarterId,
+                Label = h.HeadquarterName,
+                Available = approved?.Available,
+                ApprovedCSR2Expense = approved?.ApprovedCSR2Expense,
+                AvailabilityIssue = approved?.AvailabilityIssue ?? "No matching Headquarters allocation record for this financial year."
+            };
+        }).ToList();
+    }
+    private async Task LoadAssignedRegionAsync()
+    {
+        if (!IsAssignedRmRole) return;
+        var assignment = await Http.GetFromJsonAsync<AssignedGeography>("api/budget-reallocations/assigned-geography");
+        if (assignment == null || assignment.RegionId <= 0 || assignment.StateId != selectedStateId)
+        {
+            Show("RM employee State/Region mapping is missing or inconsistent.", true);
+            return;
+        }
+        if (!regions.Any(x => x.Id == assignment.RegionId))
+        {
+            Show("Assigned Region was not returned by the Region budget lookup.", true);
+            return;
+        }
+        selectedRegionId = assignment.RegionId;
+        budgets = await LoadHeadquartersOptionsAsync();
+    }
+
+    private async Task OnFinancialYearChanged(int value)
+    {
+        form.FinancialYearId = value;
+        selectedStateId = 0; selectedRegionId = 0;
+        states.Clear(); regions.Clear(); budgets.Clear(); ResetBudgetSelection();
+        if (value <= 0) return;
+
+        states = await GetOptionsAsync($"api/budget-reallocations/budget-options?financialYearId={value}&level=1");
+        if (selectedLevel == ReallocationLevel.State)
+        {
+            budgets = states;
+            return;
+        }
+        // Only SMM/RM auto-select their server-authorized, single assigned State.
+        if (IsAssignedStateRole && states.Count == 1)
+        {
+            selectedStateId = states[0].Id;
+            try
+            {
+                regions = await LoadRegionOptionsAsync();
+                if (selectedLevel == ReallocationLevel.Region) budgets = regions;
+                else if (selectedLevel == ReallocationLevel.Headquarters) await LoadAssignedRegionAsync();
+            }
+            catch (Exception ex) { Show("Unable to load Region/Headquarters choices: " + ex.Message, true); }
+        }
+    }
+    private async Task OnStateChanged(ChangeEventArgs e)
+    {
+        int.TryParse(e.Value?.ToString(), out selectedStateId);
+        selectedRegionId = 0; regions.Clear(); budgets.Clear(); ResetBudgetSelection();
+        if (selectedLevel == ReallocationLevel.State) { budgets = states; return; }
+        if (selectedStateId <= 0) return;
+        try
+        {
+            regions = await LoadRegionOptionsAsync();
+            if (selectedLevel == ReallocationLevel.Region) budgets = regions;
+            else if (selectedLevel == ReallocationLevel.Headquarters) await LoadAssignedRegionAsync();
+        }
+        catch (Exception ex) { Show("Unable to load Region options: " + ex.Message, true); }
+    }
+    private async Task OnLevelChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var val) && Enum.IsDefined(typeof(ReallocationLevel), val))
+            selectedLevel = (ReallocationLevel)val;
+        selectedRegionId = 0; budgets.Clear(); ResetBudgetSelection();
+        if (selectedLevel == ReallocationLevel.Region) budgets = regions;
+    }
+    private async Task OnRegionChanged(ChangeEventArgs e)
+    {
+        int.TryParse(e.Value?.ToString(), out selectedRegionId);
+        budgets.Clear(); ResetBudgetSelection();
+        if (selectedRegionId > 0)
+            try { budgets = await LoadHeadquartersOptionsAsync(); }
+            catch (Exception ex) { Show("Unable to load Headquarters options: " + ex.Message, true); }
+    }
+    private void ResetBudgetSelection()
+    {
+        form.SourceId = 0; form.DestinationId = 0;
+        form.SourceLevel = selectedLevel; form.DestinationLevel = selectedLevel;
+    }
+    private async Task<List<BudgetOption>> GetOptionsAsync(string url)
+    {
+        try { return await Http.GetFromJsonAsync<List<BudgetOption>>(url) ?? new(); }
+        catch (Exception ex) { Show("Unable to load budget options: " + ex.Message, true); return new(); }
+    }
+
     private string message = string.Empty;
     private string remarks = string.Empty;
     private bool isError;
@@ -109,13 +397,24 @@
     {
         try
         {
-            var roleInfo = await Http.GetFromJsonAsync<RoleContextDto>("api/budget-reallocations/role-applyContext");
+            var roleInfo = await Http.GetFromJsonAsync<RoleContextDto>("api/budget-reallocations/role-context");
             currentRoles = new HashSet<string>(roleInfo?.Roles ?? new(), StringComparer.OrdinalIgnoreCase);
-            using var response = await Http.GetAsync("api/budget-reallocations/apply-applyContext");
+            using var response = await Http.GetAsync("api/budget-reallocations/apply-context");
             if (response.IsSuccessStatusCode)
+            {
                 applyContext = await response.Content.ReadFromJsonAsync<ApplyContextDto>();
+                if (applyContext != null)
+                {
+                    selectedLevel = applyContext.ReallocationLevel;
+                    ResetBudgetSelection();
+                }
+            }
         }
-        catch (Exception ex) { Show("Unable to load reallocation applyContext: " + ex.Message, true); }
+        catch (Exception ex) { Show("Unable to load reallocation context: " + ex.Message, true); }
+        try { financialYears = await GetOptionsAsync("api/budget-reallocations/financial-years"); }
+        catch (Exception ex) { Show(ex.Message, true); }
+        if (financialYears.Count > 0 && form.FinancialYearId == 0)
+            await OnFinancialYearChanged(financialYears[0].Id);
         await LoadRequestsAsync();
     }
     private async Task LoadRequestsAsync()
@@ -132,7 +431,7 @@
             var response = await Http.PostAsJsonAsync("api/budget-reallocations", form);
             if (!response.IsSuccessStatusCode) { Show(await response.Content.ReadAsStringAsync(), true); return; }
             Show("Budget reallocation application submitted for approval.", false);
-            form = NewForm();
+            var fy = form.FinancialYearId; form = NewForm(); form.FinancialYearId = fy; ResetBudgetSelection();
             await LoadRequestsAsync();
         }
         catch (Exception ex) { Show(ex.Message, true); }
@@ -167,6 +466,7 @@
     private sealed class ApplyContextDto
     {
         public string InitiatorRole { get; set; } = string.Empty;
+        public ReallocationLevel ReallocationLevel { get; set; }
         public List<string> ApprovalRoute { get; set; } = new();
     }
     private sealed class RequestRow
