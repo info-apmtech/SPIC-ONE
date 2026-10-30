@@ -1,8 +1,8 @@
 @page "/DefaultWelcome"
+@inject NavigationManager Nav
 
 @*
-    Default landing page (LoginState.DefaultLandingPath). Just a welcome screen - no cards, menus,
-    statistics or other dashboard content.
+    Default landing page (LoginState.DefaultLandingPath).
 
     Deliberately independent of Pages/Welcome.razor, which remains the "no designation assigned"
     screen with its own markup, layout and wording. Nothing is shared between the two.
@@ -10,91 +10,369 @@
     No @layout is declared, so the router default (MainLayout) applies and the normal app shell
     provides navigation. Registered in PageGuard's _alwaysOpen set because it is the destination of
     LandingPage; without that it would be denied and redirected back to itself, looping forever.
+
+    Hero photo: no real agri/factory photograph exists anywhere in this project's assets, so
+    .dw-hero-image-inner currently shows a brand-colour gradient placeholder instead of a broken
+    image. Once a real photo is supplied, drop it at
+    wwwroot/Images/LayoutImages/welcome-hero.jpg and uncomment the background-image rule below
+    (search "REPLACE WITH REAL PHOTO").
 *@
 
-<div class="welcome-wrap">
-    <div class="welcome-card">
-      @*   <div class="welcome-icon">👋</div> *@
+<div class="dw-wrap">
+    <div class="dw-hero">
+        <div class="dw-hero-text">
+            <h1 class="dw-title">
+                WELCOME TO<br />
+                <span class="dw-title-accent">SPIC</span>
+            </h1>
+            <h2 class="dw-tagline">Nourishing People.<br />Nurturing the Future.</h2>
+            <p class="dw-sub">
+                Empowering farmers, communities and businesses through innovative and
+                sustainable Agri solutions.
+            </p>
+            <button type="button" class="dw-cta" @onclick="GetStarted">
+                Get Started <i class="bi bi-chevron-double-right"></i>
+            </button>
+        </div>
+        <div class="dw-hero-image">
+            <div class="dw-hero-image-inner"></div>
+        </div>
+    </div>
 
-        <h1 class="welcome-title">Welcome to SPIC ONE</h1>
+    <div class="dw-cards">
+        <div class="dw-card">
+            <i class="bi bi-flower1 dw-card-watermark dw-watermark-green"></i>
+            <div class="dw-card-icon dw-icon-green"><i class="bi bi-flower1"></i></div>
+            <h3 class="dw-card-title">Quality Agri Products</h3>
+            <p class="dw-card-sub">For better yield and healthier Lives</p>
+        </div>
+        <div class="dw-card">
+            <i class="bi bi-people-fill dw-card-watermark dw-watermark-blue"></i>
+            <div class="dw-card-icon dw-icon-blue"><i class="bi bi-people-fill"></i></div>
+            <h3 class="dw-card-title">Stronger Communities</h3>
+            <p class="dw-card-sub">Supporting farmers and rural growth</p>
+        </div>
+        <div class="dw-card">
+            <i class="bi bi-lightbulb-fill dw-card-watermark dw-watermark-orange"></i>
+            <div class="dw-card-icon dw-icon-orange"><i class="bi bi-lightbulb-fill"></i></div>
+            <h3 class="dw-card-title">Innovation for Growth</h3>
+            <p class="dw-card-sub">Driving sustainable agri solutions.</p>
+        </div>
+        <div class="dw-card">
+            <i class="bi bi-shield-check dw-card-watermark dw-watermark-purple"></i>
+            <div class="dw-card-icon dw-icon-purple"><i class="bi bi-shield-check"></i></div>
+            <h3 class="dw-card-title">Responsible Business</h3>
+            <p class="dw-card-sub">For a greener and brighter tomorrow.</p>
+        </div>
     </div>
 </div>
 
 <style>
-    .welcome-wrap {
-        /* Fills .main-content's own height (Layout.css gives it a definite flex
-           height = 100vh minus the topbar) rather than claiming a fresh 100vh on
-           top of it, which overflowed .main-content and forced its scrollbar. */
-        height: 100%;
+    .dw-wrap {
+        /* .main-content (Layout.css) is flex:1 and always fills the full app-shell
+           height itself, with its own background-color - if this page is shorter
+           than that, .main-content's background shows through as a visibly
+           different-coloured band below the cards. min-height:100% makes this
+           page's own gradient background extend the same full height instead, so
+           there's no seam, while the gap/spacing BUGS inside the layout (hero-to-
+           cards spacing) are fixed separately in the flex rules below - this is not
+           a reintroduction of that earlier problem. */
+        min-height: 110%;
         /* .main-content (Layout.css) has its own padding: 16px 24px 28px - the
            negative margins below cancel that out on all four sides so this
-           gradient bleeds to .main-content's actual edges instead of sitting
-           inset inside it. The matching height bump makes up the vertical
-           room the negative top/bottom margins open up (height:100% alone
-           doesn't grow to fill margin space, only width:auto does). */
+           page bleeds to .main-content's actual edges instead of sitting
+           inset inside it. */
         margin: -16px -24px -28px -24px;
-        height: calc(100% + 16px + 28px);
+        padding: clamp(48px, 6vh, 88px) 48px clamp(56px, 7vh, 96px);
+        font-family: 'Segoe UI', Arial, sans-serif;
+        background: linear-gradient(135deg, #ffffff 0%, #ffffff 55%, #e8f6ee 100%);
+    }
+
+    /* ---------- Hero ---------- */
+    .dw-hero {
+        display: flex;
+        align-items: center;
+        gap: 56px;
+        margin-bottom: clamp(56px, 7vh, 96px);
+    }
+
+    .dw-hero-text {
+        flex: 0 1 580px;
+        min-width: 0;
+    }
+
+    .dw-title {
+        margin: 0 0 20px;
+        font-size: 3.2rem;
+        font-weight: 800;
+        line-height: 1.15;
+        color: #1f3b2d;
+        letter-spacing: 0.5px;
+    }
+
+    .dw-title-accent {
+        color: #0a6b3d;
+    }
+
+    .dw-tagline {
+        margin: 0 0 18px;
+        font-size: 1.75rem;
+        font-weight: 600;
+        line-height: 1.3;
+        color: #1f2937;
+    }
+
+    .dw-sub {
+        margin: 0 0 32px;
+        max-width: 540px;
+        font-size: 1.1rem;
+        line-height: 1.65;
+        color: #6b7280;
+    }
+
+    .dw-cta {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        border: none;
+        background: #0a6b3d;
+        color: #fff;
+        font-weight: 600;
+        font-size: 1.1rem;
+        padding: 17px 34px;
+        border-radius: 10px;
+        cursor: pointer;
+        transition: background 0.15s ease;
+    }
+
+        .dw-cta:hover {
+            background: #085a33;
+        }
+
+    .dw-hero-image {
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+
+    .dw-hero-image-inner {
+        width: 100%;
+        /* Scales with the actual viewport height (not just width/aspect-ratio) so the
+           hero grows on tall monitors/maximized windows instead of leaving trailing
+           dead space no fixed px value could ever fully predict. Aspect-ratio alone
+           only reacts to the column's width, which is why enlarging fixed sizes kept
+           losing the race against taller and taller screens. */
+        height: clamp(280px, 42vh, 560px);
+        border-radius: 260px 24px 24px 260px;
+        background: url('_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/welcome-hero.png') center / cover no-repeat;
+        box-shadow: 0 20px 50px rgba(10, 107, 61, 0.18);
+    }
+
+    /* ---------- Feature cards ---------- */
+    .dw-cards {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 24px;
+    }
+
+    .dw-card {
+        position: relative;
+        overflow: hidden;
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: 16px;
+        padding: 30px 26px;
+    }
+
+    .dw-card-icon {
         display: flex;
         align-items: center;
         justify-content: center;
-        padding: 24px;
-        background: linear-gradient(135deg, #0a6b3d 0%, #1f3b2d 100%);
-        font-family: 'Segoe UI', Arial, sans-serif;
+        width: 58px;
+        height: 58px;
+        border-radius: 14px;
+        font-size: 1.65rem;
+        margin-bottom: 20px;
     }
 
-    .welcome-card {
-        width: 100%;
-        max-width: 460px;
-        background: rgba(255, 255, 255, 0.95);
-        border: 1px solid rgba(244, 216, 0, 0.35);
-        border-radius: 18px;
-        padding: 40px 32px;
-        text-align: center;
-        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
-        backdrop-filter: blur(8px);
+    .dw-icon-green {
+        background: #dcfce7;
+        color: #16a34a;
     }
 
-    .welcome-icon {
-        font-size: 3rem;
-        margin-bottom: 8px;
+    .dw-icon-blue {
+        background: #dbeafe;
+        color: #2563eb;
     }
 
-    .welcome-title {
-        color: #1f3b2d;
-        font-size: 1.6rem;
+    .dw-icon-orange {
+        background: #ffedd5;
+        color: #ea580c;
+    }
+
+    .dw-icon-purple {
+        background: #ede9fe;
+        color: #7c3aed;
+    }
+
+    /* Decorative watermark - a large, faint echo of each card's own icon sitting
+       behind the text, bottom-right. .dw-card already has position:relative and
+       overflow:hidden, so this just needs absolute positioning. */
+    .dw-card-watermark {
+        position: absolute;
+        right: -20px;
+        bottom: -26px;
+        font-size: 7.5rem;
+        line-height: 1;
+        opacity: 0.14;
+        pointer-events: none;
+        z-index: 0;
+    }
+
+    .dw-watermark-green {
+        color: #16a34a;
+    }
+
+    .dw-watermark-blue {
+        color: #2563eb;
+    }
+
+    .dw-watermark-orange {
+        color: #ea580c;
+    }
+
+    .dw-watermark-purple {
+        color: #7c3aed;
+    }
+
+    .dw-card-icon,
+    .dw-card-title,
+    .dw-card-sub {
+        position: relative;
+        z-index: 1;
+    }
+
+    .dw-card-title {
+        margin: 0 0 8px;
+        font-size: 1.2rem;
         font-weight: 700;
+        color: #111827;
+    }
+
+    .dw-card-sub {
         margin: 0;
+        font-size: 0.95rem;
+        line-height: 1.55;
+        color: #6b7280;
     }
 
     /* tablet: .main-content's padding narrows to 16px 16px 24px (Layout.css) */
     @@media (min-width: 768px) and (max-width: 1199.98px) {
-        .welcome-wrap {
+        .dw-wrap {
             margin: -16px -16px -24px -16px;
-            height: calc(100% + 16px + 24px);
+            padding: 24px 24px 32px;
+        }
+
+        .dw-title {
+            font-size: 2.2rem;
+        }
+
+        .dw-tagline {
+            font-size: 1.3rem;
+        }
+    }
+
+    /* below 992px: stack hero (image above text, matching the mobile reference) and
+       drop feature cards to a 2-column grid */
+    @@media (max-width: 991.98px) {
+        .dw-hero {
+            flex-direction: column;
+            align-items: stretch;
+            gap: 28px;
+        }
+
+        .dw-hero-text {
+            /* flex-basis:520px is meant as a WIDTH for the desktop row layout - in this
+               stacked column layout it would be read as a forced HEIGHT instead,
+               leaving dead space below the button. Let it size to its own content. */
+            flex: 0 1 auto;
+            order: 2;
+        }
+
+        .dw-hero-image {
+            flex: 0 0 auto;
+            order: 1;
+        }
+
+        .dw-hero {
+            gap: 18px;
+        }
+
+        .dw-hero-image-inner {
+            height: auto;
+            aspect-ratio: 2.2 / 1;
+            border-radius: 150px 16px 16px 150px;
+        }
+
+        .dw-cards {
+            grid-template-columns: repeat(2, 1fr);
         }
     }
 
     /* native: phone */
     @@media (max-width: 767.98px) {
-        .welcome-wrap {
-            min-height: 100dvh;
-            padding: calc(16px + var(--safe-top, 0px)) 16px calc(16px + var(--safe-bottom, 0px));
-            align-items: flex-start;
+        .dw-wrap {
+            min-height: 110dvh;
+            margin: calc(-16px - var(--safe-top, 0px)) -16px calc(-16px - var(--safe-bottom, 0px));
+            padding: calc(20px + var(--safe-top, 0px)) 16px calc(20px + var(--safe-bottom, 0px));
         }
 
-        .welcome-card {
-            max-width: none;
-            padding: 28px 20px;
-            border-radius: 16px;
-            margin-top: 8vh;
+        .dw-title {
+            font-size: 1.9rem;
         }
 
-        .welcome-icon {
-            font-size: 2.5rem;
+        .dw-tagline {
+            font-size: 1.2rem;
         }
 
-        .welcome-title {
-            font-size: 1.4rem;
+        .dw-sub {
+            font-size: 0.92rem;
+        }
+
+        .dw-cta {
+            width: 100%;
+            justify-content: center;
+            min-height: 48px;
+        }
+
+        .dw-hero {
+            gap: 14px;
+        }
+
+        .dw-hero-image-inner {
+            height: auto;
+            aspect-ratio: 2.2 / 1;
+            border-radius: 150px 16px 16px 150px;
+            
+        }
+
+        .dw-cards {
+            gap: 14px;
+        }
+
+        .dw-card {
+            padding: 16px 14px;
+        }
+
+        .dw-card-watermark {
+            font-size: 4.2rem;
+            right: -10px;
+            bottom: -14px;
         }
     }
 </style>
+
+@code {
+    // No fixed "home" route exists for every role, so Get Started sends the user into the
+    // app shell's own dashboard entry point rather than a specific feature page.
+    private void GetStarted() => Nav.NavigateTo("/Dashboard");
+}
