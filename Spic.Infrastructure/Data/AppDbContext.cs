@@ -1027,5 +1027,7 @@ namespace Spic.Infrastructure.Data
         public DbSet<ExpenseInformation> ExpenseInformations { get; set; }
         public DbSet<CSRExceedingDaySetting> CSRExceedingDaySettings { get; set; }
         public DbSet<GpsSetting> GpsSettings { get; set; }
+        public DbSet<BudgetReallocation> BudgetReallocations { get; set; }
+        public DbSet<BudgetReallocationApproval> BudgetReallocationApprovals { get; set; }
     }
 }
