@@ -136,6 +136,13 @@
 
             <div class="fpm-modal-body">
                 <div class="fpm-field">
+                    <label>Product Group</label>
+                    <select @bind="editGroup">
+                        <option value="Live Stock">Live Stock</option>
+                        <option value="Orchard">Orchard</option>
+                    </select>
+                </div>
+                <div class="fpm-field">
                     <label>Product Name</label>
                     <input type="text" @bind="editName" />
                 </div>
@@ -392,6 +399,7 @@
     }
 
     private static string GroupDisplay(string apiGroup) => apiGroup == "LiveStock" ? "Live Stock" : "Orchard";
+    private static string GroupApi(string uiGroup) => uiGroup == "Live Stock" ? "LiveStock" : "Orchard";
 
     private List<ApiFarmProduct> rows = new();
     private bool _loading;
@@ -402,6 +410,7 @@
     private string searchQuery = "";
 
     private ApiFarmProduct? editRow;
+    private string editGroup = "Live Stock";
     private string editName = "";
     private string editUom = "";
     private decimal editRate;
@@ -454,6 +463,7 @@
     private void OpenEdit(ApiFarmProduct row)
     {
         editRow = row;
+        editGroup = GroupDisplay(row.Group);
         editName = row.Name;
         editUom = row.Uom;
         editRate = row.CurrentRate;
@@ -483,6 +493,7 @@
             var response = await Http.PutAsJsonAsync($"api/FarmProduct/products/{editRow.Id}", new
             {
                 Name = editName.Trim(),
+                Group = GroupApi(editGroup),
                 Uom = editUom.Trim(),
                 CurrentRate = editRate,
                 IsActive = editIsActive

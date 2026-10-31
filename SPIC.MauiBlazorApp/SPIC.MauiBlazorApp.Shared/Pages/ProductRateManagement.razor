@@ -108,11 +108,14 @@
                     <button type="button" class="prm-action-btn prm-action-view" title="View" @onclick="() => ViewRow(row)">
                         <i class="bi bi-eye"></i>
                     </button>
-                    @if (LoginState.Can(SPIC.Core.Entities.PagePermission.productRateManagement, "Entry"))
+                    @if (LoginState.Can(SPIC.Core.Entities.PagePermission.productRateManagement, "Update") || LoginState.Can(SPIC.Core.Entities.PagePermission.productRateManagement, "Entry"))
                     {
                         <button type="button" class="prm-action-btn prm-action-edit" title="Edit" @onclick="() => EditRow(row)">
                             <i class="bi bi-pencil-square"></i>
                         </button>
+                    }
+                    @if (LoginState.Can(SPIC.Core.Entities.PagePermission.productRateManagement, "Delete") || LoginState.Can(SPIC.Core.Entities.PagePermission.productRateManagement, "Entry"))
+                    {
                         <button type="button" class="prm-action-btn prm-action-delete" title="Delete" @onclick="() => DeleteRow(row)">
                             <i class="bi bi-trash"></i>
                         </button>
@@ -125,11 +128,14 @@
             <button type="button" class="prm-action-btn prm-action-view" title="View" @onclick="() => ViewRow(row)">
                 <i class="bi bi-eye"></i>
             </button>
-            @if (LoginState.Can(SPIC.Core.Entities.PagePermission.productRateManagement, "Entry"))
+            @if (LoginState.Can(SPIC.Core.Entities.PagePermission.productRateManagement, "Update") || LoginState.Can(SPIC.Core.Entities.PagePermission.productRateManagement, "Entry"))
             {
                 <button type="button" class="prm-action-btn prm-action-edit" title="Edit" @onclick="() => EditRow(row)">
                     <i class="bi bi-pencil-square"></i>
                 </button>
+            }
+            @if (LoginState.Can(SPIC.Core.Entities.PagePermission.productRateManagement, "Delete") || LoginState.Can(SPIC.Core.Entities.PagePermission.productRateManagement, "Entry"))
+            {
                 <button type="button" class="prm-action-btn prm-action-delete" title="Delete" @onclick="() => DeleteRow(row)">
                     <i class="bi bi-trash"></i>
                 </button>
@@ -166,91 +172,57 @@
             </div>
 
             <div class="prm-modal-body">
-                @if (ShowFullProductFields)
+                <div class="prm-toggle-group">
+                    <button type="button" class='prm-toggle-btn @(formProductGroup == "Live Stock" ? "active" : "")' @onclick='() => formProductGroup = "Live Stock"'>Live Stock</button>
+                    <button type="button" class='prm-toggle-btn @(formProductGroup == "Orchard" ? "active" : "")' @onclick='() => formProductGroup = "Orchard"'>Orchard</button>
+                </div>
+
+                <div class="prm-field">
+                    <label>Product</label>
+                    <input type="text" @bind="formProductName" placeholder="e.g. Sheep" />
+                </div>
+
+                <div class="prm-field-row">
+                    <div class="prm-field">
+                        <label>UOM</label>
+                        <select @bind="formUom">
+                            <option value="Kg">Kg</option>
+                            <option value="Unit">Unit</option>
+                            <option value="Litre">Litre</option>
+                            <option value="Nos">Nos</option>
+                        </select>
+                    </div>
+                    <div class="prm-field">
+                        <label>Price</label>
+                        <input type="number" min="0" @bind="formRate" placeholder="Enter Price" />
+                    </div>
+                </div>
+
+                <div class="prm-field">
+                    <label>Reason <span class="prm-field-optional">(Optional)</span></label>
+                    <textarea @bind="formReason" rows="3" placeholder="e.g. Need to track dairy cattle separately."></textarea>
+                </div>
+
+                @if (editingRow is null)
                 {
-                    <div class="prm-toggle-group">
-                        <button type="button" class='prm-toggle-btn @(formProductGroup == "Live Stock" ? "active" : "")' @onclick='() => formProductGroup = "Live Stock"'>Live Stock</button>
-                        <button type="button" class='prm-toggle-btn @(formProductGroup == "Orchard" ? "active" : "")' @onclick='() => formProductGroup = "Orchard"'>Orchard</button>
-                    </div>
-
-                    <div class="prm-field">
-                        <label>Product</label>
-                        <input type="text" @bind="formProductName" placeholder="e.g. Sheep" />
-                    </div>
-
-                    <div class="prm-field-row">
-                        <div class="prm-field">
-                            <label>UOM</label>
-                            <select @bind="formUom">
-                                <option value="Kg">Kg</option>
-                                <option value="Unit">Unit</option>
-                                <option value="Litre">Litre</option>
-                                <option value="Nos">Nos</option>
-                            </select>
-                        </div>
-                        <div class="prm-field">
-                            <label>Price</label>
-                            <input type="number" min="0" @bind="formRate" placeholder="Enter Price" />
-                        </div>
-                    </div>
-
-                    <div class="prm-field">
-                        <label>Reason</label>
-                        <textarea @bind="formReason" rows="3" placeholder="e.g. Need to track dairy cattle separately."></textarea>
-                    </div>
-
                     <div class="prm-note">
                         <i class="bi bi-exclamation-triangle"></i>
                         <span>This will appear as a new product awaiting Admin approval.</span>
                     </div>
                 }
-                else
+                else if (editingRow.Status != "Rejected" && !editingPendingRequestId.HasValue)
                 {
-                    <div class="prm-field-row">
-                        <div class="prm-field">
-                            <label>Product Group</label>
-                            <select disabled>
-                                <option>@editingRow.Group</option>
-                            </select>
-                        </div>
-                        <div class="prm-field">
-                            <label>Product</label>
-                            <select disabled>
-                                <option>@editingRow.Name</option>
-                            </select>
-                        </div>
+                    <div class="prm-note">
+                        <i class="bi bi-info-circle"></i>
+                        <span>This request will be submitted to Admin for review. Changes will take effect once approved.</span>
                     </div>
-
-                    <div class="prm-field-row">
-                        <div class="prm-field">
-                            <label>UOM</label>
-                            <select disabled>
-                                <option>@editingRow.Uom</option>
-                            </select>
-                        </div>
-                        <div class="prm-field">
-                            <label>Price</label>
-                            <input type="number" min="0" @bind="formRate" placeholder="Enter Price" />
-                        </div>
-                    </div>
-
-                    <div class="prm-field">
-                        <label>Reason</label>
-                        <textarea @bind="formReason" rows="3" placeholder="Need to track dairy cattle separately."></textarea>
-                    </div>
-
-                    <p style="font-size: 13px; color: var(--text-soft); margin-top: 5px;">
-                        @(editingRow.Name) will be added inside the @(editingRow.Group.ToLower()) section.
-                        <br/>
-                        Product not Listed <a href="#" @onclick:preventDefault @onclick="OpenAddModal" style="color: var(--primary); font-weight: 600; text-decoration: underline;">Request New Product</a>
-                    </p>
                 }
             </div>
 
             <div class="prm-modal-footer">
                 <button type="button" class="prm-btn prm-btn-outline" style="background: #f3f4f6; color: var(--text-main); border:none;" @onclick="CloseFormModal">Close</button>
-                <button type="button" class="prm-btn prm-btn-primary" @onclick="SubmitForm">
-                    @(editingRow is null ? "Request Product" : (editingRow.Status == "Rejected" ? "Resubmit Request" : "Update Request"))
+                <button type="button" class="prm-btn prm-btn-primary" @onclick="HandleModalSubmit">
+                    @(editingRow is null ? "Request Product" : (editingRow.Status == "Rejected" ? "Resubmit Request" : (editingPendingRequestId.HasValue ? "Update Request" : "Submit Request")))
                 </button>
             </div>
         </div>
@@ -916,6 +888,12 @@
         margin-bottom: 6px;
     }
 
+    .prm-field-optional {
+        font-weight: 400;
+        text-transform: none;
+        letter-spacing: normal;
+    }
+
     .prm-field input,
     .prm-field select,
     .prm-field textarea {
@@ -1551,12 +1529,12 @@
     private int? editingPendingRequestId;
     private ProductRow? viewingRow;
 
-    private bool ShowFullProductFields =>
-        editingRow is null || (editingPendingRequestId.HasValue && editingRow.RequestType == "New Product");
+    private bool IsEditingApprovedProduct =>
+        editingRow is not null && editingRow.ProductId.HasValue && !editingPendingRequestId.HasValue;
 
     private string ModalTitle => editingPendingRequestId.HasValue
         ? (editingRow?.Status == "Rejected" ? "Resubmit Request" : "Edit Request")
-        : (editingRow is null ? "Request New Product" : "Request Rate Change");
+        : (editingRow is null ? "Request New Product" : "Request Rate / Detail Change");
 
     private string ModalSubtitle => editingPendingRequestId.HasValue
         ? (editingRow?.Status == "Rejected"
@@ -1564,9 +1542,8 @@
             : "Update your pending request before Admin reviews it.")
         : (editingRow is null
             ? "Tell Admin what you want to add to the catalog."
-            : "Request a new rate for an existing product, it will be reviewed and approved by admin");
+            : $"Submit a change request for {editingRow.Name} to Admin for approval.");
 
-    private string formExistingProductId = "";
     private string formProductName = "";
     private string formProductGroup = "Live Stock";
     private string formUom = "Kg";
@@ -1630,7 +1607,6 @@
     {
         editingRow = null;
         editingPendingRequestId = null;
-        formExistingProductId = "";
         formProductName = "";
         formProductGroup = "Live Stock";
         formUom = "Kg";
@@ -1646,7 +1622,7 @@
         {
             editingRow = row;
             editingPendingRequestId = row.RequestId;
-            formProductName = row.RequestType == "New Product" ? row.Name : "";
+            formProductName = row.Name;
             formProductGroup = row.Group;
             formUom = row.Uom;
             formRate = row.RequestRateValue;
@@ -1658,15 +1634,22 @@
         // An item still awaiting approval (has no catalog product ID and not editable)
         if (row.ProductId is null)
         {
-            Toast.Error("This product is still awaiting approval - you can't request a rate change yet.");
+            Toast.Error("This product is still awaiting approval - you can't edit it yet.");
             return;
         }
 
         editingRow = row;
         editingPendingRequestId = null;
-        formExistingProductId = row.ProductId.Value.ToString();
-        formRate = null;
-        formReason = "";
+        formProductName = row.Name;
+        formProductGroup = row.Group;
+        formUom = row.Uom;
+        formRate = row.RequestRateValue;
+        if (formRate is null && row.ProductId.HasValue)
+        {
+            var p = _products.FirstOrDefault(x => x.Id == row.ProductId.Value);
+            if (p is not null) formRate = p.CurrentRate;
+        }
+        formReason = row.Reason ?? "";
         showFormModal = true;
     }
 
@@ -1703,7 +1686,7 @@
         }
     }
 
-    private async Task SubmitForm()
+    private async Task HandleModalSubmit()
     {
         if (formRate is null || formRate <= 0)
         {
@@ -1711,59 +1694,68 @@
             return;
         }
 
-        if (string.IsNullOrWhiteSpace(formReason))
+        if (string.IsNullOrWhiteSpace(formProductName) || string.IsNullOrWhiteSpace(formUom))
         {
-            Toast.Error("Enter a reason for this request.");
+            Toast.Error("Enter a product name and UOM.");
             return;
         }
 
+        // Case 1: Editing a pending request or resubmitting a rejected request
         if (editingPendingRequestId.HasValue)
         {
             await SaveEditOfPendingRequest(editingPendingRequestId.Value);
             return;
         }
 
-        object payload;
-
-        if (editingRow is not null)
+        // Case 2: Editing an existing catalog product: submit a Rate Change / Edit request to Admin
+        if (editingRow is not null && editingRow.ProductId.HasValue)
         {
-            if (!int.TryParse(formExistingProductId, out var id))
-            {
-                Toast.Error("Select a product.");
-                return;
-            }
-
-            payload = new
+            var rateChangePayload = new
             {
                 RequestType = "RateChange",
-                FarmProductId = id,
-                Uom = editingRow.Uom,
-                Rate = formRate.Value,
-                Reason = formReason.Trim()
-            };
-        }
-        else
-        {
-            if (string.IsNullOrWhiteSpace(formProductName) || string.IsNullOrWhiteSpace(formUom))
-            {
-                Toast.Error("Enter a product name and UOM.");
-                return;
-            }
-
-            payload = new
-            {
-                RequestType = "NewProduct",
+                FarmProductId = editingRow.ProductId.Value,
                 ProductName = formProductName.Trim(),
                 Group = GroupApi(formProductGroup),
                 Uom = formUom.Trim(),
                 Rate = formRate.Value,
                 Reason = formReason.Trim()
             };
+
+            try
+            {
+                var response = await Http.PostAsJsonAsync("api/FarmProduct/requests", rateChangePayload);
+                if (!response.IsSuccessStatusCode)
+                {
+                    var message = await response.Content.ReadAsStringAsync();
+                    Toast.Error(string.IsNullOrWhiteSpace(message) ? "Failed to submit request." : message);
+                    return;
+                }
+
+                Toast.Success("Request submitted to Admin for approval.");
+                showFormModal = false;
+                await LoadDataAsync();
+            }
+            catch (Exception ex)
+            {
+                Toast.Error("Failed to submit request: " + ex.Message);
+            }
+            return;
         }
+
+        // Case 3: Creating a new product request
+        var newPayload = new
+        {
+            RequestType = "NewProduct",
+            ProductName = formProductName.Trim(),
+            Group = GroupApi(formProductGroup),
+            Uom = formUom.Trim(),
+            Rate = formRate.Value,
+            Reason = formReason.Trim()
+        };
 
         try
         {
-            var response = await Http.PostAsJsonAsync("api/FarmProduct/requests", payload);
+            var response = await Http.PostAsJsonAsync("api/FarmProduct/requests", newPayload);
             if (!response.IsSuccessStatusCode)
             {
                 var message = await response.Content.ReadAsStringAsync();
@@ -1771,7 +1763,7 @@
                 return;
             }
 
-            Toast.Success("Request submitted.");
+            Toast.Success("New product request submitted to Admin for approval.");
             showFormModal = false;
             await LoadDataAsync();
         }
@@ -1783,34 +1775,20 @@
 
     private async Task SaveEditOfPendingRequest(int requestId)
     {
-        object payload;
-
-        if (editingRow!.RequestType == "New Product")
+        if (string.IsNullOrWhiteSpace(formProductName) || string.IsNullOrWhiteSpace(formUom))
         {
-            if (string.IsNullOrWhiteSpace(formProductName) || string.IsNullOrWhiteSpace(formUom))
-            {
-                Toast.Error("Enter a product name and UOM.");
-                return;
-            }
+            Toast.Error("Enter a product name and UOM.");
+            return;
+        }
 
-            payload = new
-            {
-                ProductName = formProductName.Trim(),
-                Group = GroupApi(formProductGroup),
-                Uom = formUom.Trim(),
-                Rate = formRate!.Value,
-                Reason = formReason.Trim()
-            };
-        }
-        else
+        var payload = new
         {
-            payload = new
-            {
-                Uom = editingRow.Uom,
-                Rate = formRate!.Value,
-                Reason = formReason.Trim()
-            };
-        }
+            ProductName = formProductName.Trim(),
+            Group = GroupApi(formProductGroup),
+            Uom = formUom.Trim(),
+            Rate = formRate!.Value,
+            Reason = formReason.Trim()
+        };
 
         try
         {
