@@ -781,6 +781,99 @@ namespace Spic.Infrastructure.Migrations
                     b.ToTable("BudgetProgramMains");
                 });
 
+            modelBuilder.Entity("SPIC.Core.Entities.BudgetReallocation", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int>("DestinationId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("DestinationLevel")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("FinancialYearId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("InitiatedBy")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("InitiatorRole")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<int>("SourceId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SourceLevel")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("BudgetReallocations");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.BudgetReallocationApproval", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("ApprovedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("ApprovedBy")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<int>("BudgetReallocationId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Decision")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Remarks")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("StageRole")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BudgetReallocationId");
+
+                    b.ToTable("BudgetReallocationApprovals");
+                });
+
             modelBuilder.Entity("SPIC.Core.Entities.CSR1", b =>
                 {
                     b.Property<int>("Id")
@@ -11114,6 +11207,17 @@ namespace Spic.Infrastructure.Migrations
                     b.Navigation("FinancialYear");
                 });
 
+            modelBuilder.Entity("SPIC.Core.Entities.BudgetReallocationApproval", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.BudgetReallocation", "BudgetReallocation")
+                        .WithMany("Approvals")
+                        .HasForeignKey("BudgetReallocationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("BudgetReallocation");
+                });
+
             modelBuilder.Entity("SPIC.Core.Entities.CSR1ApprovalDetails", b =>
                 {
                     b.HasOne("SPIC.Core.Entities.CSR1", "CSR1")
@@ -12136,6 +12240,11 @@ namespace Spic.Infrastructure.Migrations
                     b.Navigation("Histories");
 
                     b.Navigation("Programs");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.BudgetReallocation", b =>
+                {
+                    b.Navigation("Approvals");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.CSR2", b =>

@@ -1,0 +1,183 @@
+﻿@page "/BudgetReallocations"
+@using System.Net.Http.Json
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
+@inject HttpClient Http
+
+<PageTitle>Budget Reallocations</PageTitle>
+<div class="container-fluid py-4">
+    <div class="alert alert-info">Budget availability and State/Region/HQ access checks must be mapped to the existing allocation schema before Apply or Approve can succeed. The API blocks these operations until configured.</div>
+    <div class="card shadow-sm border-0">
+        <div class="card-body p-4">
+            <h4 class="mb-1">Budget Reallocations</h4>
+            <p class="text-muted">Request, review and approve budget transfers</p>
+            @if (!string.IsNullOrWhiteSpace(message))
+            {
+                <div class="alert @(isError ? "alert-danger" : "alert-success")" role="alert">@message</div>
+            }
+            <h5 class="mt-4 mb-3">New Reallocation Request</h5>
+            @if (applyContext is null)
+            {
+                <div class="alert alert-warning">Initiator applyContext unavailable. Sign in as RM, SMM or Admin, and verify API access.</div>
+            }
+            else
+            {
+                <div class="mb-3"><label class="form-label">Initiated by</label><div class="fw-semibold">@applyContext.InitiatorRole</div></div>
+                <EditForm Model="form" OnValidSubmit="ApplyAsync">
+                    <DataAnnotationsValidator />
+                    <ValidationSummary />
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label">From Budget - Level</label>
+                            <InputSelect class="form-select" @bind-Value="form.SourceLevel">
+                                <option value="1">State</option>
+                                <option value="2">Region</option>
+                                <option value="3">HQ</option>
+                            </InputSelect>
+                            <label class="form-label mt-2">From Budget - State/Region/HQ ID</label>
+                            <InputNumber class="form-control" @bind-Value="form.SourceId" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">To Budget - Level</label>
+                            <InputSelect class="form-select" @bind-Value="form.DestinationLevel">
+                                <option value="1">State</option>
+                                <option value="2">Region</option>
+                                <option value="3">HQ</option>
+                            </InputSelect>
+                            <label class="form-label mt-2">To Budget - State/Region/HQ ID</label>
+                            <InputNumber class="form-control" @bind-Value="form.DestinationId" />
+                        </div>
+                        <div class="col-md-6"><label class="form-label">Reallocation Amount (₹)</label><InputNumber class="form-control" @bind-Value="form.Amount" /></div>
+                        <div class="col-md-6"><label class="form-label">Financial Year ID</label><InputNumber class="form-control" @bind-Value="form.FinancialYearId" /></div>
+                        <div class="col-12"><label class="form-label">Reason for Reallocation</label><InputTextArea class="form-control" rows="3" @bind-Value="form.Reason" /></div>
+                    </div>
+                    <div class="mt-3 mb-3"><label class="form-label">Approval route</label><div class="fw-semibold">@string.Join(" → ", applyContext.ApprovalRoute)</div></div>
+                    <button type="submit" disabled="@busy" class="btn btn-dark w-100">@(busy ? "Applying..." : "Apply Reallocation")</button>
+                </EditForm>
+            }
+        </div>
+    </div>
+    <div class="card shadow-sm border-0 mt-4">
+        <div class="card-body">
+            <div class="d-flex align-items-center justify-content-between mb-3"><h5 class="mb-0">Reallocation Requests</h5><button class="btn btn-outline-secondary btn-sm" @onclick="LoadRequestsAsync">Refresh</button></div>
+            <div class="table-responsive">
+                <table class="table table-striped align-middle">
+                    <thead><tr><th>Request</th><th>FY ID</th><th>From</th><th>To</th><th>Amount</th><th>Status</th><th>Action</th></tr></thead>
+                    <tbody>
+                        @foreach (var item in requests)
+                        {
+                            <tr>
+                                <td>@item.Id</td>
+                                <td>@item.FinancialYearId</td>
+                                <td>@item.SourceLevel / @item.SourceId</td>
+                                <td>@item.DestinationLevel / @item.DestinationId</td>
+                                <td>₹@item.Amount.ToString("N2")</td>
+                                <td>@item.Status</td>
+                                <td>
+                                    @if (contextRoleCanApprove(item.Status))
+                                    {
+                                        <button class="btn btn-sm btn-outline-success me-1" disabled="@busy" @onclick="() => DecideAsync(item.Id, true)">Approve</button>
+                                        <button class="btn btn-sm btn-outline-danger" disabled="@busy" @onclick="() => DecideAsync(item.Id, false)">Reject</button>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <label class="form-label">Approval / Rejection Remarks</label><InputTextArea class="form-control" @bind-Value="remarks" />
+        </div>
+    </div>
+</div>
+
+@code {
+    private CreateBudgetReallocationDto form = NewForm();
+    private ApplyContextDto? applyContext;
+    private List<RequestRow> requests = new();
+    private string message = string.Empty;
+    private string remarks = string.Empty;
+    private bool isError;
+    private bool busy;
+
+    private static CreateBudgetReallocationDto NewForm() => new()
+    {
+        SourceLevel = ReallocationLevel.Headquarters,
+        DestinationLevel = ReallocationLevel.Headquarters
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var roleInfo = await Http.GetFromJsonAsync<RoleContextDto>("api/budget-reallocations/role-applyContext");
+            currentRoles = new HashSet<string>(roleInfo?.Roles ?? new(), StringComparer.OrdinalIgnoreCase);
+            using var response = await Http.GetAsync("api/budget-reallocations/apply-applyContext");
+            if (response.IsSuccessStatusCode)
+                applyContext = await response.Content.ReadFromJsonAsync<ApplyContextDto>();
+        }
+        catch (Exception ex) { Show("Unable to load reallocation applyContext: " + ex.Message, true); }
+        await LoadRequestsAsync();
+    }
+    private async Task LoadRequestsAsync()
+    {
+        try { requests = await Http.GetFromJsonAsync<List<RequestRow>>("api/budget-reallocations") ?? new(); }
+        catch (Exception ex) { Show("Unable to load requests: " + ex.Message, true); }
+    }
+    private async Task ApplyAsync()
+    {
+        if (applyContext is null) return;
+        busy = true;
+        try
+        {
+            var response = await Http.PostAsJsonAsync("api/budget-reallocations", form);
+            if (!response.IsSuccessStatusCode) { Show(await response.Content.ReadAsStringAsync(), true); return; }
+            Show("Budget reallocation application submitted for approval.", false);
+            form = NewForm();
+            await LoadRequestsAsync();
+        }
+        catch (Exception ex) { Show(ex.Message, true); }
+        finally { busy = false; }
+    }
+    private async Task DecideAsync(int id, bool approve)
+    {
+        busy = true;
+        try
+        {
+            var response = await Http.PostAsJsonAsync($"api/budget-reallocations/{id}/decision", new ReallocationDecisionDto { Approve = approve, Remarks = remarks });
+            if (!response.IsSuccessStatusCode) { Show(await response.Content.ReadAsStringAsync(), true); return; }
+            Show(approve ? "Approval recorded." : "Rejection recorded.", false);
+            remarks = string.Empty;
+            await LoadRequestsAsync();
+        }
+        catch (Exception ex) { Show(ex.Message, true); }
+        finally { busy = false; }
+    }
+    private bool contextRoleCanApprove(string status) =>
+        status switch
+        {
+            "PendingSMM" => currentRoles.Contains("SMM"),
+            "PendingAVP" => currentRoles.Contains("AVP"),
+            "PendingMDHOD" => currentRoles.Contains("MDHOD"),
+            _ => false
+        };
+    private HashSet<string> currentRoles = new(StringComparer.OrdinalIgnoreCase);
+    private void Show(string value, bool error) { message = value; isError = error; }
+
+    private sealed class RoleContextDto { public List<string> Roles { get; set; } = new(); }
+    private sealed class ApplyContextDto
+    {
+        public string InitiatorRole { get; set; } = string.Empty;
+        public List<string> ApprovalRoute { get; set; } = new();
+    }
+    private sealed class RequestRow
+    {
+        public int Id { get; set; }
+        public int FinancialYearId { get; set; }
+        public ReallocationLevel SourceLevel { get; set; }
+        public int SourceId { get; set; }
+        public ReallocationLevel DestinationLevel { get; set; }
+        public int DestinationId { get; set; }
+        public decimal Amount { get; set; }
+        public string Status { get; set; } = string.Empty;
+    }
+}
