@@ -1,127 +1,546 @@
 ﻿@page "/DemoDetails"
+@inject HttpClient Http
+@inject NavigationManager NavigationManager
+@using System.Net.Http.Json
+@using System.Net
+@using Microsoft.AspNetCore.Components
 
-<div class="container-fluid py-4 px-0">
-
-    <PageHeader Title="Demo Details"
-                Subtitle="Review demo summary and start the first treatment during field visit">
-    </PageHeader>
-
-
-    <div class="demo-card">
-
-        <div class="demo-title-row">
-            <span>Farmer / Field Owner</span>
-            <span class="tag green">Farmer Program</span>
-            <span class="tag blue">Spot Demonstration</span>
-        </div>
-
-
-        <h5>SPIC GRANOZ</h5>
-
-
-        <div class="info-grid">
-
-            <div>
-                <label>Sanction Number</label>
-                <b>CSR/2024/TN/0847</b>
-            </div>
-
-            <div>
-                <label>Crop</label>
-                <b>Brinjal</b>
-            </div>
-
-            <div>
-                <label>Date of Sowing</label>
-                <b>15 March 2026</b>
-            </div>
-
-            <div>
-                <label>Crop Stage</label>
-                <span class="stage">Fruit Stage</span>
-            </div>
-
-            <div>
-                <label>Expected Harvest</label>
-                <b>20 Jul 2026</b>
-            </div>
-
-        </div>
-
+<div class="container-fluid py-4 px-0 demo-details-page">
+    <div class="mb-3">
+        <h3>Demo Details</h3>
+        <p class="text-muted">Review demo summary and start the first treatment during field visit</p>
     </div>
 
-
-
-    <div class="demo-card farmer-card">
-
-        <div class="farmer-grid">
-
-            <div>
-                <label>Farmer</label>
-                <b>M Kanniyappan</b>
+    @if (isLoading)
+    {
+        <div class="alert alert-info">Loading demo details...</div>
+    }
+    else if (!string.IsNullOrWhiteSpace(error))
+    {
+        <div class="alert alert-danger">@error</div>
+        <button class="btn btn-outline-secondary" @onclick="BackToList">Back to Demo Documentation</button>
+    }
+    else if (program != null)
+    {
+        <div class="demo-card demo-summary-card">
+            <div class="demo-title-row">
+                <span class="summary-heading">Farmer / Field Owner</span>
+                <span class="tag green"><i class="bi bi-circle-fill" aria-hidden="true"></i> @Display(program.ProgramType)</span>
+                <span class="tag blue"><i class="bi bi-circle-fill" aria-hidden="true"></i> @Display(program.ProgramName)</span>
             </div>
-
-            <div>
-                <label>Mobile Number</label>
-                <b>7094100291</b>
+            <h5>@Display(program.Product)</h5>
+            <div class="info-grid">
+                <div class="info-item">
+                    <i class="bi bi-tools info-icon" aria-hidden="true"></i>
+                    <div class="info-content"><label>Sanction Number</label><b>@Display(program.SeasonNumber)</b></div>
+                </div>
+                <div class="info-item">
+                    <i class="bi bi-flower1 info-icon" aria-hidden="true"></i>
+                    <div class="info-content"><label>Crop</label><b>@Display(doc?.Crop, program.Crop)</b></div>
+                </div>
+                <div class="info-item">
+                    <i class="bi bi-calendar3 info-icon" aria-hidden="true"></i>
+                    <div class="info-content"><label>Date of Sowing:</label><b>@DateText(doc?.SowingDate)</b></div>
+                </div>
+                <div class="info-item">
+                    <i class="bi bi-bullseye info-icon" aria-hidden="true"></i>
+                    <div class="info-content"><label>Crop Stage:</label><span class="stage">@Display(doc?.CropStage)</span></div>
+                </div>
+                <div class="info-item">
+                    <i class="bi bi-calendar3 info-icon" aria-hidden="true"></i>
+                    <div class="info-content"><label>Expected Harvest:</label><b>@DateText(doc?.HarvestDate)</b></div>
+                </div>
             </div>
-
-            <div>
-                <label>District</label>
-                <b>Kanchipuram</b>
-            </div>
-
-            <div>
-                <label>State</label>
-                <b>Tamil Nadu</b>
-            </div>
-
-            <div>
-                <label>Pin Code</label>
-                <b>603207</b>
-            </div>
-
         </div>
 
-
-        <div class="location">
-            <label>Location</label>
-            Maruthamthattam Village, Kanchipuram DT, Tamil Nadu St, 602 307
-        </div>
-
-    </div>
-
-
-
-    <div class="demo-card treatment-card">
-
-        <h6>Treatment Journey</h6>
-
-
-        <div class="empty-state">
-
-            <div class="empty-icon">
-                <i class="bi bi-flower1"></i>
+        <div class="demo-card farmer-card">
+            @if (doc == null)
+            {
+                <div class="alert alert-warning mb-3">Farmer and crop documentation is not available yet. The Start Documentation form must save its inputs to the backend before these values can appear here.</div>
+            }
+            <div class="farmer-grid">
+                <div><label>Farmer</label><b>@Display(doc?.FarmerName)</b></div>
+                <div><label>Mobile Number</label><b>@Display(doc?.MobileNumber)</b></div>
+                <div><label>District</label><b>@Display(doc?.District, program.District)</b></div>
+                <div><label>State</label><b>@Display(doc?.State)</b></div>
+                <div><label>Pin Code</label><b>@Display(doc?.PinCode)</b></div>
             </div>
-
-
-            <h5>
-                No Treatment Recorded Yet
-            </h5>
-
-
-            <p>
-                Start the first field visit to document treatment details and begin the demo journey.
-            </p>
-
-
-            <button class="btn-start">
-                Start First Treatment
-            </button>
-
+            <div class="location">
+                <label>Location</label>
+                <div class="location-value">@Display(doc?.FarmerAddress, doc?.Village, program.Location)</div>
+            </div>
         </div>
 
-
-    </div>
-
+        <div class="demo-card treatment-card">
+            <h6>Treatment Journey</h6>
+            @if (doc == null)
+            {
+                <div class="empty-state">
+                    <p>Treatment history is unavailable until the documentation details endpoint returns a record.</p>
+                </div>
+            }
+            else if (doc.TreatmentCount == 0)
+            {
+                <div class="empty-state">
+                    <div class="empty-icon"><i class="bi bi-flower1"></i></div>
+                    <h5>No Treatment Recorded Yet</h5>
+                    <p>Start the first field visit to document treatment details and begin the demo journey.</p>
+                    <button type="button" class="btn-start" @onclick="StartFirstTreatment">Start First Treatment</button>
+                </div>
+            }
+            else
+            {
+                <div class="empty-state">
+                    <h5>@doc.TreatmentCount treatment(s) recorded</h5>
+                    <p>Continue to the treatment journey to review or add field visits.</p>
+                    <button type="button" class="btn-start" @onclick="StartFirstTreatment">View Treatments</button>
+                </div>
+            }
+        </div>
+    }
 </div>
+
+<style>
+    .demo-details-page .demo-card {
+        background: #fff;
+        border: 1px solid #e6eaee;
+        border-radius: 10px;
+        padding: 22px;
+        margin-bottom: 18px;
+    }
+
+    .demo-details-page .demo-title-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-bottom: 14px;
+        font-weight: 600;
+    }
+
+    .demo-details-page .tag {
+        padding: 5px 10px;
+        border-radius: 6px;
+        font-size: 12px;
+        font-weight: 600;
+    }
+
+        .demo-details-page .tag.green {
+            background: #e5f6eb;
+            color: #16804c;
+        }
+
+        .demo-details-page .tag.blue {
+            background: #e8f1ff;
+            color: #2563a9;
+        }
+
+    .demo-details-page h5 {
+        font-size: 17px;
+        font-weight: 700;
+        margin-bottom: 20px;
+    }
+
+    .demo-details-page .info-grid {
+        display: grid;
+        grid-template-columns: repeat(5,minmax(0,1fr));
+        gap: 20px;
+    }
+
+    /* Compact programme summary, matching the provided reference. */
+    .demo-details-page .demo-summary-card {
+        border-top: 2px solid #22c55e;
+        border-radius: 8px;
+        padding: 14px 16px 13px;
+        box-shadow: 0 1px 3px rgba(16,24,40,.05);
+    }
+
+        .demo-details-page .demo-summary-card .demo-title-row {
+            gap: 6px;
+            margin-bottom: 12px;
+        }
+
+        .demo-details-page .demo-summary-card .summary-heading {
+            margin-right: 8px;
+            font-size: 13px;
+            color: #334155;
+            font-weight: 600;
+        }
+
+        .demo-details-page .demo-summary-card .tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 3px 8px;
+            border-radius: 999px;
+            font-size: 9px;
+            line-height: 1.2;
+        }
+
+            .demo-details-page .demo-summary-card .tag i {
+                font-size: 5px;
+            }
+
+        .demo-details-page .demo-summary-card h5 {
+            margin: 0 0 12px;
+            font-size: 16px;
+            font-weight: 500;
+            color: #343a40;
+        }
+
+        .demo-details-page .demo-summary-card .info-grid {
+            gap: 0;
+            grid-template-columns: repeat(5, minmax(0, 1fr));
+        }
+
+        .demo-details-page .demo-summary-card .info-item {
+            display: flex;
+            align-items: flex-start;
+            min-width: 0;
+            gap: 9px;
+            border-right: 1px solid #e3e9ee;
+            padding: 1px 12px;
+        }
+
+            .demo-details-page .demo-summary-card .info-item:first-child {
+                padding-left: 0;
+            }
+
+            .demo-details-page .demo-summary-card .info-item:last-child {
+                border-right: none;
+                padding-right: 0;
+            }
+
+        .demo-details-page .demo-summary-card .info-icon {
+            flex: 0 0 auto;
+            color: #93a6a0;
+            font-size: 15px;
+            line-height: 18px;
+        }
+
+        .demo-details-page .demo-summary-card .info-content {
+            min-width: 0;
+        }
+
+        .demo-details-page .demo-summary-card label {
+            margin-bottom: 4px;
+            font-size: 10px;
+            color: #6c7773;
+        }
+
+        .demo-details-page .demo-summary-card b {
+            display: block;
+            color: #087c41;
+            font-size: 11px;
+            font-weight: 700;
+        }
+
+        .demo-details-page .demo-summary-card .stage {
+            display: inline-block;
+            padding: 3px 9px;
+            background: #f3e8ff;
+            color: #8c3ab3;
+            border-radius: 999px;
+            font-size: 10px;
+        }
+
+    @@media(max-width: 900px) {
+        .demo-details-page .demo-summary-card .info-grid {
+            grid-template-columns: repeat(3, minmax(0,1fr));
+            row-gap: 14px;
+        }
+
+        .demo-details-page .demo-summary-card .info-item:nth-child(3) {
+            border-right: 0;
+        }
+    }
+
+    @@media(max-width: 550px) {
+        .demo-details-page .demo-summary-card .info-grid {
+            grid-template-columns: repeat(2,minmax(0,1fr));
+        }
+
+        .demo-details-page .demo-summary-card .info-item:nth-child(3) {
+            border-right: 1px solid #e3e9ee;
+        }
+
+        .demo-details-page .demo-summary-card .info-item:nth-child(2n) {
+            border-right: 0;
+        }
+    }
+
+    .demo-details-page .farmer-grid {
+        display: grid;
+        grid-template-columns: repeat(5,minmax(0,1fr));
+        gap: 20px;
+    }
+
+    .demo-details-page label {
+        display: block;
+        font-size: 11px;
+        color: #7a8694;
+        margin-bottom: 7px;
+    }
+
+    .demo-details-page b {
+        font-size: 13px;
+        color: #273744;
+        overflow-wrap: anywhere;
+    }
+
+    .demo-details-page .stage {
+        color: #15803d;
+        background: #e8f7ed;
+        border-radius: 5px;
+        padding: 5px 8px;
+        font-weight: 600;
+        font-size: 12px;
+    }
+
+    .demo-details-page .location {
+        border-top: 1px solid #e9edf0;
+        margin-top: 23px;
+        padding-top: 16px;
+        font-size: 13px;
+    }
+
+    /* Farmer details: compact five-column summary and full-width location. */
+    .demo-details-page .farmer-card {
+        padding: 14px 16px;
+        border-radius: 9px;
+    }
+
+        .demo-details-page .farmer-card .farmer-grid {
+            grid-template-columns: repeat(5, minmax(0, 1fr));
+            gap: 0;
+        }
+
+            .demo-details-page .farmer-card .farmer-grid > div {
+                min-width: 0;
+                border-right: 1px solid #e2e8ea;
+                padding: 1px 12px;
+            }
+
+                .demo-details-page .farmer-card .farmer-grid > div:first-child {
+                    padding-left: 0;
+                }
+
+                .demo-details-page .farmer-card .farmer-grid > div:last-child {
+                    border-right: 0;
+                    padding-right: 0;
+                }
+
+        .demo-details-page .farmer-card label {
+            font-size: 10px;
+            color: #78847f;
+            margin-bottom: 5px;
+        }
+
+        .demo-details-page .farmer-card b {
+            display: block;
+            font-size: 11px;
+            line-height: 1.35;
+            color: #087d45;
+            font-weight: 700;
+        }
+
+        .demo-details-page .farmer-card .location {
+            margin-top: 14px;
+            padding-top: 0;
+            border-top: 0;
+        }
+
+            .demo-details-page .farmer-card .location label {
+                margin-bottom: 3px;
+            }
+
+        .demo-details-page .farmer-card .location-value {
+            width: 100%;
+            background: #f3f4f4;
+            border-radius: 6px;
+            padding: 9px 11px;
+            color: #087d45;
+            font-size: 11px;
+            font-weight: 700;
+            overflow-wrap: anywhere;
+        }
+
+    @@media(max-width: 900px) {
+        .demo-details-page .farmer-card .farmer-grid {
+            grid-template-columns: repeat(3,minmax(0,1fr));
+            row-gap: 14px;
+        }
+
+            .demo-details-page .farmer-card .farmer-grid > div:nth-child(3) {
+                border-right: 0;
+            }
+    }
+
+    @@media(max-width: 550px) {
+        .demo-details-page .farmer-card .farmer-grid {
+            grid-template-columns: repeat(2,minmax(0,1fr));
+        }
+
+            .demo-details-page .farmer-card .farmer-grid > div:nth-child(3) {
+                border-right: 1px solid #e2e8ea;
+            }
+
+            .demo-details-page .farmer-card .farmer-grid > div:nth-child(2n) {
+                border-right: 0;
+            }
+    }
+
+    .demo-details-page .treatment-card h6 {
+        font-weight: 700;
+        font-size: 15px;
+    }
+
+    .demo-details-page .empty-state {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        padding: 35px 10px;
+    }
+
+        .demo-details-page .empty-state h5 {
+            margin: 12px 0 8px;
+        }
+
+        .demo-details-page .empty-state p {
+            color: #7a8694;
+            max-width: 480px;
+            font-size: 13px;
+        }
+
+    .demo-details-page .empty-icon {
+        display: grid;
+        place-items: center;
+        width: 52px;
+        height: 52px;
+        border-radius: 50%;
+        background: #e9f7ef;
+        color: #198754;
+        font-size: 26px;
+    }
+
+    .demo-details-page .btn-start {
+        border: 0;
+        border-radius: 6px;
+        background: #14834b;
+        color: #fff;
+        padding: 10px 18px;
+        font-weight: 600;
+        margin-top: 10px;
+    }
+
+    @@media (max-width:900px) {
+        .demo-details-page .farmer-grid {
+            grid-template-columns: repeat(3,minmax(0,1fr));
+        }
+    }
+
+    @@media (max-width:550px) {
+        .demo-details-page .farmer-grid {
+            grid-template-columns: repeat(2,minmax(0,1fr));
+        }
+    }
+</style>
+
+@code {
+    [SupplyParameterFromQuery(Name = "csr2Id")]
+    public int? CSR2Id { get; set; }
+
+    // The existing approved-csr2 endpoint already powers StartDocumentation.
+    private sealed class DemoProgram
+    {
+        public int Id { get; set; }
+        public int CSR1Id { get; set; }
+        public string? ProgramType { get; set; }
+        public string? ProgramName { get; set; }
+        public string? SeasonNumber { get; set; }
+        public string? CSR2Status { get; set; }
+        public DateTime? CSR2CompletedDate { get; set; }
+        public string? Product { get; set; }
+        public string? Crop { get; set; }
+        public string? Location { get; set; }
+        public string? District { get; set; }
+    }
+
+    // API contract needed for saved StartDocumentation data:
+    // GET api/DemoDocumentation/documentation-details?csr2Id=26
+    // The API must scope this record to the authenticated user and return null/404 if absent.
+    private sealed class DocumentationDetails
+    {
+        public string? FarmerName { get; set; }
+        public string? MobileNumber { get; set; }
+        public string? Village { get; set; }
+        public string? FarmerAddress { get; set; }
+        public string? Crop { get; set; }
+        public string? CropType { get; set; }
+        public string? State { get; set; }
+        public string? District { get; set; }
+        public string? PinCode { get; set; }
+        public DateTime? SowingDate { get; set; }
+        public string? CropStage { get; set; }
+        public DateTime? HarvestDate { get; set; }
+        public string? Remarks { get; set; }
+        public int TreatmentCount { get; set; }
+    }
+
+    private DemoProgram? program;
+    private DocumentationDetails? doc;
+    private bool isLoading;
+    private string error = "";
+
+    private static string Display(params string?[] values) =>
+        values.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v)) ?? "-";
+    private static string DateText(DateTime? date) => date?.ToString("dd MMM yyyy") ?? "-";
+    private void BackToList() => NavigationManager.NavigateTo("/DemoDocumentation");
+
+    protected override async Task OnParametersSetAsync()
+    {
+        program = null;
+        doc = null;
+        error = "";
+        if (CSR2Id is null or <= 0) { error = "Missing or invalid csr2Id in the URL."; return; }
+        isLoading = true;
+        try
+        {
+            using var response = await Http.GetAsync("api/DemoDocumentation/approved-csr2");
+            if (!response.IsSuccessStatusCode)
+            {
+                error = $"Unable to load approved CSR-2 (HTTP {(int)response.StatusCode}).";
+                return;
+            }
+            var programs = await response.Content.ReadFromJsonAsync<List<DemoProgram>>() ?? new();
+            program = programs.FirstOrDefault(x => x.Id == CSR2Id.Value);
+            if (program == null)
+            {
+                error = "CSR-2 not found, not finally approved, or outside your permitted scope.";
+                return;
+            }
+
+            // Separate endpoint: StartDocumentation data is not included in approved-csr2.
+            // 404 is a missing saved record; it is not an excuse to show example farmer values.
+            using var detailsResponse = await Http.GetAsync($"api/DemoDocumentation/documentation-details?csr2Id={CSR2Id.Value}");
+            if (detailsResponse.IsSuccessStatusCode)
+            {
+                doc = await detailsResponse.Content.ReadFromJsonAsync<DocumentationDetails>();
+            }
+            else if (detailsResponse.StatusCode != HttpStatusCode.NotFound)
+            {
+                error = $"Unable to load saved documentation (HTTP {(int)detailsResponse.StatusCode}).";
+            }
+        }
+        catch (Exception ex) { error = $"Unable to load demo details: {ex.Message}"; }
+        finally { isLoading = false; }
+    }
+
+    private void StartFirstTreatment()
+    {
+        if (program == null) return;
+        // Update this route to the actual treatment page route when available.
+        NavigationManager.NavigateTo($"/TreatmentDetails?csr2Id={program.Id}");
+    }
+}

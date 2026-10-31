@@ -832,8 +832,8 @@
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
     }
         /* css/ProprietorDetails.css defines global .theme-green / .theme-blue
-                                                                                                   watermarks (::before/::after) that leak onto these tiles and sit on top
-                                                                                                   of the label text. Neutralise them for this page only. */
+                                                                                                       watermarks (::before/::after) that leak onto these tiles and sit on top
+                                                                                                       of the label text. Neutralise them for this page only. */
         .bm-stat-card::before,
         .bm-stat-card::after {
             content: none !important;
@@ -1287,7 +1287,7 @@
             height: 36px;
         }
         /* Budget table becomes one card per HQ so the Budget input is always
-                                                                                                       on screen (it used to sit off the right edge of a 720px table). */
+                                                                                                           on screen (it used to sit off the right edge of a 720px table). */
         .bm-table-card {
             overflow: visible;
             border: 0;
@@ -1755,42 +1755,26 @@
         }
     }
 
+    // Keep master program names/types separate from the currently selected submission.
+    private List<ProgramWiseBudgetDto> _reviewProgramMaster = new();
+
     private async Task LoadProgramMasterForReviewAsync()
     {
         try
         {
-            programPlans =
+            _reviewProgramMaster =
                 await Http.GetFromJsonAsync<List<ProgramWiseBudgetDto>>(
-                    "api/Budget/program-master-list")
-                ?? new();
-
-            foreach (var item in programPlans)
-            {
-                item.AprilCount = 0;
-                item.MayCount = 0;
-                item.JuneCount = 0;
-                item.JulyCount = 0;
-                item.AugustCount = 0;
-                item.SeptemberCount = 0;
-                item.OctoberCount = 0;
-                item.NovemberCount = 0;
-                item.DecemberCount = 0;
-                item.JanuaryCount = 0;
-                item.FebruaryCount = 0;
-                item.MarchCount = 0;
-
-                item.TotalBudget = item.IsChangeAmount ? 0 : item.BudgetAmount;
-                CalculateBudget(item);
-            }
-
-            ApplyBudgetFilter();
+                    "api/Budget/program-master-list") ?? new();
         }
         catch (Exception ex)
         {
             Console.WriteLine($"Review Program Master Load Error: {ex.Message}");
-            programPlans = new();
-            FilteredProgramPlans = new();
+            _reviewProgramMaster = new();
         }
+
+        // No submission selected: do not display another user's programs.
+        programPlans = new();
+        ApplyBudgetFilter();
     }
 
     private void OnApprovalSelectionChanged(ChangeEventArgs e)
@@ -1802,40 +1786,50 @@
     private void SelectSubmittedBudget()
     {
         var selected = _pendingApprovals.FirstOrDefault(x => x.Id == _selectedSubmissionId);
-
         if (selected == null)
         {
+            programPlans = new();
             ApplyBudgetFilter();
             return;
         }
 
         var submittedPrograms = selected.Programs ?? new List<ProgramWiseBudgetDto>();
+        var masterById = _reviewProgramMaster
+            .GroupBy(x => x.ProgramId)
+            .ToDictionary(x => x.Key, x => x.First());
 
-        // Merge saved submission values into Program Master rows so Program Type
-        // and Program Name always come from the master list.
-        foreach (var master in programPlans)
+        // Only rows in the selected MO / RMDO submission are displayed.
+        // Start with independent copies so switching submissions cannot leak values.
+        var loaded = new List<ProgramWiseBudgetDto>();
+        foreach (var saved in submittedPrograms.GroupBy(x => x.ProgramId).Select(x => x.First()))
         {
-            var saved = submittedPrograms.FirstOrDefault(x => x.ProgramId == master.ProgramId);
-            if (saved == null)
-                continue;
+            masterById.TryGetValue(saved.ProgramId, out var master);
+            var template = master ?? saved;
+            var row = System.Text.Json.JsonSerializer.Deserialize<ProgramWiseBudgetDto>(
+                System.Text.Json.JsonSerializer.Serialize(template))!;
 
-            master.TotalBudget = saved.TotalBudget;
-            master.AprilCount = saved.AprilCount;
-            master.MayCount = saved.MayCount;
-            master.JuneCount = saved.JuneCount;
-            master.JulyCount = saved.JulyCount;
-            master.AugustCount = saved.AugustCount;
-            master.SeptemberCount = saved.SeptemberCount;
-            master.OctoberCount = saved.OctoberCount;
-            master.NovemberCount = saved.NovemberCount;
-            master.DecemberCount = saved.DecemberCount;
-            master.JanuaryCount = saved.JanuaryCount;
-            master.FebruaryCount = saved.FebruaryCount;
-            master.MarchCount = saved.MarchCount;
-
-            CalculateBudget(master);
+            row.ProgramName = !string.IsNullOrWhiteSpace(master?.ProgramName)
+                ? master.ProgramName : saved.ProgramName;
+            row.ProgramType = !string.IsNullOrWhiteSpace(master?.ProgramType)
+                ? master.ProgramType : saved.ProgramType;
+            row.TotalBudget = saved.TotalBudget;
+            row.AprilCount = saved.AprilCount;
+            row.MayCount = saved.MayCount;
+            row.JuneCount = saved.JuneCount;
+            row.JulyCount = saved.JulyCount;
+            row.AugustCount = saved.AugustCount;
+            row.SeptemberCount = saved.SeptemberCount;
+            row.OctoberCount = saved.OctoberCount;
+            row.NovemberCount = saved.NovemberCount;
+            row.DecemberCount = saved.DecemberCount;
+            row.JanuaryCount = saved.JanuaryCount;
+            row.FebruaryCount = saved.FebruaryCount;
+            row.MarchCount = saved.MarchCount;
+            CalculateBudget(row);
+            loaded.Add(row);
         }
 
+        programPlans = loaded;
         ApplyBudgetFilter();
     }
 

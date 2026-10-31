@@ -454,9 +454,9 @@ else if (csr1Plan != null)
                                       title="@video.FileName">
                                     @video.FileName
                                     (@FormatVideoSize(
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            video.Bytes.LongLength > 0
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                ? video.Bytes.LongLength
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                : video.SavedFileSize))
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                video.Bytes.LongLength > 0
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    ? video.Bytes.LongLength
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    : video.SavedFileSize))
                                 </span>
 
                                 <input type="text"
@@ -1133,6 +1133,16 @@ else if (csr1Plan != null)
             }
             else if (currentStep == 4 && CanManageExpenseAndSubmit)
             {
+                @if (CanApproveCurrentCSR2 && ExceedsCsr1Budget)
+                {
+                    <div class="alert alert-danger mt-3" role="alert">
+                        <strong>Budget not available for CSR-2 approval.</strong>
+                        Actual expense @Money(ActualExpenseTotal) exceeds the approved CSR-1 budget
+                        @Money(csr1Plan!.Budget) by @Money(Csr1BudgetShortage).
+                        Request a budget reallocation through the authorized budget holder and
+                        complete the required reallocation approvals before retrying CSR-2 approval.
+                    </div>
+                }
                 <div class="dmtp-action-bar">
                     <span class="dmtp-action-note dmtp-action-note-success">Review all CSR-2 details before completing the current workflow action.</span>
                     <div class="dmtp-action-buttons">
@@ -2913,6 +2923,10 @@ else if (csr1Plan != null)
     private readonly List<ExpenseItem> expenseItems = new();
     private decimal ActualExpenseTotal => expenseItems.Sum(x => x.ActualAmount ?? 0m);
     private decimal BudgetBalance => (csr1Plan?.Budget ?? 0m) - ActualExpenseTotal;
+    // CSR-1 plan ceiling is a preliminary check only. Final budget-pool availability
+    // must be verified by the CSR-2 approval API using the authorized FY/scope.
+    private bool ExceedsCsr1Budget => csr1Plan != null && ActualExpenseTotal > csr1Plan.Budget;
+    private decimal Csr1BudgetShortage => csr1Plan == null ? 0m : Math.Max(0m, ActualExpenseTotal - csr1Plan.Budget);
 
     private static readonly string[] ExpenseIcons =
     {
@@ -3993,6 +4007,20 @@ else if (csr1Plan != null)
         else
         {
             ShowCsr2Alert("You are not authorized to perform the current CSR-2 workflow action.");
+            return;
+        }
+
+        // Early UI-level check for the CSR-1 plan ceiling during approval only.
+        // The server MUST additionally check the current pool balance (including
+        // approved reallocations and previous approved CSR-2 spending) atomically.
+        if (endpoint == "approve" && ExceedsCsr1Budget)
+        {
+            ShowCsr2Alert(
+                $"Budget not available. CSR-2 actual expenses {Money(ActualExpenseTotal)} " +
+                $"exceed CSR-1 approved budget {Money(csr1Plan!.Budget)} by " +
+                $"{Money(Csr1BudgetShortage)}. Request budget reallocation and complete " +
+                "its approval before retrying CSR-2 approval.",
+                true, "Budget Not Available");
             return;
         }
 
