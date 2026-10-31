@@ -801,6 +801,34 @@ namespace Spic.Infrastructure.Data
                     .OnDelete(DeleteBehavior.Cascade);
             });
             builder.Entity<CSR2Media>().HasIndex(x => new { x.CSR2Id, x.MediaType });
+
+            builder.Entity<CropType>(entity =>
+            {
+                entity.Property(x => x.Name).HasMaxLength(200).IsRequired();
+                entity.Property(x => x.UpdatedBy).HasMaxLength(100).IsRequired();
+                entity.HasOne<Crop>()
+                    .WithMany()
+                    .HasForeignKey(x => x.CropId)
+                    .OnDelete(DeleteBehavior.Restrict);
+                entity.HasIndex(x => new { x.CropId, x.Name });
+            });
+
+            builder.Entity<DemoDocumentation>()
+    .HasIndex(x => x.CSR2Id).IsUnique();
+            builder.Entity<DemoDocumentation>()
+                .HasOne(x => x.CSR2)
+                .WithMany()
+                .HasForeignKey(x => x.CSR2Id)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            builder.Entity<CropStage>(entity =>
+            {
+                entity.HasOne<Crop>()
+                      .WithMany()
+                      .HasForeignKey(x => x.CropId)
+                      .OnDelete(DeleteBehavior.Restrict);
+                entity.HasIndex(x => new { x.CropId, x.Name });
+            });
         }
 
         // User related
@@ -928,26 +956,26 @@ namespace Spic.Infrastructure.Data
         public DbSet<JMDOTrackingSession> JMDOTrackingSessions { get; set; }
         public DbSet<JMDOTrackingPoint> JMDOTrackingPoints { get; set; }
 
-		public DbSet<RefreshToken> RefreshTokens { get; set; }
+        public DbSet<RefreshToken> RefreshTokens { get; set; }
 
-		//// SAS: sample collection
-		public DbSet<SasFarmer> SasFarmers { get; set; }
-		public DbSet<SampleCollection> SampleCollections { get; set; }
-		public DbSet<SampleItem> SampleItems { get; set; }
-		public DbSet<SamplePayment> SamplePayments { get; set; }
-		public DbSet<SampleConsignment> SampleConsignments { get; set; }
-		public DbSet<ConsignmentPhoto> ConsignmentPhotos { get; set; }
-		public DbSet<SasStatusEvent> SasStatusEvents { get; set; }
-		public DbSet<SampleLabResult> SampleLabResults { get; set; }
-		public DbSet<SasSampleCharge> SasSampleCharges { get; set; }
-		public DbSet<SampleBatch> SampleBatches { get; set; }
-		public DbSet<LabParameter> LabParameters { get; set; }
-		public DbSet<LabDocument> LabDocuments { get; set; }
-		public DbSet<LabActivity> LabActivities { get; set; }
-		public DbSet<LabReport> LabReports { get; set; }
-		public DbSet<LabCropRecommendation> LabCropRecommendations { get; set; }
-		public DbSet<LabTranslation> LabTranslations { get; set; }
-		public DbSet<SasCourier> SasCouriers { get; set; }
+        //// SAS: sample collection
+        public DbSet<SasFarmer> SasFarmers { get; set; }
+        public DbSet<SampleCollection> SampleCollections { get; set; }
+        public DbSet<SampleItem> SampleItems { get; set; }
+        public DbSet<SamplePayment> SamplePayments { get; set; }
+        public DbSet<SampleConsignment> SampleConsignments { get; set; }
+        public DbSet<ConsignmentPhoto> ConsignmentPhotos { get; set; }
+        public DbSet<SasStatusEvent> SasStatusEvents { get; set; }
+        public DbSet<SampleLabResult> SampleLabResults { get; set; }
+        public DbSet<SasSampleCharge> SasSampleCharges { get; set; }
+        public DbSet<SampleBatch> SampleBatches { get; set; }
+        public DbSet<LabParameter> LabParameters { get; set; }
+        public DbSet<LabDocument> LabDocuments { get; set; }
+        public DbSet<LabActivity> LabActivities { get; set; }
+        public DbSet<LabReport> LabReports { get; set; }
+        public DbSet<LabCropRecommendation> LabCropRecommendations { get; set; }
+        public DbSet<LabTranslation> LabTranslations { get; set; }
+        public DbSet<SasCourier> SasCouriers { get; set; }
 
         //// JMDO Task Allocation
         public DbSet<JmdoTaskAllocation> JmdoTaskAllocations { get; set; }
@@ -1029,5 +1057,8 @@ namespace Spic.Infrastructure.Data
         public DbSet<GpsSetting> GpsSettings { get; set; }
         public DbSet<BudgetReallocation> BudgetReallocations { get; set; }
         public DbSet<BudgetReallocationApproval> BudgetReallocationApprovals { get; set; }
+        public DbSet<CropType> CropTypes => Set<CropType>();
+        public DbSet<DemoDocumentation> DemoDocumentations => Set<DemoDocumentation>();
+        public DbSet<CropStage> CropStages => Set<CropStage>();
     }
 }

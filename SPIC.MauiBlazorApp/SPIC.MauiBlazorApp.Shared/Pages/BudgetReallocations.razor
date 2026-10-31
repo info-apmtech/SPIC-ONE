@@ -203,7 +203,7 @@
     <div class="d-flex align-items-center justify-content-between mb-3"><h5 class="mb-0">Reallocation Requests</h5><button class="btn btn-outline-secondary btn-sm" @onclick="LoadRequestsAsync">Refresh</button></div>
     <div class="table-responsive">
         <table class="table table-striped align-middle">
-            <thead><tr><th>Request</th><th>FY ID</th><th>From</th><th>To</th><th>Amount</th><th>Status</th><th>Action</th></tr></thead>
+            <thead><tr><th>Request</th><th>FY ID</th><th>From</th><th>To</th><th>Amount</th><th>Initiated By</th><th>Status</th><th>Action</th></tr></thead>
             <tbody>
                 @foreach (var item in requests)
                 {
@@ -213,9 +213,10 @@
                         <td>@item.SourceLevel / @item.SourceId</td>
                         <td>@item.DestinationLevel / @item.DestinationId</td>
                         <td>₹@item.Amount.ToString("N2")</td>
+                        <td>@item.InitiatorRole</td>
                         <td>@item.Status</td>
                         <td>
-                            @if (contextRoleCanApprove(item.Status))
+                            @if (item.CanApprove)
                             {
                                 <button class="btn btn-sm btn-outline-success me-1" disabled="@busy" @onclick="() => DecideAsync(item.Id, true)">Approve</button>
                                 <button class="btn btn-sm btn-outline-danger" disabled="@busy" @onclick="() => DecideAsync(item.Id, false)">Reject</button>
@@ -451,14 +452,6 @@
         catch (Exception ex) { Show(ex.Message, true); }
         finally { busy = false; }
     }
-    private bool contextRoleCanApprove(string status) =>
-        status switch
-        {
-            "PendingSMM" => currentRoles.Contains("SMM"),
-            "PendingAVP" => currentRoles.Contains("AVP"),
-            "PendingMDHOD" => currentRoles.Contains("MDHOD"),
-            _ => false
-        };
     private HashSet<string> currentRoles = new(StringComparer.OrdinalIgnoreCase);
     private void Show(string value, bool error) { message = value; isError = error; }
 
@@ -478,6 +471,9 @@
         public ReallocationLevel DestinationLevel { get; set; }
         public int DestinationId { get; set; }
         public decimal Amount { get; set; }
+        public string InitiatorRole { get; set; } = string.Empty;
+        public bool CanApprove { get; set; }
+        public bool IsOwnRequest { get; set; }
         public string Status { get; set; } = string.Empty;
     }
 }

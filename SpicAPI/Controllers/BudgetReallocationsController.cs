@@ -447,37 +447,68 @@ public sealed class BudgetReallocationsController : ControllerBase
         });
     }
 
+    // The initiator sees their own requests; the current approver sees only pending
+    // requests in their authorized State/Region/HQ scope.
+    private async Task<bool> CanApproveRequestAsync(BudgetReallocation r, CancellationToken ct)
+    {
+        var role = ApproverRole(r.Status);
+        if (role == null || !User.IsInRole(role) || r.InitiatedBy == Actor)
+            return false;
+        var source = Key(r.FinancialYearId, r.SourceLevel, r.SourceId);
+        var destination = Key(r.FinancialYearId, r.DestinationLevel, r.DestinationId);
+        return await CanAccessBudgetAsync(Actor, role, source, ct) == true &&
+               await CanAccessBudgetAsync(Actor, role, destination, ct) == true;
+    }
+
     [HttpGet]
     public async Task<IActionResult> List(CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(Actor)) return Forbid();
-        // Show only own submissions until scope mapping is implemented.
-        // Do not expose all employee records to approvers without jurisdiction filters.
-        var rows = await _db.Set<BudgetReallocation>().AsNoTracking()
-            .Where(x => x.InitiatedBy == Actor).OrderByDescending(x => x.Id)
-            .Take(100).Select(x => new {
-                x.Id,
-                x.FinancialYearId,
-                x.SourceLevel,
-                x.SourceId,
-                x.DestinationLevel,
-                x.DestinationId,
-                x.Amount,
-                x.Reason,
-                Status = x.Status.ToString(),
-                x.CreatedAt
-            })
-            .ToListAsync(ct);
-        return Ok(rows);
+        var pending = new List<ReallocationStatus>();
+        if (User.IsInRole("SMM")) pending.Add(ReallocationStatus.PendingSMM);
+        if (User.IsInRole("AVP")) pending.Add(ReallocationStatus.PendingAVP);
+        if (User.IsInRole("MDHOD")) pending.Add(ReallocationStatus.PendingMDHOD);
+
+        // Filter by creator/current stage BEFORE retrieving entities. Enforce
+        // exact geographical authorization per request below.
+        var candidates = await _db.Set<BudgetReallocation>().AsNoTracking()
+            .Where(x => x.InitiatedBy == Actor || pending.Contains(x.Status))
+            .OrderByDescending(x => x.Id).Take(300).ToListAsync(ct);
+
+        var results = new List<object>();
+        foreach (var r in candidates)
+        {
+            bool canApprove = await CanApproveRequestAsync(r, ct);
+            if (r.InitiatedBy != Actor && !canApprove) continue;
+            results.Add(new
+            {
+                r.Id,
+                r.FinancialYearId,
+                r.SourceLevel,
+                r.SourceId,
+                r.DestinationLevel,
+                r.DestinationId,
+                r.Amount,
+                r.Reason,
+                r.InitiatorRole,
+                r.InitiatedBy,
+                r.CreatedAt,
+                Status = r.Status.ToString(),
+                CanApprove = canApprove,
+                IsOwnRequest = r.InitiatedBy == Actor
+            });
+        }
+        return Ok(results);
     }
 
     [HttpGet("{id:int}")]
     public async Task<IActionResult> Details(int id, CancellationToken ct)
     {
+        if (string.IsNullOrWhiteSpace(Actor)) return Forbid();
         var r = await _db.Set<BudgetReallocation>().AsNoTracking()
             .Include(x => x.Approvals).FirstOrDefaultAsync(x => x.Id == id, ct);
         if (r == null) return NotFound();
-        if (r.InitiatedBy != Actor) return Forbid(); // expand via scope check once mapped
+        if (r.InitiatedBy != Actor && !await CanApproveRequestAsync(r, ct)) return Forbid();
         return Ok(r);
     }
 
@@ -546,13 +577,8 @@ public sealed class BudgetReallocationsController : ControllerBase
         if (r is null) return NotFound();
         var stageRole = ApproverRole(r.Status);
         if (stageRole == null) return Conflict("Request is not pending approval.");
-        if (!User.IsInRole(stageRole) || Actor == r.InitiatedBy) return Forbid();
+        if (!await CanApproveRequestAsync(r, ct)) return Forbid();
         var source = Key(r.FinancialYearId, r.SourceLevel, r.SourceId);
-        var dest = Key(r.FinancialYearId, r.DestinationLevel, r.DestinationId);
-        var canSource = await CanAccessBudgetAsync(Actor, stageRole, source, ct);
-        var canDest = await CanAccessBudgetAsync(Actor, stageRole, dest, ct);
-        if (!canSource.HasValue || !canDest.HasValue) return IntegrationUnavailable();
-        if (!canSource.Value || !canDest.Value) return Forbid();
         if (!dto.Approve && string.IsNullOrWhiteSpace(dto.Remarks))
             return BadRequest("Rejection remarks required.");
         if (dto.Approve && r.Status == ReallocationStatus.PendingMDHOD)
