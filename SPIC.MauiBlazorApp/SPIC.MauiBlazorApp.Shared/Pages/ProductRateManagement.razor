@@ -250,7 +250,7 @@
             <div class="prm-modal-footer">
                 <button type="button" class="prm-btn prm-btn-outline" style="background: #f3f4f6; color: var(--text-main); border:none;" @onclick="CloseFormModal">Close</button>
                 <button type="button" class="prm-btn prm-btn-primary" @onclick="SubmitForm">
-                    @(editingRow is null ? "Request Product" : "Update Request")
+                    @(editingRow is null ? "Request Product" : (editingRow.Status == "Rejected" ? "Resubmit Request" : "Update Request"))
                 </button>
             </div>
         </div>
@@ -318,6 +318,13 @@
                         <div class="prm-info-value" style="grid-column: 1 / -1;">
                             <div class="prm-reason-box">@(viewingRow.Reason ?? "-")</div>
                         </div>
+                        @if (viewingRow.Status == "Rejected" && !string.IsNullOrWhiteSpace(viewingRow.RejectionReason))
+                        {
+                            <div class="prm-info-label" style="grid-column: 1 / -1; margin-top: 10px; color: #dc2626;">Rejection Reason</div>
+                            <div class="prm-info-value" style="grid-column: 1 / -1;">
+                                <div class="prm-reason-box" style="background: #fef2f2; border-color: #fca5a5; color: #991b1b;">@viewingRow.RejectionReason</div>
+                            </div>
+                        }
                     </div>
                 </div>
             </div>
@@ -1363,6 +1370,7 @@
         public string? RequestDate { get; set; }
         public string? RequestedBy { get; set; }
         public string? Reason { get; set; }
+        public string? RejectionReason { get; set; }
 
         // Synthetic key for @@key/list-diffing only - never used for API calls.
         public string Id => $"p{ProductId}-r{RequestId}";
@@ -1465,6 +1473,7 @@
                 row.RequestDate = req.RequestedAt.ToString("dd MMM yyyy");
                 row.RequestedBy = req.RequestedBy;
                 row.Reason = req.Reason;
+                row.RejectionReason = req.RejectionReason;
             }
 
             list.Add(row);
@@ -1487,7 +1496,8 @@
                 Status = req.Status,
                 RequestDate = req.RequestedAt.ToString("dd MMM yyyy"),
                 RequestedBy = req.RequestedBy,
-                Reason = req.Reason
+                Reason = req.Reason,
+                RejectionReason = req.RejectionReason
             });
         }
 
@@ -1529,17 +1539,8 @@
             """,
     };
 
-    // Only a handful of products have a hand-drawn SVG (Chicken, Goat, etc.). Farm Office can
-    // request any product name though, so anything else falls back to a letter badge instead of
-    // a mismatched generic icon (e.g. a box icon for "Camel").
     private static MarkupString IconFor(string name) =>
-        new(ProductIconSvgs.TryGetValue(name, out var svg) ? svg : MonogramBadge(name));
-
-    private static string MonogramBadge(string name)
-    {
-        var letter = string.IsNullOrWhiteSpace(name) ? "?" : char.ToUpperInvariant(name.Trim()[0]).ToString();
-        return $"<span class=\"prm-icon-monogram\">{letter}</span>";
-    }
+        FarmProductIcons.IconFor(name, "prm-icon-monogram");
 
     private string currentTab = "All";
     private string statusFilter = "All";
@@ -1554,14 +1555,16 @@
         editingRow is null || (editingPendingRequestId.HasValue && editingRow.RequestType == "New Product");
 
     private string ModalTitle => editingPendingRequestId.HasValue
-        ? "Edit Request"
+        ? (editingRow?.Status == "Rejected" ? "Resubmit Request" : "Edit Request")
         : (editingRow is null ? "Request New Product" : "Request Rate Change");
 
     private string ModalSubtitle => editingPendingRequestId.HasValue
-        ? "Update your pending request before Admin reviews it."
+        ? (editingRow?.Status == "Rejected"
+            ? "Update your rejected request and resubmit it for Admin review."
+            : "Update your pending request before Admin reviews it.")
         : (editingRow is null
             ? "Tell Admin what you want to add to the catalog."
-            : "Request a new rate for an existing product, it wil be reviewed and approved by admin");
+            : "Request a new rate for an existing product, it will be reviewed and approved by admin");
 
     private string formExistingProductId = "";
     private string formProductName = "";
@@ -1638,8 +1641,8 @@
 
     private void EditRow(ProductRow row)
     {
-        // A still-pending request of their own (New Product or Rate Change) - edit it in place.
-        if (row.RequestId is not null && row.Status == "Pending")
+        // A request of their own (New Product or Rate Change) that is Pending or Rejected - edit/resubmit it in place.
+        if (row.RequestId is not null && (row.Status == "Pending" || row.Status == "Rejected"))
         {
             editingRow = row;
             editingPendingRequestId = row.RequestId;
@@ -1652,7 +1655,7 @@
             return;
         }
 
-        // Otherwise, submit a brand-new Rate Change request against an already-approved product.
+        // An item still awaiting approval (has no catalog product ID and not editable)
         if (row.ProductId is null)
         {
             Toast.Error("This product is still awaiting approval - you can't request a rate change yet.");
@@ -1673,13 +1676,13 @@
 
     private async Task DeleteRow(ProductRow row)
     {
-        if (row.RequestId is null || row.Status != "Pending")
+        if (row.RequestId is null || (row.Status != "Pending" && row.Status != "Rejected"))
         {
-            Toast.Error("There is no pending request to delete for this product.");
+            Toast.Error("There is no pending or rejected request to delete for this product.");
             return;
         }
 
-        var ok = await Toast.ConfirmAsync("Delete request?", $"Delete the pending request for \"{row.Name}\"? This cannot be undone.", "Delete", danger: true);
+        var ok = await Toast.ConfirmAsync("Delete request?", $"Delete the request for \"{row.Name}\"? This cannot be undone.", "Delete", danger: true);
         if (!ok) return;
 
         try
@@ -1819,7 +1822,7 @@
                 return;
             }
 
-            Toast.Success("Request updated.");
+            Toast.Success(editingRow?.Status == "Rejected" ? "Request resubmitted." : "Request updated.");
             showFormModal = false;
             editingPendingRequestId = null;
             await LoadDataAsync();

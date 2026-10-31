@@ -259,8 +259,18 @@ namespace SpicAPI.Controllers
 
             var request = await _db.FarmProductRateRequests.FirstOrDefaultAsync(r => r.Id == id);
             if (request is null) return NotFound();
-            if (request.Status != FarmRequestStatus.Pending)
-                return BadRequest("Only a pending request can be edited.");
+            if (request.Status != FarmRequestStatus.Pending && request.Status != FarmRequestStatus.Rejected)
+                return BadRequest("Only a pending or rejected request can be edited.");
+
+            if (request.Status == FarmRequestStatus.Rejected)
+            {
+                request.Status = FarmRequestStatus.Pending;
+                request.RejectionReason = null;
+                request.AdminRemarks = null;
+                request.DecidedBy = null;
+                request.DecidedAt = null;
+                request.RequestedAt = DateTime.Now;
+            }
 
             if (string.IsNullOrWhiteSpace(payload.Uom))
                 return BadRequest("UOM is required.");
