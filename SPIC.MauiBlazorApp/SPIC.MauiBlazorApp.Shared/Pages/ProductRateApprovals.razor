@@ -1,0 +1,644 @@
+@page "/ProductRateApprovals"
+@using System.Net.Http.Json
+@inject NavigationManager Nav
+@inject LoginState LoginState
+@inject ToastService Toast
+@inject HttpClient Http
+
+@*
+    Farm Operations (Farm Admin): approve or reject the New Product / Rate Change requests
+    submitted by Farm Office on ProductRateManagement.razor. Backed by FarmProductController.
+    Gated by PagePermission.ProductRateApprovals - Update is required to approve/reject.
+    Only ever lists Pending requests - once decided, a request drops off this page (its history
+    lives on FarmProductMaster's rate-history drawer instead).
+*@
+
+<div class="pra-page">
+
+    <PageHeader Title="Pending Approvals"
+                Subtitle="View all product, submit request for new Product or rate change, and track request"
+                ShowBack="false">
+        <Actions>
+            <button type="button" class="pra-btn pra-btn-outline" @onclick="GoToDashboard">
+                <i class="bi bi-arrow-left"></i> Back to Dashboard
+            </button>
+            @if (LoginState.Can(SPIC.Core.Entities.PagePermission.productRateManagement, "Entry"))
+            {
+                <button type="button" class="pra-btn pra-btn-primary" @onclick='() => Nav.NavigateTo("/ProductRateManagement")'>
+                    Request New Product
+                </button>
+            }
+        </Actions>
+    </PageHeader>
+
+    <div class="pra-filters-card">
+        <button type="button" class="pra-filters-toggle" @onclick="() => filtersExpanded = !filtersExpanded">
+            <span><i class="bi bi-funnel"></i> Filters</span>
+            <i class="bi @(filtersExpanded ? "bi-chevron-up" : "bi-chevron-down")"></i>
+        </button>
+        @if (filtersExpanded)
+        {
+            <div class="pra-filters-body">
+                <div class="pra-filters-grid">
+                    <div class="pra-filter-field">
+                        <label>From Date</label>
+                        <input type="date" value="@fromDate" @onchange="OnFromDateChanged" />
+                    </div>
+                    <div class="pra-filter-field">
+                        <label>To Date</label>
+                        <input type="date" value="@toDate" @onchange="OnToDateChanged" />
+                    </div>
+                    <div class="pra-filter-field">
+                        <label>Request Type</label>
+                        <select @bind="requestTypeFilter">
+                            <option value="All">All</option>
+                            <option value="New Product">New Product</option>
+                            <option value="Rate Change">Rate Change</option>
+                        </select>
+                    </div>
+                    <div class="pra-filter-field">
+                        <label>Product Group</label>
+                        <select @bind="groupFilter">
+                            <option value="All">All</option>
+                            <option value="Live Stock">Live Stock</option>
+                            <option value="Orchard">Orchard</option>
+                        </select>
+                    </div>
+                    <div class="pra-filter-field">
+                        <label>Product</label>
+                        <select @bind="productFilter">
+                            <option value="All">All</option>
+                            @foreach (var p in DistinctProductNames)
+                            {
+                                <option value="@p">@p</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+                <div class="pra-filters-actions">
+                    <button type="button" class="pra-btn pra-btn-outline" @onclick="ClearFilters">
+                        <i class="bi bi-x-lg"></i> Clear All
+                    </button>
+                    <button type="button" class="pra-btn pra-btn-primary" @onclick="ApplyFilters">
+                        <i class="bi bi-funnel"></i> Apply Filters
+                    </button>
+                </div>
+            </div>
+        }
+    </div>
+
+    <div class="pra-tabs">
+        <div class="pra-tab-group">
+            <button type="button" class='pra-tab @(requestTypeFilter == "All" ? "active" : "")' @onclick='() => SwitchTab("All")'>All Request</button>
+            <button type="button" class='pra-tab @(requestTypeFilter == "New Product" ? "active" : "")' @onclick='() => SwitchTab("New Product")'>New Product (@NewProductCount)</button>
+            <button type="button" class='pra-tab @(requestTypeFilter == "Rate Change" ? "active" : "")' @onclick='() => SwitchTab("Rate Change")'>Rate Change (@RateChangeCount)</button>
+        </div>
+    </div>
+
+    <SpicDataTable TItem="RequestRow"
+                   Items="FilteredRows"
+                   IsLoading="_loading"
+                   Title="Requests"
+                   FileName="PendingApprovals"
+                   ExportColumns="GetExportColumns()"
+                   SearchText="@searchQuery"
+                   EmptyTitle="No pending requests"
+                   EmptyMessage="No requests match your filters. Try a different search or filter.">
+        <FilterControls>
+            <div class="pra-search">
+                <i class="bi bi-search"></i>
+                <input type="text" placeholder="Search requests..." @bind="searchQuery" @bind:event="oninput" @bind:after="StateHasChanged" />
+            </div>
+        </FilterControls>
+
+        <TableHeader>
+            <th>Request ID</th>
+            <th>Product Group</th>
+            <th>Product</th>
+            <th>Request Type</th>
+            <th>Current Rate</th>
+            <th>Requested Rate</th>
+            <th>Requested On</th>
+            <th class="pra-col-action">Action</th>
+        </TableHeader>
+
+        <TableRow Context="row">
+            <td data-label="Request ID">Request @row.Id.ToString("000")</td>
+            <td data-label="Product Group">
+                <span class='pra-group-pill @(row.Group == "Orchard" ? "pra-group-orchard" : "pra-group-livestock")'>@row.Group</span>
+            </td>
+            <td data-label="Product">
+                <span class="pra-product">
+                    <span class="pra-icon"><i class="bi bi-box-seam"></i></span>
+                    @row.ProductName
+                </span>
+            </td>
+            <td data-label="Request Type">
+                <span class='pra-type-pill @(row.RequestType == "New Product" ? "pra-type-new" : "pra-type-rate")'>@row.RequestType</span>
+            </td>
+            <td data-label="Current Rate">@(row.CurrentRateText ?? "-")</td>
+            <td data-label="Requested Rate">@row.RequestedRateText</td>
+            <td data-label="Requested On">@row.RequestDate</td>
+            <td data-label="Action" class="pra-col-action">
+                <div class="pra-action-wrap">
+                    @if (LoginState.Can(SPIC.Core.Entities.PagePermission.ProductRateApprovals, "Update"))
+                    {
+                        <button type="button" class="pra-approve-btn" @onclick="() => QuickApprove(row)">Approve</button>
+                        <button type="button" class="pra-action-btn pra-action-edit" title="Review &amp; Decide" @onclick="() => OpenEdit(row)">
+                            <i class="bi bi-pencil-square"></i>
+                        </button>
+                    }
+                    <button type="button" class="pra-action-btn pra-action-view" title="View" @onclick="() => OpenView(row)">
+                        <i class="bi bi-eye"></i>
+                    </button>
+                </div>
+            </td>
+        </TableRow>
+
+        <CardActions Context="row">
+            @if (LoginState.Can(SPIC.Core.Entities.PagePermission.ProductRateApprovals, "Update"))
+            {
+                <button type="button" class="pra-approve-btn" @onclick="() => QuickApprove(row)">Approve</button>
+                <button type="button" class="pra-action-btn pra-action-edit" title="Review &amp; Decide" @onclick="() => OpenEdit(row)">
+                    <i class="bi bi-pencil-square"></i>
+                </button>
+            }
+            <button type="button" class="pra-action-btn pra-action-view" title="View" @onclick="() => OpenView(row)">
+                <i class="bi bi-eye"></i>
+            </button>
+        </CardActions>
+    </SpicDataTable>
+</div>
+
+@if (reviewRow is not null)
+{
+    <div class="pra-sidepanel-backdrop" @onclick="CloseReview">
+        <div class="pra-sidepanel" @onclick:stopPropagation="true">
+            <div class="pra-sidepanel-header">
+                <h3>
+                    <button type="button" class="pra-modal-close" style="margin-right: 10px;" @onclick="CloseReview">
+                        <i class="bi bi-arrow-left"></i>
+                    </button>
+                    Product Details
+                </h3>
+                <p class="pra-sidepanel-subtitle">@reviewRow.RequestType Request</p>
+            </div>
+
+            <div class="pra-sidepanel-body">
+                <div class="pra-info-card">
+                    <h4>Product Information</h4>
+                    <div class="pra-info-grid">
+                        <div class="pra-info-label">Product</div>
+                        <div class="pra-info-value">: @reviewRow.ProductName <span class='pra-group-pill @(reviewRow.Group == "Orchard" ? "pra-group-orchard" : "pra-group-livestock")'>@reviewRow.Group</span></div>
+                        <div class="pra-info-label">Unit</div>
+                        <div class="pra-info-value">: @reviewRow.Uom</div>
+                        @if (reviewRow.RequestType == "Rate Change")
+                        {
+                            <div class="pra-info-label">Current Rate</div>
+                            <div class="pra-info-value">: @(reviewRow.CurrentRateText ?? "-")</div>
+                        }
+                        <div class="pra-info-label">Request Price</div>
+                        <div class="pra-info-value">: @reviewRow.RequestedRateText</div>
+                        <div class="pra-info-label">Request On</div>
+                        <div class="pra-info-value">: @reviewRow.RequestDate</div>
+                        <div class="pra-info-label">Request By</div>
+                        <div class="pra-info-value">: @reviewRow.RequestedBy</div>
+                    </div>
+
+                    <div class="pra-field" style="margin-top: 12px;">
+                        <label>Reason</label>
+                        <div class="pra-reason-box">@reviewRow.Reason</div>
+                    </div>
+                </div>
+
+                @if (reviewEditable)
+                {
+                    <div class="pra-info-card">
+                        <h4>Approval Details</h4>
+                        <div class="pra-field-row">
+                            <div class="pra-field">
+                                <label>UOM</label>
+                                <select @bind="decisionUom">
+                                    <option value="Kg">Kg</option>
+                                    <option value="Unit">Unit</option>
+                                    <option value="Litre">Litre</option>
+                                    <option value="Nos">Nos</option>
+                                </select>
+                            </div>
+                            <div class="pra-field">
+                                <label>Approved Price</label>
+                                <input type="number" min="0" @bind="decisionPrice" />
+                            </div>
+                        </div>
+                        <div class="pra-field">
+                            <label>Admin Remarks <span class="pra-field-hint">Optional (required when rejecting)</span></label>
+                            <textarea @bind="decisionRemarks" rows="3" placeholder="Reason for approval or rejection"></textarea>
+                        </div>
+                    </div>
+                }
+            </div>
+
+            <div class="pra-sidepanel-footer">
+                <button type="button" class="pra-btn pra-btn-outline" @onclick="CloseReview">
+                    <i class="bi bi-arrow-left"></i> Back to Batch List
+                </button>
+                <div class="pra-footer-right">
+                    <button type="button" class="pra-btn pra-btn-muted" @onclick="CloseReview">Close</button>
+                    @if (reviewEditable)
+                    {
+                        <button type="button" class="pra-btn pra-btn-danger" disabled="@_deciding" @onclick="RejectReview">
+                            Reject
+                        </button>
+                        <button type="button" class="pra-btn pra-btn-success" disabled="@_deciding" @onclick="ApproveReview">
+                            Approve <i class="bi bi-chevron-double-right"></i>
+                        </button>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<style>
+    .pra-page {
+        --pra-blue-bg: #dbeafe; --pra-blue-text: #1d4ed8; --pra-blue-border: #93c5fd;
+        --pra-mint-bg: #dcfce7; --pra-mint-text: #15803d; --pra-mint-border: #86efac;
+        --pra-violet-bg: #ede9fe; --pra-violet-text: #6d28d9; --pra-violet-border: #c4b5fd;
+        --pra-amber-bg: #fef3c7; --pra-amber-text: #92400e; --pra-amber-border: #fcd34d;
+        --pra-emerald-bg: #d1fae5; --pra-emerald-text: #065f46; --pra-emerald-border: #6ee7b7;
+        --pra-rose-bg: #fee2e2; --pra-rose-text: #b91c1c; --pra-rose-border: #fca5a5;
+        --pra-gray-bg: #f3f4f6; --pra-gray-text: #6b7280; --pra-gray-border: #e5e7eb;
+        color: var(--text-main);
+    }
+
+    .pra-page .shell-page-actions { gap: 10px; flex-wrap: wrap; }
+
+    .pra-btn {
+        display: inline-flex; align-items: center; gap: 8px;
+        padding: 9px 16px; border-radius: 8px; font-size: 14px; font-weight: 600;
+        cursor: pointer; transition: all .15s ease; white-space: nowrap; border: 1px solid transparent;
+    }
+
+    .pra-btn-outline { background: #fff; border-color: var(--primary); color: var(--primary); }
+    .pra-btn-outline:hover { background: var(--primary-soft); }
+    .pra-btn-primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+    .pra-btn-muted { background: #e5e7eb; border-color: #e5e7eb; color: var(--text-main); }
+    .pra-btn-success { background: #16a34a; color: #fff; }
+    .pra-btn-success:hover { background: #15803d; }
+    .pra-btn-success:disabled, .pra-btn-danger:disabled { opacity: .6; cursor: not-allowed; }
+    .pra-btn-danger { background: #dc2626; color: #fff; }
+    .pra-btn-danger:hover { background: #b91c1c; }
+
+    .pra-filters-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 14px; margin: 16px 0; overflow: hidden; }
+    .pra-filters-toggle { width: 100%; display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; background: #f9fafb; border: none; cursor: pointer; font-size: 14px; font-weight: 700; color: var(--text-main); }
+    .pra-filters-body { padding: 18px; border-top: 1px solid #e5e7eb; }
+    .pra-filters-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; margin-bottom: 14px; }
+    .pra-filter-field { display: flex; flex-direction: column; gap: 6px; }
+    .pra-filter-field label { font-size: 12px; font-weight: 700; color: var(--text-main); }
+    .pra-filter-field input, .pra-filter-field select { padding: 8px 10px; border-radius: 8px; border: 1px solid #e5e7eb; font-size: 13px; background: #fff; }
+    .pra-filters-actions { display: flex; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
+
+    .pra-tabs { margin: 16px 0 12px; }
+    .pra-tab-group { display: inline-flex; gap: 4px; background: #f3f4f6; padding: 4px; border-radius: 10px; flex-wrap: wrap; }
+    .pra-tab { padding: 8px 18px; border-radius: 8px; font-size: 13px; font-weight: 600; color: var(--text-soft); cursor: pointer; background: transparent; border: none; white-space: nowrap; }
+    .pra-tab.active { background: #fff; color: var(--primary); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+
+    .pra-card { background: #fff; border-radius: 14px; border: 1px solid #e5e7eb; padding: 18px; }
+
+    .pra-table-scroll { overflow-x: auto; }
+    .pra-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .pra-table th { text-align: left; padding: 10px 12px; background: #f9fafb; color: var(--text-soft); font-weight: 600; white-space: nowrap; border-bottom: 1px solid #e5e7eb; }
+    .pra-table td { padding: 10px 12px; border-bottom: 1px solid #f3f4f6; white-space: nowrap; }
+    .pra-col-action { text-align: center; }
+
+    .pra-product { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; }
+    .pra-icon { display: inline-flex; width: 22px; height: 22px; color: var(--primary); }
+
+    .pra-group-pill, .pra-type-pill {
+        display: inline-block; padding: 5px 12px; border-radius: 999px; font-size: 12px; font-weight: 600; border: 1px solid; white-space: nowrap;
+    }
+
+    .pra-group-livestock, .pra-type-rate { background: var(--pra-blue-bg); color: var(--pra-blue-text); border-color: var(--pra-blue-border); }
+    .pra-group-orchard { background: var(--pra-mint-bg); color: var(--pra-mint-text); border-color: var(--pra-mint-border); }
+    .pra-type-new { background: var(--pra-violet-bg); color: var(--pra-violet-text); border-color: var(--pra-violet-border); }
+
+    .pra-action-wrap { display: flex; gap: 6px; justify-content: center; align-items: center; }
+    .pra-action-btn { width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center; border-radius: 8px; border: 1px solid #e5e7eb; background: #fff; cursor: pointer; color: var(--text-soft); }
+    .pra-action-view:hover { color: var(--primary); border-color: var(--primary); }
+    .pra-action-edit:hover { color: #0ea5e9; border-color: #7dd3fc; }
+    .pra-approve-btn { background: #16a34a; color: #fff; border: none; border-radius: 8px; padding: 7px 14px; font-size: 12px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+    .pra-approve-btn:hover { background: #15803d; }
+
+    .pra-pagination { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-top: 14px; }
+    .pra-items-per-page { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-soft); }
+    .pra-items-per-page select { padding: 5px 8px; border-radius: 6px; border: 1px solid #e5e7eb; }
+    .pra-pagination-buttons { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+    .pra-page-btn { width: 30px; height: 30px; border-radius: 8px; border: 1px solid #e5e7eb; background: #fff; cursor: pointer; }
+    .pra-page-btn.active { background: var(--primary); border-color: var(--primary); color: #fff; }
+    .pra-page-btn:disabled { opacity: .5; cursor: not-allowed; }
+    .pra-page-ellipsis { padding: 0 4px; color: var(--text-soft); }
+
+    .pra-sidepanel-backdrop { position: fixed; inset: 0; background: rgba(15,23,42,.45); display: flex; justify-content: flex-end; z-index: 1050; }
+    .pra-sidepanel { width: 440px; max-width: 100%; background: #fff; height: 100%; overflow-y: auto; display: flex; flex-direction: column; }
+    .pra-sidepanel-header { padding: 16px 18px; border-bottom: 1px solid #e5e7eb; background: #f9fafb; }
+    .pra-sidepanel-header h3 { display: flex; align-items: center; font-size: 16px; font-weight: 700; margin: 0; }
+    .pra-sidepanel-subtitle { margin: 4px 0 0 40px; font-size: 13px; color: var(--text-soft); }
+    .pra-modal-close { width: 30px; height: 30px; border-radius: 8px; border: 1px solid #e5e7eb; background: #fff; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+    .pra-sidepanel-body { padding: 16px 18px; flex: 1; display: flex; flex-direction: column; gap: 16px; }
+    .pra-sidepanel-footer { padding: 14px 18px; border-top: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .pra-footer-right { display: flex; gap: 10px; flex-wrap: wrap; }
+
+    .pra-info-card h4 { font-size: 13px; font-weight: 700; margin: 0 0 10px; color: var(--text-main); }
+    .pra-info-grid { display: grid; grid-template-columns: 120px 1fr; row-gap: 10px; font-size: 13px; align-items: center; }
+    .pra-info-label { color: var(--text-soft); font-weight: 600; }
+    .pra-info-value { color: var(--text-main); display: flex; align-items: center; gap: 8px; }
+
+    .pra-reason-box { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px 12px; font-size: 13px; }
+
+    .pra-field-row { display: flex; gap: 10px; }
+    .pra-field { flex: 1; display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+    .pra-field label { font-size: 12px; font-weight: 600; color: var(--text-soft); }
+    .pra-field-hint { font-weight: 400; color: var(--text-soft); }
+    .pra-field input, .pra-field select, .pra-field textarea { padding: 8px 10px; border-radius: 8px; border: 1px solid #e5e7eb; font-size: 13px; }
+
+    @@media (max-width: 767px) {
+        .pra-table thead { display: none; }
+        .pra-table, .pra-table tbody, .pra-table tr, .pra-table td { display: block; width: 100%; }
+        .pra-table tr { border: 1px solid #e5e7eb; border-radius: 10px; margin-bottom: 10px; padding: 8px 12px; }
+        .pra-table td { border: none; padding: 6px 0; display: flex; justify-content: space-between; align-items: center; gap: 10px; white-space: normal; }
+        .pra-table td::before { content: attr(data-label); font-weight: 600; color: var(--text-soft); }
+        .pra-sidepanel { width: 100%; }
+        .pra-field-row { flex-direction: column; }
+        .pra-sidepanel-footer { flex-direction: column; align-items: stretch; }
+        .pra-footer-right { justify-content: stretch; }
+        .pra-footer-right .pra-btn { flex: 1; justify-content: center; }
+    }
+</style>
+
+@code {
+    private class RequestRow
+    {
+        public int Id { get; set; }
+        public string ProductName { get; set; } = "";
+        public string Group { get; set; } = "Live Stock";
+        public string Uom { get; set; } = "Kg";
+        public string? CurrentRateText { get; set; }
+        public string RequestedRateText { get; set; } = "";
+        public decimal RequestedRateValue { get; set; }
+        public string RequestType { get; set; } = "";
+        public string Status { get; set; } = "Pending";
+        public string RequestedBy { get; set; } = "";
+        public string RequestDate { get; set; } = "";
+        public DateTime RequestedAtRaw { get; set; }
+        public string Reason { get; set; } = "";
+    }
+
+    private class ApiFarmRequest
+    {
+        public int Id { get; set; }
+        public string RequestType { get; set; } = "";
+        public int? FarmProductId { get; set; }
+        public string ProductName { get; set; } = "";
+        public string Group { get; set; } = "";
+        public string Uom { get; set; } = "";
+        public decimal? CurrentRate { get; set; }
+        public decimal RequestedRate { get; set; }
+        public string Reason { get; set; } = "";
+        public string Status { get; set; } = "";
+        public string RequestedBy { get; set; } = "";
+        public DateTime RequestedAt { get; set; }
+        public decimal? ApprovedPrice { get; set; }
+        public string? ApprovedUom { get; set; }
+        public string? AdminRemarks { get; set; }
+        public string? RejectionReason { get; set; }
+        public string? DecidedBy { get; set; }
+        public DateTime? DecidedAt { get; set; }
+    }
+
+    private static string GroupDisplay(string apiGroup) => apiGroup == "LiveStock" ? "Live Stock" : "Orchard";
+    private static string RequestTypeDisplay(string apiType) => apiType == "NewProduct" ? "New Product" : "Rate Change";
+
+    private List<RequestRow> rows = new();
+    private bool _loading;
+    private bool _deciding;
+
+    private bool filtersExpanded = true;
+    private string fromDate = DateTime.Now.ToString("yyyy-MM-dd");
+    private string toDate = DateTime.Now.ToString("yyyy-MM-dd");
+    private string requestTypeFilter = "All";
+    private string groupFilter = "All";
+    private string productFilter = "All";
+    private string searchQuery = "";
+
+    private RequestRow? reviewRow;
+    private bool reviewEditable;
+    private string decisionUom = "";
+    private decimal? decisionPrice;
+    private string decisionRemarks = "";
+
+    protected override async Task OnInitializedAsync() => await LoadDataAsync();
+
+    private async Task LoadDataAsync()
+    {
+        _loading = true;
+        try
+        {
+            var requests = await Http.GetFromJsonAsync<List<ApiFarmRequest>>("api/FarmProduct/requests?status=Pending") ?? new();
+            rows = requests.Select(r => new RequestRow
+            {
+                Id = r.Id,
+                ProductName = r.ProductName,
+                Group = GroupDisplay(r.Group),
+                Uom = r.Uom,
+                CurrentRateText = r.CurrentRate.HasValue ? $"₹ {r.CurrentRate.Value:N0} / {r.Uom}" : null,
+                RequestedRateText = $"₹ {r.RequestedRate:N0} / {r.Uom}",
+                RequestedRateValue = r.RequestedRate,
+                RequestType = RequestTypeDisplay(r.RequestType),
+                Status = r.Status,
+                RequestedBy = r.RequestedBy,
+                RequestDate = r.RequestedAt.ToString("dd MMM yyyy"),
+                RequestedAtRaw = r.RequestedAt,
+                Reason = r.Reason
+            }).OrderByDescending(r => r.Id).ToList();
+        }
+        catch (Exception ex)
+        {
+            Toast.Error("Failed to load requests: " + ex.Message);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private List<string> DistinctProductNames => rows.Select(r => r.ProductName).Distinct().OrderBy(n => n).ToList();
+
+    private List<RequestRow> FilteredExceptType
+    {
+        get
+        {
+            var filtered = rows.AsEnumerable();
+
+            if (groupFilter != "All")
+                filtered = filtered.Where(r => r.Group == groupFilter);
+
+            if (productFilter != "All")
+                filtered = filtered.Where(r => r.ProductName == productFilter);
+
+            if (!string.IsNullOrWhiteSpace(fromDate) && DateTime.TryParse(fromDate, out var from))
+                filtered = filtered.Where(r => r.RequestedAtRaw >= from.Date);
+
+            if (!string.IsNullOrWhiteSpace(toDate) && DateTime.TryParse(toDate, out var to))
+                filtered = filtered.Where(r => r.RequestedAtRaw < to.Date.AddDays(1));
+
+            return filtered.ToList();
+        }
+    }
+
+    private List<RequestRow> FilteredRows => requestTypeFilter switch
+    {
+        "New Product" => FilteredExceptType.Where(r => r.RequestType == "New Product").ToList(),
+        "Rate Change" => FilteredExceptType.Where(r => r.RequestType == "Rate Change").ToList(),
+        _ => FilteredExceptType
+    };
+
+    private int NewProductCount => FilteredExceptType.Count(r => r.RequestType == "New Product");
+    private int RateChangeCount => FilteredExceptType.Count(r => r.RequestType == "Rate Change");
+
+    private List<ExportColumn<RequestRow>> GetExportColumns() => new()
+    {
+        new() { Header = "Request ID", ValueSelector = r => $"Request {r.Id:000}" },
+        new() { Header = "Product Group", ValueSelector = r => r.Group },
+        new() { Header = "Product", ValueSelector = r => r.ProductName },
+        new() { Header = "Request Type", ValueSelector = r => r.RequestType },
+        new() { Header = "Current Rate", ValueSelector = r => r.CurrentRateText ?? "-" },
+        new() { Header = "Requested Rate", ValueSelector = r => r.RequestedRateText },
+        new() { Header = "Requested On", ValueSelector = r => r.RequestDate }
+    };
+
+    private void GoToDashboard() => Nav.NavigateTo(LoginState.LandingPage);
+
+    private void SwitchTab(string tab) => requestTypeFilter = tab;
+
+    private void ApplyFilters() => filtersExpanded = false;
+
+    private void ClearFilters()
+    {
+        fromDate = DateTime.Now.ToString("yyyy-MM-dd");
+        toDate = DateTime.Now.ToString("yyyy-MM-dd");
+        requestTypeFilter = "All";
+        groupFilter = "All";
+        productFilter = "All";
+    }
+
+    private void OnFromDateChanged(ChangeEventArgs e) => fromDate = e.Value?.ToString() ?? "";
+
+    private void OnToDateChanged(ChangeEventArgs e) => toDate = e.Value?.ToString() ?? "";
+
+    private void OpenView(RequestRow row)
+    {
+        reviewRow = row;
+        reviewEditable = false;
+    }
+
+    private void OpenEdit(RequestRow row)
+    {
+        reviewRow = row;
+        reviewEditable = true;
+        decisionUom = row.Uom;
+        decisionPrice = row.RequestedRateValue;
+        decisionRemarks = "";
+    }
+
+    private void CloseReview()
+    {
+        reviewRow = null;
+        reviewEditable = false;
+    }
+
+    private async Task QuickApprove(RequestRow row)
+    {
+        var ok = await Toast.ConfirmAsync("Approve request?", $"Approve the request for \"{row.ProductName}\" at {row.RequestedRateText}?", "Approve");
+        if (!ok) return;
+
+        await DecideAsync(row.Id, approve: true, price: row.RequestedRateValue, uom: row.Uom, remarks: null);
+    }
+
+    private async Task ApproveReview()
+    {
+        if (reviewRow is null) return;
+
+        if (decisionPrice is null || decisionPrice <= 0)
+        {
+            Toast.Error("Enter a valid approved price.");
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(decisionUom))
+        {
+            Toast.Error("Enter a UOM.");
+            return;
+        }
+
+        await DecideAsync(reviewRow.Id, approve: true, price: decisionPrice.Value, uom: decisionUom.Trim(), remarks: string.IsNullOrWhiteSpace(decisionRemarks) ? null : decisionRemarks.Trim());
+    }
+
+    private async Task RejectReview()
+    {
+        if (reviewRow is null) return;
+
+        if (string.IsNullOrWhiteSpace(decisionRemarks))
+        {
+            Toast.Error("Enter a rejection reason in Admin Remarks.");
+            return;
+        }
+
+        var ok = await Toast.ConfirmAsync("Reject request?", $"Reject the request for \"{reviewRow.ProductName}\"? This cannot be undone.", "Reject", danger: true);
+        if (!ok) return;
+
+        await DecideAsync(reviewRow.Id, approve: false, price: null, uom: null, remarks: decisionRemarks.Trim());
+    }
+
+    private async Task DecideAsync(int requestId, bool approve, decimal? price, string? uom, string? remarks)
+    {
+        _deciding = true;
+        try
+        {
+            HttpResponseMessage response;
+            if (approve)
+            {
+                response = await Http.PostAsJsonAsync($"api/FarmProduct/requests/{requestId}/approve", new
+                {
+                    ApprovedPrice = price,
+                    ApprovedUom = uom,
+                    AdminRemarks = remarks
+                });
+            }
+            else
+            {
+                response = await Http.PostAsJsonAsync($"api/FarmProduct/requests/{requestId}/reject", new
+                {
+                    RejectionReason = remarks
+                });
+            }
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var message = await response.Content.ReadAsStringAsync();
+                Toast.Error(string.IsNullOrWhiteSpace(message) ? "Failed to save the decision." : message);
+                return;
+            }
+
+            Toast.Success(approve ? "Request approved." : "Request rejected.");
+            CloseReview();
+            await LoadDataAsync();
+        }
+        catch (Exception ex)
+        {
+            Toast.Error("Failed to save the decision: " + ex.Message);
+        }
+        finally
+        {
+            _deciding = false;
+        }
+    }
+}

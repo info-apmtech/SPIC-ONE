@@ -822,6 +822,11 @@ namespace Spic.Infrastructure.Data
         public DbSet<Category> Categories { get; set; }
         public DbSet<ProductGroup> ProductGroups { get; set; }
         public DbSet<Product> Products { get; set; }
+
+        // Farm Operations (Farm Admin / Farm Office) - livestock/orchard product catalog.
+        // Deliberately separate from Product/ProductGroup above.
+        public DbSet<FarmProduct> FarmProducts { get; set; }
+        public DbSet<FarmProductRateRequest> FarmProductRateRequests { get; set; }
         public DbSet<Warehouse> Warehouses { get; set; }
         //public DbSet<CandFWarehouse> CandFWarehouses { get; set; }
         public DbSet<LyingWithMaster> LyingWithMasters { get; set; }

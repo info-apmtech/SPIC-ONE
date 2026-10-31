@@ -1,13 +1,16 @@
 @page "/ProductRateManagement"
+@using System.Net.Http.Json
 @inject NavigationManager Nav
 @inject LoginState LoginState
 @inject ToastService Toast
+@inject HttpClient Http
 
 @*
-    SAS portal: farmer product catalog + a rate-change / new-product request workflow.
-    UI-first pass: the product list, requests and approvals below are all in-memory
-    (no backend yet) so the design can be reviewed before a real ProductRateManagement
-    table/controller is built. Gated by PagePermission.ProductRateManagement.
+    Farm Operations (Farm Office): livestock/orchard product catalog + a rate-change /
+    new-product request workflow, backed by FarmProductController. Gated by
+    PagePermission.productRateManagement - Entry is required to submit/retract a request
+    (Farm Admin's approve/reject and master-catalog management live on the separate
+    ProductRateApprovals.razor / FarmProductMaster.razor pages, not here).
 *@
 
 <div class="prm-page">
@@ -19,9 +22,12 @@
             <button type="button" class="prm-btn prm-btn-outline" @onclick="GoToDashboard">
                 <i class="bi bi-arrow-left"></i> Back to Dashboard
             </button>
-            <button type="button" class="prm-btn prm-btn-primary" @onclick="OpenAddModal">
-                <i class="bi bi-plus-lg"></i> Request New Product
-            </button>
+            @if (LoginState.Can(SPIC.Core.Entities.PagePermission.productRateManagement, "Entry"))
+            {
+                <button type="button" class="prm-btn prm-btn-primary" @onclick="OpenAddModal">
+                    <i class="bi bi-plus-lg"></i> Request New Product
+                </button>
+            }
         </Actions>
     </PageHeader>
 
@@ -33,8 +39,16 @@
         </div>
     </div>
 
-    <div class="prm-card">
-        <div class="prm-toolbar">
+    <SpicDataTable TItem="ProductRow"
+                   Items="FilteredRows"
+                   IsLoading="_loading"
+                   Title="Products"
+                   FileName="ProductRateManagement"
+                   ExportColumns="GetExportColumns()"
+                   SearchText="@searchQuery"
+                   EmptyTitle="No products found"
+                   EmptyMessage="No products match your filters. Try a different search or filter.">
+        <FilterControls>
             <div class="prm-pills">
                 <button type="button" class='prm-pill @(statusFilter == "All" ? "active" : "")' @onclick='() => SetStatusFilter("All")'>All</button>
                 <button type="button" class='prm-pill @(statusFilter == "Pending" ? "active" : "")' @onclick='() => SetStatusFilter("Pending")'>
@@ -46,118 +60,82 @@
             </div>
             <div class="prm-search">
                 <i class="bi bi-search"></i>
-                <input type="text" value="@searchQuery" @oninput="OnSearchChanged" placeholder="Search zones..." />
+                <input type="text" placeholder="Search products..." @bind="searchQuery" @bind:event="oninput" @bind:after="StateHasChanged" />
             </div>
-        </div>
+        </FilterControls>
 
-        <div class="prm-table-scroll">
-            <table class="prm-table">
-                <thead>
-                    <tr>
-                        <th>S.No</th>
-                        <th>Product</th>
-                        <th>Product Group</th>
-                        <th>UOM</th>
-                        <th>Current Rate</th>
-                        <th>Request Rate</th>
-                        <th>Request Type</th>
-                        <th>Status</th>
-                        <th>Request Date</th>
-                        <th class="prm-col-action">Action</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @if (PageRows.Count == 0)
-                    {
-                        <tr class="prm-state-row">
-                            <td colspan="10">
-                                <EmptyState Title="No products found" Message="No products match your filters. Try a different search or filter." />
-                            </td>
-                        </tr>
-                    }
-                    else
-                    {
-                        @foreach (var row in PageRows)
-                        {
-                            <tr @key="row.Id">
-                                <td data-label="S.No">@SerialNoFor(row)</td>
-                                <td data-label="Product">
-                                    <span class="prm-product">
-                                        <span class="prm-icon">@IconFor(row.Name)</span>
-                                        @row.Name
-                                    </span>
-                                </td>
-                                <td data-label="Product Group">
-                                    <span class='prm-group-pill @(row.Group == "Orchard" ? "prm-group-orchard" : "prm-group-livestock")'>@row.Group</span>
-                                </td>
-                                <td data-label="UOM">@row.Uom</td>
-                                <td data-label="Current Rate">@(row.CurrentRateText ?? "-")</td>
-                                <td data-label="Request Rate">@(row.RequestRateText ?? "-")</td>
-                                <td data-label="Request Type">
-                                    @if (row.RequestType is null)
-                                    {
-                                        @:-
-                                    }
-                                    else
-                                    {
-                                        <span class='prm-type-pill @(row.RequestType == "New Product" ? "prm-type-new" : "prm-type-rate")'>@row.RequestType</span>
-                                    }
-                                </td>
-                                <td data-label="Status">
-                                    <span class='prm-status-pill @StatusPillClass(row.Status)'>@row.Status</span>
-                                </td>
-                                <td data-label="Request Date">@(row.RequestDate ?? "-")</td>
-                                <td data-label="Action" class="prm-col-action">
-                                    <div class="prm-action-wrap">
-                                        <button type="button" class="prm-action-btn prm-action-view" title="View" @onclick="() => ViewRow(row)">
-                                            <i class="bi bi-eye"></i>
-                                        </button>
-                                        <button type="button" class="prm-action-btn prm-action-edit" title="Edit" @onclick="() => EditRow(row)">
-                                            <i class="bi bi-pencil-square"></i>
-                                        </button>
-                                        <button type="button" class="prm-action-btn prm-action-delete" title="Delete" @onclick="() => DeleteRow(row)">
-                                            <i class="bi bi-trash"></i>
-                                        </button>
-                                    </div>
-                                </td>
-                            </tr>
-                        }
-                    }
-                </tbody>
-            </table>
-        </div>
+        <TableHeader>
+            <th>Product</th>
+            <th>Product Group</th>
+            <th>UOM</th>
+            <th>Current Rate</th>
+            <th>Request Rate</th>
+            <th>Request Type</th>
+            <th>Status</th>
+            <th>Request Date</th>
+            <th class="prm-col-action">Action</th>
+        </TableHeader>
 
-        <div class="prm-pagination">
-            <div class="prm-items-per-page">
-                <span>Items Per Page</span>
-                <select value="@itemsPerPage" @onchange="ChangeItemsPerPage">
-                    <option value="8">8</option>
-                    <option value="16">16</option>
-                    <option value="24">24</option>
-                    <option value="32">32</option>
-                </select>
-            </div>
-            <div class="prm-pagination-buttons">
-                <button type="button" class="prm-page-btn" disabled="@(currentPage == 1)" @onclick="() => SetPage(currentPage - 1)">
-                    <i class="bi bi-chevron-left"></i>
-                </button>
-                @foreach (var p in PaginationPages)
+        <TableRow Context="row">
+            <td data-label="Product">
+                <span class="prm-product">
+                    <span class="prm-icon">@IconFor(row.Name)</span>
+                    @row.Name
+                </span>
+            </td>
+            <td data-label="Product Group">
+                <span class='prm-group-pill @(row.Group == "Orchard" ? "prm-group-orchard" : "prm-group-livestock")'>@row.Group</span>
+            </td>
+            <td data-label="UOM">@row.Uom</td>
+            <td data-label="Current Rate">@(row.CurrentRateText ?? "-")</td>
+            <td data-label="Request Rate">@(row.RequestRateText ?? "-")</td>
+            <td data-label="Request Type">
+                @if (row.RequestType is null)
                 {
-                    if (p is "...")
-                    {
-                        <span class="prm-page-ellipsis">...</span>
-                    }
-                    else
-                    {
-                        <button type="button" class='prm-page-btn @((int)p == currentPage ? "active" : "")' @onclick='() => SetPage((int)p)'>@p</button>
-                    }
+                    @:-
                 }
-                <button type="button" class="prm-page-btn" disabled="@(currentPage == TotalPages)" @onclick="() => SetPage(currentPage + 1)">
-                    <i class="bi bi-chevron-right"></i>
+                else
+                {
+                    <span class='prm-type-pill @(row.RequestType == "New Product" ? "prm-type-new" : "prm-type-rate")'>@row.RequestType</span>
+                }
+            </td>
+            <td data-label="Status">
+                <span class='prm-status-pill @StatusPillClass(row.Status)'>@row.Status</span>
+            </td>
+            <td data-label="Request Date">@(row.RequestDate ?? "-")</td>
+            <td data-label="Action" class="prm-col-action">
+                <div class="prm-action-wrap">
+                    <button type="button" class="prm-action-btn prm-action-view" title="View" @onclick="() => ViewRow(row)">
+                        <i class="bi bi-eye"></i>
+                    </button>
+                    @if (LoginState.Can(SPIC.Core.Entities.PagePermission.productRateManagement, "Entry"))
+                    {
+                        <button type="button" class="prm-action-btn prm-action-edit" title="Edit" @onclick="() => EditRow(row)">
+                            <i class="bi bi-pencil-square"></i>
+                        </button>
+                        <button type="button" class="prm-action-btn prm-action-delete" title="Delete" @onclick="() => DeleteRow(row)">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    }
+                </div>
+            </td>
+        </TableRow>
+
+        <CardActions Context="row">
+            <button type="button" class="prm-action-btn prm-action-view" title="View" @onclick="() => ViewRow(row)">
+                <i class="bi bi-eye"></i>
+            </button>
+            @if (LoginState.Can(SPIC.Core.Entities.PagePermission.productRateManagement, "Entry"))
+            {
+                <button type="button" class="prm-action-btn prm-action-edit" title="Edit" @onclick="() => EditRow(row)">
+                    <i class="bi bi-pencil-square"></i>
                 </button>
-            </div>
-        </div>
-    </div>
+                <button type="button" class="prm-action-btn prm-action-delete" title="Delete" @onclick="() => DeleteRow(row)">
+                    <i class="bi bi-trash"></i>
+                </button>
+            }
+        </CardActions>
+    </SpicDataTable>
 
     <div class="prm-info">
         <div class="prm-info-icon"><i class="bi bi-info-circle"></i></div>
@@ -179,12 +157,8 @@
         <div class="prm-modal" @onclick:stopPropagation="true">
             <div class="prm-modal-header">
                 <div>
-                    <h3>@(editingRow is null ? "Request New Product" : "Request Rate Change")</h3>
-                    <p class="prm-modal-subtitle">
-                        @(editingRow is null
-                            ? "Tell Admin what you want to add to the catalog."
-                            : "Request a new rate for an existing product, it wil be reviewed and approved by admin")
-                    </p>
+                    <h3>@ModalTitle</h3>
+                    <p class="prm-modal-subtitle">@ModalSubtitle</p>
                 </div>
                 <button type="button" class="prm-modal-close" @onclick="CloseFormModal" aria-label="Close">
                     <i class="bi bi-x-lg"></i>
@@ -192,7 +166,7 @@
             </div>
 
             <div class="prm-modal-body">
-                @if (editingRow is null)
+                @if (ShowFullProductFields)
                 {
                     <div class="prm-toggle-group">
                         <button type="button" class='prm-toggle-btn @(formProductGroup == "Live Stock" ? "active" : "")' @onclick='() => formProductGroup = "Live Stock"'>Live Stock</button>
@@ -318,7 +292,6 @@
                                 <i class="bi bi-file-earmark-text"></i>
                             </div>
                             <div class="prm-rate-amount">@(viewingRow.CurrentRateText ?? "-")</div>
-                            <div class="prm-rate-sub">(This 15 Day) 01 - 15 Sep 2026</div>
                         </div>
                         <div class="prm-rate-box">
                             <div class="prm-rate-header">
@@ -326,7 +299,6 @@
                                 <i class="bi bi-file-earmark-arrow-up"></i>
                             </div>
                             <div class="prm-rate-amount">@(viewingRow.RequestRateText ?? "-")</div>
-                            <div class="prm-rate-sub">(This 15 Day) 16 - 30 Sep 2026</div>
                         </div>
                     </div>
                     <div class="prm-rate-type">
@@ -339,12 +311,12 @@
                     <h4>Request Information</h4>
                     <div class="prm-info-grid" style="grid-template-columns: 100px 1fr;">
                         <div class="prm-info-label">Request Date</div>
-                        <div class="prm-info-value">: @(viewingRow.RequestDate ?? "-"), 10:30 AM</div>
+                        <div class="prm-info-value">: @(viewingRow.RequestDate ?? "-")</div>
                         <div class="prm-info-label">Requested By</div>
-                        <div class="prm-info-value">: Rajesh Kumar (Office)</div>
+                        <div class="prm-info-value">: @(viewingRow.RequestedBy ?? "-")</div>
                         <div class="prm-info-label" style="grid-column: 1 / -1; margin-top: 10px;">Reason</div>
                         <div class="prm-info-value" style="grid-column: 1 / -1;">
-                            <div class="prm-reason-box">Market rate increased. Requesting new rate for next 15 days.</div>
+                            <div class="prm-reason-box">@(viewingRow.Reason ?? "-")</div>
                         </div>
                     </div>
                 </div>
@@ -621,6 +593,19 @@
         flex-shrink: 0;
     }
 
+    .prm-icon-monogram {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        background: #e6f4ec;
+        color: #006139;
+        font-size: 12px;
+        font-weight: 700;
+    }
+
         .prm-icon svg {
             width: 20px;
             height: 20px;
@@ -680,6 +665,12 @@
         background: var(--prm-gray-bg);
         color: var(--prm-gray-text);
         border-color: var(--prm-gray-border);
+    }
+
+    .prm-status-rejected {
+        background: #fee2e2;
+        color: #b91c1c;
+        border-color: #fca5a5;
     }
 
     .prm-action-wrap {
@@ -1359,27 +1350,149 @@
 @code {
     private class ProductRow
     {
-        public int Id { get; set; }
+        public int? ProductId { get; set; }
+        public int? RequestId { get; set; }
         public string Name { get; set; } = "";
         public string Group { get; set; } = "Live Stock";
         public string Uom { get; set; } = "Kg";
         public string? CurrentRateText { get; set; }
         public string? RequestRateText { get; set; }
+        public decimal? RequestRateValue { get; set; }
         public string? RequestType { get; set; }
         public string Status { get; set; } = "No Request";
         public string? RequestDate { get; set; }
+        public string? RequestedBy { get; set; }
+        public string? Reason { get; set; }
+
+        // Synthetic key for @@key/list-diffing only - never used for API calls.
+        public string Id => $"p{ProductId}-r{RequestId}";
     }
 
-    private List<ProductRow> rows = new()
+    private class ApiFarmProduct
     {
-        new ProductRow { Id = 1, Name = "Chicken", Group = "Live Stock", Uom = "Kg", CurrentRateText = "₹ 250 / Kg", RequestRateText = "₹ 278 / Kg", RequestType = "Rate Change", Status = "Pending", RequestDate = "02 Oct 2026" },
-        new ProductRow { Id = 2, Name = "Chicken Eggs", Group = "Live Stock", Uom = "Unit", CurrentRateText = "₹ 250 / Kg", RequestRateText = null, RequestType = null, Status = "No Request", RequestDate = null },
-        new ProductRow { Id = 3, Name = "Goat", Group = "Live Stock", Uom = "Kg", CurrentRateText = "₹ 250 / Kg", RequestRateText = "₹ 450 / Kg", RequestType = "Rate Change", Status = "Approved", RequestDate = "02 Oct 2026" },
-        new ProductRow { Id = 4, Name = "Goat", Group = "Live Stock", Uom = "Kg", CurrentRateText = "₹ 250 / Kg", RequestRateText = "₹ 350 / Kg", RequestType = "Rate Change", Status = "Pending", RequestDate = "02 Oct 2026" },
-        new ProductRow { Id = 5, Name = "Dragon Fruit", Group = "Orchard", Uom = "Kg", CurrentRateText = null, RequestRateText = "₹ 170 / Kg", RequestType = "New Product", Status = "Approved", RequestDate = null },
-    };
+        public int Id { get; set; }
+        public string Name { get; set; } = "";
+        public string Group { get; set; } = "";
+        public string Uom { get; set; } = "";
+        public decimal CurrentRate { get; set; }
+        public bool IsActive { get; set; }
+        public DateTime UpdatedAt { get; set; }
+    }
 
-    private int _nextId = 6;
+    private class ApiFarmRequest
+    {
+        public int Id { get; set; }
+        public string RequestType { get; set; } = "";
+        public int? FarmProductId { get; set; }
+        public string ProductName { get; set; } = "";
+        public string Group { get; set; } = "";
+        public string Uom { get; set; } = "";
+        public decimal? CurrentRate { get; set; }
+        public decimal RequestedRate { get; set; }
+        public string Reason { get; set; } = "";
+        public string Status { get; set; } = "";
+        public string RequestedBy { get; set; } = "";
+        public DateTime RequestedAt { get; set; }
+        public decimal? ApprovedPrice { get; set; }
+        public string? ApprovedUom { get; set; }
+        public string? AdminRemarks { get; set; }
+        public string? RejectionReason { get; set; }
+        public string? DecidedBy { get; set; }
+        public DateTime? DecidedAt { get; set; }
+    }
+
+    private List<ProductRow> rows = new();
+    private List<ApiFarmProduct> _products = new();
+    private List<ApiFarmRequest> _requests = new();
+    private bool _loading;
+
+    private static string GroupDisplay(string apiGroup) => apiGroup == "LiveStock" ? "Live Stock" : "Orchard";
+    private static string GroupApi(string uiGroup) => uiGroup == "Live Stock" ? "LiveStock" : "Orchard";
+    private static string RequestTypeDisplay(string apiType) => apiType == "NewProduct" ? "New Product" : "Rate Change";
+
+    protected override async Task OnInitializedAsync() => await LoadDataAsync();
+
+    private async Task LoadDataAsync()
+    {
+        _loading = true;
+        try
+        {
+            var productsTask = Http.GetFromJsonAsync<List<ApiFarmProduct>>("api/FarmProduct/products");
+            var requestsTask = Http.GetFromJsonAsync<List<ApiFarmRequest>>("api/FarmProduct/requests");
+            await Task.WhenAll(productsTask, requestsTask);
+            _products = productsTask.Result ?? new();
+            _requests = requestsTask.Result ?? new();
+            BuildRows();
+        }
+        catch (Exception ex)
+        {
+            Toast.Error("Failed to load products: " + ex.Message);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void BuildRows()
+    {
+        var list = new List<ProductRow>();
+
+        var latestByProduct = _requests
+            .Where(r => r.FarmProductId.HasValue)
+            .GroupBy(r => r.FarmProductId!.Value)
+            .ToDictionary(g => g.Key, g => g.OrderByDescending(r => r.RequestedAt).First());
+
+        foreach (var p in _products)
+        {
+            var row = new ProductRow
+            {
+                ProductId = p.Id,
+                Name = p.Name,
+                Group = GroupDisplay(p.Group),
+                Uom = p.Uom,
+                CurrentRateText = $"₹ {p.CurrentRate:N0} / {p.Uom}",
+                Status = "No Request"
+            };
+
+            if (latestByProduct.TryGetValue(p.Id, out var req))
+            {
+                row.RequestId = req.Id;
+                row.RequestRateText = $"₹ {req.RequestedRate:N0} / {req.Uom}";
+                row.RequestRateValue = req.RequestedRate;
+                row.RequestType = RequestTypeDisplay(req.RequestType);
+                row.Status = req.Status;
+                row.RequestDate = req.RequestedAt.ToString("dd MMM yyyy");
+                row.RequestedBy = req.RequestedBy;
+                row.Reason = req.Reason;
+            }
+
+            list.Add(row);
+        }
+
+        // Still-pending "new product" requests have no FarmProduct row yet - show them as their own entry.
+        foreach (var req in _requests.Where(r => r.RequestType == "NewProduct" && !r.FarmProductId.HasValue))
+        {
+            list.Add(new ProductRow
+            {
+                ProductId = null,
+                RequestId = req.Id,
+                Name = req.ProductName,
+                Group = GroupDisplay(req.Group),
+                Uom = req.Uom,
+                CurrentRateText = null,
+                RequestRateText = $"₹ {req.RequestedRate:N0} / {req.Uom}",
+                RequestRateValue = req.RequestedRate,
+                RequestType = RequestTypeDisplay(req.RequestType),
+                Status = req.Status,
+                RequestDate = req.RequestedAt.ToString("dd MMM yyyy"),
+                RequestedBy = req.RequestedBy,
+                Reason = req.Reason
+            });
+        }
+
+        rows = list.OrderBy(r => r.Name).ToList();
+    }
 
     private static readonly Dictionary<string, string> ProductIconSvgs = new()
     {
@@ -1416,18 +1529,39 @@
             """,
     };
 
-    private MarkupString IconFor(string name) =>
-        new(ProductIconSvgs.TryGetValue(name, out var svg) ? svg : "<i class=\"bi bi-box-seam\"></i>");
+    // Only a handful of products have a hand-drawn SVG (Chicken, Goat, etc.). Farm Office can
+    // request any product name though, so anything else falls back to a letter badge instead of
+    // a mismatched generic icon (e.g. a box icon for "Camel").
+    private static MarkupString IconFor(string name) =>
+        new(ProductIconSvgs.TryGetValue(name, out var svg) ? svg : MonogramBadge(name));
+
+    private static string MonogramBadge(string name)
+    {
+        var letter = string.IsNullOrWhiteSpace(name) ? "?" : char.ToUpperInvariant(name.Trim()[0]).ToString();
+        return $"<span class=\"prm-icon-monogram\">{letter}</span>";
+    }
 
     private string currentTab = "All";
     private string statusFilter = "All";
     private string searchQuery = "";
-    private int currentPage = 1;
-    private int itemsPerPage = 16;
 
     private bool showFormModal;
     private ProductRow? editingRow;
+    private int? editingPendingRequestId;
     private ProductRow? viewingRow;
+
+    private bool ShowFullProductFields =>
+        editingRow is null || (editingPendingRequestId.HasValue && editingRow.RequestType == "New Product");
+
+    private string ModalTitle => editingPendingRequestId.HasValue
+        ? "Edit Request"
+        : (editingRow is null ? "Request New Product" : "Request Rate Change");
+
+    private string ModalSubtitle => editingPendingRequestId.HasValue
+        ? "Update your pending request before Admin reviews it."
+        : (editingRow is null
+            ? "Tell Admin what you want to add to the catalog."
+            : "Request a new rate for an existing product, it wil be reviewed and approved by admin");
 
     private string formExistingProductId = "";
     private string formProductName = "";
@@ -1455,56 +1589,27 @@
             if (statusFilter != "All")
                 filtered = filtered.Where(r => r.Status == statusFilter);
 
-            if (!string.IsNullOrWhiteSpace(searchQuery))
-            {
-                var q = searchQuery.Trim();
-                filtered = filtered.Where(r => r.Name.Contains(q, StringComparison.OrdinalIgnoreCase));
-            }
-
             return filtered.ToList();
         }
     }
 
-    private int TotalPages => Math.Max(1, (int)Math.Ceiling((double)FilteredRows.Count / itemsPerPage));
-
-    private List<ProductRow> PageRows
+    private List<ExportColumn<ProductRow>> GetExportColumns() => new()
     {
-        get
-        {
-            var filtered = FilteredRows;
-            var start = (currentPage - 1) * itemsPerPage;
-            return filtered.Skip(start).Take(itemsPerPage).ToList();
-        }
-    }
-
-    private int SerialNoFor(ProductRow row) => FilteredRows.IndexOf(row) + 1;
-
-    private List<object> PaginationPages
-    {
-        get
-        {
-            var pages = new List<object>();
-            var total = TotalPages;
-            if (total <= 7)
-            {
-                for (int i = 1; i <= total; i++) pages.Add(i);
-            }
-            else
-            {
-                pages.Add(1); pages.Add(2); pages.Add(3);
-                if (currentPage > 5) pages.Add("...");
-                if (currentPage > 3 && currentPage < total - 2) pages.Add(currentPage);
-                if (currentPage < total - 4) pages.Add("...");
-                pages.Add(total - 2); pages.Add(total - 1); pages.Add(total);
-            }
-            return pages.Distinct().ToList();
-        }
-    }
+        new() { Header = "Product", ValueSelector = r => r.Name },
+        new() { Header = "Product Group", ValueSelector = r => r.Group },
+        new() { Header = "UOM", ValueSelector = r => r.Uom },
+        new() { Header = "Current Rate", ValueSelector = r => r.CurrentRateText ?? "-" },
+        new() { Header = "Request Rate", ValueSelector = r => r.RequestRateText ?? "-" },
+        new() { Header = "Request Type", ValueSelector = r => r.RequestType ?? "-" },
+        new() { Header = "Status", ValueSelector = r => r.Status },
+        new() { Header = "Request Date", ValueSelector = r => r.RequestDate ?? "-" }
+    };
 
     private static string StatusPillClass(string status) => status switch
     {
         "Pending" => "prm-status-pending",
         "Approved" => "prm-status-approved",
+        "Rejected" => "prm-status-rejected",
         _ => "prm-status-none"
     };
 
@@ -1514,33 +1619,14 @@
     {
         currentTab = tab;
         statusFilter = "All";
-        currentPage = 1;
     }
 
-    private void SetStatusFilter(string status)
-    {
-        statusFilter = status;
-        currentPage = 1;
-    }
-
-    private void OnSearchChanged(ChangeEventArgs e)
-    {
-        searchQuery = e.Value?.ToString() ?? "";
-        currentPage = 1;
-    }
-
-    private void SetPage(int page) => currentPage = page;
-
-    private void ChangeItemsPerPage(ChangeEventArgs e)
-    {
-        if (int.TryParse(e.Value?.ToString(), out var val))
-            itemsPerPage = val;
-        currentPage = 1;
-    }
+    private void SetStatusFilter(string status) => statusFilter = status;
 
     private void OpenAddModal()
     {
         editingRow = null;
+        editingPendingRequestId = null;
         formExistingProductId = "";
         formProductName = "";
         formProductGroup = "Live Stock";
@@ -1552,8 +1638,30 @@
 
     private void EditRow(ProductRow row)
     {
+        // A still-pending request of their own (New Product or Rate Change) - edit it in place.
+        if (row.RequestId is not null && row.Status == "Pending")
+        {
+            editingRow = row;
+            editingPendingRequestId = row.RequestId;
+            formProductName = row.RequestType == "New Product" ? row.Name : "";
+            formProductGroup = row.Group;
+            formUom = row.Uom;
+            formRate = row.RequestRateValue;
+            formReason = row.Reason ?? "";
+            showFormModal = true;
+            return;
+        }
+
+        // Otherwise, submit a brand-new Rate Change request against an already-approved product.
+        if (row.ProductId is null)
+        {
+            Toast.Error("This product is still awaiting approval - you can't request a rate change yet.");
+            return;
+        }
+
         editingRow = row;
-        formExistingProductId = row.Id.ToString();
+        editingPendingRequestId = null;
+        formExistingProductId = row.ProductId.Value.ToString();
         formRate = null;
         formReason = "";
         showFormModal = true;
@@ -1565,22 +1673,54 @@
 
     private async Task DeleteRow(ProductRow row)
     {
-        var ok = await Toast.ConfirmAsync("Delete product?", $"Delete \"{row.Name}\" from the catalog? This cannot be undone.", "Delete", danger: true);
+        if (row.RequestId is null || row.Status != "Pending")
+        {
+            Toast.Error("There is no pending request to delete for this product.");
+            return;
+        }
+
+        var ok = await Toast.ConfirmAsync("Delete request?", $"Delete the pending request for \"{row.Name}\"? This cannot be undone.", "Delete", danger: true);
         if (!ok) return;
 
-        rows.Remove(row);
-        Toast.Success($"\"{row.Name}\" deleted.");
+        try
+        {
+            var response = await Http.DeleteAsync($"api/FarmProduct/requests/{row.RequestId.Value}");
+            if (!response.IsSuccessStatusCode)
+            {
+                Toast.Error("Failed to delete the request.");
+                return;
+            }
+
+            Toast.Success("Request deleted.");
+            await LoadDataAsync();
+        }
+        catch (Exception ex)
+        {
+            Toast.Error("Failed to delete the request: " + ex.Message);
+        }
     }
 
-    private void SubmitForm()
+    private async Task SubmitForm()
     {
-        if (formRate is null || formRate < 0)
+        if (formRate is null || formRate <= 0)
         {
             Toast.Error("Enter a valid rate.");
             return;
         }
 
-        var today = DateTime.Now.ToString("dd MMM yyyy");
+        if (string.IsNullOrWhiteSpace(formReason))
+        {
+            Toast.Error("Enter a reason for this request.");
+            return;
+        }
+
+        if (editingPendingRequestId.HasValue)
+        {
+            await SaveEditOfPendingRequest(editingPendingRequestId.Value);
+            return;
+        }
+
+        object payload;
 
         if (editingRow is not null)
         {
@@ -1590,17 +1730,14 @@
                 return;
             }
 
-            var target = rows.FirstOrDefault(r => r.Id == id);
-            if (target is null)
+            payload = new
             {
-                Toast.Error("Select a product.");
-                return;
-            }
-
-            target.RequestRateText = $"₹ {formRate.Value:N0} / {target.Uom}";
-            target.RequestType = "Rate Change";
-            target.Status = "Pending";
-            target.RequestDate = today;
+                RequestType = "RateChange",
+                FarmProductId = id,
+                Uom = editingRow.Uom,
+                Rate = formRate.Value,
+                Reason = formReason.Trim()
+            };
         }
         else
         {
@@ -1610,21 +1747,86 @@
                 return;
             }
 
-            rows.Add(new ProductRow
+            payload = new
             {
-                Id = _nextId++,
-                Name = formProductName.Trim(),
-                Group = formProductGroup,
+                RequestType = "NewProduct",
+                ProductName = formProductName.Trim(),
+                Group = GroupApi(formProductGroup),
                 Uom = formUom.Trim(),
-                CurrentRateText = null,
-                RequestRateText = $"₹ {formRate.Value:N0} / {formUom.Trim()}",
-                RequestType = "New Product",
-                Status = "Pending",
-                RequestDate = today
-            });
+                Rate = formRate.Value,
+                Reason = formReason.Trim()
+            };
         }
 
-        Toast.Success("Request submitted.");
-        showFormModal = false;
+        try
+        {
+            var response = await Http.PostAsJsonAsync("api/FarmProduct/requests", payload);
+            if (!response.IsSuccessStatusCode)
+            {
+                var message = await response.Content.ReadAsStringAsync();
+                Toast.Error(string.IsNullOrWhiteSpace(message) ? "Failed to submit the request." : message);
+                return;
+            }
+
+            Toast.Success("Request submitted.");
+            showFormModal = false;
+            await LoadDataAsync();
+        }
+        catch (Exception ex)
+        {
+            Toast.Error("Failed to submit the request: " + ex.Message);
+        }
+    }
+
+    private async Task SaveEditOfPendingRequest(int requestId)
+    {
+        object payload;
+
+        if (editingRow!.RequestType == "New Product")
+        {
+            if (string.IsNullOrWhiteSpace(formProductName) || string.IsNullOrWhiteSpace(formUom))
+            {
+                Toast.Error("Enter a product name and UOM.");
+                return;
+            }
+
+            payload = new
+            {
+                ProductName = formProductName.Trim(),
+                Group = GroupApi(formProductGroup),
+                Uom = formUom.Trim(),
+                Rate = formRate!.Value,
+                Reason = formReason.Trim()
+            };
+        }
+        else
+        {
+            payload = new
+            {
+                Uom = editingRow.Uom,
+                Rate = formRate!.Value,
+                Reason = formReason.Trim()
+            };
+        }
+
+        try
+        {
+            var response = await Http.PutAsJsonAsync($"api/FarmProduct/requests/{requestId}", payload);
+            if (!response.IsSuccessStatusCode)
+            {
+                var message = await response.Content.ReadAsStringAsync();
+                Toast.Error(string.IsNullOrWhiteSpace(message) ? "Failed to update the request." : message);
+                return;
+            }
+
+            Toast.Success("Request updated.");
+            showFormModal = false;
+            editingPendingRequestId = null;
+            await LoadDataAsync();
+        }
+        catch (Exception ex)
+        {
+            Toast.Error("Failed to update the request: " + ex.Message);
+        }
     }
 }

@@ -3511,6 +3511,115 @@ namespace Spic.Infrastructure.Migrations
                     b.ToTable("ExpenseInformations");
                 });
 
+            modelBuilder.Entity("SPIC.Core.Entities.FarmProduct", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<decimal>("CurrentRate")
+                        .HasColumnType("numeric");
+
+                    b.Property<int>("Group")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Uom")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("FarmProducts");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.FarmProductRateRequest", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("AdminRemarks")
+                        .HasColumnType("text");
+
+                    b.Property<decimal?>("ApprovedPrice")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("ApprovedUom")
+                        .HasColumnType("text");
+
+                    b.Property<decimal?>("CurrentRateAtRequestTime")
+                        .HasColumnType("numeric");
+
+                    b.Property<DateTime?>("DecidedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("DecidedBy")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("FarmProductId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("ProposedGroup")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ProposedProductName")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ProposedUom")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("RejectionReason")
+                        .HasColumnType("text");
+
+                    b.Property<int>("RequestType")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("RequestedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("RequestedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<decimal>("RequestedRate")
+                        .HasColumnType("numeric");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FarmProductId");
+
+                    b.ToTable("FarmProductRateRequests");
+                });
+
             modelBuilder.Entity("SPIC.Core.Entities.FinancialYear", b =>
                 {
                     b.Property<int>("Id")
@@ -11198,6 +11307,15 @@ namespace Spic.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("State");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.FarmProductRateRequest", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.FarmProduct", "FarmProduct")
+                        .WithMany()
+                        .HasForeignKey("FarmProductId");
+
+                    b.Navigation("FarmProduct");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.GuestHouseBill", b =>

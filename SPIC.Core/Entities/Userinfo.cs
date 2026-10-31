@@ -130,6 +130,11 @@ namespace SPIC.Core.Entities
         // Plant / Dealer Nature master (2026-10-16): these two lookup tables had no admin UI at
         // all, so Excel bulk-upload rows referencing a new Plant/Dealer Nature could never be
         // entered ahead of time. Appended at the END on purpose - see the comment above.
-        PlantDealerNatureMaster, ExpenseInformation, TeamTracking, CSRExceedingDaySetting, GpsSettings, BudgetAllocations
+        PlantDealerNatureMaster, ExpenseInformation, TeamTracking, CSRExceedingDaySetting, GpsSettings, BudgetAllocations, productRateManagement, FifteenDaysEntry,
+
+        // Farm Operations approval workflow (2026-10-31): Farm Admin's two pages, separate from
+        // productRateManagement (Farm Office's request/catalog page) so the two roles can be
+        // granted Entry (request) vs Update (approve/manage) independently. Appended at the END.
+        ProductRateApprovals, FarmProductMaster
     }
 }

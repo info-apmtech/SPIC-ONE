@@ -1,0 +1,523 @@
+@page "/FarmProductMaster"
+@using System.Net.Http.Json
+@inject NavigationManager Nav
+@inject LoginState LoginState
+@inject ToastService Toast
+@inject HttpClient Http
+
+@*
+    Farm Operations (Farm Admin): master catalog of livestock/orchard products, with a direct
+    edit (bypassing the request/approval flow) and a rate-history drawer. Backed by
+    FarmProductController. Gated by PagePermission.FarmProductMaster - Update is required to
+    edit/deactivate a product.
+*@
+
+<div class="fpm-page">
+
+    <PageHeader Title="Product Master"
+                Subtitle="Manage products, Units and rate used in farm operations"
+                ShowBack="false">
+        <Actions>
+            <button type="button" class="fpm-btn fpm-btn-outline" @onclick="GoToDashboard">
+                <i class="bi bi-arrow-left"></i> Back to Dashboard
+            </button>
+            @if (LoginState.Can(SPIC.Core.Entities.PagePermission.productRateManagement, "Entry"))
+            {
+                <button type="button" class="fpm-btn fpm-btn-outline" @onclick='() => Nav.NavigateTo("/ProductRateManagement")'>
+                    Request New Product
+                </button>
+            }
+        </Actions>
+    </PageHeader>
+
+    <div class="fpm-tabs">
+        <div class="fpm-tab-group">
+            <button type="button" class='fpm-tab @(currentTab == "All" ? "active" : "")' @onclick='() => SwitchTab("All")'>All Product</button>
+            <button type="button" class='fpm-tab @(currentTab == "Livestock" ? "active" : "")' @onclick='() => SwitchTab("Livestock")'>Livestock</button>
+            <button type="button" class='fpm-tab @(currentTab == "Orchard" ? "active" : "")' @onclick='() => SwitchTab("Orchard")'>Orchard</button>
+        </div>
+    </div>
+
+    <SpicDataTable TItem="ApiFarmProduct"
+                   Items="FilteredRows"
+                   IsLoading="_loading"
+                   Title="Products"
+                   FileName="ProductMaster"
+                   ExportColumns="GetExportColumns()"
+                   SearchText="@searchQuery"
+                   EmptyTitle="No products found"
+                   EmptyMessage="No products match your filters. Try a different search or filter.">
+        <FilterControls>
+            <div class="fpm-search">
+                <i class="bi bi-search"></i>
+                <input type="text" placeholder="Search products..." @bind="searchQuery" @bind:event="oninput" @bind:after="StateHasChanged" />
+            </div>
+        </FilterControls>
+
+        <TableHeader>
+            <th>Product</th>
+            <th>Product Group</th>
+            <th>UOM</th>
+            <th>Current Rate</th>
+            <th>Next Effective Rate</th>
+            <th>Effective From</th>
+            <th>Status</th>
+            <th class="fpm-col-action">Action</th>
+        </TableHeader>
+
+        <TableRow Context="row">
+            <td data-label="Product">
+                <span class="fpm-product">
+                    <span class="fpm-icon"><i class="bi bi-box-seam"></i></span>
+                    @row.Name
+                </span>
+            </td>
+            <td data-label="Product Group">
+                <span class='fpm-group-pill @(GroupDisplay(row.Group) == "Orchard" ? "fpm-group-orchard" : "fpm-group-livestock")'>@GroupDisplay(row.Group)</span>
+            </td>
+            <td data-label="UOM">@row.Uom</td>
+            <td data-label="Current Rate">₹ @row.CurrentRate.ToString("N0") / @row.Uom</td>
+            <td data-label="Next Effective Rate">-</td>
+            <td data-label="Effective From">-</td>
+            <td data-label="Status">
+                <span class='fpm-status-pill @(row.IsActive ? "fpm-status-active" : "fpm-status-inactive")'>@(row.IsActive ? "Active" : "Inactive")</span>
+            </td>
+            <td data-label="Action" class="fpm-col-action">
+                <div class="fpm-action-wrap">
+                    <button type="button" class="fpm-history-btn" @onclick="() => OpenHistory(row)">View History</button>
+                    @if (LoginState.Can(SPIC.Core.Entities.PagePermission.FarmProductMaster, "Update"))
+                    {
+                        <button type="button" class="fpm-action-btn fpm-action-edit" title="Edit" @onclick="() => OpenEdit(row)">
+                            <i class="bi bi-pencil-square"></i>
+                        </button>
+                    }
+                </div>
+            </td>
+        </TableRow>
+
+        <CardActions Context="row">
+            <button type="button" class="fpm-history-btn" @onclick="() => OpenHistory(row)">View History</button>
+            @if (LoginState.Can(SPIC.Core.Entities.PagePermission.FarmProductMaster, "Update"))
+            {
+                <button type="button" class="fpm-action-btn fpm-action-edit" title="Edit" @onclick="() => OpenEdit(row)">
+                    <i class="bi bi-pencil-square"></i>
+                </button>
+            }
+        </CardActions>
+    </SpicDataTable>
+
+    <div class="fpm-info">
+        <div class="fpm-info-icon"><i class="bi bi-info-circle"></i></div>
+        <div class="fpm-info-body">
+            <h3>Information</h3>
+            <ul>
+                <li>Products are added here once a Request New Product submission is approved.</li>
+                <li>Rate changes are reflected here immediately once a Rate Change request is approved.</li>
+                <li>Edit lets you directly correct a product's name, UOM or rate without going through the approval flow.</li>
+                <li>Deactivating a product (via Edit) hides it from new requests while keeping its rate history.</li>
+            </ul>
+        </div>
+    </div>
+</div>
+
+@if (editRow is not null)
+{
+    <div class="fpm-modal-backdrop" @onclick="CloseEdit">
+        <div class="fpm-modal" @onclick:stopPropagation="true">
+            <div class="fpm-modal-header">
+                <div>
+                    <h3>Edit Product</h3>
+                    <p class="fpm-modal-subtitle">Direct catalog correction - does not go through the approval flow.</p>
+                </div>
+                <button type="button" class="fpm-modal-close" @onclick="CloseEdit" aria-label="Close">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            </div>
+
+            <div class="fpm-modal-body">
+                <div class="fpm-field">
+                    <label>Product Name</label>
+                    <input type="text" @bind="editName" />
+                </div>
+                <div class="fpm-field-row">
+                    <div class="fpm-field">
+                        <label>UOM</label>
+                        <input type="text" @bind="editUom" />
+                    </div>
+                    <div class="fpm-field">
+                        <label>Current Rate</label>
+                        <input type="number" min="0" @bind="editRate" />
+                    </div>
+                </div>
+                <div class="fpm-field fpm-checkbox-field">
+                    <label><input type="checkbox" @bind="editIsActive" /> Active</label>
+                </div>
+            </div>
+
+            <div class="fpm-modal-footer">
+                <button type="button" class="fpm-btn fpm-btn-outline" @onclick="CloseEdit">Cancel</button>
+                <button type="button" class="fpm-btn fpm-btn-primary" disabled="@_saving" @onclick="SaveEdit">
+                    @(_saving ? "Saving..." : "Save Changes")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (historyRow is not null)
+{
+    <div class="fpm-sidepanel-backdrop" @onclick="CloseHistory">
+        <div class="fpm-sidepanel" @onclick:stopPropagation="true">
+            <div class="fpm-sidepanel-header">
+                <h3>
+                    <button type="button" class="fpm-modal-close" style="margin-right: 10px;" @onclick="CloseHistory">
+                        <i class="bi bi-arrow-left"></i>
+                    </button>
+                    Rate History
+                </h3>
+            </div>
+
+            <div class="fpm-sidepanel-body">
+                <div class="fpm-info-card">
+                    <h4>Product Information</h4>
+                    <div class="fpm-info-grid">
+                        <div class="fpm-info-label">Product Name</div>
+                        <div class="fpm-info-value">: @historyRow.Name</div>
+                        <div class="fpm-info-label">Product Group</div>
+                        <div class="fpm-info-value">: <span class='fpm-group-pill @(historyRow.Group == "Orchard" ? "fpm-group-orchard" : "fpm-group-livestock")'>@historyRow.Group</span></div>
+                        <div class="fpm-info-label">Unit (UOM)</div>
+                        <div class="fpm-info-value">: @historyRow.Uom</div>
+                    </div>
+                </div>
+
+                <div class="fpm-info-card">
+                    <div class="fpm-rate-box fpm-rate-box-current">
+                        <div class="fpm-rate-header">
+                            <span>Current Rate</span>
+                            <i class="bi bi-file-earmark-text"></i>
+                        </div>
+                        <div class="fpm-rate-amount">₹ @historyRow.CurrentRate.ToString("N0") / @historyRow.Uom</div>
+                    </div>
+                </div>
+
+                <div class="fpm-info-card">
+                    <h4>History</h4>
+                    @if (_historyLoading)
+                    {
+                        <Skeleton Variant="table" Rows="3" LoadingText="Loading history..." />
+                    }
+                    else if (historyEntries.Count == 0)
+                    {
+                        <div class="fpm-history-empty">No approved rate history yet.</div>
+                    }
+                    else
+                    {
+                        <table class="fpm-history-table">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Rate</th>
+                                    <th>Tag</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var h in historyEntries)
+                                {
+                                    <tr>
+                                        <td>@h.DecidedAt.ToString("dd MMM yyyy")</td>
+                                        <td>₹ @h.Rate.ToString("N0") / @historyRow.Uom</td>
+                                        <td><span class='fpm-status-pill @(h.Tag == "Current" ? "fpm-status-active" : "fpm-status-inactive")'>@h.Tag</span></td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    }
+                </div>
+            </div>
+
+            <div class="fpm-sidepanel-footer">
+                <button type="button" class="fpm-btn fpm-btn-outline" @onclick="CloseHistory">Close</button>
+            </div>
+        </div>
+    </div>
+}
+
+<style>
+    .fpm-page {
+        --fpm-blue-bg: #dbeafe; --fpm-blue-text: #1d4ed8; --fpm-blue-border: #93c5fd;
+        --fpm-mint-bg: #dcfce7; --fpm-mint-text: #15803d; --fpm-mint-border: #86efac;
+        --fpm-gray-bg: #f3f4f6; --fpm-gray-text: #6b7280; --fpm-gray-border: #e5e7eb;
+        color: var(--text-main);
+    }
+
+    .fpm-page .shell-page-actions { gap: 10px; flex-wrap: wrap; }
+
+    .fpm-btn {
+        display: inline-flex; align-items: center; gap: 8px;
+        padding: 9px 16px; border-radius: 8px; font-size: 14px; font-weight: 600;
+        cursor: pointer; transition: all .15s ease; white-space: nowrap; border: 1px solid transparent;
+    }
+
+    .fpm-btn-outline { background: #fff; border-color: var(--primary); color: var(--primary); }
+    .fpm-btn-outline:hover { background: var(--primary-soft); }
+    .fpm-btn-primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+    .fpm-btn-primary:disabled { opacity: .6; cursor: not-allowed; }
+
+    .fpm-tabs { margin: 16px 0 12px; }
+    .fpm-tab-group { display: inline-flex; gap: 4px; background: #f3f4f6; padding: 4px; border-radius: 10px; }
+    .fpm-tab { padding: 8px 18px; border-radius: 8px; font-size: 13px; font-weight: 600; color: var(--text-soft); cursor: pointer; background: transparent; border: none; }
+    .fpm-tab.active { background: #fff; color: var(--primary); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+
+    .fpm-card { background: #fff; border-radius: 14px; border: 1px solid #e5e7eb; padding: 18px; }
+
+    .fpm-table-scroll { overflow-x: auto; }
+    .fpm-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .fpm-table th { text-align: left; padding: 10px 12px; background: #f9fafb; color: var(--text-soft); font-weight: 600; white-space: nowrap; border-bottom: 1px solid #e5e7eb; }
+    .fpm-table td { padding: 10px 12px; border-bottom: 1px solid #f3f4f6; white-space: nowrap; }
+    .fpm-col-action { text-align: center; }
+
+    .fpm-product { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; }
+    .fpm-icon { display: inline-flex; width: 22px; height: 22px; color: var(--primary); }
+
+    .fpm-group-pill, .fpm-status-pill {
+        display: inline-block; padding: 5px 12px; border-radius: 999px; font-size: 12px; font-weight: 600; border: 1px solid; white-space: nowrap;
+    }
+
+    .fpm-group-livestock { background: var(--fpm-blue-bg); color: var(--fpm-blue-text); border-color: var(--fpm-blue-border); }
+    .fpm-group-orchard { background: var(--fpm-mint-bg); color: var(--fpm-mint-text); border-color: var(--fpm-mint-border); }
+    .fpm-status-active { background: var(--fpm-mint-bg); color: var(--fpm-mint-text); border-color: var(--fpm-mint-border); }
+    .fpm-status-inactive { background: var(--fpm-gray-bg); color: var(--fpm-gray-text); border-color: var(--fpm-gray-border); }
+
+    .fpm-action-wrap { display: flex; gap: 8px; justify-content: center; align-items: center; }
+    .fpm-action-btn { width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center; border-radius: 8px; border: 1px solid #e5e7eb; background: #fff; cursor: pointer; color: var(--text-soft); }
+    .fpm-action-edit:hover { color: #0ea5e9; border-color: #7dd3fc; }
+    .fpm-history-btn { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 7px 14px; font-size: 12px; font-weight: 600; color: var(--text-main); cursor: pointer; white-space: nowrap; }
+    .fpm-history-btn:hover { color: var(--primary); border-color: var(--primary); }
+
+    .fpm-info { display: flex; gap: 14px; margin-top: 20px; padding: 18px 20px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 12px; }
+    .fpm-info-icon { flex-shrink: 0; width: 28px; height: 28px; border-radius: 50%; border: 2px solid #1e293b; display: flex; align-items: center; justify-content: center; }
+    .fpm-info-body h3 { margin: 0 0 8px; font-size: 15px; font-weight: 700; color: var(--text-main); }
+    .fpm-info-body ul { margin: 0; padding-left: 18px; font-size: 13px; color: var(--text-soft); line-height: 1.7; }
+
+    .fpm-pagination { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-top: 14px; }
+    .fpm-items-per-page { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-soft); }
+    .fpm-items-per-page select { padding: 5px 8px; border-radius: 6px; border: 1px solid #e5e7eb; }
+    .fpm-pagination-buttons { display: flex; align-items: center; gap: 4px; }
+    .fpm-page-btn { width: 30px; height: 30px; border-radius: 8px; border: 1px solid #e5e7eb; background: #fff; cursor: pointer; }
+    .fpm-page-btn.active { background: var(--primary); border-color: var(--primary); color: #fff; }
+    .fpm-page-btn:disabled { opacity: .5; cursor: not-allowed; }
+    .fpm-page-ellipsis { padding: 0 4px; color: var(--text-soft); }
+
+    .fpm-modal-backdrop { position: fixed; inset: 0; background: rgba(15,23,42,.45); display: flex; align-items: center; justify-content: center; z-index: 1050; padding: 16px; }
+    .fpm-modal { width: 460px; max-width: 100%; background: #fff; border-radius: 14px; overflow: hidden; display: flex; flex-direction: column; max-height: 90vh; }
+    .fpm-modal-header { display: flex; justify-content: space-between; align-items: flex-start; padding: 18px 20px; border-bottom: 1px solid #e5e7eb; }
+    .fpm-modal-header h3 { margin: 0; font-size: 16px; font-weight: 700; }
+    .fpm-modal-subtitle { margin: 4px 0 0; font-size: 12px; color: var(--text-soft); }
+    .fpm-modal-close { width: 30px; height: 30px; border-radius: 8px; border: 1px solid #e5e7eb; background: #fff; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+    .fpm-modal-body { padding: 18px 20px; overflow-y: auto; }
+    .fpm-modal-footer { padding: 14px 20px; border-top: 1px solid #e5e7eb; display: flex; justify-content: flex-end; gap: 10px; }
+
+    .fpm-field-row { display: flex; gap: 10px; }
+    .fpm-field { flex: 1; display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+    .fpm-field label { font-size: 12px; font-weight: 600; color: var(--text-soft); }
+    .fpm-field input { padding: 8px 10px; border-radius: 8px; border: 1px solid #e5e7eb; font-size: 13px; }
+    .fpm-checkbox-field label { flex-direction: row; align-items: center; display: flex; gap: 8px; font-size: 13px; color: var(--text-main); }
+
+    .fpm-sidepanel-backdrop { position: fixed; inset: 0; background: rgba(15,23,42,.45); display: flex; justify-content: flex-end; z-index: 1050; }
+    .fpm-sidepanel { width: 420px; max-width: 100%; background: #fff; height: 100%; overflow-y: auto; display: flex; flex-direction: column; }
+    .fpm-sidepanel-header { padding: 16px 18px; border-bottom: 1px solid #e5e7eb; }
+    .fpm-sidepanel-header h3 { display: flex; align-items: center; font-size: 16px; font-weight: 700; margin: 0; }
+    .fpm-sidepanel-body { padding: 16px 18px; flex: 1; display: flex; flex-direction: column; gap: 16px; }
+    .fpm-sidepanel-footer { padding: 14px 18px; border-top: 1px solid #e5e7eb; display: flex; justify-content: flex-end; gap: 10px; }
+
+    .fpm-info-card h4 { font-size: 13px; font-weight: 700; margin: 0 0 10px; color: var(--text-main); }
+    .fpm-info-grid { display: grid; grid-template-columns: 120px 1fr; row-gap: 8px; font-size: 13px; }
+    .fpm-info-label { color: var(--text-soft); font-weight: 600; }
+    .fpm-info-value { color: var(--text-main); }
+
+    .fpm-rate-box { border: 1px solid #e5e7eb; border-radius: 10px; padding: 10px 12px; }
+    .fpm-rate-box-current { background: var(--primary-soft); border-color: var(--primary); }
+    .fpm-rate-header { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--text-soft); font-weight: 600; }
+    .fpm-rate-amount { font-size: 17px; font-weight: 700; margin-top: 4px; }
+
+    .fpm-history-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .fpm-history-table th { text-align: left; padding: 8px 10px; background: #f9fafb; color: var(--text-soft); font-weight: 600; border-bottom: 1px solid #e5e7eb; }
+    .fpm-history-table td { padding: 8px 10px; border-bottom: 1px solid #f3f4f6; }
+    .fpm-history-empty { font-size: 13px; color: var(--text-soft); padding: 10px 0; }
+
+    @@media (max-width: 767px) {
+        .fpm-table thead { display: none; }
+        .fpm-table, .fpm-table tbody, .fpm-table tr, .fpm-table td { display: block; width: 100%; }
+        .fpm-table tr { border: 1px solid #e5e7eb; border-radius: 10px; margin-bottom: 10px; padding: 8px 12px; }
+        .fpm-table td { border: none; padding: 6px 0; display: flex; justify-content: space-between; gap: 10px; white-space: normal; }
+        .fpm-table td::before { content: attr(data-label); font-weight: 600; color: var(--text-soft); }
+        .fpm-sidepanel { width: 100%; }
+        .fpm-field-row { flex-direction: column; }
+        .fpm-modal-footer { flex-direction: column-reverse; align-items: stretch; }
+        .fpm-modal-footer .fpm-btn { justify-content: center; }
+    }
+</style>
+
+@code {
+    private class ApiFarmProduct
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = "";
+        public string Group { get; set; } = "";
+        public string Uom { get; set; } = "";
+        public decimal CurrentRate { get; set; }
+        public bool IsActive { get; set; }
+        public DateTime UpdatedAt { get; set; }
+    }
+
+    private class RateHistoryEntry
+    {
+        public int RequestId { get; set; }
+        public decimal Rate { get; set; }
+        public string Tag { get; set; } = "";
+        public DateTime DecidedAt { get; set; }
+    }
+
+    private static string GroupDisplay(string apiGroup) => apiGroup == "LiveStock" ? "Live Stock" : "Orchard";
+
+    private List<ApiFarmProduct> rows = new();
+    private bool _loading;
+    private bool _saving;
+    private bool _historyLoading;
+
+    private string currentTab = "All";
+    private string searchQuery = "";
+
+    private ApiFarmProduct? editRow;
+    private string editName = "";
+    private string editUom = "";
+    private decimal editRate;
+    private bool editIsActive;
+
+    private ApiFarmProduct? historyRow;
+    private List<RateHistoryEntry> historyEntries = new();
+
+    protected override async Task OnInitializedAsync() => await LoadDataAsync();
+
+    private async Task LoadDataAsync()
+    {
+        _loading = true;
+        try
+        {
+            rows = await Http.GetFromJsonAsync<List<ApiFarmProduct>>("api/FarmProduct/products?includeInactive=true") ?? new();
+        }
+        catch (Exception ex)
+        {
+            Toast.Error("Failed to load products: " + ex.Message);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private List<ApiFarmProduct> TabRows => currentTab switch
+    {
+        "Livestock" => rows.Where(r => GroupDisplay(r.Group) == "Live Stock").ToList(),
+        "Orchard" => rows.Where(r => GroupDisplay(r.Group) == "Orchard").ToList(),
+        _ => rows
+    };
+
+    private List<ApiFarmProduct> FilteredRows => TabRows;
+
+    private List<ExportColumn<ApiFarmProduct>> GetExportColumns() => new()
+    {
+        new() { Header = "Product", ValueSelector = r => r.Name },
+        new() { Header = "Product Group", ValueSelector = r => GroupDisplay(r.Group) },
+        new() { Header = "UOM", ValueSelector = r => r.Uom },
+        new() { Header = "Current Rate", ValueSelector = r => $"₹ {r.CurrentRate:N0} / {r.Uom}" },
+        new() { Header = "Status", ValueSelector = r => r.IsActive ? "Active" : "Inactive" }
+    };
+
+    private void GoToDashboard() => Nav.NavigateTo(LoginState.LandingPage);
+
+    private void SwitchTab(string tab) => currentTab = tab;
+
+    private void OpenEdit(ApiFarmProduct row)
+    {
+        editRow = row;
+        editName = row.Name;
+        editUom = row.Uom;
+        editRate = row.CurrentRate;
+        editIsActive = row.IsActive;
+    }
+
+    private void CloseEdit() => editRow = null;
+
+    private async Task SaveEdit()
+    {
+        if (editRow is null) return;
+
+        if (string.IsNullOrWhiteSpace(editName) || string.IsNullOrWhiteSpace(editUom))
+        {
+            Toast.Error("Enter a product name and UOM.");
+            return;
+        }
+        if (editRate <= 0)
+        {
+            Toast.Error("Enter a valid rate.");
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            var response = await Http.PutAsJsonAsync($"api/FarmProduct/products/{editRow.Id}", new
+            {
+                Name = editName.Trim(),
+                Uom = editUom.Trim(),
+                CurrentRate = editRate,
+                IsActive = editIsActive
+            });
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var message = await response.Content.ReadAsStringAsync();
+                Toast.Error(string.IsNullOrWhiteSpace(message) ? "Failed to save the product." : message);
+                return;
+            }
+
+            Toast.Success("Product updated.");
+            editRow = null;
+            await LoadDataAsync();
+        }
+        catch (Exception ex)
+        {
+            Toast.Error("Failed to save the product: " + ex.Message);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task OpenHistory(ApiFarmProduct row)
+    {
+        historyRow = row;
+        historyEntries = new();
+        _historyLoading = true;
+        try
+        {
+            historyEntries = await Http.GetFromJsonAsync<List<RateHistoryEntry>>($"api/FarmProduct/products/{row.Id}/rate-history") ?? new();
+        }
+        catch (Exception ex)
+        {
+            Toast.Error("Failed to load rate history: " + ex.Message);
+        }
+        finally
+        {
+            _historyLoading = false;
+        }
+    }
+
+    private void CloseHistory()
+    {
+        historyRow = null;
+        historyEntries = new();
+    }
+}
