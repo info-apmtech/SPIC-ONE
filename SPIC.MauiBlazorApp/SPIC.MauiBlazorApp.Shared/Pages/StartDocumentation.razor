@@ -1,172 +1,684 @@
 ﻿@page "/StartDocumentation"
+@inject HttpClient Http
+@inject NavigationManager NavigationManager
+@using System.Net.Http.Json
+@using System.Text.Json
+@using Microsoft.AspNetCore.Components
+@using System.Net
 
-<div class="container-fluid py-4 px-0">
-
-    <PageHeader Title="Start Documentation"
-                Subtitle="Complete demo details to begin documentation">
-
-    </PageHeader>
-
-    <div class="doc-card">
-        <h6>Program Details (From CSR-2)</h6>
-
-        <div class="row">
-            <div class="doc-card program-summary-card">
-
-                <div class="summary-item">
-
-                    <label>Program Type</label>
-
-                    <div class="summary-value">
-                        Farmer Program
-                    </div>
-
-                </div>
-
-
-                <div class="summary-item">
-
-                    <label>Program Name</label>
-
-                    <div class="summary-value">
-                        Spot Demonstration
-                    </div>
-
-                </div>
-
-
-                <div class="summary-item">
-
-                    <label>Sanction Number</label>
-
-                    <div class="summary-value">
-                        SN-2024-0412
-                    </div>
-
-                </div>
-
-
-                <div class="summary-item">
-
-                    <label>CSR2 Status</label>
-
-                    <div class="summary-value">
-                        Completed
-                    </div>
-
-                </div>
-
-
-                <div class="summary-item">
-
-                    <label>CSR2 Completed Date</label>
-
-                    <div class="summary-value">
-                        10-Jan-2026
-                    </div>
-
-                </div>
-            </div>
-        </div>
+<div class="container-fluid py-4 px-0 start-doc-page">
+    <div class="mb-3">
+        <h3>Start Documentation</h3>
+        <p class="text-muted">Complete demo details to begin documentation</p>
     </div>
 
-
-    <div class="doc-card">
-        <h6>Farmer & Location Details</h6>
-
-        <div class="row">
-            <div class="col">
-                <label>Farmer Name</label>
-                <input class="form-control" />
-            </div>
-
-            <div class="col">
-                <label>Mobile Number</label>
-                <input class="form-control" />
-            </div>
-
-            <div class="col">
-                <label>Place / Village</label>
-                <input class="form-control" />
-            </div>
-        </div>
-
-        <div class="row mt-3">
-            <div class="col-md-6">
-                <label>Farmer Address</label>
-                <textarea class="form-control"></textarea>
+    @if (isLoading)
+    {
+        <div class="alert alert-info">Loading selected CSR-2 program...</div>
+    }
+    else if (!string.IsNullOrWhiteSpace(error))
+    {
+        <div class="alert alert-danger">@error</div>
+        <button type="button" class="btn btn-outline-secondary" @onclick="BackToList">Back to Demo Documentation</button>
+    }
+    else if (selected != null)
+    {
+        <div class="doc-card">
+            <h6>Program Details (From CSR-2)</h6>
+            <div class="program-summary-card">
+                <div class="summary-item"><label>Program Type</label><div class="summary-value">@ValueOrDash(selected.ProgramType)</div></div>
+                <div class="summary-item"><label>Program Name</label><div class="summary-value">@ValueOrDash(selected.ProgramName)</div></div>
+                <div class="summary-item"><label>Sanction Number</label><div class="summary-value">@ValueOrDash(selected.SeasonNumber)</div></div>
+                <div class="summary-item"><label>CSR-2 Status</label><div class="summary-value">@ValueOrDash(selected.CSR2Status)</div></div>
+                <div class="summary-item"><label>CSR-2 Completed Date</label><div class="summary-value">@(selected.CSR2CompletedDate?.ToString("dd-MMM-yyyy") ?? "-")</div></div>
+                <div class="summary-item"><label>Actual Event Location</label><div class="summary-value">@ValueOrDash(selected.Location)</div></div>
+                <div class="summary-item"><label>Focus Products</label><div class="summary-value">@ValueOrDash(selected.Product)</div></div>
             </div>
         </div>
 
-        <div class="row mt-3">
-            <div class="col">
-                <label>Crop</label>
-                <select class="form-control">
-                    <option>Select Crop</option>
-                </select>
+        <div class="doc-card farmer-location-card">
+            <h6>Farmer &amp; Location Details</h6>
+            <div class="row g-3">
+                <div class="col-12 col-md-4">
+                    <label for="farmer-name">Farmer Name</label>
+                    <input id="farmer-name" class="form-control" @bind="farmerName" placeholder="Enter Farmer Name" />
+                </div>
+                <div class="col-12 col-md-4">
+                    <label for="farmer-mobile">Mobile Number</label>
+                    <input id="farmer-mobile" class="form-control" type="tel" inputmode="numeric" maxlength="10" @bind="mobile" placeholder="Enter Mobile Number" />
+                </div>
+                <div class="col-12 col-md-4">
+                    <label for="farmer-village">Place / Village</label>
+                    <input id="farmer-village" class="form-control" @bind="village" placeholder="Enter Village or Locality" />
+                </div>
+                <div class="col-12">
+                    <label for="farmer-address">Farmer Address</label>
+                    <input id="farmer-address" class="form-control" @bind="address" placeholder="Village / Street, District, State" />
+                </div>
+                <div class="col-12 col-md-4">
+                    <label for="farmer-crop">Crop</label>
+                    <select id="farmer-crop" class="form-select" value="@cropId" @onchange="OnCropChanged" disabled="@loadingCrops">
+                        <option value="">@(loadingCrops ? "Loading Crops..." : "Select Crop")</option>
+                        @foreach (var item in crops)
+                        {
+                            <option value="@item.Id">@item.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-12 col-md-4">
+                    <label for="farmer-crop-type">Crop Type</label>
+                    <select id="farmer-crop-type" class="form-select" @bind="cropTypeId"
+                            disabled="@(string.IsNullOrEmpty(cropId) || loadingCropTypes)">
+                        <option value="">@(loadingCropTypes ? "Loading Crop Types..." : "Select Crop Type")</option>
+                        @foreach (var item in cropTypes)
+                        {
+                            <option value="@item.Id">@item.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-12 col-md-4">
+                    <label for="farmer-pin-primary">Pin Code</label>
+                    <input id="farmer-pin-primary" class="form-control" inputmode="numeric" maxlength="6" @bind="pinCode" placeholder="Enter Pin Code" />
+                </div>
+                <div class="col-12 col-md-4">
+                    <label for="farmer-state">State</label>
+                    <select id="farmer-state" class="form-select" value="@stateId" @onchange="OnStateChanged" disabled="@loadingStates">
+                        <option value="">@(loadingStates ? "Loading States..." : "Select State")</option>
+                        @foreach (var item in states)
+                        {
+                            <option value="@item.Id">@item.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-12 col-md-4">
+                    <label for="farmer-district">District</label>
+                    <select id="farmer-district" class="form-select" value="@districtId" @onchange="OnDistrictChanged" disabled="@(string.IsNullOrEmpty(stateId) || loadingDistricts)">
+                        <option value="">@(loadingDistricts ? "Loading Districts..." : "Select District")</option>
+                        @foreach (var item in districts)
+                        {
+                            <option value="@item.Id">@item.Name</option>
+                        }
+                    </select>
+                </div>
             </div>
-
-            <div class="col">
-                <label>Crop Type</label>
-                <select class="form-control">
-                    <option>Select Type</option>
-                </select>
-            </div>
-
-            <div class="col">
-                <label>Pin Code</label>
-                <input class="form-control" />
-            </div>
+            @if (!string.IsNullOrEmpty(masterError))
+            {
+                <div class="small text-danger mt-2" role="alert">@masterError</div>
+            }
         </div>
 
-        <div class="row mt-3">
-            <div class="col">
-                <label>State</label>
-                <select class="form-control"></select>
-            </div>
-
-            <div class="col">
-                <label>District</label>
-                <select class="form-control"></select>
-            </div>
-        </div>
-    </div>
-
-
-    <div class="doc-card">
-        <h6>Crop Information</h6>
-
-        <div class="row">
-            <div class="col">
-                <label>Date Of Sowing</label>
-                <input type="date" class="form-control" />
-            </div>
-
-            <div class="col">
-                <label>Current Crop Stage</label>
-                <select class="form-control">
-                    <option>Select Stage</option>
-                </select>
-            </div>
-
-            <div class="col">
-                <label>Expected Harvest Date</label>
-                <input type="date" class="form-control" />
+        <div class="doc-card">
+            <h6>Crop Information</h6>
+            <div class="row g-3">
+                <div class="col-md-4"><label>Date Of Sowing</label><input type="date" class="form-control" @bind="sowingDate" @bind:format="yyyy-MM-dd" /></div>
+                <div class="col-md-4">
+                    <label for="current-crop-stage">Current Crop Stage</label>
+                    <select id="current-crop-stage" class="form-select" @bind="cropStageId"
+                            disabled="@(string.IsNullOrEmpty(cropId) || loadingCropStages)">
+                        <option value="">@(loadingCropStages ? "Loading Crop Stages..." : "Select Crop Stage")</option>
+                        @foreach (var item in cropStages)
+                        {
+                            <option value="@item.Id">@item.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-4"><label>Expected Harvest Date</label><input type="date" class="form-control" @bind="harvestDate" @bind:format="yyyy-MM-dd" /></div>
+                <div class="col-12"><label>Remarks</label><textarea class="form-control" rows="3" @bind="remarks"></textarea></div>
             </div>
         </div>
-
-        <div class="row mt-3">
-            <div class="col">
-                <label>Remarks</label>
-                <textarea class="form-control"></textarea>
-            </div>
+        @if (!string.IsNullOrWhiteSpace(saveError))
+        {
+            <div class="alert alert-danger">@saveError</div>
+        }
+        @if (!string.IsNullOrWhiteSpace(saveSuccess))
+        {
+            <div class="alert alert-success">@saveSuccess</div>
+        }
+        <div class="text-end mt-3 d-flex gap-2 justify-content-end">
+            <button type="button" class="btn btn-outline-secondary" @onclick="BackToList">Back</button>
+            <button type="button" class="btn btn-light" disabled="@isSaving" @onclick="SaveDraftAsync">Save Draft</button>
+            <button type="button" class="btn btn-success" disabled="@isSaving" @onclick="StartDocumentationAsync">@(isSaving ? "Saving..." : "Start Documentation")</button>
         </div>
-    </div>
 
-
-    <div class="text-end mt-3">
-        <button class="btn btn-light">Save Draft</button>
-        <button class="btn btn-success">Start Documentation</button>
-    </div>
-
+    }
 </div>
+<style>
+    .start-doc-page .doc-card {
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: 10px;
+        padding: 20px;
+        margin-bottom: 18px
+    }
+
+        .start-doc-page .doc-card h6 {
+            font-size: 15px;
+            font-weight: 700;
+            margin-bottom: 17px
+        }
+
+    .start-doc-page label {
+        font-size: 12px;
+        color: #475569;
+        margin-bottom: 5px;
+        display: block
+    }
+
+    .start-doc-page .form-control {
+        font-size: 13px;
+        min-height: 36px
+    }
+
+    /* Farmer/location layout aligned to the supplied 3-column design. */
+    .start-doc-page .farmer-location-card .row {
+        --bs-gutter-x: 16px;
+        --bs-gutter-y: 13px;
+    }
+
+    .start-doc-page .farmer-location-card label {
+        font-size: 11px;
+        color: #334155;
+        margin-bottom: 5px;
+    }
+
+    .start-doc-page .farmer-location-card .form-control,
+    .start-doc-page .farmer-location-card .form-select {
+        width: 100%;
+        min-height: 38px;
+        border: 1px solid #e9ecef;
+        border-radius: 5px;
+        background-color: #fafafa;
+        color: #263238;
+        padding: 8px 11px;
+        font-size: 12px;
+        box-shadow: none;
+    }
+
+        .start-doc-page .farmer-location-card .form-control::placeholder {
+            color: #92979f;
+            opacity: 1;
+        }
+
+        .start-doc-page .farmer-location-card .form-control:focus,
+        .start-doc-page .farmer-location-card .form-select:focus {
+            border-color: #87bda1;
+            background-color: #fff;
+            box-shadow: 0 0 0 2px rgba(8, 127, 74, 0.08);
+        }
+
+    /* Editable inputs styled like dropdowns until master-data APIs exist. */
+    .start-doc-page .farmer-location-card .dropdown-like-input {
+        padding-right: 30px;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2392999f' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 10px center;
+        background-size: 14px;
+    }
+
+    /* Compact, separator-based summary matching the reference image. */
+    .start-doc-page .program-summary-card {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 0;
+        align-items: start;
+    }
+
+        .start-doc-page .program-summary-card .summary-item {
+            min-width: 0;
+            background: transparent;
+            border-radius: 0;
+            padding: 2px 12px;
+            border-right: 1px solid #e7ebf0;
+        }
+
+            .start-doc-page .program-summary-card .summary-item:nth-child(5),
+            .start-doc-page .program-summary-card .summary-item:last-child {
+                border-right: 0;
+            }
+
+            .start-doc-page .program-summary-card .summary-item:nth-child(n+6) {
+                margin-top: 12px;
+                padding-top: 10px;
+                border-top: 1px solid #eef1f4;
+            }
+
+        .start-doc-page .program-summary-card label {
+            font-size: 10px;
+            color: #64748b;
+            margin-bottom: 5px;
+        }
+
+        .start-doc-page .program-summary-card .summary-value {
+            font-size: 12px;
+            font-weight: 600;
+            color: #087f4a;
+            overflow-wrap: anywhere;
+        }
+
+        .start-doc-page .program-summary-card .summary-item:nth-child(3) .summary-value {
+            color: #1e293b;
+        }
+
+    @@media(max-width: 900px) {
+        .start-doc-page .program-summary-card {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            row-gap: 12px;
+        }
+
+            .start-doc-page .program-summary-card .summary-item:nth-child(3n) {
+                border-right: 0;
+            }
+    }
+
+    @@media(max-width: 520px) {
+        .start-doc-page .program-summary-card {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+            .start-doc-page .program-summary-card .summary-item:nth-child(3n) {
+                border-right: 1px solid #e7ebf0;
+            }
+
+            .start-doc-page .program-summary-card .summary-item:nth-child(2n) {
+                border-right: 0;
+            }
+    }
+</style>
+@code {
+    [SupplyParameterFromQuery(Name = "csr2Id")]
+    public int? CSR2Id { get; set; }
+
+    private sealed class DemoRecord
+    {
+        public int Id { get; set; }
+        public int CSR1Id { get; set; }
+        public string ProgramType { get; set; } = "";
+        public string ProgramName { get; set; } = "";
+        public string SeasonNumber { get; set; } = "";
+        public string CSR2Status { get; set; } = "";
+        public DateTime? CSR2CompletedDate { get; set; }
+        public string Product { get; set; } = "";
+        public string Crop { get; set; } = "";
+        public string Location { get; set; } = "";
+        public string District { get; set; } = "";
+    }
+    private DemoRecord? selected;
+    private bool isLoading;
+    private bool isSaving;
+    private string saveError = "", saveSuccess = "";
+    private string error = "";
+    private string farmerName = "", mobile = "", village = "", address = "", crop = "", cropType = "", pinCode = "", state = "", district = "", remarks = "";
+    private string cropId = "", cropTypeId = "", cropStageId = "";
+    private List<MasterOption> cropStages = new();
+    private bool loadingCropStages;
+    private int cropStageRequestVersion;
+    private const string CropStagesApi = "api/DemoDocumentation/crop-stages";
+    private List<MasterOption> crops = new(), cropTypes = new();
+    private bool loadingCrops, loadingCropTypes;
+    private int cropTypeRequestVersion;
+    private const string CropsApi = "api/Crop/all";
+    private const string CropTypesApi = "api/DemoDocumentation/crop-types";
+    // Change these paths if the project's master controllers use different routes.
+    private const string StatesApi = "api/DemoDocumentation/states";
+    private const string DistrictsApi = "api/DemoDocumentation/districts";
+    private sealed class MasterOption
+    {
+        public string Id { get; set; } = "";
+        public string Name { get; set; } = "";
+    }
+    private List<MasterOption> states = new();
+    private List<MasterOption> districts = new();
+    private string stateId = "", districtId = "", masterError = "";
+    private bool loadingStates, loadingDistricts;
+    private int districtRequestVersion;
+    private DateTime? sowingDate, harvestDate;
+    private IEnumerable<string> CropOptions => (selected?.Crop ?? "").Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).Distinct(StringComparer.OrdinalIgnoreCase);
+    private static string ValueOrDash(string? s) => string.IsNullOrWhiteSpace(s) ? "-" : s;
+    private void BackToList() => NavigationManager.NavigateTo("/DemoDocumentation");
+
+    protected override async Task OnParametersSetAsync()
+    {
+        selected = null;
+        error = "";
+        if (CSR2Id is null or <= 0) { error = "Missing or invalid csr2Id in URL."; return; }
+        isLoading = true;
+        try
+        {
+            // The existing endpoint applies the same role/geographic access restrictions as the list page.
+            using var response = await Http.GetAsync("api/DemoDocumentation/approved-csr2");
+            if (!response.IsSuccessStatusCode) { error = $"Unable to load approved CSR-2 (HTTP {(int)response.StatusCode})."; return; }
+            var records = await response.Content.ReadFromJsonAsync<List<DemoRecord>>() ?? new();
+            selected = records.FirstOrDefault(x => x.Id == CSR2Id.Value);
+            if (selected == null) { error = "This CSR-2 is not finally approved or is outside your permitted scope."; return; }
+            village = selected.Location;
+            district = selected.District;
+            crop = CropOptions.FirstOrDefault() ?? "";
+            await LoadCropsAsync();
+            await LoadStatesAsync();
+            await LoadSavedDocumentationAsync();
+        }
+        catch (Exception ex) { error = $"Unable to load selected CSR-2: {ex.Message}"; }
+        finally { isLoading = false; }
+    }
+
+    private static string Property(JsonElement element, params string[] candidates)
+    {
+        if (element.ValueKind != JsonValueKind.Object) return "";
+        foreach (var name in candidates)
+        {
+            foreach (var property in element.EnumerateObject())
+            {
+                if (string.Equals(property.Name, name, StringComparison.OrdinalIgnoreCase))
+                    return property.Value.ValueKind == JsonValueKind.String
+                        ? property.Value.GetString() ?? "" : property.Value.ToString();
+            }
+        }
+        return "";
+    }
+
+    // Accepts simple JSON arrays; supports common Id/Name, StateId/StateName,
+    // and DistrictId/DistrictName master DTO field names.
+    private static async Task<List<MasterOption>> ReadOptionsAsync(HttpResponseMessage response, bool isState)
+    {
+        response.EnsureSuccessStatusCode();
+        using var json = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync());
+        var root = json.RootElement;
+        if (root.ValueKind == JsonValueKind.Object &&
+            (root.TryGetProperty("data", out var data) || root.TryGetProperty("Data", out data)))
+            root = data;
+        if (root.ValueKind != JsonValueKind.Array)
+            throw new InvalidOperationException("Master API must return a JSON array.");
+        return root.EnumerateArray().Select(e => new MasterOption
+        {
+            Id = isState ? Property(e, "Id", "StateId") : Property(e, "Id", "DistrictId"),
+            Name = isState ? Property(e, "StateName", "Name") : Property(e, "DistrictName", "Name")
+        }).Where(x => !string.IsNullOrWhiteSpace(x.Id) && !string.IsNullOrWhiteSpace(x.Name))
+          .OrderBy(x => x.Name).ToList();
+    }
+
+    // Load the existing Crop master, but keep the Crop choices limited to the
+    // crop names included in this final-approved CSR-2's focus products.
+    private async Task LoadCropsAsync()
+    {
+        loadingCrops = true;
+        masterError = "";
+        crops.Clear();
+        cropTypes.Clear();
+        cropStages.Clear();
+        cropStageId = "";
+        ++cropStageRequestVersion;
+        cropId = "";
+        cropTypeId = "";
+        try
+        {
+            using var response = await Http.GetAsync(CropsApi);
+            response.EnsureSuccessStatusCode();
+            using var json = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync());
+            var root = json.RootElement;
+            if (root.ValueKind == JsonValueKind.Object &&
+                (root.TryGetProperty("data", out var data) || root.TryGetProperty("Data", out data)))
+                root = data;
+            if (root.ValueKind != JsonValueKind.Array)
+                throw new InvalidOperationException("Crop API must return an array.");
+            var focusNames = CropOptions.ToHashSet(StringComparer.OrdinalIgnoreCase);
+            crops = root.EnumerateArray()
+                .Where(e => !string.Equals(Property(e, "IsActive"), "false", StringComparison.OrdinalIgnoreCase))
+                .Select(e => new MasterOption { Id = Property(e, "Id"), Name = Property(e, "Name") })
+                .Where(x => !string.IsNullOrWhiteSpace(x.Id) && focusNames.Contains(x.Name))
+                .OrderBy(x => x.Name)
+                .ToList();
+            var first = crops.FirstOrDefault();
+            if (first != null)
+            {
+                cropId = first.Id;
+                crop = first.Name;
+                await Task.WhenAll(LoadCropTypesAsync(), LoadCropStagesAsync());
+            }
+        }
+        catch (Exception ex) { masterError = $"Unable to load crops: {ex.Message}"; }
+        finally { loadingCrops = false; }
+    }
+
+    private async Task OnCropChanged(ChangeEventArgs args)
+    {
+        cropId = args.Value?.ToString() ?? "";
+        crop = crops.FirstOrDefault(x => x.Id == cropId)?.Name ?? "";
+        cropTypeId = "";
+        cropType = "";
+        cropTypes.Clear();
+        cropStageId = "";
+        cropStages.Clear();
+        await Task.WhenAll(LoadCropTypesAsync(), LoadCropStagesAsync());
+    }
+
+    private async Task LoadCropTypesAsync()
+    {
+        var version = ++cropTypeRequestVersion;
+        cropTypes.Clear();
+        cropTypeId = "";
+        cropType = "";
+        if (string.IsNullOrEmpty(cropId)) { loadingCropTypes = false; return; }
+        loadingCropTypes = true;
+        masterError = "";
+        try
+        {
+            using var response = await Http.GetAsync($"{CropTypesApi}?cropId={Uri.EscapeDataString(cropId)}");
+            var results = await ReadNamedOptionsAsync(response);
+            if (version == cropTypeRequestVersion) cropTypes = results;
+        }
+        catch (Exception ex)
+        {
+            if (version == cropTypeRequestVersion) masterError = $"Unable to load crop types: {ex.Message}";
+        }
+        finally { if (version == cropTypeRequestVersion) loadingCropTypes = false; }
+    }
+
+    private async Task LoadCropStagesAsync()
+    {
+        var version = ++cropStageRequestVersion;
+        cropStages.Clear();
+        cropStageId = "";
+        if (string.IsNullOrEmpty(cropId))
+        {
+            loadingCropStages = false;
+            return;
+        }
+        loadingCropStages = true;
+        try
+        {
+            using var response = await Http.GetAsync($"{CropStagesApi}?cropId={Uri.EscapeDataString(cropId)}");
+            var results = await ReadNamedOptionsAsync(response);
+            if (version == cropStageRequestVersion) cropStages = results;
+        }
+        catch (Exception ex)
+        {
+            if (version == cropStageRequestVersion)
+                masterError = $"Unable to load crop stages: {ex.Message}";
+        }
+        finally
+        {
+            if (version == cropStageRequestVersion) loadingCropStages = false;
+        }
+    }
+
+    private static async Task<List<MasterOption>> ReadNamedOptionsAsync(HttpResponseMessage response)
+    {
+        response.EnsureSuccessStatusCode();
+        using var json = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync());
+        if (json.RootElement.ValueKind != JsonValueKind.Array)
+            throw new InvalidOperationException("Master lookup API must return an array.");
+        return json.RootElement.EnumerateArray()
+            .Select(e => new MasterOption { Id = Property(e, "Id"), Name = Property(e, "Name") })
+            .Where(x => !string.IsNullOrWhiteSpace(x.Id) && !string.IsNullOrWhiteSpace(x.Name))
+            .OrderBy(x => x.Name).ToList();
+    }
+
+    private async Task LoadStatesAsync()
+    {
+        loadingStates = true;
+        masterError = "";
+        try
+        {
+            using var response = await Http.GetAsync(StatesApi);
+            states = await ReadOptionsAsync(response, true);
+        }
+        catch (Exception ex) { masterError = $"Unable to load states: {ex.Message}"; }
+        finally { loadingStates = false; }
+    }
+
+    private async Task OnStateChanged(ChangeEventArgs args)
+    {
+        stateId = args.Value?.ToString() ?? "";
+        state = states.FirstOrDefault(x => x.Id == stateId)?.Name ?? "";
+        districtId = "";
+        district = "";
+        districts.Clear();
+        masterError = "";
+        var version = ++districtRequestVersion;
+        if (string.IsNullOrEmpty(stateId)) { loadingDistricts = false; return; }
+        loadingDistricts = true;
+        try
+        {
+            using var response = await Http.GetAsync($"{DistrictsApi}?stateId={Uri.EscapeDataString(stateId)}");
+            var results = await ReadOptionsAsync(response, false);
+            if (version == districtRequestVersion) districts = results;
+        }
+        catch (Exception ex)
+        {
+            if (version == districtRequestVersion) masterError = $"Unable to load districts: {ex.Message}";
+        }
+        finally { if (version == districtRequestVersion) loadingDistricts = false; }
+    }
+
+    private void OnDistrictChanged(ChangeEventArgs args)
+    {
+        districtId = args.Value?.ToString() ?? "";
+        district = districts.FirstOrDefault(x => x.Id == districtId)?.Name ?? "";
+    }
+
+    private class DocumentationPayload
+    {
+        public int CSR2Id { get; set; }
+        public string FarmerName { get; set; } = "";
+        public string MobileNumber { get; set; } = "";
+        public string? Village { get; set; }
+        public string? FarmerAddress { get; set; }
+        public int StateId { get; set; }
+        public int DistrictId { get; set; }
+        public string PinCode { get; set; } = "";
+        public int CropId { get; set; }
+        public int CropTypeId { get; set; }
+        public DateTime? SowingDate { get; set; }
+        public int? CropStageId { get; set; }
+        public DateTime? HarvestDate { get; set; }
+        public string? Remarks { get; set; }
+    }
+
+    private sealed class SavedDocumentation : DocumentationPayload
+    {
+        public string Status { get; set; } = "";
+    }
+
+    private async Task LoadSavedDocumentationAsync()
+    {
+        if (CSR2Id is null) return;
+        using var response = await Http.GetAsync($"api/DemoDocumentation/documentation-details?csr2Id={CSR2Id.Value}");
+        if (response.StatusCode == HttpStatusCode.NotFound) return;
+        if (!response.IsSuccessStatusCode)
+        {
+            masterError = $"Unable to load existing documentation (HTTP {(int)response.StatusCode}).";
+            return;
+        }
+        var saved = await response.Content.ReadFromJsonAsync<SavedDocumentation>();
+        if (saved == null) return;
+        farmerName = saved.FarmerName;
+        mobile = saved.MobileNumber;
+        village = saved.Village ?? "";
+        address = saved.FarmerAddress ?? "";
+        pinCode = saved.PinCode;
+
+        remarks = saved.Remarks ?? "";
+        sowingDate = saved.SowingDate;
+        harvestDate = saved.HarvestDate;
+        stateId = saved.StateId.ToString();
+        state = states.FirstOrDefault(x => x.Id == stateId)?.Name ?? "";
+        await LoadDistrictsForSelectedStateAsync();
+        districtId = saved.DistrictId.ToString();
+        district = districts.FirstOrDefault(x => x.Id == districtId)?.Name ?? "";
+        cropId = saved.CropId.ToString();
+        crop = crops.FirstOrDefault(x => x.Id == cropId)?.Name ?? "";
+        await Task.WhenAll(LoadCropTypesAsync(), LoadCropStagesAsync());
+        cropStageId = saved.CropStageId.HasValue && cropStages.Any(x => x.Id == saved.CropStageId.Value.ToString())
+            ? saved.CropStageId.Value.ToString() : "";
+        cropTypeId = saved.CropTypeId.ToString();
+        cropType = cropTypes.FirstOrDefault(x => x.Id == cropTypeId)?.Name ?? "";
+    }
+
+    private async Task LoadDistrictsForSelectedStateAsync()
+    {
+        districts.Clear();
+        if (string.IsNullOrWhiteSpace(stateId)) return;
+        loadingDistricts = true;
+        try
+        {
+            using var response = await Http.GetAsync($"{DistrictsApi}?stateId={Uri.EscapeDataString(stateId)}");
+            districts = await ReadOptionsAsync(response, false);
+        }
+        finally { loadingDistricts = false; }
+    }
+
+    private Task SaveDraftAsync() => SaveAsync(false);
+    private Task StartDocumentationAsync() => SaveAsync(true);
+
+    private async Task SaveAsync(bool start)
+    {
+        saveError = saveSuccess = "";
+        if (selected == null) return;
+        if (!int.TryParse(stateId, out var sid) || !int.TryParse(districtId, out var did) ||
+            !int.TryParse(cropId, out var cid) || !int.TryParse(cropTypeId, out var ctid) ||
+            !int.TryParse(cropStageId, out var csid))
+        {
+            saveError = "Select State, District, Crop, Crop Type and Current Crop Stage.";
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(farmerName) ||
+            mobile.Length != 10 || !mobile.All(char.IsDigit) ||
+            pinCode.Length != 6 || !pinCode.All(char.IsDigit))
+        {
+            saveError = "Enter farmer name, a 10-digit mobile number and a 6-digit PIN code.";
+            return;
+        }
+        isSaving = true;
+        try
+        {
+            var data = new DocumentationPayload
+            {
+                CSR2Id = selected.Id,
+                FarmerName = farmerName.Trim(),
+                MobileNumber = mobile,
+                Village = village,
+                FarmerAddress = address,
+                StateId = sid,
+                DistrictId = did,
+                PinCode = pinCode,
+                CropId = cid,
+                CropTypeId = ctid,
+                SowingDate = sowingDate,
+                CropStageId = csid,
+                HarvestDate = harvestDate,
+                Remarks = remarks
+            };
+            var endpoint = start ? "start" : "save-draft";
+            using var response = await Http.PostAsJsonAsync($"api/DemoDocumentation/{endpoint}", data);
+            if (!response.IsSuccessStatusCode)
+            {
+                saveError = $"Unable to save documentation (HTTP {(int)response.StatusCode}): {await response.Content.ReadAsStringAsync()}";
+                return;
+            }
+            if (start) NavigationManager.NavigateTo($"/DemoDetails?csr2Id={selected.Id}");
+            else saveSuccess = "Draft saved successfully.";
+        }
+        catch (Exception ex) { saveError = $"Unable to save documentation: {ex.Message}"; }
+        finally { isSaving = false; }
+    }
+}

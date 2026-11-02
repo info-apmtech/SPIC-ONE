@@ -1,451 +1,621 @@
 ﻿@page "/DemoDocumentation"
-
 @inject HttpClient Http
+@inject NavigationManager NavigationManager
+@using System.Net.Http.Json
+@using System.Linq
 
+<div class="container-fluid demo-page py-3 px-3">
+    <div class="demo-page-head">
+        <div>
+            <h1>Demo Documentation</h1>
+            <p>Track eligible field demonstrations and treatment-wise documentation</p>
+        </div>
+        <div class="info-alert"><i class="bi bi-info-circle"></i> Records are shown only for approved CSR-2 entries with eligible Program Types</div>
+    </div>
 
-<div class="container-fluid py-4">
-
-    <PageHeader Title="Demo Documentation"
-                Subtitle="Track eligible field demonstrations and treatment-wise documentation">
-
-        <Actions>
-
-            <div class="info-alert">
-
-                <i class="bi bi-info-circle"></i>
-
-                <span>
-                    Records are shown for CSR2 Completed and eligible Program Type only
-                </span>
-
-            </div>
-
-        </Actions>
-
-    </PageHeader>
-
-
-
-    <!-- FILTER CARD -->
+    @if (!string.IsNullOrWhiteSpace(LoadError))
+    {
+        <div class="alert alert-danger" role="alert">@LoadError</div>
+    }
+    @if (IsLoading)
+    {
+        <div class="alert alert-info">Loading approved CSR-2 demonstration records...</div>
+    }
 
     <div class="filter-card">
-
-
-        <div class="filter-header">
-
-            <span>
-                <i class="bi bi-funnel"></i>
-                Filters
-            </span>
-
-            <i class="bi bi-chevron-down"></i>
-
-        </div>
-
-
-
+        <div class="filter-header"><span><i class="bi bi-funnel me-2"></i>Filters</span><i class="bi bi-chevron-down"></i></div>
         <div class="filter-body">
-
-
             <div class="filter-grid">
-
-
                 <div>
-                    <label>Sanction Number</label>
-
-                    <select class="form-control"
-                            @bind="SelectedSeason">
-
-                        <option value="">
-                            Select Sanction Number
-                        </option>
-
-                        @foreach (var item in DemoList.Select(x => x.SeasonNumber).Distinct())
-                        {
-                            <option value="@item">@item</option>
-                        }
-
-                    </select>
-
-                </div>
-
-
-
-                <div>
-                    <label>Program Name</label>
-
-                    <select class="form-control"
-                            @bind="SelectedProgram">
-
-                        <option value="">
-                            Select Program Name
-                        </option>
-
-                        @foreach (var item in DemoList.Select(x => x.ProgramName).Distinct())
-                        {
-                            <option value="@item">@item</option>
-                        }
-
-                    </select>
-
-                </div>
-
-
-
-                <div>
-                    <label>Product</label>
-
-                    <select class="form-control"
-                            @bind="SelectedProduct">
-
-                        <option value="">
-                            Select Product
-                        </option>
-
-                        @foreach (var item in DemoList.Select(x => x.Product).Distinct())
-                        {
-                            <option value="@item">@item</option>
-                        }
-
-                    </select>
-
-                </div>
-
-
-
-                <div>
-                    <label>Crop</label>
-
-                    <select class="form-control"
-                            @bind="SelectedCrop">
-
-                        <option value="">
-                            Select Crop
-                        </option>
-
-                        @foreach (var item in DemoList.Select(x => x.Crop).Distinct())
-                        {
-                            <option value="@item">@item</option>
-                        }
-
-                    </select>
-
-                </div>
-
-
-
-                <div>
-                    <label>District</label>
-
-                    <select class="form-control"
-                            @bind="SelectedDistrict">
-
-                        <option value="">
-                            Select District
-                        </option>
-
-                        @foreach (var item in DemoList.Select(x => x.District).Distinct())
-                        {
-                            <option value="@item">@item</option>
-                        }
-
-                    </select>
-
-                </div>
-
-
-
-                <div>
-                    <label>Stage</label>
-
-                    <select class="form-control"
-                            @bind="SelectedStage">
-
-                        <option value="">
-                            Select Stage
-                        </option>
-
-                        @foreach (var item in DemoList.Select(x => x.CurrentStage).Distinct())
-                        {
-                            <option value="@item">@item</option>
-                        }
-
-                    </select>
-
-                </div>
-
-
-
-                <div>
-                    <label>Status</label>
-
-                    <select class="form-control"
-                            @bind="SelectedStatus">
-
-                        <option value="">
-                            Select Status
-                        </option>
-
-                        @foreach (var item in DemoList.Select(x => x.Status).Distinct())
-                        {
-                            <option value="@item">@item</option>
-                        }
-
-                    </select>
-
-                </div>
-
-
-
-                <div class="filter-actions">
-
-                    <button class="clear-btn"
-                            @onclick="ClearFilter">
-
-                        <i class="bi bi-x"></i>
-                        Clear All
-
-                    </button>
-
-
-                    <button class="apply-btn"
-                            @onclick="ApplyFilter">
-
-                        <i class="bi bi-funnel"></i>
-                        Apply Filters
-
-                    </button>
-
-                </div>
-
-
+                    <label>Sanction Number</label><select class="form-control" @bind="SelectedSeason">
+                    <option value="">Select Sanction Number</option>
+                    @foreach (var x in DemoList.Select(x => x.SeasonNumber).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct().OrderBy(x => x))
+                    {
+                        <option value="@x">@x</option>
+                    }
+                </select>
             </div>
-
-
-        </div>
-
-
-    </div>
-
-
-
-
-    <!-- SUMMARY -->
-
-    <div class="row mt-4 g-3">
-        <div class="col-md-3"><div class="summary-card summary-total"><div><div class="summary-title">Total Demonstrations</div><div class="summary-value">42</div><div class="summary-description">All eligible records</div></div><div class="summary-icon"><i class="bi bi-file-earmark-text"></i></div></div></div>
-        <div class="col-md-3"><div class="summary-card summary-notstarted"><div><div class="summary-title">Not Started</div><div class="summary-value">28</div><div class="summary-description">Pending First visit</div></div><div class="summary-icon"><i class="bi bi-file-earmark-check"></i></div></div></div>
-        <div class="col-md-3"><div class="summary-card summary-progress"><div><div class="summary-title">In Progress</div><div class="summary-value">22</div><div class="summary-description">Active Documentation</div></div><div class="summary-icon"><i class="bi bi-clock"></i></div></div></div>
-        <div class="col-md-3"><div class="summary-card summary-completed"><div><div class="summary-title">Completed</div><div class="summary-value">2</div><div class="summary-description">Invoiced document</div></div><div class="summary-icon"><i class="bi bi-patch-check"></i></div></div></div>
-    </div>
-
-
-    <!-- TABLE -->
-
-
-    <SpicDataTable 
-        Title="Demo Documentation List"
-        Items="FilteredDemoList">
-
-
-        <FilterControls>
-
-            <div class="search-box">
-
-                <i class="bi bi-search"></i>
-
-                <input placeholder="Search demo..."
-                       @bind="SearchText"
-                       @bind:event="oninput"/>
-
-            </div>
-
-
-        </FilterControls>
-
-
-
-
-        <TableHeader>
-
-            <th>Sanction Number</th>
-            <th>Program Name</th>
-            <th>Product/Crop</th>
-            <th>Location</th>
-            <th>Current Stage</th>
-            <th>Date Of Sowing</th>
-            <th>Harvest Date</th>
-            <th>Treatments</th>
-            <th>Last Treatment</th>
-            <th>Documentation</th>
-            <th>Status</th>
-            <th>Action</th>
-
-        </TableHeader>
-
-
-
-
-        <TableRow Context="item">
-
-
-            <td>
-                <span class="season-text">
-                    @item.SeasonNumber
-                </span>
-            </td>
-
-
-            <td>
-                <div class="program-text">
-                    @item.ProgramName
-                </div>
-            </td>
-
-
-            <td>
-
-                <div class="product-cell">
-
-                    <b>@item.Product</b>
-
-                    <small>
-                        @item.Crop
-                    </small>
-
-                </div>
-
-            </td>
-
-
-            <td>
-
-                <div class="location-cell">
-
-                    <i class="bi bi-geo-alt-fill"></i>
-
-                    @item.Location
-
-                </div>
-
-            </td>
-
-
-            <td>
-
-                @if (item.CurrentStage.Contains("Completed"))
+            <div>
+                <label>Program Name</label><select class="form-control" @bind="SelectedProgram">
+                <option value="">Select Program Name</option>
+                @foreach (var x in DemoList.Select(x => x.ProgramName).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct().OrderBy(x => x))
                 {
-                    <span class="stage completed">
-                        <i class="bi bi-check-circle"></i>
-                        @item.CurrentStage
-                    </span>
+                    <option value="@x">@x</option>
                 }
-                else if (item.CurrentStage.Contains("Treatment"))
+            </select>
+        </div>
+        <div>
+            <label>Product</label><select class="form-control" @bind="SelectedProduct">
+            <option value="">Select Product</option>
+            @foreach (var x in DemoList.Select(x => x.Product).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct().OrderBy(x => x))
+            {
+                <option value="@x">@x</option>
+            }
+        </select>
+    </div>
+    <div>
+        <label>Crop</label><select class="form-control" @bind="SelectedCrop">
+        <option value="">Select Crop</option>
+        @foreach (var x in DemoList.Select(x => x.Crop).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct().OrderBy(x => x))
+        {
+            <option value="@x">@x</option>
+        }
+    </select>
+</div>
+<div>
+    <label>District</label><select class="form-control" @bind="SelectedDistrict">
+    <option value="">Select District</option>
+    @foreach (var x in DemoList.Select(x => x.District).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct().OrderBy(x => x))
+    {
+        <option value="@x">@x</option>
+    }
+</select>
+</div>
+<div>
+    <label>Stage</label><select class="form-control" @bind="SelectedStage">
+    <option value="">Select Stage</option>
+    @foreach (var x in DemoList.Select(x => x.CurrentStage).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct().OrderBy(x => x))
+    {
+        <option value="@x">@x</option>
+    }
+</select>
+</div>
+<div>
+    <label>Status</label><select class="form-control" @bind="SelectedStatus">
+    <option value="">Select Status</option>
+    @foreach (var x in DemoList.Select(x => x.Status).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct().OrderBy(x => x))
+    {
+        <option value="@x">@x</option>
+    }
+</select>
+</div>
+<div class="filter-actions">
+    <button type="button" class="clear-btn" @onclick="ClearFilter"><i class="bi bi-x"></i> Clear All</button>
+    <button type="button" class="apply-btn" @onclick="ApplyFilter"><i class="bi bi-funnel"></i> Apply Filters</button>
+</div>
+</div>
+</div>
+</div>
+
+<div class="demo-summary-grid">
+    <div class="summary-card summary-total"><div><div class="summary-title">Total Demonstrations</div><div class="summary-value">@DemoList.Count</div><div class="summary-description">All eligible records</div></div><div class="summary-icon"><i class="bi bi-file-earmark-text"></i></div></div>
+    <div class="summary-card summary-notstarted"><div><div class="summary-title">Not Started</div><div class="summary-value">@DemoList.Count(x => x.Status == "Not Started")</div><div class="summary-description">Pending First visit</div></div><div class="summary-icon"><i class="bi bi-file-earmark-check"></i></div></div>
+    <div class="summary-card summary-progress"><div><div class="summary-title">In Progress</div><div class="summary-value">@DemoList.Count(x => x.Status == "In Progress")</div><div class="summary-description">Active Documentation</div></div><div class="summary-icon"><i class="bi bi-clock"></i></div></div>
+    <div class="summary-card summary-completed"><div><div class="summary-title">Completed</div><div class="summary-value">@DemoList.Count(x => x.Status == "Completed")</div><div class="summary-description">Invoiced document</div></div><div class="summary-icon"><i class="bi bi-patch-check"></i></div></div>
+</div>
+
+<div class="demo-table-card">
+    <div class="demo-table-toolbar">
+        <h2>Demo Documentation List</h2>
+        <div class="search-box"><i class="bi bi-search"></i><input type="search" placeholder="Search demo..." value="@SearchText" @oninput="OnSearchChanged" /></div>
+    </div>
+    <div class="demo-table-scroll">
+        <table class="demo-table">
+            <thead><tr><th>Sanction Number</th><th>Program Name</th><th>Product / Crop</th><th>Location</th><th>Current Stage</th><th>Date Of Sowing</th><th>Harvest Date</th><th>Treatments</th><th>Last Treatment</th><th>Documentation</th><th>Status</th><th>Action</th></tr></thead>
+            <tbody>
+                @if (PagedDemoList.Any())
                 {
-                    <span class="stage progress">
-                        <i class="bi bi-arrow-repeat"></i>
-                        @item.CurrentStage
-                    </span>
+                    @foreach (var item in PagedDemoList)
+                    {
+                        <tr @key="item.Id">
+                            <td><span class="season-text">@item.SeasonNumber</span></td>
+                            <td><span class="program-text">@item.ProgramName</span></td>
+                            <td><div class="product-cell"><b>@item.Product</b><small>@item.Crop</small></div></td>
+                            <td><div class="location-cell"><i class="bi bi-geo-alt-fill"></i><span>@item.Location</span></div></td>
+                            <td><span class="stage @(item.CurrentStage.Contains("Completed", StringComparison.OrdinalIgnoreCase) ? "completed" : item.CurrentStage.Contains("Treatment", StringComparison.OrdinalIgnoreCase) ? "progress" : "pending")"><i class="bi bi-circle-fill"></i> @item.CurrentStage</span></td>
+                            <td>@(item.SowingDate?.ToString("dd-MM-yyyy") ?? "-")</td>
+                            <td>@(item.HarvestDate?.ToString("dd-MM-yyyy") ?? "-")</td>
+                            <td><div class="treatment"><b>@item.CompletedTreatments Completed</b><small>Out of @item.TotalTreatments</small></div></td>
+                            <td>@(item.LastTreatmentDate?.ToString("dd-MM-yyyy") ?? "-")</td>
+                            <td><span class="doc-status">@item.DocumentationStatus</span></td>
+                            <td><span class="status @(item.Status == "Completed" ? "completed" : item.Status == "In Progress" ? "progress" : "pending")"><i class="bi bi-circle-fill"></i> @item.Status</span></td>
+                            <td><div class="demo-actions"><button type="button" class="view-btn" @onclick="() => OpenStartDocumentation(item.Id)">View / Continue</button></div></td>
+                        </tr>
+                    }
                 }
                 else
                 {
-                    <span class="stage pending">
-                        <i class="bi bi-hourglass"></i>
-                        @item.CurrentStage
-                    </span>
+                    <tr><td colspan="12" class="demo-empty">@(IsLoading ? "Loading records..." : "No eligible demonstration records found")</td></tr>
                 }
-
-            </td>
-
-
-
-            <td>
-                @item.SowingDate.ToString("dd-MM-yyyy")
-            </td>
-
-
-
-            <td>
-                @item.HarvestDate.ToString("dd-MM-yyyy")
-            </td>
-
-
-
-            <td>
-
-                <div class="treatment">
-
-                    <b>
-                        @item.CompletedTreatments Completed
-                    </b>
-
-                    <small>
-                        Out of @item.TotalTreatments
-                    </small>
-
-                </div>
-
-            </td>
-
-
-
-            <td>
-                @item.LastTreatmentDate?.ToString("dd-MM-yyyy")
-            </td>
-
-
-
-            <td>
-
-                <span class="doc-status">
-
-                    @item.DocumentationStatus
-
-                </span>
-
-            </td>
-
-
-
-            <td>
-
-                <span class="status">
-
-                    @if (item.Status == "Completed")
-                    {
-                        <i class="bi bi-check-circle"></i>
-                    }
-
-                    @item.Status
-
-                </span>
-
-            </td>
-
-
-
-            <td>
-
-                <button class="view-btn">
-                    View
-                </button>
-
-
-                <button class="continue-btn">
-                    Continue
-                </button>
-
-
-            </td>
-
-
-        </TableRow>
-
-
-    </SpicDataTable>
-
-
+            </tbody>
+        </table>
+    </div>
+    <div class="demo-table-footer">
+        <div class="demo-page-size">Rows Per Page <select value="@PageSize" @onchange="OnPageSizeChanged"><option value="8">8</option><option value="16">16</option><option value="25">25</option><option value="50">50</option></select></div>
+        <div class="demo-pagination">
+            <button type="button" disabled="@(CurrentPage == 1)" @onclick="() => ChangePage(CurrentPage - 1)">‹</button>
+            <span>@CurrentPage / @TotalPages</span><button type="button" disabled="@(CurrentPage == TotalPages)" @onclick="() => ChangePage(CurrentPage + 1)">›</button>
+        </div>
+    </div>
 </div>
+</div>
+
+<style>
+    /* All selectors are scoped to this page. */
+    .demo-page {
+        background: #f8fafb;
+        min-height: 100%;
+        color: #1f2937;
+        font-family: Inter,system-ui,Arial,sans-serif;
+    }
+
+        .demo-page * {
+            box-sizing: border-box;
+        }
+
+    .demo-page-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 18px;
+        flex-wrap: wrap;
+        margin-bottom: 20px;
+    }
+
+        .demo-page-head h1 {
+            font-size: 22px;
+            font-weight: 700;
+            color: #1f2937;
+            margin: 0 0 4px;
+        }
+
+        .demo-page-head p {
+            font-size: 11px;
+            color: #718096;
+            margin: 0;
+        }
+
+    .demo-page .info-alert {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        background: #ecfdf5;
+        border: 1px solid #b7e4d2;
+        color: #047857;
+        border-radius: 6px;
+        padding: 6px 12px;
+        font-size: 10px;
+        max-width: 100%;
+    }
+
+    .demo-page .filter-card {
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
+        overflow: hidden;
+        margin-bottom: 15px;
+    }
+
+    .demo-page .filter-header {
+        height: 38px;
+        background: #f8fafb;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0 14px;
+        font-size: 12px;
+        color: #374151;
+        border-bottom: 1px solid #edf0f3;
+    }
+
+    .demo-page .filter-body {
+        padding: 14px;
+    }
+
+    .demo-page .filter-grid {
+        display: grid;
+        grid-template-columns: repeat(4,minmax(0,1fr));
+        gap: 12px;
+    }
+
+        .demo-page .filter-grid label {
+            display: block;
+            font-size: 10px;
+            color: #374151;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+
+        .demo-page .filter-grid .form-control {
+            width: 100%;
+            min-width: 0;
+            height: 34px;
+            border-radius: 6px;
+            font-size: 11px;
+            border: 1px solid #e5e7eb;
+            color: #1f2937;
+            background: #fff;
+            padding: 0 9px;
+        }
+
+    .demo-page .filter-actions {
+        display: flex;
+        align-items: flex-end;
+        justify-content: flex-end;
+        gap: 8px;
+        padding-top: 16px;
+        white-space: nowrap;
+    }
+
+    .demo-page .clear-btn, .demo-page .apply-btn {
+        min-height: 30px;
+        padding: 0 13px;
+        border-radius: 5px;
+        font-size: 10px;
+        font-weight: 600;
+    }
+
+    .demo-page .clear-btn {
+        background: #fff;
+        border: 1px solid #d1d5db;
+        color: #1f2937;
+    }
+
+    .demo-page .apply-btn {
+        background: #2563eb;
+        color: #fff;
+        border: 1px solid #2563eb;
+    }
+
+    .demo-page .demo-summary-grid {
+        display: grid;
+        grid-template-columns: repeat(4,minmax(0,1fr));
+        gap: 12px;
+        margin: 16px 0 21px;
+    }
+
+    .demo-page .summary-card {
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: 10px;
+        padding: 14px;
+        height: 78px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 10px;
+        min-width: 0;
+    }
+
+    .demo-page .summary-title {
+        font-size: 12px;
+        color: #1f2937;
+        white-space: nowrap;
+    }
+
+    .demo-page .summary-value {
+        font-size: 22px;
+        font-weight: 700;
+        color: #1f2937;
+        line-height: 1.25;
+    }
+
+    .demo-page .summary-description {
+        font-size: 10px;
+        color: #64748b;
+    }
+
+    .demo-page .summary-icon {
+        width: 38px;
+        height: 38px;
+        flex: 0 0 38px;
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 18px;
+    }
+
+    .demo-page .summary-total .summary-icon {
+        background: #eaf2ff;
+        color: #2563eb;
+    }
+
+    .demo-page .summary-notstarted .summary-icon {
+        background: #f3f4f6;
+        color: #1f2937;
+    }
+
+    .demo-page .summary-progress .summary-icon {
+        background: #fff7d6;
+        color: #f59e0b;
+    }
+
+    .demo-page .summary-completed .summary-icon {
+        background: #dcfce7;
+        color: #16a34a;
+    }
+
+    .demo-page .demo-table-card {
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: 10px;
+        padding: 18px;
+        min-width: 0;
+    }
+
+    .demo-page .demo-table-toolbar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 15px;
+    }
+
+        .demo-page .demo-table-toolbar h2 {
+            font-size: 15px;
+            font-weight: 700;
+            color: #1f2937;
+            margin: 0;
+        }
+
+    .demo-page .search-box {
+        height: 32px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        border: 1px solid #e5e7eb;
+        background: #fff;
+        border-radius: 6px;
+        padding: 0 10px;
+        color: #94a3b8;
+        min-width: 180px;
+    }
+
+        .demo-page .search-box input {
+            border: 0;
+            outline: 0;
+            font-size: 11px;
+            min-width: 0;
+            width: 100%;
+            background: transparent;
+            color: #1f2937;
+        }
+
+    .demo-page .demo-table-scroll {
+        width: 100%;
+        overflow-x: auto;
+    }
+
+    .demo-page .demo-table {
+        width: 100%;
+        border-collapse: collapse;
+        min-width: 1190px;
+    }
+
+        .demo-page .demo-table th {
+            background: #f8fafb;
+            text-align: left;
+            color: #334155;
+            font-size: 10px;
+            font-weight: 700;
+            padding: 12px 9px;
+            border-top: 1px solid #e5e7eb;
+            border-bottom: 1px solid #e5e7eb;
+            white-space: nowrap;
+        }
+
+        .demo-page .demo-table td {
+            padding: 12px 9px;
+            border-bottom: 1px solid #edf0f3;
+            font-size: 10px;
+            vertical-align: middle;
+            color: #475569;
+        }
+
+        .demo-page .demo-table tbody tr:hover {
+            background: #fbfdfd;
+        }
+
+    .demo-page .season-text {
+        color: #16a34a;
+        font-weight: 700;
+        white-space: nowrap;
+    }
+
+    .demo-page .program-text {
+        font-weight: 600;
+        color: #374151;
+    }
+
+    .demo-page .product-cell, .demo-page .treatment {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+    }
+
+        .demo-page .product-cell b, .demo-page .treatment b {
+            color: #334155;
+            font-weight: 600;
+        }
+
+        .demo-page .product-cell small, .demo-page .treatment small {
+            font-size: 9px;
+            color: #94a3b8;
+        }
+
+    .demo-page .location-cell {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        max-width: 190px;
+    }
+
+        .demo-page .location-cell i {
+            color: #64748b;
+        }
+
+    .demo-page .stage, .demo-page .status {
+        display: inline-flex;
+        gap: 5px;
+        align-items: center;
+        white-space: nowrap;
+        font-size: 9px;
+        font-weight: 600;
+    }
+
+        .demo-page .stage i, .demo-page .status i {
+            font-size: 6px;
+        }
+
+        .demo-page .stage.completed, .demo-page .status.completed {
+            color: #16a34a;
+        }
+
+        .demo-page .stage.progress, .demo-page .status.progress {
+            color: #d97706;
+        }
+
+        .demo-page .stage.pending, .demo-page .status.pending {
+            color: #64748b;
+        }
+
+    .demo-page .doc-status {
+        display: inline-flex;
+        padding: 4px 7px;
+        background: #f8fafc;
+        border-radius: 4px;
+        color: #475569;
+        font-size: 9px;
+    }
+
+    .demo-page .demo-actions {
+        display: flex;
+        gap: 4px;
+    }
+
+    .demo-page .view-btn {
+        background: #fff;
+        border: 1px solid #a7dec5;
+        color: #07834b;
+        font-size: 9px;
+        font-weight: 600;
+        border-radius: 5px;
+        padding: 6px 8px;
+        white-space: nowrap;
+    }
+
+        .demo-page .view-btn:disabled {
+            opacity: .65;
+            cursor: not-allowed;
+        }
+
+    .demo-page .demo-empty {
+        text-align: center;
+        color: #64748b;
+        padding: 30px !important;
+    }
+
+    .demo-page .demo-table-footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 15px 0 0;
+        font-size: 10px;
+        color: #64748b;
+    }
+
+    .demo-page .demo-page-size {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+    }
+
+        .demo-page .demo-page-size select {
+            border: 1px solid #e5e7eb;
+            border-radius: 5px;
+            padding: 4px 8px;
+            background: #fff;
+        }
+
+    .demo-page .demo-pagination {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+        .demo-page .demo-pagination button {
+            background: #fff;
+            border: 1px solid #e5e7eb;
+            border-radius: 5px;
+            padding: 3px 9px;
+            font-size: 15px;
+        }
+
+            .demo-page .demo-pagination button:disabled {
+                opacity: .35;
+            }
+
+    @@media(max-width:1100px) {
+        .demo-page .filter-grid {
+            grid-template-columns: repeat(2,minmax(0,1fr));
+        }
+
+        .demo-page .demo-summary-grid {
+            grid-template-columns: repeat(2,minmax(0,1fr));
+        }
+    }
+
+    @@media(max-width:620px) {
+        .demo-page .filter-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .demo-page .demo-summary-grid {
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+
+        .demo-page .summary-card {
+            padding: 9px;
+        }
+
+        .demo-page .summary-title {
+            font-size: 10px;
+            white-space: normal;
+        }
+
+        .demo-page .demo-page-head h1 {
+            font-size: 19px;
+        }
+
+        .demo-page .demo-table-toolbar {
+            align-items: flex-start;
+            flex-direction: column;
+        }
+
+        .demo-page .search-box {
+            width: 100%;
+        }
+
+        .demo-page .filter-actions {
+            justify-content: flex-start;
+            padding-top: 2px;
+        }
+    }
+</style>
+
 @code {
 
 
@@ -466,117 +636,81 @@
 
 
 
-    protected override async Task OnInitializedAsync()
+    private int PageSize = 16;
+    private int CurrentPage = 1;
+    private int TotalPages => Math.Max(1, (int)Math.Ceiling(FilteredDemoList.Count / (double)PageSize));
+    private IEnumerable<DemoDocumentationDto> PagedDemoList => FilteredDemoList.Skip((CurrentPage - 1) * PageSize).Take(PageSize);
+    private void ChangePage(int page) => CurrentPage = Math.Clamp(page, 1, TotalPages);
+
+    private void OpenStartDocumentation(int csr2Id)
     {
-        // await LoadData();
-        LoadData();
+        if (csr2Id <= 0) return;
+        NavigationManager.NavigateTo($"/StartDocumentation?csr2Id={csr2Id}");
     }
-
-
-
-    // private async Task LoadData()
-    // {
-    //     DemoList =
-    //         await Http.GetFromJsonAsync<List<DemoDocumentationDto>>
-    //         ("api/DemoDocumentation")
-    //         ?? new();
-
-
-    //     FilteredDemoList = DemoList;
-    // }
-
-    private void LoadData()
+    private void OnPageSizeChanged(ChangeEventArgs e)
     {
-        DemoList = new()
+        PageSize = int.TryParse(e.Value?.ToString(), out var value) && value > 0 ? value : 16;
+        CurrentPage = 1;
+    }
+    private bool IsLoading;
+    private string LoadError = string.Empty;
+
+    // Requires an API that returns approved CSR-2 demonstration records.
+    // The server must enforce role/geographic access, approval status,
+    // eligible program types and distinct CSR2 IDs (not just the UI).
+    protected override async Task OnInitializedAsync() => await LoadDataAsync();
+
+    private async Task LoadDataAsync()
     {
-        new DemoDocumentationDto
+        IsLoading = true;
+        LoadError = string.Empty;
+        DemoList = new();
+        FilteredDemoList = new();
+        try
         {
-            Id = 1,
-            SeasonNumber = "2025-26",
-            ProgramName = "Crop Demonstration",
-            Product = "SPIC Growth",
-            Crop = "Paddy",
-            District = "Chennai",
-            Location = "Farm - 01",
-            CurrentStage = "Treatment Stage 2",
-            SowingDate = new DateTime(2026, 06, 10),
-            HarvestDate = new DateTime(2026, 09, 15),
-            TotalTreatments = 5,
-            CompletedTreatments = 2,
-            LastTreatmentDate = new DateTime(2026, 07, 20),
-            DocumentationStatus = "In Progress",
-            Status = "In Progress"
-        },
-
-        new DemoDocumentationDto
-        {
-            Id = 2,
-            SeasonNumber = "2025-26",
-            ProgramName = "Field Trial",
-            Product = "SPIC Plus",
-            Crop = "Maize",
-            District = "Madurai",
-            Location = "Farm - 02",
-            CurrentStage = "Completed",
-            SowingDate = new DateTime(2026, 05, 15),
-            HarvestDate = new DateTime(2026, 08, 25),
-            TotalTreatments = 4,
-            CompletedTreatments = 4,
-            LastTreatmentDate = new DateTime(2026, 08, 10),
-            DocumentationStatus = "Completed",
-            Status = "Completed"
-        },
-
-        new DemoDocumentationDto
-        {
-            Id = 3,
-            SeasonNumber = "2025-26",
-            ProgramName = "Demo Program",
-            Product = "SPIC Organic",
-            Crop = "Groundnut",
-            District = "Salem",
-            Location = "Farm - 03",
-            CurrentStage = "Not Started",
-            SowingDate = DateTime.Now,
-            HarvestDate = DateTime.Now.AddDays(90),
-            TotalTreatments = 3,
-            CompletedTreatments = 0,
-            LastTreatmentDate = null,
-            DocumentationStatus = "Pending",
-            Status = "Not Started"
+            // API response must match DemoDocumentationDto below.
+            using var response = await Http.GetAsync("api/DemoDocumentation/approved-csr2");
+            if (!response.IsSuccessStatusCode)
+            {
+                LoadError = $"Unable to load approved CSR-2 demonstrations (HTTP {(int)response.StatusCode}).";
+                return;
+            }
+            var data = await response.Content.ReadFromJsonAsync<List<DemoDocumentationDto>>() ?? new();
+            DemoList = data;
+            ApplyFilter();
         }
-    };
-
-
-        FilteredDemoList = DemoList;
+        catch (Exception ex)
+        {
+            LoadError = $"Unable to load demonstration records: {ex.Message}";
+        }
+        finally
+        {
+            IsLoading = false;
+        }
     }
 
     private void ApplyFilter()
     {
-
-        FilteredDemoList = DemoList
-            .Where(x =>
-                (string.IsNullOrEmpty(SearchText) ||
-                 x.Product.Contains(SearchText, StringComparison.OrdinalIgnoreCase))
-
-                &&
-                (string.IsNullOrEmpty(SelectedSeason) ||
-                 x.SeasonNumber == SelectedSeason)
-
-                &&
-                (string.IsNullOrEmpty(SelectedProgram) ||
-                 x.ProgramName == SelectedProgram)
-
-                &&
-                (string.IsNullOrEmpty(SelectedStatus) ||
-                 x.Status == SelectedStatus)
-
-            )
-            .ToList();
-
+        FilteredDemoList = DemoList.Where(x =>
+            (string.IsNullOrWhiteSpace(SearchText) ||
+              new[] { x.SeasonNumber, x.ProgramName, x.Product, x.Crop, x.District, x.Location, x.Status }
+                .Any(s => (s ?? "").Contains(SearchText, StringComparison.OrdinalIgnoreCase))) &&
+            (string.IsNullOrWhiteSpace(SelectedSeason) || x.SeasonNumber == SelectedSeason) &&
+            (string.IsNullOrWhiteSpace(SelectedProgram) || x.ProgramName == SelectedProgram) &&
+            (string.IsNullOrWhiteSpace(SelectedProduct) || x.Product == SelectedProduct) &&
+            (string.IsNullOrWhiteSpace(SelectedCrop) || x.Crop == SelectedCrop) &&
+            (string.IsNullOrWhiteSpace(SelectedDistrict) || x.District == SelectedDistrict) &&
+            (string.IsNullOrWhiteSpace(SelectedStage) || x.CurrentStage == SelectedStage) &&
+            (string.IsNullOrWhiteSpace(SelectedStatus) || x.Status == SelectedStatus)
+        ).ToList();
+        CurrentPage = 1;
     }
 
-
+    private void OnSearchChanged(ChangeEventArgs e)
+    {
+        SearchText = e.Value?.ToString() ?? "";
+        ApplyFilter();
+    }
 
     private void ClearFilter()
     {
@@ -589,7 +723,7 @@
         SelectedStatus = "";
         SearchText = "";
 
-        FilteredDemoList = DemoList;
+        ApplyFilter();
     }
 
 
@@ -613,9 +747,9 @@
 
         public string CurrentStage { get; set; } = "";
 
-        public DateTime SowingDate { get; set; }
+        public DateTime? SowingDate { get; set; }
 
-        public DateTime HarvestDate { get; set; }
+        public DateTime? HarvestDate { get; set; }
 
         public int TotalTreatments { get; set; }
 
