@@ -2,111 +2,290 @@
 @using Microsoft.AspNetCore.Components
 @using Microsoft.AspNetCore.Components.Forms
 @using System.IO
+@using System.Net.Http.Json
+@using System.Net
+@using System.Text.Json
+@inject HttpClient Http
 @inject NavigationManager NavigationManager
 
 <div class="container-fluid py-3 px-2 treatment-page">
     <div class="treatment-heading">
         <button type="button" class="back-link" @onclick="BackToDemo"><i class="bi bi-arrow-left"></i> Back to Demo Details</button>
-        <div><h4>Treatment 01 <span class="visit-badge">First Treatment</span></h4><p>CSR-2 #@CSR2Id · Field Visit Documentation</p></div>
+        <div><h4>Treatment @TreatmentNumber.ToString("00") <span class="visit-badge">Treatment @TreatmentNumber.ToString("00")</span></h4><p>CSR-2 #@CSR2Id · Field Visit Documentation</p></div>
     </div>
+
+    @if (previousTreatment != null)
+    {
+        <div class="previous-treatment-card">
+            <div class="previous-treatment-heading">
+                <h6>Previous Treatment Reference - Treatment @((TreatmentNumber - 1).ToString("00"))</h6>
+                <button type="button" class="previous-view-btn" @onclick="ViewPreviousTreatment">View Full Details</button>
+            </div>
+            <div class="previous-treatment-grid">
+                <div><label>Visit Date</label><strong>@(previousTreatment.VisitDate?.ToString("dd MMM yyyy") ?? "-")</strong></div>
+                <div><label>Current Plant Stage</label><strong>@PreviousStageName</strong></div>
+                <div><label>Dosage Applied</label><strong>@ReferenceDisplay(previousTreatment.Dosage)</strong></div>
+                <div><label>Method</label><strong>@ReferenceDisplay(previousTreatment.ApplicationMethod)</strong></div>
+            </div>
+            <div class="previous-observation-grid">
+                <div><label>Field Observation</label><div class="previous-note">@ReferenceDisplay(previousTreatment.ObservationNotes, previousTreatment.PhysicalParameters)</div></div>
+                <div><label>Yield Parameters</label><div class="previous-note">@ReferenceDisplay(previousTreatment.YieldParameters)</div></div>
+            </div>
+        </div>
+    }
+    else if (!string.IsNullOrWhiteSpace(previousTreatmentError))
+    {
+        <div class="alert alert-warning">@previousTreatmentError</div>
+    }
 
     <div class="treatment-section">
         <h6>Visit Details</h6>
         <div class="form-grid three-cols">
             <div class="field"><label>Visit Date</label><input type="date" class="form-control" @bind="visitDate" @bind:format="yyyy-MM-dd" /></div>
-            <div class="field"><label>Field Officer / Visibility</label><select class="form-select" @bind="fieldOfficer"><option value="">Select Officer</option><option>MO</option><option>MDO</option><option>RM</option></select></div>
-            <div class="field"><label>Current Plant Stage</label><select class="form-select" @bind="plantStage"><option value="">Select Stage</option><option>Seedling Stage</option><option>Vegetative Stage</option><option>Flowering Stage</option><option>Harvest Stage</option></select></div>
-            <div class="field"><label>Plant Condition</label><select class="form-select" @bind="plantCondition"><option value="">Select Condition</option><option>Good</option><option>Average</option><option>Poor</option></select></div>
+            <div class="field">
+                <label>Field Officer / Visibility</label><select class="form-select" @bind="fieldOfficer">
+                <option value="">Select Officer</option>@foreach (var o in officerOptions) {
+                <option value="@o.Id">@o.Name</option>
+            }
+        </select>
+    </div>
+    <div class="field">
+        <label>Current Plant Stage</label><select class="form-select" @bind="plantStage">
+        <option value="">Select Stage</option>@foreach (var o in stageOptions) {
+        <option value="@o.Id">@o.Name</option>
+    }
+</select>
+</div>
+<div class="field"><label>Plant Condition</label><select class="form-select" @bind="plantCondition"><option value="">Select Condition</option><option>Good</option><option>Average</option><option>Poor</option></select></div>
+</div>
+</div>
+
+<div class="treatment-section">
+    <h6>Treatment Applied</h6>
+    <div class="form-grid three-cols">
+        <div class="field">
+            <label>Product Used</label><select class="form-select" @bind="productUsed">
+            <option value="">Select Product</option>@foreach (var o in productOptions) {
+            <option value="@o.Id">@o.Name</option>
+        }
+    </select>
+</div>
+<div class="field"><label>Dosage</label><input class="form-control" placeholder="e.g. 2 ml/L" @bind="dosage" /></div>
+<div class="field"><label>Application Method</label><select class="form-select" @bind="applicationMethod"><option value="">Select Method</option><option>Spray</option><option>Drip</option><option>Manual</option></select></div>
+<div class="field"><label>Treatment Date</label><input type="date" class="form-control" @bind="treatmentDate" @bind:format="yyyy-MM-dd" /></div>
+<div class="field"><label>Stage of Application</label><select class="form-select" @bind="applicationStage"><option value="">Select Stage of Application</option><option>Initial</option><option>Mid Stage</option><option>Final Stage</option></select></div>
+<div class="field"><label>Remarks</label><input class="form-control" placeholder="Any additional remarks..." @bind="treatmentRemarks" /></div>
+</div>
+</div>
+
+<div class="treatment-section">
+    <h6>Observations</h6>
+    <div class="form-grid two-cols">
+        <div class="field"><label>Physical Parameters</label><textarea class="form-control observation-area" placeholder="Plant height, leaf count, stem girth, colour..." @bind="physicalParameters"></textarea></div>
+        <div class="field"><label>Yield Parameters</label><textarea class="form-control observation-area" placeholder="Tiller count, panicle length, grain filling, fruit set..." @bind="yieldParameters"></textarea></div>
+    </div>
+    <div class="field mt-3">
+        <label>Quick Observations</label>
+        <div class="observation-chips">
+            @foreach (var observation in quickObservationOptions)
+            {
+                <button type="button" class="observation-chip @(chosenObservations.Contains(observation) ? "selected" : "")" @onclick="() => ToggleObservation(observation)">@observation</button>
+            }
         </div>
     </div>
+    <div class="field mt-3"><label>Observation Notes</label><textarea class="form-control notes-area" placeholder="Detailed Field Observation Notes..." @bind="observationNotes"></textarea></div>
+</div>
 
-    <div class="treatment-section">
-        <h6>Treatment Applied</h6>
-        <div class="form-grid three-cols">
-            <div class="field"><label>Product Used</label><select class="form-select" @bind="productUsed"><option value="">Select Product</option><option>SPIC Product A</option><option>SPIC Product B</option></select></div>
-            <div class="field"><label>Dosage</label><input class="form-control" placeholder="e.g. 2 ml/L" @bind="dosage" /></div>
-            <div class="field"><label>Application Method</label><select class="form-select" @bind="applicationMethod"><option value="">Select Method</option><option>Spray</option><option>Drip</option><option>Manual</option></select></div>
-            <div class="field"><label>Treatment Date</label><input type="date" class="form-control" @bind="treatmentDate" @bind:format="yyyy-MM-dd" /></div>
-            <div class="field"><label>Stage of Application</label><select class="form-select" @bind="applicationStage"><option value="">Select Stage of Application</option><option>Initial</option><option>Mid Stage</option><option>Final Stage</option></select></div>
-            <div class="field"><label>Remarks</label><input class="form-control" placeholder="Any additional remarks..." @bind="treatmentRemarks" /></div>
-        </div>
-    </div>
-
-    <div class="treatment-section">
-        <h6>Observations</h6>
-        <div class="form-grid two-cols">
-            <div class="field"><label>Physical Parameters</label><textarea class="form-control observation-area" placeholder="Plant height, leaf count, stem girth, colour..." @bind="physicalParameters"></textarea></div>
-            <div class="field"><label>Yield Parameters</label><textarea class="form-control observation-area" placeholder="Tiller count, panicle length, grain filling, fruit set..." @bind="yieldParameters"></textarea></div>
-        </div>
-        <div class="field mt-3">
-            <label>Quick Observations</label>
-            <div class="observation-chips">
-                @foreach (var observation in quickObservationOptions)
+<div class="treatment-section image-section">
+    <div class="images-grid">
+        <div class="image-panel">
+            <div class="image-panel-heading"><h6>Control Images</h6><label class="upload-button" for="control-upload"><i class="bi bi-plus"></i> Upload Image</label></div>
+            <div class="upload-drop"><i class="bi bi-cloud-arrow-up"></i><strong>Choose images or click to upload</strong><small>JPG, PNG · Max 10MB each</small><InputFile id="control-upload" OnChange="OnControlFiles" multiple accept="image/jpeg,image/png" /></div>
+            <div class="preview-grid">
+                @foreach (var img in controlImages.Take(5))
                 {
-                    <button type="button" class="observation-chip @(chosenObservations.Contains(observation) ? "selected" : "")" @onclick="() => ToggleObservation(observation)">@observation</button>
-                }
-            </div>
-        </div>
-        <div class="field mt-3"><label>Observation Notes</label><textarea class="form-control notes-area" placeholder="Detailed Field Observation Notes..." @bind="observationNotes"></textarea></div>
-    </div>
-
-    <div class="treatment-section image-section">
-        <div class="images-grid">
-            <div class="image-panel">
-                <div class="image-panel-heading"><h6>Control Images</h6><label class="upload-button" for="control-upload"><i class="bi bi-plus"></i> Upload Image</label></div>
-                <div class="upload-drop"><i class="bi bi-cloud-arrow-up"></i><strong>Choose images or click to upload</strong><small>JPG, PNG · Max 10MB each</small><InputFile id="control-upload" OnChange="OnControlFiles" multiple accept="image/jpeg,image/png" /></div>
-                <div class="preview-grid">@foreach (var img in controlImages.Take(5)) {
                     <img src="@img" alt="Control photo" />
                 }
             </div>
             <button type="button" class="view-images" @onclick="() => showAllControls = !showAllControls">@(showAllControls ? "Hide Images" : $"View All Images ({controlImages.Count})") <i class="bi bi-chevron-right"></i></button>
             @if (showAllControls)
             {
-                <div class="preview-grid expanded">@foreach (var img in controlImages) {
-                    <img src="@img" alt="Control photo" />
+                <div class="preview-grid expanded">
+                    @foreach (var img in controlImages)
+                    {
+                        <img src="@img" alt="Control photo" />
+                    }
+                </div>
+            }
+        </div>
+        <div class="image-panel">
+            <div class="image-panel-heading"><h6>Treated Images</h6><label class="upload-button" for="treated-upload"><i class="bi bi-plus"></i> Upload Image</label></div>
+            <div class="upload-drop"><i class="bi bi-cloud-arrow-up"></i><strong>Choose images or click to upload</strong><small>JPG, PNG · Max 10MB each</small><InputFile id="treated-upload" OnChange="OnTreatedFiles" multiple accept="image/jpeg,image/png" /></div>
+            <div class="preview-grid">
+                @foreach (var img in treatedImages.Take(5))
+                {
+                    <img src="@img" alt="Treated photo" />
                 }
             </div>
-        }
+            <button type="button" class="view-images" @onclick="() => showAllTreated = !showAllTreated">@(showAllTreated ? "Hide Images" : $"View All Images ({treatedImages.Count})") <i class="bi bi-chevron-right"></i></button>
+            @if (showAllTreated)
+            {
+                <div class="preview-grid expanded">
+                    @foreach (var img in treatedImages)
+                    {
+                        <img src="@img" alt="Treated photo" />
+                    }
+                </div>
+            }
+        </div>
     </div>
-    <div class="image-panel">
-        <div class="image-panel-heading"><h6>Treated Images</h6><label class="upload-button" for="treated-upload"><i class="bi bi-plus"></i> Upload Image</label></div>
-        <div class="upload-drop"><i class="bi bi-cloud-arrow-up"></i><strong>Choose images or click to upload</strong><small>JPG, PNG · Max 10MB each</small><InputFile id="treated-upload" OnChange="OnTreatedFiles" multiple accept="image/jpeg,image/png" /></div>
-        <div class="preview-grid">@foreach (var img in treatedImages.Take(5)) {
-            <img src="@img" alt="Treated photo" />
-        }
-    </div>
-    <button type="button" class="view-images" @onclick="() => showAllTreated = !showAllTreated">@(showAllTreated ? "Hide Images" : $"View All Images ({treatedImages.Count})") <i class="bi bi-chevron-right"></i></button>
-    @if (showAllTreated)
+    @if (!string.IsNullOrEmpty(imageError))
     {
-        <div class="preview-grid expanded">@foreach (var img in treatedImages) {
-            <img src="@img" alt="Treated photo" />
-        }
-    </div>
-}
-</div>
-</div>
-        @if (!string.IsNullOrEmpty(imageError))
-{
-    <p class="text-danger small mt-2">@imageError</p>
-}
+        <p class="text-danger small mt-2">@imageError</p>
+    }
 </div>
 
 <div class="treatment-section">
     <h6>Problem Identification &amp; Recommendation</h6>
     <div class="form-grid three-cols">
-        <div class="field"><label>Problem Observed?</label><div class="toggle-group"><button type="button" class="@(hasProblem ? "active" : "")" @onclick="() => hasProblem = true">Yes, problem identified</button><button type="button" class="@(!hasProblem ? "active okay" : "")" @onclick="() => hasProblem = false">No, all looks good</button></div></div>
-        <div class="field"><label>Problem Category</label><select class="form-select" @bind="problemCategory" disabled="@(!hasProblem)"><option value="">Select Category</option><option>Pest Attack</option><option>Disease</option><option>Nutrient Deficiency</option></select></div>
-        <div class="field"><label>Problem Description</label><input class="form-control" placeholder="Describe the issue observed" @bind="problemDescription" disabled="@(!hasProblem)" /></div>
-        <div class="field"><label>Severity</label><select class="form-select" @bind="severity" disabled="@(!hasProblem)"><option value="">Select Severity</option><option>Low</option><option>Medium</option><option>High</option></select></div>
-        <div class="field"><label>Recommendation / Monitoring Action</label><input class="form-control" placeholder="Recommended monitoring action" @bind="recommendation" /></div>
-        <div class="field"><label>Action Taken</label><input class="form-control" placeholder="Field scouting and monitoring advised" @bind="actionTaken" /></div>
+        <div class="field">
+            <label>Problem Observed?</label>
+            <div class="toggle-group">
+                <button type="button" class="@(hasProblem ? "active" : "")" @onclick="() => SetProblemObserved(true)">Yes, problem identified</button>
+                <button type="button" class="@(!hasProblem ? "active okay" : "")" @onclick="() => SetProblemObserved(false)" disabled="@(isSaving || isCompleted)">No, all looks good</button>
+            </div>
+        </div>
+        @if (hasProblem)
+        {
+            <div class="field"><label>Problem Category</label><select class="form-select" @bind="problemCategory"><option value="">Select Category</option><option>Pest Attack</option><option>Disease</option><option>Nutrient Deficiency</option></select></div>
+            <div class="field"><label>Problem Description</label><input class="form-control" placeholder="Describe the issue observed" @bind="problemDescription" /></div>
+            <div class="field"><label>Severity</label><select class="form-select" @bind="severity"><option value="">Select Severity</option><option>Low</option><option>Medium</option><option>High</option></select></div>
+            <div class="field"><label>Recommendation / Monitoring Action</label><input class="form-control" placeholder="Recommended monitoring action" @bind="recommendation" /></div>
+            <div class="field"><label>Action Taken</label><input class="form-control" placeholder="Field scouting and monitoring advised" @bind="actionTaken" /></div>
+        }
     </div>
 </div>
-<div class="form-actions"><button type="button" class="btn btn-outline-secondary" disabled title="Treatment save endpoint not yet supplied">Save Draft</button><button type="button" class="complete-btn" disabled title="Treatment completion endpoint not yet supplied">Complete First Treatment <i class="bi bi-arrow-right"></i></button></div>
-<p class="text-muted small text-end mt-2">Form inputs and photo previews are local to this page. A treatment API is required to save or complete the record.</p>
+@if (!string.IsNullOrWhiteSpace(saveError))
+{
+    <div class="alert alert-danger">@saveError</div>
+}
+@if (!string.IsNullOrWhiteSpace(saveSuccess))
+{
+    <div class="alert alert-success">@saveSuccess</div>
+}
+<div class="form-actions"><button type="button" class="btn btn-outline-secondary" disabled="@(isSaving || isCompleted)" @onclick="() => SaveTreatmentAsync(false)">Save Draft</button><button type="button" class="complete-btn" disabled="@(isSaving || isCompleted)" @onclick="() => SaveTreatmentAsync(true)">Complete Treatment <i class="bi bi-arrow-right"></i></button></div>
+<p class="text-muted small text-end mt-2">Treatment details and uploaded photos are saved to the database.</p>
 </div>
 
 <style>
+    .previous-treatment-card {
+        background: #f5faf7;
+        border: 1px solid #cce7d6;
+        border-radius: 11px;
+        padding: 15px 17px;
+        margin-bottom: 14px;
+    }
+
+    .previous-treatment-heading {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 17px;
+    }
+
+        .previous-treatment-heading h6 {
+            margin: 0;
+            font-size: 13px;
+            font-weight: 700;
+            color: #263c33;
+        }
+
+    .previous-view-btn {
+        background: #fff;
+        border: 1px solid #85c7a3;
+        color: #167448;
+        border-radius: 5px;
+        padding: 6px 11px;
+        font-size: 10px;
+        cursor: pointer;
+        white-space: nowrap;
+    }
+
+    .previous-treatment-grid {
+        display: grid;
+        grid-template-columns: repeat(4,minmax(0,1fr));
+        margin-bottom: 16px;
+    }
+
+        .previous-treatment-grid > div {
+            min-width: 0;
+            padding: 0 13px;
+            border-right: 1px solid #dce8e1;
+        }
+
+            .previous-treatment-grid > div:first-child {
+                padding-left: 0;
+            }
+
+            .previous-treatment-grid > div:last-child {
+                border-right: 0;
+                padding-right: 0;
+            }
+
+    .previous-treatment-card label {
+        display: block;
+        font-size: 10px;
+        color: #68786f;
+        margin-bottom: 6px;
+    }
+
+    .previous-treatment-grid strong {
+        display: block;
+        color: #167448;
+        font-size: 11px;
+        font-weight: 700;
+        overflow-wrap: anywhere;
+    }
+
+    .previous-observation-grid {
+        display: grid;
+        grid-template-columns: repeat(2,minmax(0,1fr));
+        gap: 14px;
+    }
+
+    .previous-note {
+        background: #fff;
+        border-radius: 5px;
+        padding: 11px;
+        color: #68756d;
+        font-size: 11px;
+        line-height: 1.6;
+        min-height: 44px;
+        overflow-wrap: anywhere;
+    }
+
+    @@media(max-width:700px) {
+        .previous-treatment-grid {
+            grid-template-columns: repeat(2,minmax(0,1fr));
+            row-gap: 13px;
+        }
+
+            .previous-treatment-grid > div:nth-child(2) {
+                border-right: 0;
+            }
+    }
+
+    @@media(max-width:550px) {
+        .previous-observation-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .previous-treatment-heading {
+            align-items: flex-start;
+        }
+    }
+
     .treatment-page {
         background: #f5f8f8;
         color: #273d37;
@@ -391,16 +570,14 @@
         opacity: .55;
         cursor: not-allowed
     }
-    @@media(max - width:850px)
 
-    {
+    @@media(max - width:850px) {
         .three-cols {
             grid-template-columns: repeat(2,minmax(0,1fr))
         }
     }
-    @@media(max - width:600px)
 
-    {
+    @@media(max - width:600px) {
         .three-cols, .two-cols, .images-grid {
             grid-template-columns: 1fr
         }
@@ -441,14 +618,266 @@
     private bool hasProblem = true, showAllControls, showAllTreated;
     private string imageError = "";
     private readonly List<string> controlImages = new();
+    private List<PhotoRef> savedControlPhotos = new(), savedTreatedPhotos = new();
     private readonly List<string> treatedImages = new();
     private readonly string[] quickObservationOptions = { "Increase of More Branches", "Increase of More Leaves", "Increase of More Flowers", "Increase of More Fruits", "Increase of More Tillers", "Increase of More Panicles" };
     private readonly HashSet<string> chosenObservations = new();
+    private void SetProblemObserved(bool value)
+    {
+        hasProblem = value;
+        if (!value)
+        {
+            problemCategory = "";
+            problemDescription = "";
+            severity = "";
+            recommendation = "";
+            actionTaken = "";
+        }
+    }
     private void ToggleObservation(string value) { if (!chosenObservations.Add(value)) chosenObservations.Remove(value); }
+    private sealed class LookupItem { public int Id { get; set; } public string Name { get; set; } = ""; }
+    private sealed class OfficerItem { public string Id { get; set; } = ""; public string Name { get; set; } = ""; }
+    private sealed class Lookups
+    {
+        public List<LookupItem> Stages { get; set; } = new();
+        public List<LookupItem> Products { get; set; } = new();
+        public List<OfficerItem> Officers { get; set; } = new();
+        public string? DefaultFieldOfficerUserId { get; set; }
+    }
+    private sealed class PhotoRef { public int Id { get; set; } public string PhotoType { get; set; } = ""; public string FileName { get; set; } = ""; }
+    private sealed class TreatmentDto
+    {
+        public JsonElement Status { get; set; }
+        public DateTime? VisitDate { get; set; }
+        public DateTime? TreatmentDate { get; set; }
+        public string? FieldOfficerUserId { get; set; }
+        public int? CropStageId { get; set; }
+        public string? PlantCondition { get; set; }
+        public int? ProductId { get; set; }
+        public string? Dosage { get; set; }
+        public string? ApplicationMethod { get; set; }
+        public string? ApplicationStage { get; set; }
+        public string? TreatmentRemarks { get; set; }
+        public string? PhysicalParameters { get; set; }
+        public string? YieldParameters { get; set; }
+        public string? ObservationNotes { get; set; }
+        public bool HasProblem { get; set; }
+        public string? ProblemCategory { get; set; }
+        public string? ProblemDescription { get; set; }
+        public string? Severity { get; set; }
+        public string? Recommendation { get; set; }
+        public string? ActionTaken { get; set; }
+        public List<string> QuickObservations { get; set; } = new();
+        public List<PhotoRef> Photos { get; set; } = new();
+    }
+    private TreatmentDto? previousTreatment;
+    private string previousTreatmentError = "";
+    private string PreviousStageName => previousTreatment?.CropStageId is int id
+        ? stageOptions.FirstOrDefault(x => x.Id == id)?.Name ?? $"Stage #{id}"
+        : "-";
+    private static string ReferenceDisplay(params string?[] values) =>
+        values.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v)) ?? "-";
+    private void ViewPreviousTreatment() => NavigationManager.NavigateTo(
+        $"/TreatmentDetails?csr2Id={CSR2Id}&treatmentNumber={TreatmentNumber - 1}");
+
+    private List<OfficerItem> officerOptions = new();
+    private List<LookupItem> stageOptions = new(), productOptions = new();
+    private bool isSaving;
+    private bool isCompleted;
+    private string saveError = "", saveSuccess = "";
+    [SupplyParameterFromQuery(Name = "treatmentNumber")]
+    public int? RequestedTreatmentNumber { get; set; }
+    private int TreatmentNumber => RequestedTreatmentNumber is > 0 ? RequestedTreatmentNumber.Value : 1;
+    // Load independent API requests concurrently to reduce initial page latency.
+    protected override async Task OnParametersSetAsync()
+    {
+        saveError = saveSuccess = previousTreatmentError = "";
+        isCompleted = false;
+        previousTreatment = null;
+        if (CSR2Id is null or <= 0) { saveError = "Missing csr2Id."; return; }
+
+        try
+        {
+            int csrId = CSR2Id.Value;
+            int number = TreatmentNumber;
+            var lookupTask = Http.GetFromJsonAsync<Lookups>($"api/DemoDocumentation/treatment/lookups?csr2Id={csrId}");
+            var currentTask = GetTreatmentAsync(csrId, number);
+            var previousTask = number > 1 ? GetTreatmentAsync(csrId, number - 1) : Task.FromResult<TreatmentDto?>(null);
+
+            await Task.WhenAll(lookupTask, currentTask, previousTask);
+            var lookup = await lookupTask;
+            var t = await currentTask;
+            previousTreatment = await previousTask;
+
+            stageOptions = lookup?.Stages ?? new();
+            productOptions = lookup?.Products ?? new();
+            officerOptions = (lookup?.Officers ?? new())
+                .Where(o => !string.IsNullOrWhiteSpace(o.Id))
+                .GroupBy(o => o.Id, StringComparer.OrdinalIgnoreCase)
+                .Select(g => g.First())
+                .OrderBy(o => o.Name)
+                .ToList();
+            var defaultId = lookup?.DefaultFieldOfficerUserId;
+            fieldOfficer = officerOptions.Any(o => o.Id == defaultId) ? defaultId! : "";
+
+            // Avoid carrying data from the previous route when switching treatment numbers.
+            visitDate = treatmentDate = DateTime.Today;
+            plantStage = plantCondition = productUsed = dosage = applicationMethod = applicationStage = treatmentRemarks = "";
+            physicalParameters = yieldParameters = observationNotes = problemCategory = problemDescription = severity = recommendation = actionTaken = "";
+            hasProblem = true;
+            chosenObservations.Clear();
+            controlImages.Clear();
+            treatedImages.Clear();
+            savedControlPhotos.Clear();
+            savedTreatedPhotos.Clear();
+            pendingControls.Clear();
+            pendingTreated.Clear();
+            showAllControls = showAllTreated = false;
+
+            if (t == null) return;
+            visitDate = t.VisitDate;
+            treatmentDate = t.TreatmentDate;
+            if (!string.IsNullOrWhiteSpace(t.FieldOfficerUserId))
+            {
+                fieldOfficer = t.FieldOfficerUserId;
+                if (!officerOptions.Any(o => o.Id == fieldOfficer))
+                    officerOptions.Add(new OfficerItem { Id = fieldOfficer, Name = $"Assigned employee ({fieldOfficer})" });
+            }
+            plantStage = t.CropStageId?.ToString() ?? "";
+            plantCondition = t.PlantCondition ?? "";
+            productUsed = t.ProductId?.ToString() ?? "";
+            dosage = t.Dosage ?? "";
+            applicationMethod = t.ApplicationMethod ?? "";
+            applicationStage = t.ApplicationStage ?? "";
+            treatmentRemarks = t.TreatmentRemarks ?? "";
+            physicalParameters = t.PhysicalParameters ?? "";
+            yieldParameters = t.YieldParameters ?? "";
+            observationNotes = t.ObservationNotes ?? "";
+            hasProblem = t.HasProblem;
+            problemCategory = t.ProblemCategory ?? "";
+            problemDescription = t.ProblemDescription ?? "";
+            severity = t.Severity ?? "";
+            recommendation = t.Recommendation ?? "";
+            actionTaken = t.ActionTaken ?? "";
+            foreach (var obs in t.QuickObservations ?? new()) chosenObservations.Add(obs);
+            savedControlPhotos = (t.Photos ?? new()).Where(x => x.PhotoType == "Control").ToList();
+            savedTreatedPhotos = (t.Photos ?? new()).Where(x => x.PhotoType == "Treated").ToList();
+
+            // Bounded parallel reads preserve preview order while limiting network load.
+            var previews = await LoadPhotoPreviewsAsync(savedControlPhotos.Concat(savedTreatedPhotos).ToList());
+            controlImages.AddRange(previews.Take(savedControlPhotos.Count));
+            treatedImages.AddRange(previews.Skip(savedControlPhotos.Count));
+            isCompleted = t.Status.ToString() == "Completed" || t.Status.ToString() == "1";
+            if (isCompleted)
+                saveSuccess = "This treatment has already been completed.";
+        }
+        catch (Exception ex) { saveError = $"Could not load treatment: {ex.Message}"; }
+    }
+
+    private async Task<TreatmentDto?> GetTreatmentAsync(int csr2Id, int number)
+    {
+        using var response = await Http.GetAsync($"api/DemoDocumentation/treatment/details?csr2Id={csr2Id}&treatmentNumber={number}");
+        if (response.StatusCode == HttpStatusCode.NotFound) return null;
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<TreatmentDto>();
+    }
+
+    private async Task<string[]> LoadPhotoPreviewsAsync(List<PhotoRef> photos)
+    {
+        using var throttle = new SemaphoreSlim(3);
+        var tasks = photos.Select(async photo =>
+        {
+            await throttle.WaitAsync();
+            try { return await PhotoPreviewAsync(photo); }
+            finally { throttle.Release(); }
+        });
+        return await Task.WhenAll(tasks);
+    }
+
+    private async Task SaveTreatmentAsync(bool complete)
+    {
+        if (isSaving) return;
+        saveError = saveSuccess = "";
+        if (isCompleted) { saveError = "This treatment is already completed."; return; }
+        if (CSR2Id is null or <= 0) { saveError = "Invalid CSR-2 ID."; return; }
+        if (complete && (!visitDate.HasValue || !treatmentDate.HasValue ||
+                         !int.TryParse(plantStage, out var stageId) || stageId <= 0 ||
+                         !int.TryParse(productUsed, out var productId) || productId <= 0))
+        {
+            saveError = "Enter Visit Date, Treatment Date, Current Plant Stage and Product Used before completing the treatment.";
+            return;
+        }
+        isSaving = true;
+        try
+        {
+            var payload = new
+            {
+                CSR2Id = CSR2Id.Value,
+                TreatmentNumber,
+                VisitDate = visitDate,
+                FieldOfficerUserId = fieldOfficer,
+                CropStageId = int.TryParse(plantStage, out var sid) ? (int?)sid : null,
+                PlantCondition = plantCondition,
+                ProductId = int.TryParse(productUsed, out var pid) ? (int?)pid : null,
+                Dosage = dosage,
+                ApplicationMethod = applicationMethod,
+                TreatmentDate = treatmentDate,
+                ApplicationStage = applicationStage,
+                TreatmentRemarks = treatmentRemarks,
+                PhysicalParameters = physicalParameters,
+                YieldParameters = yieldParameters,
+                ObservationNotes = observationNotes,
+                HasProblem = hasProblem,
+                ProblemCategory = hasProblem ? problemCategory : "",
+                ProblemDescription = hasProblem ? problemDescription : "",
+                Severity = hasProblem ? severity : "",
+                Recommendation = hasProblem ? recommendation : "",
+                ActionTaken = hasProblem ? actionTaken : "",
+                QuickObservations = chosenObservations.ToList()
+            };
+            // New images are separate multipart uploads; for completion save the draft first.
+            using var response = await Http.PostAsJsonAsync("api/DemoDocumentation/treatment/save", payload);
+            if (!response.IsSuccessStatusCode) { saveError = await response.Content.ReadAsStringAsync(); return; }
+            if (pendingControls.Count > 0) await UploadPendingAsync("Control", pendingControls);
+            if (pendingTreated.Count > 0) await UploadPendingAsync("Treated", pendingTreated);
+            if (complete)
+            {
+                using var completed = await Http.PostAsJsonAsync("api/DemoDocumentation/treatment/complete", payload);
+                if (!completed.IsSuccessStatusCode) { saveError = await completed.Content.ReadAsStringAsync(); return; }
+            }
+            if (complete) isCompleted = true;
+            saveSuccess = complete ? "Treatment completed successfully." : "Draft saved successfully.";
+        }
+        catch (Exception ex) { saveError = $"Save failed: {ex.Message}"; }
+        finally { isSaving = false; }
+    }
+    private async Task<string> PhotoPreviewAsync(PhotoRef photo)
+    {
+        var bytes = await Http.GetByteArrayAsync($"api/DemoDocumentation/treatment/photo/{photo.Id}");
+        var contentType = photo.FileName.EndsWith(".png", StringComparison.OrdinalIgnoreCase) ? "image/png" : "image/jpeg";
+        return $"data:{contentType};base64,{Convert.ToBase64String(bytes)}";
+    }
+    private readonly List<(string Name, string ContentType, byte[] Bytes)> pendingControls = new(), pendingTreated = new();
+    private async Task UploadPendingAsync(string kind, List<(string Name, string ContentType, byte[] Bytes)> pending)
+    {
+        using var form = new MultipartFormDataContent();
+        form.Add(new StringContent(CSR2Id!.Value.ToString()), "csr2Id");
+        form.Add(new StringContent(TreatmentNumber.ToString()), "treatmentNumber");
+        form.Add(new StringContent(kind), "photoType");
+        foreach (var file in pending)
+        {
+            var bytes = new ByteArrayContent(file.Bytes);
+            bytes.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(file.ContentType);
+            form.Add(bytes, "files", file.Name);
+        }
+        using var response = await Http.PostAsync("api/DemoDocumentation/treatment/photos", form);
+        response.EnsureSuccessStatusCode();
+        pending.Clear();
+    }
     private void BackToDemo() => NavigationManager.NavigateTo(CSR2Id is > 0 ? $"/DemoDetails?csr2Id={CSR2Id}" : "/DemoDocumentation");
-    private Task OnControlFiles(InputFileChangeEventArgs e) => ReadFiles(e, controlImages);
-    private Task OnTreatedFiles(InputFileChangeEventArgs e) => ReadFiles(e, treatedImages);
-    private async Task ReadFiles(InputFileChangeEventArgs e, List<string> destination)
+    private Task OnControlFiles(InputFileChangeEventArgs e) => ReadFiles(e, controlImages, pendingControls);
+    private Task OnTreatedFiles(InputFileChangeEventArgs e) => ReadFiles(e, treatedImages, pendingTreated);
+    private async Task ReadFiles(InputFileChangeEventArgs e, List<string> destination, List<(string Name, string ContentType, byte[] Bytes)> pending)
     {
         imageError = "";
         if (e.FileCount > 20) { imageError = "Select up to 20 images at a time."; return; }
@@ -461,7 +890,9 @@
                 await using var stream = file.OpenReadStream(10 * 1024 * 1024);
                 using var memory = new MemoryStream();
                 await stream.CopyToAsync(memory);
-                destination.Add($"data:{file.ContentType};base64,{Convert.ToBase64String(memory.ToArray())}");
+                var fileBytes = memory.ToArray();
+                destination.Add($"data:{file.ContentType};base64,{Convert.ToBase64String(fileBytes)}");
+                pending.Add((file.Name, file.ContentType, fileBytes));
             }
             catch (Exception) { imageError = "One or more images could not be opened."; }
         }

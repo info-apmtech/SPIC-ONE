@@ -3427,6 +3427,195 @@ namespace Spic.Infrastructure.Migrations
                     b.ToTable("DemoDocumentations");
                 });
 
+            modelBuilder.Entity("SPIC.Core.Entities.DemoTreatment", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ActionTaken")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("ApplicationMethod")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("ApplicationStage")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("CSR2Id")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("CompletedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int?>("CropStageId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("DemoDocumentationId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Dosage")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("FieldOfficerUserId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<bool>("HasProblem")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("ObservationNotes")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<string>("PhysicalParameters")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<string>("PlantCondition")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("ProblemCategory")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("ProblemDescription")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<int?>("ProductId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Recommendation")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("Severity")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("TreatmentDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int>("TreatmentNumber")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("TreatmentRemarks")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime?>("VisitDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("YieldParameters")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CSR2Id");
+
+                    b.HasIndex("CropStageId");
+
+                    b.HasIndex("ProductId");
+
+                    b.HasIndex("DemoDocumentationId", "TreatmentNumber")
+                        .IsUnique();
+
+                    b.ToTable("DemoTreatments");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.DemoTreatmentObservation", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("DemoTreatmentId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Observation")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DemoTreatmentId");
+
+                    b.ToTable("DemoTreatmentObservations");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.DemoTreatmentPhoto", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<byte[]>("Data")
+                        .IsRequired()
+                        .HasColumnType("bytea");
+
+                    b.Property<int>("DemoTreatmentId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<string>("PhotoType")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DemoTreatmentId");
+
+                    b.ToTable("DemoTreatmentPhotos");
+                });
+
             modelBuilder.Entity("SPIC.Core.Entities.Designation", b =>
                 {
                     b.Property<int>("Id")
@@ -11485,6 +11674,61 @@ namespace Spic.Infrastructure.Migrations
                     b.Navigation("CSR2");
                 });
 
+            modelBuilder.Entity("SPIC.Core.Entities.DemoTreatment", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.CSR2", "CSR2")
+                        .WithMany()
+                        .HasForeignKey("CSR2Id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("SPIC.Core.Entities.CropStage", "CropStage")
+                        .WithMany()
+                        .HasForeignKey("CropStageId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("SPIC.Core.Entities.DemoDocumentation", "DemoDocumentation")
+                        .WithMany()
+                        .HasForeignKey("DemoDocumentationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("SPIC.Core.Entities.Product", "Product")
+                        .WithMany()
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("CSR2");
+
+                    b.Navigation("CropStage");
+
+                    b.Navigation("DemoDocumentation");
+
+                    b.Navigation("Product");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.DemoTreatmentObservation", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.DemoTreatment", "DemoTreatment")
+                        .WithMany("Observations")
+                        .HasForeignKey("DemoTreatmentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("DemoTreatment");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.DemoTreatmentPhoto", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.DemoTreatment", "DemoTreatment")
+                        .WithMany("Photos")
+                        .HasForeignKey("DemoTreatmentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("DemoTreatment");
+                });
+
             modelBuilder.Entity("SPIC.Core.Entities.District", b =>
                 {
                     b.HasOne("SPIC.Core.Entities.State", "State")
@@ -12350,6 +12594,13 @@ namespace Spic.Infrastructure.Migrations
                     b.Navigation("Attachments");
 
                     b.Navigation("Replies");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.DemoTreatment", b =>
+                {
+                    b.Navigation("Observations");
+
+                    b.Navigation("Photos");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.GuestHouse", b =>

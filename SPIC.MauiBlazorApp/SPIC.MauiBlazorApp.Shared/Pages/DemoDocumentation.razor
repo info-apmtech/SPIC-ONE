@@ -104,14 +104,28 @@
     <div class="summary-card summary-completed"><div><div class="summary-title">Completed</div><div class="summary-value">@DemoList.Count(x => x.Status == "Completed")</div><div class="summary-description">Invoiced document</div></div><div class="summary-icon"><i class="bi bi-patch-check"></i></div></div>
 </div>
 
-<div class="demo-table-card">
+<div class="demo-table-card demo-list-refined">
     <div class="demo-table-toolbar">
         <h2>Demo Documentation List</h2>
-        <div class="search-box"><i class="bi bi-search"></i><input type="search" placeholder="Search demo..." value="@SearchText" @oninput="OnSearchChanged" /></div>
+        <div class="search-box"><i class="bi bi-search"></i><input type="search" placeholder="Search demos..." value="@SearchText" @oninput="OnSearchChanged" /></div>
     </div>
     <div class="demo-table-scroll">
         <table class="demo-table">
-            <thead><tr><th>Sanction Number</th><th>Program Name</th><th>Product / Crop</th><th>Location</th><th>Current Stage</th><th>Date Of Sowing</th><th>Harvest Date</th><th>Treatments</th><th>Last Treatment</th><th>Documentation</th><th>Status</th><th>Action</th></tr></thead>
+            <thead>
+                <tr>
+                    <th>Sanction Number</th>
+                    <th>Program Name</th>
+                    <th>Product / Crop</th>
+                    <th>Location</th>
+                    <th>Current Stage</th>
+                    <th>Date of Sowing</th>
+                    <th>Harvest Date</th>
+                    <th>Treatments</th>
+                    <th>Last Treatment</th>
+                    <th>Document Status</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
             <tbody>
                 @if (PagedDemoList.Any())
                 {
@@ -121,32 +135,63 @@
                             <td><span class="season-text">@item.SeasonNumber</span></td>
                             <td><span class="program-text">@item.ProgramName</span></td>
                             <td><div class="product-cell"><b>@item.Product</b><small>@item.Crop</small></div></td>
-                            <td><div class="location-cell"><i class="bi bi-geo-alt-fill"></i><span>@item.Location</span></div></td>
-                            <td><span class="stage @(item.CurrentStage.Contains("Completed", StringComparison.OrdinalIgnoreCase) ? "completed" : item.CurrentStage.Contains("Treatment", StringComparison.OrdinalIgnoreCase) ? "progress" : "pending")"><i class="bi bi-circle-fill"></i> @item.CurrentStage</span></td>
-                            <td>@(item.SowingDate?.ToString("dd-MM-yyyy") ?? "-")</td>
-                            <td>@(item.HarvestDate?.ToString("dd-MM-yyyy") ?? "-")</td>
-                            <td><div class="treatment"><b>@item.CompletedTreatments Completed</b><small>Out of @item.TotalTreatments</small></div></td>
-                            <td>@(item.LastTreatmentDate?.ToString("dd-MM-yyyy") ?? "-")</td>
-                            <td><span class="doc-status">@item.DocumentationStatus</span></td>
-                            <td><span class="status @(item.Status == "Completed" ? "completed" : item.Status == "In Progress" ? "progress" : "pending")"><i class="bi bi-circle-fill"></i> @item.Status</span></td>
-                            <td><div class="demo-actions"><button type="button" class="view-btn" @onclick="() => OpenStartDocumentation(item.Id)">View / Continue</button></div></td>
+                            <td><div class="location-cell"><i class="bi bi-geo-alt"></i><span>@item.Location</span></div></td>
+                            <td><span class="stage @(item.CurrentStage.Contains("Completed", StringComparison.OrdinalIgnoreCase) ? "completed" : item.CurrentStage.Contains("Not Started", StringComparison.OrdinalIgnoreCase) ? "pending" : "progress")"><i class="bi bi-flower1"></i> @item.CurrentStage</span></td>
+                            <td>@(item.SowingDate?.ToString("dd-MM-yyyy") ?? "--")</td>
+                            <td>@(item.HarvestDate?.ToString("dd-MM-yyyy") ?? "--")</td>
+                            <td><div class="treatment"><b>@item.CompletedTreatments Completed</b><small>@(item.TotalTreatments > 0 ? $"{item.TotalTreatments} recorded" : "Not Treatment Yet")</small></div></td>
+                            <td><div class="last-treatment"><span>@(item.LastTreatmentDate?.ToString("dd-MM-yyyy") ?? "--")</span><small>@(item.LastTreatmentDate.HasValue ? "Last treatment" : "No treatment")</small></div></td>
+                            <td><span class="doc-status @(item.Status == "Completed" ? "completed" : item.Status == "In Progress" ? "progress" : "pending")"><i class="bi bi-circle-fill"></i> @(string.IsNullOrWhiteSpace(item.Status) ? "Not Started" : item.Status)</span></td>
+                            <td><div class="demo-actions"><button type="button" class="view-btn" @onclick="() => OpenDocumentation(item)">@(item.Status == "Not Started" ? "Start Documentation" : item.Status == "Completed" ? "View" : "View / Continue")</button></div></td>
                         </tr>
                     }
                 }
                 else
                 {
-                    <tr><td colspan="12" class="demo-empty">@(IsLoading ? "Loading records..." : "No eligible demonstration records found")</td></tr>
+                    <tr><td colspan="11" class="demo-empty">@(IsLoading ? "Loading records..." : "No eligible demonstration records found")</td></tr>
                 }
             </tbody>
         </table>
     </div>
     <div class="demo-table-footer">
-        <div class="demo-page-size">Rows Per Page <select value="@PageSize" @onchange="OnPageSizeChanged"><option value="8">8</option><option value="16">16</option><option value="25">25</option><option value="50">50</option></select></div>
+        <div class="demo-page-size">
+            Items Per Page
+            <select value="@PageSize" @onchange="OnPageSizeChanged">
+                <option value="8">8</option>
+                <option value="16">16</option>
+                <option value="25">25</option>
+                <option value="50">50</option>
+            </select>
+        </div>
+
         <div class="demo-pagination">
-            <button type="button" disabled="@(CurrentPage == 1)" @onclick="() => ChangePage(CurrentPage - 1)">‹</button>
-            <span>@CurrentPage / @TotalPages</span><button type="button" disabled="@(CurrentPage == TotalPages)" @onclick="() => ChangePage(CurrentPage + 1)">›</button>
+            <button type="button"
+                    aria-label="Previous page"
+                    disabled="@(CurrentPage <= 1)"
+                    @onclick="() => ChangePage(CurrentPage - 1)">
+                <i class="bi bi-chevron-left"></i>
+            </button>
+
+            @foreach (var page in PaginationPages)
+            {
+                <button type="button"
+                        @key="page"
+                        class="@(CurrentPage == page ? "active" : "")"
+                        aria-current="@(CurrentPage == page ? "page" : null)"
+                        @onclick="() => ChangePage(page)">
+                    @(page)
+                </button>
+            }
+
+            <button type="button"
+                    aria-label="Next page"
+                    disabled="@(CurrentPage >= TotalPages)"
+                    @onclick="() => ChangePage(CurrentPage + 1)">
+                <i class="bi bi-chevron-right"></i>
+            </button>
         </div>
     </div>
+
 </div>
 </div>
 
@@ -614,6 +659,140 @@
             padding-top: 2px;
         }
     }
+    /* Demo Documentation LIST only: filters and summary cards remain untouched. */
+    .demo-page .demo-list-refined {
+        padding: 12px 14px;
+        border-radius: 11px;
+    }
+
+        .demo-page .demo-list-refined .demo-table-toolbar {
+            margin-bottom: 11px;
+        }
+
+            .demo-page .demo-list-refined .demo-table-toolbar h2 {
+                font-size: 14px;
+            }
+
+        .demo-page .demo-list-refined .search-box {
+            background: #f4f6f8;
+            border: 0;
+            height: 30px;
+            min-width: 180px;
+        }
+
+        .demo-page .demo-list-refined .demo-table {
+            min-width: 1230px;
+        }
+
+            .demo-page .demo-list-refined .demo-table th {
+                background: #f3f4f4;
+                border-top: 0;
+                border-bottom: 0;
+                font-size: 9px;
+                padding: 11px 8px;
+            }
+
+            .demo-page .demo-list-refined .demo-table td {
+                font-size: 9px;
+                padding: 13px 8px;
+            }
+
+            .demo-page .demo-list-refined .demo-table tbody tr:last-child td {
+                border-bottom: 0;
+            }
+
+        .demo-page .demo-list-refined .product-cell small,
+        .demo-page .demo-list-refined .treatment small,
+        .demo-page .demo-list-refined .last-treatment small {
+            display: block;
+            color: #929eaa;
+            font-size: 8px;
+            margin-top: 3px;
+        }
+
+        .demo-page .demo-list-refined .last-treatment {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .demo-page .demo-list-refined .stage {
+            font-size: 9px;
+            color: #52655c;
+        }
+
+            .demo-page .demo-list-refined .stage i {
+                font-size: 13px;
+                color: #61aa83;
+            }
+
+            .demo-page .demo-list-refined .stage.pending i {
+                color: #96a1aa;
+            }
+
+            .demo-page .demo-list-refined .stage.completed i {
+                color: #179957;
+            }
+
+        .demo-page .demo-list-refined .doc-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            border-radius: 12px;
+            font-size: 9px;
+            font-weight: 600;
+            padding: 5px 7px;
+            white-space: nowrap;
+        }
+
+            .demo-page .demo-list-refined .doc-status i {
+                font-size: 6px;
+            }
+
+            .demo-page .demo-list-refined .doc-status.pending {
+                background: #f0f2f4;
+                color: #677481;
+            }
+
+            .demo-page .demo-list-refined .doc-status.progress {
+                background: #fff3e5;
+                color: #d7821a;
+            }
+
+            .demo-page .demo-list-refined .doc-status.completed {
+                background: #e7f6ed;
+                color: #16834c;
+            }
+
+        .demo-page .demo-list-refined .view-btn {
+            border: 1px solid #95c9ab;
+            padding: 6px 9px;
+            font-size: 9px;
+        }
+
+        .demo-page .demo-list-refined .demo-table-footer {
+            border-top: 1px solid #f0f2f4;
+            margin-top: 5px;
+        }
+
+        .demo-page .demo-list-refined .demo-pagination {
+            gap: 5px;
+        }
+
+            .demo-page .demo-list-refined .demo-pagination button {
+                min-width: 29px;
+                height: 29px;
+                display: grid;
+                place-items: center;
+                padding: 0 5px;
+                font-size: 11px;
+            }
+
+                .demo-page .demo-list-refined .demo-pagination button.active {
+                    background: #f0f2f4;
+                    border-color: #f0f2f4;
+                    font-weight: 700;
+                }
+
 </style>
 
 @code {
@@ -641,6 +820,14 @@
     private int TotalPages => Math.Max(1, (int)Math.Ceiling(FilteredDemoList.Count / (double)PageSize));
     private IEnumerable<DemoDocumentationDto> PagedDemoList => FilteredDemoList.Skip((CurrentPage - 1) * PageSize).Take(PageSize);
     private void ChangePage(int page) => CurrentPage = Math.Clamp(page, 1, TotalPages);
+    private IEnumerable<int> PaginationPages => Enumerable.Range(Math.Max(1, CurrentPage - 2), Math.Min(5, TotalPages - Math.Max(1, CurrentPage - 2) + 1));
+    private void OpenDocumentation(DemoDocumentationDto item)
+    {
+        if (item.Id <= 0) return;
+        NavigationManager.NavigateTo(item.Status == "Not Started"
+            ? $"/StartDocumentation?csr2Id={item.Id}"
+            : $"/DemoDetails?csr2Id={item.Id}");
+    }
 
     private void OpenStartDocumentation(int csr2Id)
     {
