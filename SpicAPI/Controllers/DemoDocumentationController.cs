@@ -24,19 +24,10 @@ namespace SpicAPI.Controllers
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             if (string.IsNullOrWhiteSpace(userId)) return Unauthorized();
 
-            var roles = (await _db.Set<Employeelogin>().AsNoTracking()
-                    .Where(x => x.IsActive && x.UserId == userId)
-                    .Select(x => x.Role)
-                    .ToListAsync(HttpContext.RequestAborted))
-                .Select(x => x.ToString())
-                .ToHashSet(StringComparer.OrdinalIgnoreCase);
-            foreach (var claim in User.FindAll(ClaimTypes.Role)) roles.Add(claim.Value);
-            bool Has(params string[] names) => names.Any(roles.Contains);
-
-            var employee = await _db.Set<Employeelogin>().AsNoTracking()
-                .Where(x => x.IsActive && x.UserId == userId)
-                .Select(x => new { x.StateId, x.RegionId, x.HeadquartersId })
-                .FirstOrDefaultAsync(HttpContext.RequestAborted);
+            // Only the active login assigned as CSR1.ResponsiblePersonId may access demos.
+            if (!await _db.Set<Employeelogin>().AsNoTracking()
+                    .AnyAsync(x => x.IsActive && x.UserId == userId, HttpContext.RequestAborted))
+                return Forbid();
 
             // All final approved CSR-2 reports joined with their approved, active CSR-1.
             var query =
@@ -47,33 +38,8 @@ namespace SpicAPI.Controllers
                       csr1.Status == CSR1Status.Approved && csr1.IsActive
                 select new { csr2, csr1, program };
 
-            // Same ownership + organizational-scope approach used by CSR2Controller.
-            // Never trust a State/HQ ID submitted by the browser to establish authorization.
-            if (!Has("Admin", "SuperAdmin", "MDADMIN", "MDHOD", "CSMDHOD", "CSMD-HOD", "RMDO"))
-            {
-                if (employee == null)
-                {
-                    query = query.Where(x => x.csr1.ResponsiblePersonId == userId);
-                }
-                else if (Has("SMD", "SMDO", "SMM") && employee.StateId > 0)
-                {
-                    int stateId = employee.StateId;
-                    query = query.Where(x => x.csr1.ResponsiblePersonId == userId ||
-                        _db.Set<Employeelogin>().Any(login => login.IsActive &&
-                            login.UserId == x.csr1.CreatedBy && login.StateId == stateId));
-                }
-                else if (Has("MDO", "JMDO", "MO", "RM", "RMM") && employee.HeadquartersId > 0)
-                {
-                    int hqId = employee.HeadquartersId;
-                    query = query.Where(x => x.csr1.ResponsiblePersonId == userId ||
-                        _db.Set<Employeelogin>().Any(login => login.IsActive &&
-                            login.UserId == x.csr1.CreatedBy && login.HeadquartersId == hqId));
-                }
-                else
-                {
-                    query = query.Where(x => x.csr1.ResponsiblePersonId == userId);
-                }
-            }
+            // Enforce ownership in SQL; do not permit Admin/State/HQ scope bypass here.
+            query = query.Where(x => x.csr1.ResponsiblePersonId == userId);
 
             var rows = await query.OrderByDescending(x => x.csr2.Id)
                 .Select(x => new
@@ -275,45 +241,20 @@ namespace SpicAPI.Controllers
             public string? Remarks { get; set; }
         }
 
-        // Matches GetApprovedCSR2 user/role/geographic scope; never trusts browser ownership.
+        // Server-authoritative eligibility for every read/write documentation request.
         private async Task<bool> CanAccessApprovedCsr2Async(int csr2Id)
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (string.IsNullOrWhiteSpace(userId)) return false;
-            var roles = (await _db.Set<Employeelogin>().AsNoTracking()
-                .Where(x => x.IsActive && x.UserId == userId).Select(x => x.Role)
-                .ToListAsync(HttpContext.RequestAborted))
-                .Select(x => x.ToString()).ToHashSet(StringComparer.OrdinalIgnoreCase);
-            foreach (var claim in User.FindAll(ClaimTypes.Role)) roles.Add(claim.Value);
-            bool Has(params string[] names) => names.Any(roles.Contains);
-            var employee = await _db.Set<Employeelogin>().AsNoTracking()
-                .Where(x => x.IsActive && x.UserId == userId)
-                .Select(x => new { x.StateId, x.HeadquartersId })
-                .FirstOrDefaultAsync(HttpContext.RequestAborted);
-            var query = from c2 in _db.Set<CSR2>().AsNoTracking()
-                        join c1 in _db.Set<CSR1>().AsNoTracking() on c2.CSR1Id equals c1.Id
-                        where c2.Id == csr2Id && c2.Status == CSR2Status.Approved &&
-                              c1.Status == CSR1Status.Approved && c1.IsActive
-                        select c1;
-            if (!Has("Admin", "SuperAdmin", "MDADMIN", "MDHOD", "CSMDHOD", "CSMD-HOD", "RMDO"))
-            {
-                if (employee != null && Has("SMD", "SMDO", "SMM") && employee.StateId > 0)
-                {
-                    int stateId = employee.StateId;
-                    query = query.Where(c1 => c1.ResponsiblePersonId == userId ||
-                        _db.Set<Employeelogin>().Any(login => login.IsActive &&
-                            login.UserId == c1.CreatedBy && login.StateId == stateId));
-                }
-                else if (employee != null && Has("MDO", "JMDO", "MO", "RM", "RMM") && employee.HeadquartersId > 0)
-                {
-                    int hqId = employee.HeadquartersId;
-                    query = query.Where(c1 => c1.ResponsiblePersonId == userId ||
-                        _db.Set<Employeelogin>().Any(login => login.IsActive &&
-                            login.UserId == c1.CreatedBy && login.HeadquartersId == hqId));
-                }
-                else query = query.Where(c1 => c1.ResponsiblePersonId == userId);
-            }
-            return await query.AnyAsync(HttpContext.RequestAborted);
+            if (csr2Id <= 0 || string.IsNullOrWhiteSpace(userId)) return false;
+            return await (
+                from c2 in _db.Set<CSR2>().AsNoTracking()
+                join c1 in _db.Set<CSR1>().AsNoTracking() on c2.CSR1Id equals c1.Id
+                where c2.Id == csr2Id && c2.Status == CSR2Status.Approved &&
+                      c1.Status == CSR1Status.Approved && c1.IsActive &&
+                      c1.ResponsiblePersonId == userId &&
+                      _db.Set<Employeelogin>().Any(x => x.IsActive && x.UserId == userId)
+                select c2.Id
+            ).AnyAsync(HttpContext.RequestAborted);
         }
 
         [HttpGet("documentation-details")]
@@ -475,16 +416,12 @@ namespace SpicAPI.Controllers
 
         private string? TreatmentUserId => User.FindFirstValue(ClaimTypes.NameIdentifier);
 
-        // Keep treatment access aligned with existing DemoDocumentation authorization.
-        // This conservative guard limits treatment operations to the documentation creator;
-        // other organization roles can be added using the existing approved CSR-2 scope policy.
+        // CSR-1 ResponsiblePersonId owns both treatment writes and reads.
+        // Completed documentation remains readable; writes require Started status.
         private async Task<DemoDocumentation?> AuthorizedDocumentation(int csr2Id, bool requireStarted = false)
         {
-            if (string.IsNullOrWhiteSpace(TreatmentUserId)) return null;
-            // Keep the existing creator-only scope. Completed records are readable,
-            // but writes are restricted to active documentation.
-            var query = _db.Set<DemoDocumentation>()
-                .Where(x => x.CSR2Id == csr2Id && x.CreatedBy == TreatmentUserId);
+            if (!await CanAccessApprovedCsr2Async(csr2Id)) return null;
+            var query = _db.Set<DemoDocumentation>().Where(x => x.CSR2Id == csr2Id);
             if (requireStarted)
                 query = query.Where(x => x.Status == DemoDocumentationStatus.Started);
             else
@@ -557,7 +494,16 @@ namespace SpicAPI.Controllers
               .GroupBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
               .Select(g => new { Id = g.Key, Name = g.First().Name! })
               .OrderBy(x => x.Name).ToList();
-            return Ok(new { stages, products, officers, defaultFieldOfficerUserId = officers.Any(o => o.Id == doc.CreatedBy) ? doc.CreatedBy : null });
+            var assignedOfficer = officers.Where(o => o.Id == TreatmentUserId).ToList();
+            if (assignedOfficer.Count == 0)
+                assignedOfficer.Add(new { Id = TreatmentUserId!, Name = "Assigned Responsible Person" });
+            return Ok(new
+            {
+                stages,
+                products,
+                officers = assignedOfficer,
+                defaultFieldOfficerUserId = TreatmentUserId
+            });
         }
 
 
@@ -683,6 +629,9 @@ namespace SpicAPI.Controllers
             var doc = await AuthorizedDocumentation(req.CSR2Id, requireStarted: true);
             if (doc == null) return Forbid();
             if (req.TreatmentNumber <= 0) return BadRequest("Invalid treatment number.");
+            if (!string.IsNullOrWhiteSpace(req.FieldOfficerUserId) &&
+                req.FieldOfficerUserId != TreatmentUserId)
+                return Forbid();
             if (req.CropStageId.HasValue && !await _db.Set<CropStage>().AnyAsync(x => x.Id == req.CropStageId && x.CropId == doc.CropId && x.IsActive, HttpContext.RequestAborted))
                 return BadRequest("Crop stage does not belong to the selected crop.");
             if (req.ProductId.HasValue && !await _db.Set<Product>().AnyAsync(x => x.Id == req.ProductId && x.IsActive, HttpContext.RequestAborted))
@@ -705,7 +654,7 @@ namespace SpicAPI.Controllers
             else { t.UpdatedAt = DateTime.UtcNow; t.UpdatedBy = TreatmentUserId; }
             // Repair the CSR2Id on an existing treatment whenever it is saved.
             t.CSR2Id = doc.CSR2Id;
-            t.VisitDate = req.VisitDate; t.FieldOfficerUserId = req.FieldOfficerUserId;
+            t.VisitDate = req.VisitDate; t.FieldOfficerUserId = TreatmentUserId;
             t.CropStageId = req.CropStageId; t.PlantCondition = req.PlantCondition;
             t.ProductId = req.ProductId; t.Dosage = req.Dosage; t.ApplicationMethod = req.ApplicationMethod;
             t.TreatmentDate = req.TreatmentDate; t.ApplicationStage = req.ApplicationStage;
