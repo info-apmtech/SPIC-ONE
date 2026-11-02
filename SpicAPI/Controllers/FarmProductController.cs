@@ -86,16 +86,17 @@ namespace SpicAPI.Controllers
             public string? Group { get; set; }              // NewProduct only: "LiveStock" | "Orchard"
             public string Uom { get; set; } = "";
             public decimal Rate { get; set; }
-            public string Reason { get; set; } = "";
+            public string? Reason { get; set; }
         }
 
         public class UpdateRequestPayload
         {
+            public int? FarmProductId { get; set; }        // RateChange only
             public string? ProductName { get; set; }       // NewProduct only
             public string? Group { get; set; }              // NewProduct only: "LiveStock" | "Orchard"
             public string Uom { get; set; } = "";
             public decimal Rate { get; set; }
-            public string Reason { get; set; } = "";
+            public string? Reason { get; set; }
         }
 
         public class DecidePayload
@@ -113,6 +114,7 @@ namespace SpicAPI.Controllers
         public class FarmProductEditPayload
         {
             public string Name { get; set; } = "";
+            public string? Group { get; set; }              // "LiveStock" | "Orchard"
             public string Uom { get; set; } = "";
             public decimal CurrentRate { get; set; }
             public bool IsActive { get; set; } = true;
@@ -203,15 +205,13 @@ namespace SpicAPI.Controllers
                 return BadRequest("UOM is required.");
             if (payload.Rate <= 0)
                 return BadRequest("Rate must be greater than zero.");
-            if (string.IsNullOrWhiteSpace(payload.Reason))
-                return BadRequest("Reason is required.");
 
             var request = new FarmProductRateRequest
             {
                 RequestType = requestType,
                 ProposedUom = payload.Uom,
                 RequestedRate = payload.Rate,
-                Reason = payload.Reason,
+                Reason = payload.Reason ?? "",
                 RequestedBy = await CurrentUserDisplayNameAsync(),
                 RequestedAt = DateTime.Now,
                 Status = FarmRequestStatus.Pending
@@ -238,6 +238,11 @@ namespace SpicAPI.Controllers
 
                 request.FarmProductId = product.Id;
                 request.CurrentRateAtRequestTime = product.CurrentRate;
+                request.ProposedProductName = !string.IsNullOrWhiteSpace(payload.ProductName) ? payload.ProductName.Trim() : product.Name;
+                if (!string.IsNullOrWhiteSpace(payload.Group) && Enum.TryParse<FarmProductGroup>(payload.Group, true, out var grp))
+                    request.ProposedGroup = grp;
+                else
+                    request.ProposedGroup = product.Group;
             }
 
             _db.FarmProductRateRequests.Add(request);
@@ -254,10 +259,11 @@ namespace SpicAPI.Controllers
         [HttpPut("requests/{id:int}")]
         public async Task<IActionResult> UpdateRequest(int id, [FromBody] UpdateRequestPayload payload)
         {
-            if (!await UserHasActionAsync(PagePermission.productRateManagement, "Entry"))
+            if (!await UserHasActionAsync(PagePermission.productRateManagement, "Update")
+                && !await UserHasActionAsync(PagePermission.productRateManagement, "Entry"))
                 return Forbidden();
 
-            var request = await _db.FarmProductRateRequests.FirstOrDefaultAsync(r => r.Id == id);
+            var request = await _db.FarmProductRateRequests.Include(r => r.FarmProduct).FirstOrDefaultAsync(r => r.Id == id);
             if (request is null) return NotFound();
             if (request.Status != FarmRequestStatus.Pending && request.Status != FarmRequestStatus.Rejected)
                 return BadRequest("Only a pending or rejected request can be edited.");
@@ -276,8 +282,6 @@ namespace SpicAPI.Controllers
                 return BadRequest("UOM is required.");
             if (payload.Rate <= 0)
                 return BadRequest("Rate must be greater than zero.");
-            if (string.IsNullOrWhiteSpace(payload.Reason))
-                return BadRequest("Reason is required.");
 
             if (request.RequestType == FarmRequestType.NewProduct)
             {
@@ -289,10 +293,29 @@ namespace SpicAPI.Controllers
                 request.ProposedProductName = payload.ProductName.Trim();
                 request.ProposedGroup = group;
             }
+            else
+            {
+                if (payload.FarmProductId.HasValue && payload.FarmProductId.Value > 0)
+                {
+                    var product = await _db.FarmProducts.FirstOrDefaultAsync(p => p.Id == payload.FarmProductId.Value);
+                    if (product is null)
+                        return BadRequest("Product not found.");
+
+                    request.FarmProductId = product.Id;
+                    request.FarmProduct = product;
+                    request.CurrentRateAtRequestTime = product.CurrentRate;
+                }
+
+                if (!string.IsNullOrWhiteSpace(payload.ProductName))
+                    request.ProposedProductName = payload.ProductName.Trim();
+
+                if (!string.IsNullOrWhiteSpace(payload.Group) && Enum.TryParse<FarmProductGroup>(payload.Group, true, out var grp))
+                    request.ProposedGroup = grp;
+            }
 
             request.ProposedUom = payload.Uom;
             request.RequestedRate = payload.Rate;
-            request.Reason = payload.Reason;
+            request.Reason = payload.Reason ?? "";
 
             await _db.SaveChangesAsync();
             return Ok(ToDto(request));
@@ -338,6 +361,11 @@ namespace SpicAPI.Controllers
             {
                 if (request.FarmProduct is null) return BadRequest("Linked product no longer exists.");
                 request.FarmProduct.CurrentRate = finalRate;
+                request.FarmProduct.Uom = finalUom;
+                if (!string.IsNullOrWhiteSpace(request.ProposedProductName))
+                    request.FarmProduct.Name = request.ProposedProductName;
+                if (request.ProposedGroup.HasValue)
+                    request.FarmProduct.Group = request.ProposedGroup.Value;
                 request.FarmProduct.UpdatedAt = DateTime.Now;
                 request.FarmProduct.UpdatedBy = decidedBy;
             }
@@ -380,7 +408,8 @@ namespace SpicAPI.Controllers
         public async Task<IActionResult> DeleteRequest(int id)
         {
             // Farm Office deleting their own still-pending request, or Farm Admin cleaning up the queue.
-            if (!await UserHasActionAsync(PagePermission.productRateManagement, "Entry")
+            if (!await UserHasActionAsync(PagePermission.productRateManagement, "Delete")
+                && !await UserHasActionAsync(PagePermission.productRateManagement, "Entry")
                 && !await UserHasActionAsync(PagePermission.ProductRateApprovals, "Update"))
                 return Forbidden();
 
@@ -399,18 +428,43 @@ namespace SpicAPI.Controllers
         [HttpPut("products/{id:int}")]
         public async Task<IActionResult> EditProduct(int id, [FromBody] FarmProductEditPayload payload)
         {
-            if (!await UserHasActionAsync(PagePermission.FarmProductMaster, "Update"))
+            if (!await UserHasActionAsync(PagePermission.FarmProductMaster, "Update")
+                && !await UserHasActionAsync(PagePermission.productRateManagement, "Update")
+                && !await UserHasActionAsync(PagePermission.productRateManagement, "Entry"))
                 return Forbidden();
 
             var product = await _db.FarmProducts.FirstOrDefaultAsync(p => p.Id == id);
             if (product is null) return NotFound();
 
-            product.Name = payload.Name;
-            product.Uom = payload.Uom;
+            if (string.IsNullOrWhiteSpace(payload.Name))
+                return BadRequest("Product name is required.");
+            if (string.IsNullOrWhiteSpace(payload.Uom))
+                return BadRequest("UOM is required.");
+            if (payload.CurrentRate <= 0)
+                return BadRequest("Current rate must be greater than zero.");
+
+            if (!string.IsNullOrWhiteSpace(payload.Group) && Enum.TryParse<FarmProductGroup>(payload.Group, true, out var grp))
+            {
+                product.Group = grp;
+            }
+
+            product.Name = payload.Name.Trim();
+            product.Uom = payload.Uom.Trim();
             product.CurrentRate = payload.CurrentRate;
             product.IsActive = payload.IsActive;
             product.UpdatedAt = DateTime.Now;
             product.UpdatedBy = await CurrentUserDisplayNameAsync();
+
+            var requests = await _db.FarmProductRateRequests.Where(r => r.FarmProductId == id).ToListAsync();
+            foreach (var req in requests)
+            {
+                if (req.RequestType == FarmRequestType.NewProduct)
+                {
+                    req.ProposedProductName = product.Name;
+                    req.ProposedGroup = product.Group;
+                    req.ProposedUom = product.Uom;
+                }
+            }
 
             await _db.SaveChangesAsync();
             return Ok(ToDto(product));
@@ -530,8 +584,8 @@ namespace SpicAPI.Controllers
             Id = r.Id,
             RequestType = r.RequestType.ToString(),
             FarmProductId = r.FarmProductId,
-            ProductName = r.FarmProduct?.Name ?? r.ProposedProductName ?? "",
-            Group = (r.FarmProduct?.Group ?? r.ProposedGroup)?.ToString() ?? "",
+            ProductName = !string.IsNullOrWhiteSpace(r.ProposedProductName) ? r.ProposedProductName : (r.FarmProduct?.Name ?? ""),
+            Group = (r.ProposedGroup ?? r.FarmProduct?.Group)?.ToString() ?? "",
             Uom = r.ApprovedUom ?? r.ProposedUom,
             CurrentRate = r.CurrentRateAtRequestTime ?? r.FarmProduct?.CurrentRate,
             RequestedRate = r.RequestedRate,
