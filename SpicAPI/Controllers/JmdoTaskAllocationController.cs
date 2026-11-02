@@ -298,6 +298,10 @@ public class JmdoTaskAllocationController : ControllerBase
         summary.HasAllocation = true;
         summary.AllocationStatus = allocation.Status;
 
+        // Tasks only become active for execution/attendance once approved by MDO
+        if (allocation.Status != JmdoTaskAllocationStatus.Approved)
+            return Ok(summary);
+
         // One row = one task (duplicate dealer rows each count, as in GetMonitoring). Only the
         // columns needed for status + day are read.
         var dealerTasks = await _db.JmdoTaskAllocationDealers.AsNoTracking()
@@ -1103,6 +1107,9 @@ public class JmdoTaskAllocationController : ControllerBase
         var allocation = await GetMyCurrentAllocationAsync(userId);
         if (allocation == null)
             return NotFound(new { Success = false, Message = "No current allocation found." });
+
+        if (allocation.Status != JmdoTaskAllocationStatus.Approved)
+            return BadRequest(new { Success = false, Message = "Allocation is awaiting MDO approval. Tasks can only be started after approval." });
 
         // Server-side enforcement, not just the client's redirect-to-MarkAttendance UX (TaskDetail.
         // razor/TasksAllocation.razor check first and redirect for a friendly experience, but a

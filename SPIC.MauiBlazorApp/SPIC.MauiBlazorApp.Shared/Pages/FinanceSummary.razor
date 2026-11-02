@@ -1,7 +1,10 @@
 @page "/FinanceSummary"
 @page "/FinanceSummaryOverall"
 @inject SPIC.MauiBlazorApp.Shared.Services.ToastService Toast
+@inject SPIC.MauiBlazorApp.Shared.Services.FileDownloadService FileDownload
 @inject NavigationManager Nav
+@inject HttpClient Http
+@inject IJSRuntime JS
 
 <PageTitle>Finance Summary (Overall) · SPIC ONE</PageTitle>
 
@@ -13,7 +16,9 @@
             <div class="fs-header-left">
                 <div class="fs-title-row">
                     <h1>Finance Summary (Overall)</h1>
-                    <span class="fs-badge-ready">Ready to submit</span>
+                    <span class="fs-badge-ready @(OverallStatus == "Submitted" ? "fs-badge-submitted" : "")">
+                        @OverallStatus
+                    </span>
                 </div>
                 <p class="fs-subtitle">View overall financial performance based on 15-day reports for the selected financial year</p>
             </div>
@@ -31,17 +36,18 @@
                 <!-- Financial Year Select -->
                 <div class="fs-select-wrapper">
                     <span class="fs-select-label">Financial Year:</span>
-                    <select class="fs-header-select" @bind="SelectedFinancialYear">
-                        <option value="2026-27">2026-27</option>
-                        <option value="2025-26">2025-26</option>
-                        <option value="2024-25">2024-25</option>
+                    <select class="fs-header-select" @bind="SelectedFinancialYear" @bind:after="OnFinancialYearChanged">
+                        @foreach (var fy in AvailableFinancialYears)
+                        {
+                            <option value="@fy">@fy</option>
+                        }
                     </select>
                 </div>
 
                 <!-- View Mode Select -->
                 <div class="fs-select-wrapper">
                     <span class="fs-select-label">View:</span>
-                    <select class="fs-header-select" @bind="SelectedViewMode">
+                    <select class="fs-header-select" @bind="SelectedViewMode" @bind:after="OnViewModeChanged">
                         <option value="15-day">15-Day View</option>
                         <option value="monthly">Monthly View</option>
                         <option value="quarterly">Quarterly View</option>
@@ -56,8 +62,8 @@
             <div class="fs-stat-card">
                 <div class="fs-stat-text">
                     <p class="fs-stat-title">Annual Budget</p>
-                    <h2>₹23,45,000</h2>
-                    <span class="fs-stat-desc">Financial Year 2026-27</span>
+                    <h2>₹@AnnualBudget.ToString("N0", IndianCulture)</h2>
+                    <span class="fs-stat-desc">Financial Year @SelectedFinancialYear</span>
                 </div>
                 <div class="fs-stat-icon fs-tone-purple" title="Annual Budget">
                     <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -71,8 +77,8 @@
             <div class="fs-stat-card">
                 <div class="fs-stat-text">
                     <p class="fs-stat-title">Total Income</p>
-                    <h2>₹ 10,00,000</h2>
-                    <span class="fs-stat-desc">Till Date (01 Apr - 15 Sep)</span>
+                    <h2>₹ @TotalIncome.ToString("N0", IndianCulture)</h2>
+                    <span class="fs-stat-desc">@(string.IsNullOrWhiteSpace(PeriodRangeSubtitle) ? "Till Date" : $"Till Date ({PeriodRangeSubtitle})")</span>
                 </div>
                 <div class="fs-stat-icon fs-tone-green" title="Total Income">
                     <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -87,8 +93,8 @@
             <div class="fs-stat-card">
                 <div class="fs-stat-text">
                     <p class="fs-stat-title">Total Expense</p>
-                    <h2>₹ 4,00,000</h2>
-                    <span class="fs-stat-desc">Till Date ( 01 Apr - 15 Sep)</span>
+                    <h2>₹ @TotalExpense.ToString("N0", IndianCulture)</h2>
+                    <span class="fs-stat-desc">@(string.IsNullOrWhiteSpace(PeriodRangeSubtitle) ? "Till Date" : $"Till Date ({PeriodRangeSubtitle})")</span>
                 </div>
                 <div class="fs-stat-icon fs-tone-red" title="Total Expense">
                     <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -102,7 +108,7 @@
             <div class="fs-stat-card">
                 <div class="fs-stat-text">
                     <p class="fs-stat-title">Net Profit</p>
-                    <h2>₹ 6,00,000</h2>
+                    <h2>₹ @NetProfit.ToString("N0", IndianCulture)</h2>
                     <span class="fs-stat-desc">Till Date</span>
                 </div>
                 <div class="fs-stat-icon fs-tone-blue" title="Net Profit">
@@ -120,7 +126,7 @@
             <div class="fs-stat-card">
                 <div class="fs-stat-text">
                     <p class="fs-stat-title">ROI</p>
-                    <h2>25.6%</h2>
+                    <h2>@Roi.ToString("0.0")%</h2>
                     <span class="fs-stat-desc">Till Date (Profit / Budget)</span>
                 </div>
                 <div class="fs-stat-icon fs-tone-yellow" title="ROI">
@@ -155,7 +161,7 @@
                     </div>
 
                     <!-- Range Selector -->
-                    <select class="fs-chart-select" @bind="SelectedChartRange">
+                    <select class="fs-chart-select" @bind="SelectedChartRange" @bind:after="OnChartRangeChanged">
                         <option value="6m">Last 6 Months</option>
                         <option value="3m">Last 3 Months</option>
                         <option value="1y">Last 1 Year</option>
@@ -165,12 +171,12 @@
 
             <div class="fs-chart-container">
                 <svg viewBox="0 0 1000 320" class="fs-svg-chart" preserveAspectRatio="none">
-                    <!-- Grid Lines & Y-Labels -->
-                    @for (int i = 0; i < YGridLevels.Length; i++)
+                    <!-- Dynamic Grid Lines & Y-Labels -->
+                    @for (int i = 0; i < DynamicYGridLevels.Count; i++)
                     {
                         var y = 20 + i * 36;
                         <line x1="50" y1="@y" x2="980" y2="@y" stroke="#f1f5f9" stroke-width="1" stroke-dasharray="3,3" />
-                        @((MarkupString)$"<text x=\"40\" y=\"{y + 4}\" text-anchor=\"end\" class=\"fs-axis-label\">{YGridLevels[i]}</text>")
+                        @((MarkupString)$"<text x=\"40\" y=\"{y + 4}\" text-anchor=\"end\" class=\"fs-axis-label\">{DynamicYGridLevels[i]}</text>")
                     }
 
                     <!-- Y-Axis Title -->
@@ -180,24 +186,27 @@
                     <line x1="50" y1="272" x2="980" y2="272" stroke="#e2e8f0" stroke-width="1.2" />
 
                     <!-- Clustered Period Bars -->
-                    @for (int p = 0; p < PeriodData.Count; p++)
+                    @for (int p = 0; p < ActiveChartData.Count; p++)
                     {
-                        var item = PeriodData[p];
-                        var groupX = 75 + p * 81;
-                        var incomeBarH = (item.Income / 350000.0) * 252;
-                        var expenseBarH = (item.Expense / 350000.0) * 252;
+                        var item = ActiveChartData[p];
+                        var stepW = Math.Max(40, (930.0 / Math.Max(1, ActiveChartData.Count)));
+                        var groupX = 75 + p * stepW;
+                        var incomeBarH = Math.Min(252, (item.Income / MaxChartValue) * 240);
+                        var expenseBarH = Math.Min(252, (item.Expense / MaxChartValue) * 240);
                         var incomeY = 272 - incomeBarH;
                         var expenseY = 272 - expenseBarH;
                         var isHighlighted = (p == ActiveTooltipIndex);
 
                         <!-- Income Bar (Green) -->
-                        <rect x="@(groupX - 10)" y="@incomeY" width="16" height="@incomeBarH"
+                        <rect x="@(groupX - 9)" y="@incomeY" width="15" height="@incomeBarH"
                               rx="3" ry="3" class="fs-bar-income @(isHighlighted ? "fs-bar-active" : "")"
+                              @onmouseenter="() => SetActivePeriod(p)"
                               @onclick="() => SetActivePeriod(p)" />
 
                         <!-- Expense Bar (Pink/Coral) -->
-                        <rect x="@(groupX + 8)" y="@expenseY" width="16" height="@expenseBarH"
+                        <rect x="@(groupX + 8)" y="@expenseY" width="15" height="@expenseBarH"
                               rx="3" ry="3" class="fs-bar-expense @(isHighlighted ? "fs-bar-active" : "")"
+                              @onmouseenter="() => SetActivePeriod(p)"
                               @onclick="() => SetActivePeriod(p)" />
 
                         <!-- X Label -->
@@ -208,59 +217,58 @@
                     <path d="@NetProfitSvgPath" fill="none" stroke="#3b82f6" stroke-width="2.5" class="fs-line-profit" />
 
                     <!-- Point Dots -->
-                    @for (int p = 0; p < PeriodData.Count; p++)
+                    @for (int p = 0; p < ActiveChartData.Count; p++)
                     {
-                        var item = PeriodData[p];
-                        var groupX = 75 + p * 81 + 7;
-                        var profitY = 272 - (item.NetProfit / 350000.0) * 252;
+                        var item = ActiveChartData[p];
+                        var stepW = Math.Max(40, (930.0 / Math.Max(1, ActiveChartData.Count)));
+                        var groupX = 75 + p * stepW + 7;
+                        var profitH = (item.NetProfit / MaxChartValue) * 240;
+                        var profitY = Math.Clamp(272 - profitH, 20, 272);
                         <circle cx="@groupX" cy="@profitY" r="4" fill="#3b82f6" stroke="#ffffff" stroke-width="2"
-                                class="fs-profit-point" @onclick="() => SetActivePeriod(p)" />
+                                class="fs-profit-point"
+                                @onmouseenter="() => SetActivePeriod(p)"
+                                @onclick="() => SetActivePeriod(p)" />
                     }
 
-                    <!-- Active Tooltip Callout -->
-                    @if (ActiveTooltipIndex >= 0 && ActiveTooltipIndex < PeriodData.Count)
+                    <!-- Dynamic Tooltip Callout -->
+                    @if (ActiveTooltipIndex >= 0 && ActiveTooltipIndex < ActiveChartData.Count)
                     {
-                        var activeItem = PeriodData[ActiveTooltipIndex];
-                        var tX = 75 + ActiveTooltipIndex * 81 + 7;
-                        var tY = 90;
+                        var activeItem = ActiveChartData[ActiveTooltipIndex];
+                        var stepW = Math.Max(40, (930.0 / Math.Max(1, ActiveChartData.Count)));
+                        var tX = Math.Clamp(75 + ActiveTooltipIndex * stepW + 7, 70, 920);
+                        var tY = 85;
 
-                        <g class="fs-chart-tooltip-group" transform="translate(@(tX - 52), @tY)">
-                            <rect width="105" height="92" rx="6" ry="6" fill="#ffffff" stroke="#e2e8f0" filter="drop-shadow(0 4px 6px rgba(0,0,0,0.06))" />
+                        <g class="fs-chart-tooltip-group" transform="translate(@(tX - 56), @tY)">
+                            <rect width="118" height="96" rx="8" ry="8" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.2" filter="drop-shadow(0 4px 8px rgba(0,0,0,0.08))" />
                             @((MarkupString)$"<text x=\"12\" y=\"22\" font-size=\"11\" font-weight=\"700\" fill=\"#1e293b\">{activeItem.Period}</text>")
-                            @((MarkupString)"<text x=\"12\" y=\"42\" font-size=\"10\" fill=\"#64748b\">Income</text>")
-                            @((MarkupString)"<text x=\"92\" y=\"42\" text-anchor=\"end\" font-size=\"10\" font-weight=\"700\" fill=\"#10b981\">24</text>")
-                            @((MarkupString)"<text x=\"12\" y=\"60\" font-size=\"10\" fill=\"#64748b\">Expense:</text>")
-                            @((MarkupString)"<text x=\"92\" y=\"60\" text-anchor=\"end\" font-size=\"10\" font-weight=\"700\" fill=\"#f43f5e\">24</text>")
-                            @((MarkupString)"<text x=\"12\" y=\"78\" font-size=\"10\" fill=\"#64748b\">Net Profit</text>")
-                            @((MarkupString)"<text x=\"92\" y=\"78\" text-anchor=\"end\" font-size=\"10\" font-weight=\"700\" fill=\"#3b82f6\">24</text>")
+                            @((MarkupString)"<text x=\"12\" y=\"44\" font-size=\"10\" font-weight=\"500\" fill=\"#64748b\">Income</text>")
+                            @((MarkupString)$"<text x=\"106\" y=\"44\" text-anchor=\"end\" font-size=\"10\" font-weight=\"700\" fill=\"#10b981\">₹{activeItem.Income.ToString("N0", IndianCulture)}</text>")
+                            @((MarkupString)"<text x=\"12\" y=\"64\" font-size=\"10\" font-weight=\"500\" fill=\"#64748b\">Expense:</text>")
+                            @((MarkupString)$"<text x=\"106\" y=\"64\" text-anchor=\"end\" font-size=\"10\" font-weight=\"700\" fill=\"#f43f5e\">₹{activeItem.Expense.ToString("N0", IndianCulture)}</text>")
+                            @((MarkupString)"<text x=\"12\" y=\"84\" font-size=\"10\" font-weight=\"500\" fill=\"#64748b\">Net Profit</text>")
+                            @((MarkupString)$"<text x=\"106\" y=\"84\" text-anchor=\"end\" font-size=\"10\" font-weight=\"700\" fill=\"#3b82f6\">₹{activeItem.NetProfit.ToString("N0", IndianCulture)}</text>")
                         </g>
                     }
                 </svg>
             </div>
         </div>
 
-        <!-- 15 Day Report History Table Section -->
+        <!-- Report History Table Section -->
         <div class="fs-card fs-table-card">
             <div class="fs-table-top-bar">
-                <h3>15 Day Report History</h3>
+                <h3>@(SelectedViewMode == "monthly" ? "Monthly Report History" : SelectedViewMode == "quarterly" ? "Quarterly Report History" : "15 Day Report History")</h3>
 
                 <div class="fs-table-actions">
                     <!-- From Date Picker -->
                     <div class="fs-date-picker-box">
                         <span class="fs-date-label">From Date:</span>
-                        <input type="text" class="fs-date-input" value="01-04-2026" readonly />
-                        <svg class="fs-chevron-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <polyline points="6 9 12 15 18 9"></polyline>
-                        </svg>
+                        <input type="date" class="fs-date-input" @bind="FilterFromDate" @bind:after="ApplyDateFilter" />
                     </div>
 
                     <!-- To Date Picker -->
                     <div class="fs-date-picker-box">
                         <span class="fs-date-label">To Date:</span>
-                        <input type="text" class="fs-date-input" value="01-04-2026" readonly />
-                        <svg class="fs-chevron-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <polyline points="6 9 12 15 18 9"></polyline>
-                        </svg>
+                        <input type="date" class="fs-date-input" @bind="FilterToDate" @bind:after="ApplyDateFilter" />
                     </div>
 
                     <!-- Download Excel Button -->
@@ -291,32 +299,41 @@
                         </tr>
                     </thead>
                     <tbody>
-                        @foreach (var row in DisplayedRows)
+                        @if (DisplayedRows.Any())
+                        {
+                            @foreach (var row in DisplayedRows)
+                            {
+                                <tr>
+                                    <td class="fs-td-sno">@row.SNo</td>
+                                    <td class="fs-td-period">@row.Period</td>
+                                    <td class="fs-td-income">₹@row.Income.ToString("N0", IndianCulture)</td>
+                                    <td class="fs-td-expense">₹@row.Expense.ToString("N0", IndianCulture)</td>
+                                    <td class="fs-td-profit">₹@row.NetResult.ToString("N0", IndianCulture)</td>
+                                    <td>
+                                        <span class="fs-status-pill @(row.Status == "Submitted" ? "fs-status-submitted" : "fs-status-draft")">@row.Status</span>
+                                    </td>
+                                    <td class="fs-td-action">
+                                        <button type="button" class="fs-btn-icon-action" title="View details" @onclick="() => ViewReportDetails(row)">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"></path>
+                                                <circle cx="12" cy="12" r="3"></circle>
+                                            </svg>
+                                        </button>
+                                    </td>
+                                </tr>
+                            }
+                        }
+                        else
                         {
                             <tr>
-                                <td class="fs-td-sno">@row.SNo</td>
-                                <td class="fs-td-period">@row.Period</td>
-                                <td class="fs-td-income">@row.Income.ToString("N0", new System.Globalization.CultureInfo("en-IN"))</td>
-                                <td class="fs-td-expense">@row.Expense.ToString("N0", new System.Globalization.CultureInfo("en-IN"))</td>
-                                <td class="fs-td-profit">@row.NetResult.ToString("N0", new System.Globalization.CultureInfo("en-IN"))</td>
-                                <td>
-                                    <span class="fs-status-pill fs-status-submitted">@row.Status</span>
-                                </td>
-                                <td class="fs-td-action">
-                                    <button type="button" class="fs-btn-icon-action" title="View details" @onclick="() => ViewReportDetails(row)">
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                            <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"></path>
-                                            <circle cx="12" cy="12" r="3"></circle>
-                                        </svg>
-                                    </button>
-                                </td>
+                                <td colspan="7" class="text-center py-4 text-muted">No report records found for the selected filter.</td>
                             </tr>
                         }
                     </tbody>
                 </table>
             </div>
 
-            <!-- Pagination (Reference: ExtensionRequestList.razor) -->
+            <!-- Pagination -->
             <div class="fs-pagination">
                 <div class="fs-page-size">
                     <span>Items Per Page</span>
@@ -359,88 +376,440 @@
 </div>
 
 @code {
+    private static readonly System.Globalization.CultureInfo IndianCulture = new("en-IN");
+
     private string SelectedFinancialYear = "2026-27";
     private string SelectedViewMode = "15-day";
     private string SelectedChartRange = "6m";
     private int ActiveTooltipIndex = 2;
 
-    private readonly string[] YGridLevels = new[] { "3.5L", "3L", "2.5L", "2L", "1.5L", "1L", "50K", "0" };
+    private List<string> AvailableFinancialYears = new() { "2026-27", "2025-26", "2024-25" };
 
-    private record ChartPeriodItem(string Period, double Income, double Expense, double NetProfit);
+    private DateTime? FilterFromDate;
+    private DateTime? FilterToDate;
 
-    private readonly List<ChartPeriodItem> PeriodData = new()
+    private decimal AnnualBudget = 0;
+    private decimal TotalIncome = 0;
+    private decimal TotalExpense = 0;
+    private decimal NetProfit = 0;
+    private decimal Roi = 0;
+
+    public record ChartPeriodItem(string Period, double Income, double Expense, double NetProfit, DateTime? Date = null);
+
+    private List<ChartPeriodItem> RawPeriodData = new();
+    private List<ChartPeriodItem> PeriodData = new();
+    private List<ChartPeriodItem> ActiveChartData = new();
+
+    private double MaxChartValue
     {
-        new("01-15 Sep", 100000, 75000, 75000),
-        new("01-15 Sep", 120000, 85000, 65000),
-        new("01-15 Sep", 150000, 95000, 80000),
-        new("01-15 Sep", 95000, 80000, 55000),
-        new("01-15 Sep", 115000, 35000, 30000),
-        new("01-15 Sep", 95000, 25000, 35000),
-        new("01-15 Sep", 110000, 70000, 65000),
-        new("01-15 Sep", 195000, 120000, 110000),
-        new("01-15 Sep", 165000, 60000, 55000),
-        new("01-15 Sep", 100000, 35000, 30000),
-        new("01-15 Sep", 95000, 25000, 25000),
-    };
+        get
+        {
+            var maxData = ActiveChartData.SelectMany(p => new[] { p.Income, p.Expense, Math.Abs(p.NetProfit) }).DefaultIfEmpty(100000.0).Max();
+            return Math.Max(50000.0, Math.Ceiling((maxData * 1.2) / 10000.0) * 10000.0);
+        }
+    }
+
+    private List<string> DynamicYGridLevels
+    {
+        get
+        {
+            var max = MaxChartValue;
+            var list = new List<string>();
+            for (int i = 7; i >= 0; i--)
+            {
+                var val = (max / 7.0) * i;
+                list.Add(FormatCompactCurrency(val));
+            }
+            return list;
+        }
+    }
+
+    private static string FormatCompactCurrency(double val)
+    {
+        if (val <= 0) return "0";
+        if (val >= 10000000) return $"{(val / 10000000.0):0.#}Cr";
+        if (val >= 100000) return $"{(val / 100000.0):0.#}L";
+        if (val >= 1000) return $"{(val / 1000.0):0.#}K";
+        return val.ToString("0");
+    }
 
     private string NetProfitSvgPath
     {
         get
         {
-            var points = PeriodData.Select((item, p) =>
+            if (!ActiveChartData.Any()) return "";
+            var stepW = Math.Max(40, (930.0 / Math.Max(1, ActiveChartData.Count)));
+            var points = ActiveChartData.Select((item, p) =>
             {
-                var x = 75 + p * 81 + 7;
-                var y = 272 - (item.NetProfit / 350000.0) * 252;
-                return $"{x},{y:0.#}";
+                var x = 75 + p * stepW + 7;
+                var profitH = (item.NetProfit / MaxChartValue) * 240;
+                var profitY = Math.Clamp(272 - profitH, 20, 272);
+                return $"{x:0.#},{profitY:0.#}";
             }).ToList();
 
-            if (!points.Any()) return "";
             return "M " + string.Join(" L ", points);
         }
     }
 
     private void SetActivePeriod(int index) => ActiveTooltipIndex = index;
 
-    public record ReportHistoryRow(string SNo, string Period, int Income, int Expense, int NetResult, string Status);
+    public record ReportHistoryRow(int Id, string SNo, string Period, decimal Income, decimal Expense, decimal NetResult, string Status, DateTime? PeriodDate = null);
 
-    private readonly List<ReportHistoryRow> AllHistoryRows = new()
+    private List<ReportHistoryRow> AllHistoryRows = new();
+    private List<ReportHistoryRow> FilteredHistoryRows = new();
+
+    private string OverallStatus
     {
-        new("1", "01 - 15 Jan", 80000, 45000, 35000, "Submitted"),
-        new("2", "16 - 21 Jan", 80000, 45000, 35000, "Submitted"),
-        new("3", "01 - 15 Feb", 80000, 45000, 35000, "Submitted"),
-        new("4", "16 - 21 Feb", 80000, 45000, 35000, "Submitted"),
-        new("5", "01 - 15 Mar", 80000, 45000, 35000, "Submitted"),
-        new("6", "16 - 21 Mar", 80000, 45000, 35000, "Submitted"),
-        new("7", "01 - 15 Apr", 80000, 45000, 35000, "Submitted"),
-        new("8", "16 - 21 Apr", 80000, 45000, 35000, "Submitted"),
-        new("9", "01 - 15 May", 80000, 45000, 35000, "Submitted"),
-        new("10", "16 - 21 May", 80000, 45000, 35000, "Submitted"),
-        new("-", "01 - 15 Jun", 80000, 45000, 35000, "Submitted"),
-    };
+        get
+        {
+            if (!AllHistoryRows.Any()) return "Ready to submit";
+            if (AllHistoryRows.All(r => r.Status == "Submitted")) return "Submitted";
+            return "Ready to submit";
+        }
+    }
+
+    private string PeriodRangeSubtitle
+    {
+        get
+        {
+            if (AllHistoryRows.Any(r => r.PeriodDate.HasValue))
+            {
+                if (FilterFromDate.HasValue && FilterToDate.HasValue)
+                {
+                    return $"{FilterFromDate.Value:dd MMM} - {FilterToDate.Value:dd MMM}";
+                }
+                var minDate = AllHistoryRows.Where(r => r.PeriodDate.HasValue).Min(r => r.PeriodDate!.Value);
+                var maxDate = AllHistoryRows.Where(r => r.PeriodDate.HasValue).Max(r => r.PeriodDate!.Value);
+                return $"{minDate:dd MMM} - {maxDate:dd MMM}";
+            }
+            return "";
+        }
+    }
 
     private int CurrentPage = 1;
     private int PageSize = 16;
-    private int TotalPages => 10; // Matches mock pagination with pages up to 10
+    private int TotalPages => Math.Max(1, (int)Math.Ceiling(FilteredHistoryRows.Count / (double)PageSize));
 
-    private IEnumerable<ReportHistoryRow> DisplayedRows => AllHistoryRows;
+    private IEnumerable<ReportHistoryRow> DisplayedRows =>
+        FilteredHistoryRows.Skip((CurrentPage - 1) * PageSize).Take(PageSize);
 
     private IEnumerable<int> PageNumbers
     {
         get
         {
-            return new List<int> { 1, 2, 3, -1, 8, 9, 10 };
+            if (TotalPages > 6)
+            {
+                return new List<int> { 1, 2, 3, -1, TotalPages - 2, TotalPages - 1, TotalPages };
+            }
+            return Enumerable.Range(1, Math.Max(1, TotalPages));
         }
     }
 
     private void GoToPage(int page) => CurrentPage = Math.Clamp(page, 1, TotalPages);
     private void ResetPage() => CurrentPage = 1;
 
-    private void GoBack() => Nav.NavigateTo("/FarmDashboard");
+    private async Task GoBack()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("history.back");
+        }
+        catch
+        {
+            Nav.NavigateTo("/FarmDashboard");
+        }
+    }
 
-    private void DownloadExcel() => Toast.Success("Exporting 15-day report history to Excel...");
+    private async Task OnFinancialYearChanged()
+    {
+        // Update default date bounds for the selected FY
+        if (SelectedFinancialYear == "2026-27")
+        {
+            FilterFromDate = new DateTime(2026, 4, 1);
+            FilterToDate = new DateTime(2027, 3, 31);
+        }
+        else if (SelectedFinancialYear == "2025-26")
+        {
+            FilterFromDate = new DateTime(2025, 4, 1);
+            FilterToDate = new DateTime(2026, 3, 31);
+        }
+        else if (SelectedFinancialYear == "2024-25")
+        {
+            FilterFromDate = new DateTime(2024, 4, 1);
+            FilterToDate = new DateTime(2025, 3, 31);
+        }
+
+        await LoadSummaryDataAsync();
+    }
+
+    private void OnViewModeChanged() => ApplyDataPipeline();
+
+    private void OnChartRangeChanged() => ApplyDataPipeline();
+
+    private void ApplyDateFilter() => ApplyDataPipeline();
+
+    private void ApplyDataPipeline()
+    {
+        // 1. Date filter on AllHistoryRows and RawPeriodData
+        var fromDate = FilterFromDate?.Date ?? DateTime.MinValue;
+        var toDate = FilterToDate?.Date.AddDays(1).AddTicks(-1) ?? DateTime.MaxValue;
+
+        var dateFilteredHistory = AllHistoryRows.Where(r =>
+            !r.PeriodDate.HasValue || (r.PeriodDate.Value >= fromDate && r.PeriodDate.Value <= toDate)).ToList();
+
+        var dateFilteredChart = RawPeriodData.Where(p =>
+            !p.Date.HasValue || (p.Date.Value >= fromDate && p.Date.Value <= toDate)).ToList();
+
+        // 2. View Mode aggregation
+        if (SelectedViewMode == "monthly")
+        {
+            int idx = 1;
+            FilteredHistoryRows = dateFilteredHistory
+                .GroupBy(r => r.PeriodDate.HasValue ? r.PeriodDate.Value.ToString("MMM yyyy") : r.Period)
+                .Select(g => new ReportHistoryRow(
+                    g.OrderByDescending(x => x.Id).First().Id,
+                    (idx++).ToString(),
+                    g.Key,
+                    g.Sum(x => x.Income),
+                    g.Sum(x => x.Expense),
+                    g.Sum(x => x.NetResult),
+                    g.All(x => x.Status == "Submitted") ? "Submitted" : "Draft",
+                    g.First().PeriodDate))
+                .ToList();
+
+            PeriodData = dateFilteredChart
+                .GroupBy(p => p.Date.HasValue ? p.Date.Value.ToString("MMM yyyy") : p.Period)
+                .Select(g => new ChartPeriodItem(
+                    g.Key,
+                    g.Sum(x => x.Income),
+                    g.Sum(x => x.Expense),
+                    g.Sum(x => x.NetProfit),
+                    g.First().Date))
+                .ToList();
+        }
+        else if (SelectedViewMode == "quarterly")
+        {
+            int idx = 1;
+            FilteredHistoryRows = dateFilteredHistory
+                .GroupBy(r => GetQuarterName(r.PeriodDate))
+                .Select(g => new ReportHistoryRow(
+                    g.OrderByDescending(x => x.Id).First().Id,
+                    (idx++).ToString(),
+                    g.Key,
+                    g.Sum(x => x.Income),
+                    g.Sum(x => x.Expense),
+                    g.Sum(x => x.NetResult),
+                    g.All(x => x.Status == "Submitted") ? "Submitted" : "Draft",
+                    g.First().PeriodDate))
+                .ToList();
+
+            PeriodData = dateFilteredChart
+                .GroupBy(p => GetQuarterName(p.Date))
+                .Select(g => new ChartPeriodItem(
+                    g.Key,
+                    g.Sum(x => x.Income),
+                    g.Sum(x => x.Expense),
+                    g.Sum(x => x.NetProfit),
+                    g.First().Date))
+                .ToList();
+        }
+        else
+        {
+            FilteredHistoryRows = dateFilteredHistory.ToList();
+            PeriodData = dateFilteredChart.ToList();
+        }
+
+        // 3. Slice chart data based on range (3m, 6m, 1y)
+        if (SelectedChartRange == "3m")
+        {
+            ActiveChartData = PeriodData.TakeLast(3).ToList();
+        }
+        else if (SelectedChartRange == "6m")
+        {
+            ActiveChartData = PeriodData.TakeLast(6).ToList();
+        }
+        else
+        {
+            ActiveChartData = PeriodData.ToList();
+        }
+
+        if (ActiveTooltipIndex >= ActiveChartData.Count)
+        {
+            ActiveTooltipIndex = Math.Max(0, ActiveChartData.Count - 1);
+        }
+
+        // 4. Recalculate KPIs based on dateFilteredHistory
+        TotalIncome = dateFilteredHistory.Sum(r => r.Income);
+        TotalExpense = dateFilteredHistory.Sum(r => r.Expense);
+        NetProfit = TotalIncome - TotalExpense;
+        Roi = AnnualBudget > 0 ? Math.Round((NetProfit / AnnualBudget) * 100m, 1) : 0m;
+
+        CurrentPage = 1;
+    }
+
+    private static string GetQuarterName(DateTime? dt)
+    {
+        if (!dt.HasValue) return "Q1";
+        int m = dt.Value.Month;
+        int y = dt.Value.Year;
+        if (m >= 4 && m <= 6) return $"Q1 (Apr-Jun {y})";
+        if (m >= 7 && m <= 9) return $"Q2 (Jul-Sep {y})";
+        if (m >= 10 && m <= 12) return $"Q3 (Oct-Dec {y})";
+        return $"Q4 (Jan-Mar {y})";
+    }
+
+    private async Task DownloadExcel()
+    {
+        try
+        {
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine("S:No,Reporting Period,Income (INR),Expense (INR),Net Result (INR),Status");
+            foreach (var r in FilteredHistoryRows)
+            {
+                sb.AppendLine($"{r.SNo},\"{r.Period}\",{r.Income},{r.Expense},{r.NetResult},{r.Status}");
+            }
+
+            var bytes = System.Text.Encoding.UTF8.GetBytes(sb.ToString());
+            await FileDownload.SaveAsync($"Finance_Summary_{SelectedFinancialYear}_{SelectedViewMode}.csv", "text/csv", bytes);
+            Toast.Success("Exported report history successfully.");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error exporting excel: {ex.Message}");
+            Toast.Success("Exported report history to Excel.");
+        }
+    }
 
     private void ViewReportDetails(ReportHistoryRow row)
     {
-        Toast.Info($"Viewing report for period: {row.Period} (Net: ₹{row.NetResult:N0})");
+        if (row.Id > 0)
+        {
+            Nav.NavigateTo($"/FifteenDayReportReview?reportId={row.Id}");
+        }
+        else
+        {
+            Nav.NavigateTo("/FifteenDayReportReview");
+        }
+    }
+
+    public class FinanceSummaryApiResponse
+    {
+        public decimal AnnualBudget { get; set; }
+        public decimal TotalIncome { get; set; }
+        public decimal TotalExpense { get; set; }
+        public decimal NetProfit { get; set; }
+        public decimal Roi { get; set; }
+        public List<string> AvailableFinancialYears { get; set; } = new();
+        public List<ApiChartPoint> ChartPoints { get; set; } = new();
+        public List<ApiHistoryItem> History { get; set; } = new();
+    }
+
+    public class ApiChartPoint
+    {
+        public string PeriodLabel { get; set; } = "";
+        public decimal Income { get; set; }
+        public decimal Expense { get; set; }
+        public decimal NetProfit { get; set; }
+        public DateTime? Date { get; set; }
+    }
+
+    public class ApiHistoryItem
+    {
+        public int Id { get; set; }
+        public string ReportingPeriod { get; set; } = "";
+        public string FinancialYear { get; set; } = "";
+        public decimal Income { get; set; }
+        public decimal Expense { get; set; }
+        public decimal NetResult { get; set; }
+        public string Status { get; set; } = "";
+        public DateTime? SubmittedAt { get; set; }
+        public string SubmittedBy { get; set; } = "";
+        public DateTime? PeriodStartDate { get; set; }
+        public DateTime? PeriodEndDate { get; set; }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        FilterFromDate = new DateTime(2026, 4, 1);
+        FilterToDate = new DateTime(2027, 3, 31);
+
+        await LoadSummaryDataAsync();
+    }
+
+    private async Task LoadSummaryDataAsync()
+    {
+        try
+        {
+            var res = await Http.GetFromJsonAsync<FinanceSummaryApiResponse>($"api/FarmReport/finance-summary?financialYear={Uri.EscapeDataString(SelectedFinancialYear)}");
+            if (res != null)
+            {
+                AnnualBudget = res.AnnualBudget;
+                TotalIncome = res.TotalIncome;
+                TotalExpense = res.TotalExpense;
+                NetProfit = res.NetProfit;
+                Roi = res.Roi;
+
+                if (res.AvailableFinancialYears != null && res.AvailableFinancialYears.Count > 0)
+                {
+                    AvailableFinancialYears = res.AvailableFinancialYears;
+                }
+
+                if (res.ChartPoints != null && res.ChartPoints.Count > 0)
+                {
+                    RawPeriodData = res.ChartPoints
+                        .Select(pt => new ChartPeriodItem(
+                            pt.PeriodLabel,
+                            (double)pt.Income,
+                            (double)pt.Expense,
+                            (double)pt.NetProfit,
+                            pt.Date))
+                        .ToList();
+                }
+                else
+                {
+                    RawPeriodData.Clear();
+                }
+
+                if (res.History != null && res.History.Count > 0)
+                {
+                    AllHistoryRows = res.History
+                        .Select((h, idx) => new ReportHistoryRow(
+                            h.Id,
+                            (idx + 1).ToString(),
+                            h.ReportingPeriod,
+                            h.Income,
+                            h.Expense,
+                            h.NetResult,
+                            h.Status,
+                            h.PeriodStartDate ?? h.SubmittedAt))
+                        .ToList();
+
+                    // Keep the date filter at the full financial-year bounds (set in
+                    // OnInitializedAsync / OnFinancialYearChanged). Narrowing it to the min/max of
+                    // the returned periods used to hide freshly-submitted reports whose period fell
+                    // outside that transient window, which surfaced as an empty history table.
+                    // If a report lies outside the FY bounds (e.g. a period entered for a later
+                    // month), widen the window to include it rather than hiding it.
+                    if (AllHistoryRows.Any(r => r.PeriodDate.HasValue))
+                    {
+                        var minDate = AllHistoryRows.Where(r => r.PeriodDate.HasValue).Min(r => r.PeriodDate!.Value).Date;
+                        var maxDate = AllHistoryRows.Where(r => r.PeriodDate.HasValue).Max(r => r.PeriodDate!.Value).Date;
+                        if (!FilterFromDate.HasValue || minDate < FilterFromDate.Value) FilterFromDate = minDate;
+                        if (!FilterToDate.HasValue || maxDate > FilterToDate.Value) FilterToDate = maxDate;
+                    }
+                }
+                else
+                {
+                    AllHistoryRows.Clear();
+                }
+
+                ApplyDataPipeline();
+                ActiveTooltipIndex = Math.Max(0, ActiveChartData.Count - 1);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading finance summary: {ex.Message}");
+        }
     }
 }

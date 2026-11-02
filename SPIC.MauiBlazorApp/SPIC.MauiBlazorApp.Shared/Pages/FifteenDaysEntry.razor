@@ -1,16 +1,17 @@
 @page "/FifteenDaysEntry"
+@page "/15daysEntry"
+@using System.Net.Http.Json
+@inject HttpClient Http
 @inject NavigationManager Nav
 @inject LoginState LoginState
 @inject ToastService Toast
+@inject IJSRuntime JS
 
 @*
     SAS portal: the periodic (15-day) farm report - Inventory, Income, Expense and
     Review are all steps of this ONE report, not separate pages, hence the page-level
     name/route rather than "InventoryEntry". Route is "/15daysEntry"; the file/class
     is named FifteenDaysEntry instead since C# identifiers can't start with a digit.
-    UI-first pass: the reporting periods and ledger rows below are all in-memory (no
-    backend yet), same approach as ProductRateManagement.razor. Not yet wired into
-    the sidebar nav.
 *@
 
 <div class="ie-page">
@@ -21,24 +22,29 @@
                     Subtitle="Submit a request to extend the Scheme period as the required turnover has been achieved."
                     ShowBack="false">
             <Actions>
-                <button type="button" class="ie-btn ie-btn-outline" @onclick="BackToReview">
+                <button type="button" class="ie-btn ie-btn-outline" @onclick="BackToPeriodAndReview">
                     <i class="bi bi-arrow-left"></i> Back to Period and Review
                 </button>
             </Actions>
         </PageHeader>
 
         <div class="ie-success-card">
-            <div class="ie-success-badge"><i class="bi bi-patch-check-fill"></i></div>
-            <h1 class="ie-success-title">15-Day Report Submitted Successfully!</h1>
-            <p class="ie-success-subtitle">Your report has been submitted for the selected period</p>
+            <div class="ie-success-badge">
+                <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M3.85 8.62a4 4 0 0 1 4.78-4.77 4 4 0 0 1 6.74 0 4 4 0 0 1 4.78 4.78 4 4 0 0 1 0 6.74 4 4 0 0 1-4.77 4.78 4 4 0 0 1-6.75 0 4 4 0 0 1-4.78-4.77 4 4 0 0 1 0-6.76Z" />
+                    <path d="m9 12 2 2 4-4" stroke-width="2.5" />
+                </svg>
+            </div>
+            <h1 class="ie-success-title">15 - Day Report Submitted Successfully!</h1>
+            <p class="ie-success-subtitle">Your Report has been submitted for the selected period</p>
 
             <div class="ie-success-details">
                 <div class="ie-success-detail-row">
-                    <div><span>Reporting Period</span><strong>01 - 15 Sept 2026</strong></div>
+                    <div><span>Reporting Period</span><strong>@CurrentReportingPeriod</strong></div>
                     <div><span>Submitted By</span><strong>@SubmittedByDisplay</strong></div>
                 </div>
                 <div class="ie-success-detail-row">
-                    <div><span>Submitted On</span><strong>@(submittedAt?.ToString("dd MMMM yyyy, hh:mm tt") ?? "-")</strong></div>
+                    <div><span>Submitted On</span><strong>@(submittedAt?.ToString("dd MMMM yyyy. hh:mm tt") ?? DateTime.Now.ToString("dd MMMM yyyy. hh:mm tt"))</strong></div>
                     <div><span>Status</span><strong><span class="ie-badge ie-badge-emerald">● Submitted</span></strong></div>
                 </div>
             </div>
@@ -49,7 +55,7 @@
                         <span class="ie-summary-label">Total Income</span>
                         <span class="ie-summary-icon"><i class="bi bi-file-earmark-arrow-up"></i></span>
                     </div>
-                    <div class="ie-summary-value">₹65,000</div>
+                    <div class="ie-summary-value">₹@IncomeGrandTotal.ToString("N0")</div>
                 </div>
 
                 <div class="ie-summary-card ie-summary-rose">
@@ -57,7 +63,7 @@
                         <span class="ie-summary-label">Total Expense</span>
                         <span class="ie-summary-icon"><i class="bi bi-clock-history"></i></span>
                     </div>
-                    <div class="ie-summary-value">₹48,000</div>
+                    <div class="ie-summary-value">₹ @MainCategoriesTotal.ToString("N0")</div>
                 </div>
 
                 <div class="ie-summary-card ie-summary-violet">
@@ -65,15 +71,15 @@
                         <span class="ie-summary-label">Net Profit</span>
                         <span class="ie-summary-icon"><i class="bi bi-clock-history"></i></span>
                     </div>
-                    <div class="ie-summary-value">₹17,000</div>
+                    <div class="ie-summary-value">₹ @NetProfit.ToString("N0")</div>
                 </div>
             </div>
 
             <div class="ie-success-actions">
-                <button type="button" class="ie-btn ie-btn-outline" @onclick="BackToReview">
+                <button type="button" class="ie-btn-view-submitted" @onclick="ViewSubmittedReport">
                     <i class="bi bi-eye"></i> View Submitted Report
                 </button>
-                <button type="button" class="ie-btn ie-btn-primary" @onclick="GoToFinanceSummary">
+                <button type="button" class="ie-btn-go-finance" @onclick="GoToFinanceSummary">
                     Go to finance summary <i class="bi bi-arrow-right"></i>
                 </button>
             </div>
@@ -83,10 +89,10 @@
     {
 
     <div class="ie-steps">
-        <button type="button" class='ie-step @(currentStep == "Inventory" ? "active" : "")' @onclick='() => currentStep = "Inventory"'>Inventory</button>
-        <button type="button" class='ie-step @(currentStep == "Income" ? "active" : "")' @onclick='() => currentStep = "Income"'>Income</button>
-        <button type="button" class='ie-step @(currentStep == "Expense" ? "active" : "")' @onclick='() => currentStep = "Expense"'>Expense</button>
-        <button type="button" class='ie-step @(currentStep == "Review" ? "active" : "")' @onclick='() => currentStep = "Review"'>Review</button>
+        <button type="button" class='ie-step @(currentStep == "Inventory" ? "active" : "")' @onclick='() => SetStep("Inventory")'>Inventory</button>
+        <button type="button" class='ie-step @(currentStep == "Income" ? "active" : "")' @onclick='() => SetStep("Income")'>Income</button>
+        <button type="button" class='ie-step @(currentStep == "Expense" ? "active" : "")' @onclick='() => SetStep("Expense")'>Expense</button>
+        <button type="button" class='ie-step @(currentStep == "Review" ? "active" : "")' @onclick='() => SetStep("Review")'>Review</button>
     </div>
 
     <PageHeader Title="@pageTitle"
@@ -113,9 +119,9 @@
                     <span class="ie-summary-label">Total Farm Income</span>
                     <span class="ie-summary-icon"><i class="bi bi-file-earmark-arrow-up"></i></span>
                 </div>
-                <div class="ie-summary-value">₹1,75,000</div>
+                <div class="ie-summary-value">₹@IncomeGrandTotal.ToString("N0")</div>
                 <div class="ie-summary-bottom">
-                    <span class="ie-summary-desc"><i class="bi bi-arrow-up-short"></i> 12.4% higher than previous 15-day report</span>
+                    <span class="ie-summary-desc"><i class="bi bi-arrow-up-short"></i> Current 15-day report</span>
                 </div>
             </div>
 
@@ -124,7 +130,7 @@
                     <span class="ie-summary-label">Livestock Income</span>
                     <span class="ie-summary-icon"><i class="bi bi-journal-text"></i></span>
                 </div>
-                <div class="ie-summary-value">₹85,000</div>
+                <div class="ie-summary-value">₹@LivestockIncomeTotal.ToString("N0")</div>
                 <div class="ie-summary-bottom">
                     <span class="ie-summary-desc">Multiple selling rates used in some entries</span>
                 </div>
@@ -135,7 +141,7 @@
                     <span class="ie-summary-label">Orchard Income</span>
                     <span class="ie-summary-icon"><i class="bi bi-tree"></i></span>
                 </div>
-                <div class="ie-summary-value">₹62,500</div>
+                <div class="ie-summary-value">₹@OrchardIncomeTotal.ToString("N0")</div>
                 <div class="ie-summary-bottom">
                     <span class="ie-summary-desc">From orchard sales</span>
                 </div>
@@ -146,7 +152,7 @@
                     <span class="ie-summary-label">Reporting Period</span>
                     <span class="ie-summary-icon"><i class="bi bi-clock-history"></i></span>
                 </div>
-                <div class="ie-summary-value">01-15 Sept 2026</div>
+                <div class="ie-summary-value">@CurrentReportingPeriod</div>
                 <div class="ie-summary-bottom">
                     <span class="ie-summary-desc">Current 15-day report</span>
                 </div>
@@ -177,10 +183,18 @@
                                         @row.Name
                                     </span>
                                 </td>
-                                <td data-label="Sold Quantity"><input type="number" min="0" placeholder="@row.QuantityPlaceholder" @bind="row.SoldQuantity" /></td>
-                                <td data-label="UOM"><input type="text" placeholder="@row.UomPlaceholder" @bind="row.Uom" /></td>
-                                <td data-label="Rate per unit"><input type="number" min="0" class="ie-no-arrow" @bind="row.Rate" /></td>
-                                <td data-label="Total amount"><input type="text" value="@IncomeTotal(row).ToString("N0")" disabled class="ie-readonly" /></td>
+                                <td data-label="Sold Quantity">
+                                    <div class="ie-stepper-input">
+                                        <input type="number" min="0" placeholder="0" @bind="row.SoldQuantity" @bind:event="oninput" @bind:after="SyncSoldToInventory" />
+                                        <div class="ie-spin-ctrls">
+                                            <button type="button" class="ie-spin-btn" @onclick="() => IncrementSold(row)" tabindex="-1" title="Increase"><i class="bi bi-chevron-up"></i></button>
+                                            <button type="button" class="ie-spin-btn" @onclick="() => DecrementSold(row)" tabindex="-1" title="Decrease"><i class="bi bi-chevron-down"></i></button>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td data-label="UOM"><input type="text" value="@row.Uom" disabled class="ie-readonly ie-no-arrow" /></td>
+                                <td data-label="Rate per unit"><input type="text" value="@($"₹{row.Rate:N0}")" disabled class="ie-readonly ie-no-arrow" /></td>
+                                <td data-label="Total amount"><input type="text" value="@($"₹{IncomeTotal(row):N0}")" disabled class="ie-readonly ie-no-arrow" /></td>
                             </tr>
                         }
                     </tbody>
@@ -201,6 +215,7 @@
                     <thead>
                         <tr>
                             <th>Product</th>
+                            <th>Sold Quantity</th>
                             <th>UOM</th>
                             <th>Rate Per Unit</th>
                             <th>Total amount</th>
@@ -216,9 +231,18 @@
                                         @row.Name
                                     </span>
                                 </td>
-                                <td data-label="UOM"><input type="text" placeholder="@row.UomPlaceholder" @bind="row.Uom" /></td>
-                                <td data-label="Rate Per Unit"><input type="number" min="0" class="ie-no-arrow" @bind="row.Rate" /></td>
-                                <td data-label="Total amount"><input type="text" value="@OrchardTotal(row).ToString("N0")" disabled class="ie-readonly" /></td>
+                                <td data-label="Sold Quantity">
+                                    <div class="ie-stepper-input">
+                                        <input type="number" min="0" placeholder="0" @bind="row.SoldQuantity" @bind:event="oninput" />
+                                        <div class="ie-spin-ctrls">
+                                            <button type="button" class="ie-spin-btn" @onclick="() => IncrementOrchardSold(row)" tabindex="-1" title="Increase"><i class="bi bi-chevron-up"></i></button>
+                                            <button type="button" class="ie-spin-btn" @onclick="() => DecrementOrchardSold(row)" tabindex="-1" title="Decrease"><i class="bi bi-chevron-down"></i></button>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td data-label="UOM"><input type="text" value="@row.Uom" disabled class="ie-readonly ie-no-arrow" /></td>
+                                <td data-label="Rate Per Unit"><input type="text" value="@($"₹{row.Rate:N0}")" disabled class="ie-readonly ie-no-arrow" /></td>
+                                <td data-label="Total amount"><input type="text" value="@($"₹{OrchardTotal(row):N0}")" disabled class="ie-readonly ie-no-arrow" /></td>
                             </tr>
                         }
                     </tbody>
@@ -261,9 +285,9 @@
                     <span class="ie-summary-label">Expense Categories</span>
                     <span class="ie-summary-icon"><i class="bi bi-grid-3x3-gap"></i></span>
                 </div>
-                <div class="ie-summary-value">@mainExpenseRows.Count Main Categories</div>
+                <div class="ie-summary-value">@(mainExpenseRows.Count + subExpenseRows.Count) Categories</div>
                 <div class="ie-summary-bottom">
-                    <span class="ie-summary-desc">Miscellaneous is one of these @mainExpenseRows.Count</span>
+                    <span class="ie-summary-desc">@mainExpenseRows.Count Farm Operations, @subExpenseRows.Count Misc</span>
                 </div>
             </div>
 
@@ -272,7 +296,7 @@
                     <span class="ie-summary-label">Reporting Period</span>
                     <span class="ie-summary-icon"><i class="bi bi-clock-history"></i></span>
                 </div>
-                <div class="ie-summary-value">01-15 Sept 2026</div>
+                <div class="ie-summary-value">@CurrentReportingPeriod</div>
                 <div class="ie-summary-bottom">
                     <span class="ie-summary-desc">Current 15-day report</span>
                 </div>
@@ -298,7 +322,7 @@
                             <th>S.NO</th>
                             <th>Expense Category</th>
                             <th>Amount (₹)</th>
-                            <th class="ie-col-action">Unit</th>
+                            <th class="ie-col-action">Action</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -323,14 +347,30 @@
                                         }
                                         else
                                         {
-                                            <input type="number" min="0" step="0.01" @bind="row.Amount" />
+                                            <input type="number" min="0" step="1" @bind="row.Amount" @bind:event="oninput" />
+                                            <div class="ie-spin-ctrls">
+                                                <button type="button" class="ie-spin-btn" @onclick="() => row.Amount++" tabindex="-1" title="Increase">
+                                                    <i class="bi bi-chevron-up"></i>
+                                                </button>
+                                                <button type="button" class="ie-spin-btn" @onclick="() => { if (row.Amount > 0) row.Amount--; }" tabindex="-1" title="Decrease">
+                                                    <i class="bi bi-chevron-down"></i>
+                                                </button>
+                                            </div>
                                         }
                                     </div>
                                 </td>
-                                <td data-label="Unit" class="ie-col-action">
-                                    <button type="button" class="ie-action-btn ie-action-edit" title="Edit">
-                                        <i class="bi bi-pencil-square"></i>
-                                    </button>
+                                <td data-label="Action" class="ie-col-action">
+                                    @if (!row.IsAutoCalculated)
+                                    {
+                                        <div class="ie-action-wrap">
+                                            <button type="button" class="ie-action-btn ie-action-edit" title="Edit Category" @onclick="() => OpenEditCategory(row, false)">
+                                                <i class="bi bi-pencil-square"></i>
+                                            </button>
+                                            <button type="button" class="ie-action-btn ie-action-delete" title="Delete Category" @onclick="() => PromptDeleteCategory(row, false)">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </div>
+                                    }
                                 </td>
                             </tr>
                         }
@@ -373,7 +413,7 @@
                             <th>S.NO</th>
                             <th>Expense Category</th>
                             <th>Amount (₹)</th>
-                            <th class="ie-col-action">Unit</th>
+                            <th class="ie-col-action">Action</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -386,13 +426,26 @@
                                 <td data-label="Amount (₹)">
                                     <div class="ie-currency-input">
                                         <span>₹</span>
-                                        <input type="number" min="0" step="0.01" @bind="row.Amount" />
+                                        <input type="number" min="0" step="1" @bind="row.Amount" @bind:event="oninput" />
+                                        <div class="ie-spin-ctrls">
+                                            <button type="button" class="ie-spin-btn" @onclick="() => row.Amount++" tabindex="-1" title="Increase">
+                                                <i class="bi bi-chevron-up"></i>
+                                            </button>
+                                            <button type="button" class="ie-spin-btn" @onclick="() => { if (row.Amount > 0) row.Amount--; }" tabindex="-1" title="Decrease">
+                                                <i class="bi bi-chevron-down"></i>
+                                            </button>
+                                        </div>
                                     </div>
                                 </td>
-                                <td data-label="Unit" class="ie-col-action">
-                                    <button type="button" class="ie-action-btn ie-action-edit" title="Edit">
-                                        <i class="bi bi-pencil-square"></i>
-                                    </button>
+                                <td data-label="Action" class="ie-col-action">
+                                    <div class="ie-action-wrap">
+                                        <button type="button" class="ie-action-btn ie-action-edit" title="Edit Category" @onclick="() => OpenEditCategory(row, true)">
+                                            <i class="bi bi-pencil-square"></i>
+                                        </button>
+                                        <button type="button" class="ie-action-btn ie-action-delete" title="Delete Category" @onclick="() => PromptDeleteCategory(row, true)">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </div>
                                 </td>
                             </tr>
                         }
@@ -424,9 +477,9 @@
                     <span class="ie-summary-label">Total Income</span>
                     <span class="ie-summary-icon"><i class="bi bi-file-earmark-arrow-up"></i></span>
                 </div>
-                <div class="ie-summary-value">₹65,000</div>
+                <div class="ie-summary-value">₹@IncomeGrandTotal.ToString("N0")</div>
                 <div class="ie-summary-bottom">
-                    <span class="ie-summary-desc">From 01 - 15 Sept 2026</span>
+                    <span class="ie-summary-desc"><i class="bi bi-arrow-up-short"></i> Current 15-day report</span>
                 </div>
             </div>
 
@@ -435,20 +488,20 @@
                     <span class="ie-summary-label">Total Expense</span>
                     <span class="ie-summary-icon"><i class="bi bi-clock-history"></i></span>
                 </div>
-                <div class="ie-summary-value">₹48,000</div>
+                <div class="ie-summary-value">₹@MainCategoriesTotal.ToString("N0")</div>
                 <div class="ie-summary-bottom">
-                    <span class="ie-summary-desc">From 01 - 15 Sept 2026</span>
+                    <span class="ie-summary-desc"><i class="bi bi-arrow-down-short"></i> Current 15-day report</span>
                 </div>
             </div>
 
             <div class="ie-summary-card ie-summary-violet">
                 <div class="ie-summary-top">
                     <span class="ie-summary-label">Net Profit</span>
-                    <span class="ie-summary-icon"><i class="bi bi-clock-history"></i></span>
+                    <span class="ie-summary-icon"><i class="bi bi-file-earmark-text"></i></span>
                 </div>
-                <div class="ie-summary-value">₹17,000</div>
+                <div class="ie-summary-value">₹@NetProfit.ToString("N0")</div>
                 <div class="ie-summary-bottom">
-                    <span class="ie-summary-desc">Income - Expense</span>
+                    <span class="ie-summary-desc">Income minus expenses</span>
                 </div>
             </div>
 
@@ -457,9 +510,9 @@
                     <span class="ie-summary-label">Reporting Period</span>
                     <span class="ie-summary-icon"><i class="bi bi-clock-history"></i></span>
                 </div>
-                <div class="ie-summary-value">01-15 Sept 2026</div>
+                <div class="ie-summary-value">@CurrentReportingPeriod</div>
                 <div class="ie-summary-bottom">
-                    <span class="ie-summary-desc"><i class="bi bi-info-circle"></i> Upcoming</span>
+                    <span class="ie-badge ie-badge-violet">Upcoming</span>
                 </div>
             </div>
         </div>
@@ -584,6 +637,7 @@
                         <thead>
                             <tr>
                                 <th>Product</th>
+                                <th>Sold Quantity</th>
                                 <th>UOM</th>
                                 <th>Rate per unit</th>
                                 <th>Total Amount</th>
@@ -599,6 +653,7 @@
                                             @row.Name
                                         </span>
                                     </td>
+                                    <td data-label="Sold Quantity">@(row.SoldQuantity?.ToString() ?? "-")</td>
                                     <td data-label="UOM">@(string.IsNullOrWhiteSpace(row.Uom) ? "-" : row.Uom)</td>
                                     <td data-label="Rate per unit">₹@row.Rate.ToString("N0")</td>
                                     <td data-label="Total Amount" class="ie-review-highlight">₹@OrchardTotal(row).ToString("N0")</td>
@@ -607,10 +662,10 @@
                         </tbody>
                         <tfoot>
                             <tr class="ie-total-row">
-                                <td colspan="4">
+                                <td colspan="5">
                                     <div class="ie-total-bar">
                                         <span>Total Income :</span>
-                                        <strong>₹ @IncomeGrandTotal.ToString("N0")</strong>
+                                        <strong>₹ @OrchardIncomeTotal.ToString("N0")</strong>
                                     </div>
                                 </td>
                             </tr>
@@ -662,7 +717,7 @@
                                     {
                                         <tr @key="row.Id">
                                             <td data-label="Expense Category" class="ie-review-ellipsis">@row.Category</td>
-                                            <td data-label="Amount (₹)">₹@(row.IsAutoCalculated ? SubCategoriesTotal : row.Amount).ToString("N0")</td>
+                                            <td data-label="Amount (₹)">₹@((row.IsAutoCalculated ? SubCategoriesTotal : row.Amount).ToString("N0"))</td>
                                         </tr>
                                     }
                                 </tbody>
@@ -740,7 +795,7 @@
                     <span class="ie-summary-label">Current Reporting</span>
                     <span class="ie-summary-icon"><i class="bi bi-file-earmark-arrow-up"></i></span>
                 </div>
-                <div class="ie-summary-value">01-15 Sept 2026</div>
+                <div class="ie-summary-value">@CurrentReportingPeriod</div>
                 <div class="ie-summary-bottom">
                     <span class="ie-summary-desc">Enter stock changes for this period</span>
                     <span class="ie-badge ie-badge-amber">Ready for Update</span>
@@ -752,9 +807,9 @@
                     <span class="ie-summary-label">Previous Period</span>
                     <span class="ie-summary-icon"><i class="bi bi-file-earmark-arrow-up"></i></span>
                 </div>
-                <div class="ie-summary-value">16-31 Aug 2026</div>
+                <div class="ie-summary-value">@PreviousReportingPeriod</div>
                 <div class="ie-summary-bottom">
-                    <span class="ie-summary-desc">Closing stock: 132 Nos</span>
+                    <span class="ie-summary-desc">Opening stock: @TotalOpeningStock Nos</span>
                     <span class="ie-badge ie-badge-emerald">Completed</span>
                 </div>
             </div>
@@ -764,9 +819,9 @@
                     <span class="ie-summary-label">Next Reporting Period</span>
                     <span class="ie-summary-icon"><i class="bi bi-clock-history"></i></span>
                 </div>
-                <div class="ie-summary-value">16-30 Sept 2026</div>
+                <div class="ie-summary-value">@NextReportingPeriod</div>
                 <div class="ie-summary-bottom">
-                    <span class="ie-summary-desc">Will be available after current submission</span>
+                    <span class="ie-summary-desc">Current Closing: @TotalClosingStock Nos</span>
                     <span class="ie-badge ie-badge-violet">Upcoming</span>
                 </div>
             </div>
@@ -787,14 +842,13 @@
                             <th>Mortality</th>
                             <th>Others</th>
                             <th>Closing Stock</th>
-                            <th class="ie-col-action">Action</th>
                         </tr>
                     </thead>
                     <tbody>
                         @if (ledgerRows.Count == 0)
                         {
                             <tr class="ie-state-row">
-                                <td colspan="9">
+                                <td colspan="8">
                                     <EmptyState Title="No products in this ledger" Message="Approved products from Product & Rate Management will appear here." />
                                 </td>
                             </tr>
@@ -810,23 +864,45 @@
                                             @row.Name
                                         </span>
                                     </td>
-                                    <td data-label="Opening Stock"><input type="number" min="0" @bind="row.Opening" /></td>
-                                    <td data-label="Purchase / Old Quantity"><input type="number" min="0" @bind="row.Purchase" /></td>
-                                    <td data-label="Hatched / New Breed"><input type="number" min="0" @bind="row.Hatched" /></td>
-                                    <td data-label="Sold"><input type="number" value="@row.Sold" disabled class="ie-readonly" /></td>
-                                    <td data-label="Mortality"><input type="number" min="0" @bind="row.Mortality" /></td>
-                                    <td data-label="Others"><input type="number" @bind="row.Others" /></td>
-                                    <td data-label="Closing Stock"><input type="number" value="@ClosingStock(row)" disabled class="ie-readonly" /></td>
-                                    <td data-label="Action" class="ie-col-action">
-                                        <div class="ie-action-wrap">
-                                            <button type="button" class="ie-action-btn ie-action-edit" title="Edit">
-                                                <i class="bi bi-pencil-square"></i>
-                                            </button>
-                                            <button type="button" class="ie-action-btn ie-action-delete" title="Delete" @onclick="() => DeleteRow(row)">
-                                                <i class="bi bi-trash"></i>
-                                            </button>
+                                    <td data-label="Opening Stock"><input type="number" value="@row.Opening" disabled class="ie-readonly ie-no-arrow" /></td>
+                                    <td data-label="Purchase / Old Quantity">
+                                        <div class="ie-stepper-input">
+                                            <input type="number" min="0" @bind="row.Purchase" @bind:event="oninput" />
+                                            <div class="ie-spin-ctrls">
+                                                <button type="button" class="ie-spin-btn" @onclick="() => row.Purchase++" tabindex="-1" title="Increase"><i class="bi bi-chevron-up"></i></button>
+                                                <button type="button" class="ie-spin-btn" @onclick="() => { if (row.Purchase > 0) row.Purchase--; }" tabindex="-1" title="Decrease"><i class="bi bi-chevron-down"></i></button>
+                                            </div>
                                         </div>
                                     </td>
+                                    <td data-label="Hatched / New Breed">
+                                        <div class="ie-stepper-input">
+                                            <input type="number" min="0" @bind="row.Hatched" @bind:event="oninput" />
+                                            <div class="ie-spin-ctrls">
+                                                <button type="button" class="ie-spin-btn" @onclick="() => row.Hatched++" tabindex="-1" title="Increase"><i class="bi bi-chevron-up"></i></button>
+                                                <button type="button" class="ie-spin-btn" @onclick="() => { if (row.Hatched > 0) row.Hatched--; }" tabindex="-1" title="Decrease"><i class="bi bi-chevron-down"></i></button>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td data-label="Sold"><input type="number" value="@row.Sold" disabled class="ie-readonly" /></td>
+                                    <td data-label="Mortality">
+                                        <div class="ie-stepper-input">
+                                            <input type="number" min="0" @bind="row.Mortality" @bind:event="oninput" />
+                                            <div class="ie-spin-ctrls">
+                                                <button type="button" class="ie-spin-btn" @onclick="() => row.Mortality++" tabindex="-1" title="Increase"><i class="bi bi-chevron-up"></i></button>
+                                                <button type="button" class="ie-spin-btn" @onclick="() => { if (row.Mortality > 0) row.Mortality--; }" tabindex="-1" title="Decrease"><i class="bi bi-chevron-down"></i></button>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td data-label="Others">
+                                        <div class="ie-stepper-input">
+                                            <input type="number" @bind="row.Others" @bind:event="oninput" />
+                                            <div class="ie-spin-ctrls">
+                                                <button type="button" class="ie-spin-btn" @onclick="() => row.Others++" tabindex="-1" title="Increase"><i class="bi bi-chevron-up"></i></button>
+                                                <button type="button" class="ie-spin-btn" @onclick="() => row.Others--" tabindex="-1" title="Decrease"><i class="bi bi-chevron-down"></i></button>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td data-label="Closing Stock"><input type="number" value="@ClosingStock(row)" disabled class="ie-readonly" /></td>
                                 </tr>
                             }
                         }
@@ -863,7 +939,7 @@
                 <div class="ie-modal-icon"><i class="bi bi-info-circle-fill"></i></div>
                 <div>
                     <h3>Submit 15-Day Report?</h3>
-                    <p class="ie-modal-subtitle">You are about to submit the report for <strong>01 - 15 September 2026</strong></p>
+                    <p class="ie-modal-subtitle">You are about to submit the report for <strong>@CurrentReportingPeriod</strong></p>
                 </div>
             </div>
 
@@ -871,27 +947,149 @@
                 <div class="ie-confirm-checklist">
                     <div class="ie-confirm-checklist-row">
                         <span>Inventory Details</span>
-                        <span class="ie-confirm-done">Completed <i class="bi bi-check2-all"></i></span>
+                        @if (IsInventoryCompleted)
+                        {
+                            <span class="ie-confirm-done">Completed <i class="bi bi-check2-all"></i></span>
+                        }
+                        else
+                        {
+                            <span class="ie-confirm-pending">Pending <i class="bi bi-clock"></i></span>
+                        }
                     </div>
                     <div class="ie-confirm-checklist-row">
                         <span>Income Details</span>
-                        <span class="ie-confirm-done">Completed <i class="bi bi-check2-all"></i></span>
+                        @if (IsIncomeCompleted)
+                        {
+                            <span class="ie-confirm-done">Completed <i class="bi bi-check2-all"></i></span>
+                        }
+                        else
+                        {
+                            <span class="ie-confirm-pending">Pending <i class="bi bi-clock"></i></span>
+                        }
                     </div>
                     <div class="ie-confirm-checklist-row">
                         <span>Expense Details</span>
-                        <span class="ie-confirm-done">Completed <i class="bi bi-check2-all"></i></span>
+                        @if (IsExpenseCompleted)
+                        {
+                            <span class="ie-confirm-done">Completed <i class="bi bi-check2-all"></i></span>
+                        }
+                        else
+                        {
+                            <span class="ie-confirm-pending">Pending <i class="bi bi-clock"></i></span>
+                        }
                     </div>
                 </div>
 
-                <div class="ie-confirm-warning">
-                    <i class="bi bi-info-circle-fill"></i>
-                    <span>Once submitted, this report cannot be edited unless reopened by Admin</span>
-                </div>
+                @if (!CanConfirmSubmit)
+                {
+                    <div class="ie-confirm-error">
+                        <i class="bi bi-exclamation-triangle-fill"></i>
+                        <span>Please fill in all sections (Inventory, Income, and Expense) before submitting.</span>
+                    </div>
+                }
+                else
+                {
+                    <div class="ie-confirm-warning">
+                        <i class="bi bi-info-circle-fill"></i>
+                        <span>Once submitted, this report cannot be edited unless reopened by Admin</span>
+                    </div>
+                }
             </div>
 
             <div class="ie-modal-footer">
                 <button type="button" class="ie-btn ie-btn-outline" @onclick="CloseSubmitConfirm">Close</button>
-                <button type="button" class="ie-btn ie-btn-primary" @onclick="ConfirmSubmit">Confirm Submit</button>
+                <button type="button" class="ie-btn ie-btn-primary" disabled="@(!CanConfirmSubmit)" @onclick="ConfirmSubmit">Confirm Submit</button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (showAddCategoryDialog)
+{
+    <div class="ie-modal-backdrop" @onclick="() => showAddCategoryDialog = false">
+        <div class="ie-modal" @onclick:stopPropagation="true">
+            <div class="ie-modal-header">
+                <div class="ie-modal-icon"><i class="bi bi-plus-circle-fill"></i></div>
+                <div>
+                    <h3>@(isAddingSubCategory ? "Add Miscellaneous Sub Category" : "Add Farm Operations Expense Category")</h3>
+                    <p class="ie-modal-subtitle">Enter category name and initial amount for this 15-day period</p>
+                </div>
+            </div>
+
+            <div class="ie-modal-body">
+                <div style="margin-bottom: 16px;">
+                    <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; color: var(--text-main);">Category Name</label>
+                    <input type="text" style="width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 14px;" placeholder="e.g. Electricity Charges" @bind="newCategoryName" />
+                </div>
+                <div style="margin-bottom: 16px;">
+                    <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; color: var(--text-main);">Amount (₹)</label>
+                    <input type="number" min="0" step="0.01" style="width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 14px;" placeholder="0.00" @bind="newCategoryAmount" />
+                </div>
+            </div>
+
+            <div class="ie-modal-footer">
+                <button type="button" class="ie-btn ie-btn-outline" @onclick="() => showAddCategoryDialog = false">Cancel</button>
+                <button type="button" class="ie-btn ie-btn-primary" @onclick="SaveNewCategory">Add Category</button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (showEditCategoryDialog && editingExpenseRow != null)
+{
+    <div class="ie-modal-backdrop" @onclick="() => showEditCategoryDialog = false">
+        <div class="ie-modal" @onclick:stopPropagation="true">
+            <div class="ie-modal-header">
+                <div class="ie-modal-icon" style="background: #ede9fe; color: #7c3aed;"><i class="bi bi-pencil-fill"></i></div>
+                <div>
+                    <h3>Edit Expense Category</h3>
+                    <p class="ie-modal-subtitle">Update the category name or amount</p>
+                </div>
+            </div>
+
+            <div class="ie-modal-body">
+                <div style="margin-bottom: 16px;">
+                    <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; color: var(--text-main);">Category Name</label>
+                    <input type="text" style="width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 14px;" @bind="editingCategoryName" />
+                </div>
+                <div style="margin-bottom: 16px;">
+                    <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; color: var(--text-main);">Amount (₹)</label>
+                    <input type="number" min="0" step="1" style="width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 14px;" @bind="editingCategoryAmount" />
+                </div>
+            </div>
+
+            <div class="ie-modal-footer">
+                <button type="button" class="ie-btn ie-btn-outline" @onclick="() => showEditCategoryDialog = false">Cancel</button>
+                <button type="button" class="ie-btn ie-btn-primary" @onclick="SaveEditCategory">Save Changes</button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (showDeleteConfirmDialog && rowToDelete != null)
+{
+    <div class="ie-modal-backdrop" @onclick="() => showDeleteConfirmDialog = false">
+        <div class="ie-modal" @onclick:stopPropagation="true">
+            <div class="ie-modal-header">
+                <div class="ie-modal-icon" style="background: #fee2e2; color: #dc2626;"><i class="bi bi-trash-fill"></i></div>
+                <div>
+                    <h3>Delete Expense Category?</h3>
+                    <p class="ie-modal-subtitle">Are you sure you want to delete <strong>@rowToDelete.Category</strong>?</p>
+                </div>
+            </div>
+
+            <div class="ie-modal-body">
+                <div class="ie-confirm-warning" style="background: #fef2f2; color: #991b1b; border: 1px solid #fecaca;">
+                    <i class="bi bi-exclamation-triangle-fill"></i>
+                    <span>This expense category and its entered amount will be removed from this 15-day period report.</span>
+                </div>
+            </div>
+
+            <div class="ie-modal-footer">
+                <button type="button" class="ie-btn ie-btn-outline" @onclick="() => showDeleteConfirmDialog = false">Cancel</button>
+                <button type="button" class="ie-btn" style="background: #dc2626; color: #fff; border: 1px solid #dc2626;" @onclick="ConfirmDeleteCategory">
+                    <i class="bi bi-trash"></i> Confirm Delete
+                </button>
             </div>
         </div>
     </div>
@@ -1222,17 +1420,12 @@
                 outline: none;
             }
 
-            /* Same decorative chevron as the Inventory/Income tables, on the
-               editable (non read-only) amount fields only. */
             .ie-currency-input input:not(.ie-readonly) {
-                padding-right: 26px !important;
+                padding-right: 4px !important;
                 appearance: none;
                 -webkit-appearance: none;
                 -moz-appearance: none;
-                background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='16' viewBox='0 0 10 16'%3E%3Cpath fill='%239ca3af' d='M5 1L9 6H1z'/%3E%3Cpath fill='%239ca3af' d='M5 15L1 10H9z'/%3E%3C/svg%3E");
-                background-repeat: no-repeat;
-                background-position: right 2px center;
-                background-size: 9px 14px;
+                background-image: none !important;
             }
 
                 .ie-currency-input input[type="number"]::-webkit-inner-spin-button,
@@ -1244,6 +1437,36 @@
                 .ie-currency-input input[type="number"] {
                     -moz-appearance: textfield;
                 }
+
+        .ie-spin-ctrls {
+            display: inline-flex;
+            flex-direction: column;
+            justify-content: center;
+            gap: 1px;
+            margin-left: auto;
+            flex-shrink: 0;
+        }
+
+        .ie-spin-btn {
+            background: transparent;
+            border: none;
+            padding: 1px 4px;
+            margin: 0;
+            cursor: pointer;
+            color: var(--text-soft);
+            font-size: 11px;
+            line-height: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 3px;
+            transition: color 0.15s ease, background 0.15s ease;
+        }
+
+            .ie-spin-btn:hover {
+                color: var(--primary);
+                background: rgba(0, 0, 0, 0.08);
+            }
 
         /* .ie-table input.ie-readonly (below) sets the same background/color and has
            equal specificity - without the extra .ie-expense-table ancestor here, that
@@ -1401,27 +1624,26 @@
     }
 
     .ie-success-badge {
-        width: 72px;
-        height: 72px;
+        width: 76px;
+        height: 76px;
         border-radius: 50%;
-        background: var(--primary);
-        color: #fff;
-        font-size: 34px;
+        background: #2e7d32;
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        margin: 0 auto 20px;
+        margin: 0 auto 18px;
+        box-shadow: 0 4px 14px rgba(46, 125, 50, 0.22);
     }
 
     .ie-success-title {
-        margin: 0 0 8px;
-        font-size: 1.6rem;
+        margin: 0 0 6px;
+        font-size: 1.75rem;
         font-weight: 700;
-        color: var(--primary-dark);
+        color: #1e5631;
     }
 
     .ie-success-subtitle {
-        margin: 0 0 28px;
+        margin: 0 0 26px;
         font-size: 14px;
         color: var(--text-soft);
     }
@@ -1445,10 +1667,11 @@
         }
 
         .ie-success-detail-row > div {
-            padding: 14px 18px;
+            padding: 14px 22px;
             display: flex;
-            flex-direction: column;
-            gap: 4px;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
         }
 
             .ie-success-detail-row > div:first-child {
@@ -1456,31 +1679,74 @@
             }
 
             .ie-success-detail-row span {
-                font-size: 12px;
+                font-size: 13px;
                 color: var(--text-soft);
+                font-weight: 400;
             }
 
             .ie-success-detail-row strong {
                 font-size: 14px;
                 color: var(--text-main);
+                font-weight: 600;
             }
 
     .ie-success-card .ie-summary-grid {
         margin: 0 0 28px;
         text-align: left;
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 16px;
     }
 
     .ie-success-actions {
         display: flex;
         align-items: center;
         justify-content: center;
-        gap: 12px;
+        gap: 16px;
         flex-wrap: wrap;
     }
 
-        .ie-success-actions .ie-btn {
-            width: auto;
-        }
+    .ie-btn-view-submitted {
+        appearance: none;
+        background: #ffffff;
+        color: #1e293b;
+        border: 1px solid #1e5631;
+        border-radius: 6px;
+        padding: 9px 20px;
+        font-weight: 500;
+        font-size: 13px;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+
+    .ie-btn-view-submitted:hover {
+        background: #f8fafc;
+        border-color: #0d3b1e;
+    }
+
+    .ie-btn-go-finance {
+        appearance: none;
+        background: #1e5631;
+        color: #ffffff;
+        border: 1px solid #1e5631;
+        border-radius: 6px;
+        padding: 9px 22px;
+        font-weight: 600;
+        font-size: 13px;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+
+    .ie-btn-go-finance:hover {
+        background: #143d22;
+        border-color: #143d22;
+    }
 
     /* Submit confirmation modal */
     .ie-modal-backdrop {
@@ -1571,6 +1837,26 @@
         gap: 6px;
         font-weight: 600;
         color: var(--primary-dark);
+    }
+
+    .ie-confirm-pending {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-weight: 600;
+        color: #d97706;
+    }
+
+    .ie-confirm-error {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        padding: 12px 16px;
+        background: #fef2f2;
+        color: #b91c1c;
+        border: 1px solid #fecaca;
+        border-radius: 8px;
+        font-size: 13px;
     }
 
     .ie-confirm-warning {
@@ -1712,36 +1998,14 @@
     .ie-table input[type="text"],
     .ie-table select {
         width: 100%;
-        min-width: 130px;
-        padding: 9px 30px 9px 12px;
+        min-width: 100px;
+        padding: 8px 12px;
         border: 1px solid var(--border);
         border-radius: 6px;
         font-size: 13px;
         color: var(--text-main);
         background-color: #fff;
-        appearance: none;
-        -webkit-appearance: none;
-        -moz-appearance: none;
-        /* Decorative up/down chevron - UOM is free text (no native spinner applies),
-           so this is drawn the same way for every field in the row for a consistent
-           look, not just the numeric ones. */
-        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='16' viewBox='0 0 10 16'%3E%3Cpath fill='%239ca3af' d='M5 1L9 6H1z'/%3E%3Cpath fill='%239ca3af' d='M5 15L1 10H9z'/%3E%3C/svg%3E");
-        background-repeat: no-repeat;
-        background-position: right 10px center;
-        background-size: 9px 14px;
     }
-
-        /* Hide the native Chromium/Firefox number spinner - we draw our own above so
-           every field (numeric or not) matches. */
-        .ie-table input[type="number"]::-webkit-inner-spin-button,
-        .ie-table input[type="number"]::-webkit-outer-spin-button {
-            -webkit-appearance: none;
-            margin: 0;
-        }
-
-        .ie-table input[type="number"] {
-            -moz-appearance: textfield;
-        }
 
         .ie-table input[type="number"]:focus,
         .ie-table input[type="text"]:focus,
@@ -1749,6 +2013,44 @@
             outline: none;
             border-color: var(--primary);
         }
+
+    .ie-stepper-input {
+        display: inline-flex;
+        align-items: center;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: #fff;
+        padding: 0 4px 0 10px;
+        width: 100%;
+        min-width: 100px;
+        transition: border-color 0.15s ease;
+    }
+
+        .ie-stepper-input:focus-within {
+            border-color: var(--primary);
+        }
+
+        .ie-stepper-input input {
+            border: none !important;
+            background: transparent !important;
+            background-image: none !important;
+            padding: 7px 4px 7px 0 !important;
+            width: 100% !important;
+            min-width: 0 !important;
+            outline: none !important;
+            font-size: 13px;
+            color: var(--text-main);
+        }
+
+            .ie-stepper-input input::-webkit-inner-spin-button,
+            .ie-stepper-input input::-webkit-outer-spin-button {
+                -webkit-appearance: none;
+                margin: 0;
+            }
+
+            .ie-stepper-input input {
+                -moz-appearance: textfield;
+            }
 
         .ie-table input.ie-readonly {
             background-color: var(--primary-soft);
@@ -1849,7 +2151,10 @@
     /* native: tablet */
     @@media (min-width: 768px) and (max-width: 1199.98px) {
         .ie-summary-grid {
-            grid-template-columns: 1fr;
+            grid-template-columns: repeat(3, 1fr);
+        }
+        .ie-summary-grid-4 {
+            grid-template-columns: repeat(4, 1fr);
         }
     }
 
@@ -2067,6 +2372,185 @@
                 width: 100%;
             }
     }
+
+    /* Review Top Header Bar matching Image 1 */
+    .ie-review-header-bar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+        flex-wrap: wrap;
+        gap: 16px;
+    }
+
+    .ie-review-title-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+
+    .ie-review-main-title {
+        font-size: 20px;
+        font-weight: 700;
+        color: #1e293b;
+        margin: 0;
+    }
+
+    .ie-review-period-subtitle {
+        font-size: 13px;
+        color: #64748b;
+        margin: 4px 0 0;
+    }
+
+    .ie-review-header-actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    /* Financial Summary & Comparison Cards */
+    .ie-financial-summary-card,
+    .ie-comparison-card {
+        padding: 20px 24px;
+        margin-bottom: 24px;
+        border-radius: 12px;
+        border: 1px solid #e2e8f0;
+        background: #ffffff;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    }
+
+    .ie-fin-header-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 18px;
+    }
+
+    .ie-fin-period-tag {
+        font-size: 13px;
+        font-weight: 600;
+        color: #64748b;
+    }
+
+    .ie-fin-stats-grid {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 14px;
+    }
+
+    .ie-fin-stat-box {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 10px;
+        padding: 14px 16px;
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+    }
+
+    .ie-fin-stat-content {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        min-width: 0;
+    }
+
+    .ie-fin-stat-label {
+        font-size: 12px;
+        font-weight: 500;
+        color: #64748b;
+    }
+
+    .ie-fin-till-tag {
+        font-size: 11px;
+        color: #94a3b8;
+    }
+
+    .ie-fin-stat-val {
+        font-size: 18px;
+        font-weight: 700;
+        color: #1e293b;
+        letter-spacing: -0.01em;
+    }
+
+    .ie-fin-stat-sub {
+        font-size: 11px;
+        font-weight: 600;
+    }
+
+    .ie-fin-stat-icon {
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 16px;
+        flex-shrink: 0;
+    }
+
+    .ie-fin-icon-green {
+        background: #ecfdf5;
+        color: #10b981;
+    }
+
+    .ie-fin-icon-red {
+        background: #fff1f2;
+        color: #f43f5e;
+    }
+
+    .ie-fin-icon-blue {
+        background: #eff6ff;
+        color: #3b82f6;
+    }
+
+    .ie-fin-icon-purple {
+        background: #f5f3ff;
+        color: #8b5cf6;
+    }
+
+    .ie-comparison-table {
+        margin: 0;
+        border: 1px solid #f1f5f9;
+        border-radius: 8px;
+        overflow: hidden;
+    }
+
+    .ie-comparison-table th {
+        background: #f8fafc;
+        font-size: 13px;
+        font-weight: 600;
+        color: #475569;
+        padding: 12px 16px;
+    }
+
+    .ie-comparison-table td {
+        padding: 12px 16px;
+        font-size: 14px;
+        border-top: 1px solid #f1f5f9;
+    }
+
+    .ie-metric-name {
+        font-weight: 600;
+        color: #1e293b;
+    }
+
+    .ie-badge-trend {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 12px;
+        font-weight: 600;
+    }
+
+    .ie-trend-up {
+        color: #10b981;
+    }
+
+    .ie-trend-down {
+        color: #ef4444;
+    }
 </style>
 
 @code {
@@ -2085,28 +2569,137 @@
         public int Others { get; set; }
     }
 
+    [SupplyParameterFromQuery(Name = "reportId")]
+    public int? ReportIdQuery { get; set; }
+
+    private int? _reportId;
+    private bool isSaving;
     private string currentStep = "Inventory";
     private bool showSubmitConfirm;
     private bool reportSubmitted;
     private DateTime? submittedAt;
 
     private string SubmittedByDisplay =>
-        string.IsNullOrWhiteSpace(LoginState.DesignationName) ? "You" : LoginState.DesignationName!;
+        !string.IsNullOrWhiteSpace(LoginState.UserName)
+            ? $"{LoginState.UserName} ({(LoginState.DesignationName ?? "Farm Officer")})"
+            : (!string.IsNullOrWhiteSpace(LoginState.DesignationName) ? $"Rajesh Kumar ({LoginState.DesignationName})" : "Rajesh Kumar (Farm Officer)");
 
     private void CloseSubmitConfirm() => showSubmitConfirm = false;
 
-    private void ConfirmSubmit()
+    private bool IsInventoryCompleted =>
+        ledgerRows.Any(r => r.Purchase > 0 || r.Sold > 0 || r.Opening > 0 || r.Hatched > 0 || r.Mortality > 0 || r.Others > 0 || ClosingStock(r) > 0);
+
+    private bool IsIncomeCompleted =>
+        IncomeGrandTotal > 0 || livestockIncomeRows.Any(r => (r.SoldQuantity ?? 0) > 0) || orchardIncomeRows.Any(r => (r.SoldQuantity ?? 0) > 0);
+
+    private bool IsExpenseCompleted =>
+        MainCategoriesTotal > 0 || mainExpenseRows.Any(r => r.Amount > 0) || subExpenseRows.Any(r => r.Amount > 0);
+
+    private bool CanConfirmSubmit => IsInventoryCompleted && IsIncomeCompleted && IsExpenseCompleted;
+
+    private async Task ConfirmSubmit()
     {
+        if (!CanConfirmSubmit)
+        {
+            Toast.Warning("Please fill in all sections (Inventory, Income, and Expense) before submitting.");
+            return;
+        }
+
         showSubmitConfirm = false;
-        reportSubmitted = true;
-        submittedAt = DateTime.Now;
-        Toast.Success("15-day report submitted.");
+        var ok = await SaveReportToDbAsync("Submitted");
+        if (ok)
+        {
+            reportSubmitted = true;
+            submittedAt = DateTime.Now;
+            await ScrollToTopAsync();
+        }
     }
 
-    private void BackToReview() => reportSubmitted = false;
+    private void BackToPeriodAndReview()
+    {
+        reportSubmitted = false;
+        currentStep = "Review";
+    }
+
+    private void ViewSubmittedReport()
+    {
+        if (_reportId.HasValue && _reportId.Value > 0)
+        {
+            Nav.NavigateTo($"/FifteenDayReportReview?reportId={_reportId.Value}");
+        }
+        else
+        {
+            Nav.NavigateTo("/FifteenDayReportReview");
+        }
+    }
 
     private void GoToFinanceSummary() => Nav.NavigateTo("/FinanceSummary");
     private string remarks = "";
+
+    private DateTime reportDate = DateTime.Today;
+
+    private string CurrentReportingPeriod =>
+        reportDate.Day <= 15
+            ? $"01 - 15 {reportDate:MMM yyyy}"
+            : $"16 - {DateTime.DaysInMonth(reportDate.Year, reportDate.Month)} {reportDate:MMM yyyy}";
+
+    private string PreviousReportingPeriod
+    {
+        get
+        {
+            if (reportDate.Day <= 15)
+            {
+                var prevMonth = reportDate.AddMonths(-1);
+                return $"16 - {DateTime.DaysInMonth(prevMonth.Year, prevMonth.Month)} {prevMonth:MMM yyyy}";
+            }
+            return $"01 - 15 {reportDate:MMM yyyy}";
+        }
+    }
+
+    private string NextReportingPeriod
+    {
+        get
+        {
+            if (reportDate.Day <= 15)
+            {
+                return $"16 - {DateTime.DaysInMonth(reportDate.Year, reportDate.Month)} {reportDate:MMM yyyy}";
+            }
+            var nextMonth = reportDate.AddMonths(1);
+            return $"01 - 15 {nextMonth:MMM yyyy}";
+        }
+    }
+
+    private int TotalOpeningStock => ledgerRows.Sum(r => r.Opening);
+    private int TotalClosingStock => ledgerRows.Sum(ClosingStock);
+    private int TotalSoldStock => ledgerRows.Sum(r => r.Sold);
+
+    private void IncrementSold(IncomeRow row)
+    {
+        row.SoldQuantity = (row.SoldQuantity ?? 0) + 1;
+        SyncSoldToInventory();
+    }
+
+    private void DecrementSold(IncomeRow row)
+    {
+        if ((row.SoldQuantity ?? 0) > 0)
+        {
+            row.SoldQuantity--;
+            SyncSoldToInventory();
+        }
+    }
+
+    private void IncrementOrchardSold(OrchardRow row)
+    {
+        row.SoldQuantity = (row.SoldQuantity ?? 0) + 1;
+    }
+
+    private void DecrementOrchardSold(OrchardRow row)
+    {
+        if ((row.SoldQuantity ?? 0) > 0)
+        {
+            row.SoldQuantity--;
+        }
+    }
 
     private List<LedgerRow> ledgerRows = new()
     {
@@ -2137,6 +2730,8 @@
         public int Id { get; set; }
         public string Name { get; set; } = "";
         public string IconKey { get; set; } = "";
+        public int? SoldQuantity { get; set; }
+        public string QuantityPlaceholder { get; set; } = "Enter sold count";
         public string Uom { get; set; } = "";
         public string UomPlaceholder { get; set; } = "Enter Kg";
         public decimal Rate { get; set; }
@@ -2149,27 +2744,25 @@
     // types in each row's actual quantity/UOM. Chicken=1 is the one worked example.
     private List<IncomeRow> livestockIncomeRows = new()
     {
-        new IncomeRow { Id = 1, Name = "Chicken", IconKey = "Chicken", SoldQuantity = 1, UomPlaceholder = "Enter Kg", Rate = 250 },
-        new IncomeRow { Id = 2, Name = "Chicken Eggs", IconKey = "Chicken Eggs", QuantityPlaceholder = "Enter stock count", UomPlaceholder = "Enter Numbers", Rate = 250 },
-        new IncomeRow { Id = 3, Name = "Goat", IconKey = "Goat", QuantityPlaceholder = "Enter stock count", UomPlaceholder = "Enter per unit", Rate = 250 },
-        new IncomeRow { Id = 4, Name = "Goat", IconKey = "Quail", QuantityPlaceholder = "Enter Sold count", UomPlaceholder = "Enter Kg", Rate = 250 },
-        new IncomeRow { Id = 5, Name = "Quale", IconKey = "Quail", QuantityPlaceholder = "Enter stock count", UomPlaceholder = "Enter unit", Rate = 250 },
-        new IncomeRow { Id = 6, Name = "Goat", IconKey = "Dragon Fruit", QuantityPlaceholder = "Enter Sold count", UomPlaceholder = "Enter Kg", Rate = 250 },
+        new IncomeRow { Id = 1, Name = "Chicken", IconKey = "Chicken", SoldQuantity = 0, UomPlaceholder = "Enter Kg", Rate = 0 },
+        new IncomeRow { Id = 2, Name = "Chicken Eggs", IconKey = "Chicken Eggs", SoldQuantity = 0, QuantityPlaceholder = "Enter stock count", UomPlaceholder = "Enter Numbers", Rate = 0 },
+        new IncomeRow { Id = 3, Name = "Goat", IconKey = "Goat", SoldQuantity = 0, QuantityPlaceholder = "Enter stock count", UomPlaceholder = "Enter per unit", Rate = 0 },
+        new IncomeRow { Id = 4, Name = "Goat", IconKey = "Quail", SoldQuantity = 0, QuantityPlaceholder = "Enter Sold count", UomPlaceholder = "Enter Kg", Rate = 0 },
+        new IncomeRow { Id = 5, Name = "Quale", IconKey = "Quail", SoldQuantity = 0, QuantityPlaceholder = "Enter stock count", UomPlaceholder = "Enter unit", Rate = 0 },
+        new IncomeRow { Id = 6, Name = "Goat", IconKey = "Dragon Fruit", SoldQuantity = 0, QuantityPlaceholder = "Enter Sold count", UomPlaceholder = "Enter Kg", Rate = 0 },
     };
 
     private List<OrchardRow> orchardIncomeRows = new()
     {
-        new OrchardRow { Id = 1, Name = "Mango", IconKey = "Mango", UomPlaceholder = "Enter Kg", Rate = 250 },
-        new OrchardRow { Id = 2, Name = "Papaya", IconKey = "Papaya", UomPlaceholder = "Enter Numbers", Rate = 250 },
-        new OrchardRow { Id = 3, Name = "Watermelon", IconKey = "Watermelon", UomPlaceholder = "Enter unit", Rate = 250 },
-        new OrchardRow { Id = 4, Name = "Lemon", IconKey = "Lemon", UomPlaceholder = "Enter Kg", Rate = 250 },
+        new OrchardRow { Id = 1, Name = "Mango", IconKey = "Mango", SoldQuantity = 0, UomPlaceholder = "Enter Kg", Rate = 0 },
+        new OrchardRow { Id = 2, Name = "Papaya", IconKey = "Papaya", SoldQuantity = 0, UomPlaceholder = "Enter Numbers", Rate = 0 },
+        new OrchardRow { Id = 3, Name = "Watermelon", IconKey = "Watermelon", SoldQuantity = 0, UomPlaceholder = "Enter unit", Rate = 0 },
+        new OrchardRow { Id = 4, Name = "Lemon", IconKey = "Lemon", SoldQuantity = 0, UomPlaceholder = "Enter Kg", Rate = 0 },
     };
 
     private static decimal IncomeTotal(IncomeRow row) => (row.SoldQuantity ?? 0) * row.Rate;
 
-    // Orchard Sales has no Sold Quantity column in this design - Total only becomes
-    // non-zero once a quantity field is added here in a later pass.
-    private static decimal OrchardTotal(OrchardRow row) => 0;
+    private static decimal OrchardTotal(OrchardRow row) => (row.SoldQuantity ?? 0) * row.Rate;
 
     private class ExpenseRow
     {
@@ -2185,27 +2778,27 @@
 
     private List<ExpenseRow> mainExpenseRows = new()
     {
-        new ExpenseRow { Id = 1, Category = "Labour Charges", Amount = 5000 },
-        new ExpenseRow { Id = 2, Category = "Seeds / Seedings", Amount = 3000 },
-        new ExpenseRow { Id = 3, Category = "Plant Protection", Amount = 12000 },
-        new ExpenseRow { Id = 4, Category = "Plant Protection", Amount = 8000 },
-        new ExpenseRow { Id = 5, Category = "Livestock Purchase", Amount = 4000 },
-        new ExpenseRow { Id = 6, Category = "Feed", Amount = 3500 },
-        new ExpenseRow { Id = 7, Category = "Veterinary Dr Fee", Amount = 1500 },
-        new ExpenseRow { Id = 8, Category = "Medicine", Amount = 1200 },
+        new ExpenseRow { Id = 1, Category = "Labour Charges", Amount = 0 },
+        new ExpenseRow { Id = 2, Category = "Seeds / Seedings", Amount = 0 },
+        new ExpenseRow { Id = 3, Category = "Plant Protection", Amount = 0 },
+        new ExpenseRow { Id = 4, Category = "Plant Protection", Amount = 0 },
+        new ExpenseRow { Id = 5, Category = "Livestock Purchase", Amount = 0 },
+        new ExpenseRow { Id = 6, Category = "Feed", Amount = 0 },
+        new ExpenseRow { Id = 7, Category = "Veterinary Dr Fee", Amount = 0 },
+        new ExpenseRow { Id = 8, Category = "Medicine", Amount = 0 },
         new ExpenseRow { Id = 9, Category = "Miscellaneous", IsAutoCalculated = true },
     };
 
     private List<ExpenseRow> subExpenseRows = new()
     {
-        new ExpenseRow { Id = 1, Category = "Tools and implements Purchase/Service", Amount = 2000 },
-        new ExpenseRow { Id = 2, Category = "TVS XL Service", Amount = 1500 },
-        new ExpenseRow { Id = 3, Category = "Garden Decor / Hardware's", Amount = 1200 },
-        new ExpenseRow { Id = 4, Category = "Cleaning / Pooja things", Amount = 1000 },
-        new ExpenseRow { Id = 5, Category = "Auto", Amount = 1500 },
-        new ExpenseRow { Id = 6, Category = "Utensils / Packing Materials", Amount = 1200 },
-        new ExpenseRow { Id = 7, Category = "Refreshment", Amount = 800 },
-        new ExpenseRow { Id = 8, Category = "Rejuvenation", Amount = 600 },
+        new ExpenseRow { Id = 1, Category = "Tools and implements Purchase/Service", Amount = 0 },
+        new ExpenseRow { Id = 2, Category = "TVS XL Service", Amount = 0 },
+        new ExpenseRow { Id = 3, Category = "Garden Decor / Hardware's", Amount = 0 },
+        new ExpenseRow { Id = 4, Category = "Cleaning / Pooja things", Amount = 0 },
+        new ExpenseRow { Id = 5, Category = "Auto", Amount = 0 },
+        new ExpenseRow { Id = 6, Category = "Utensils / Packing Materials", Amount = 0 },
+        new ExpenseRow { Id = 7, Category = "Refreshment", Amount = 0 },
+        new ExpenseRow { Id = 8, Category = "Rejuvenation", Amount = 0 },
     };
 
     private decimal SubCategoriesTotal => subExpenseRows.Sum(r => r.Amount);
@@ -2213,8 +2806,7 @@
     private decimal MainCategoriesTotal =>
         mainExpenseRows.Where(r => !r.IsAutoCalculated).Sum(r => r.Amount) + SubCategoriesTotal;
 
-    // Highest expense groups by category name first (the mock data has two separate
-    // "Plant Protection" line items that combine into the single highest category).
+    // Highest expense groups by category name first
     private decimal HighestExpenseAmount =>
         mainExpenseRows.Where(r => !r.IsAutoCalculated)
             .GroupBy(r => r.Category)
@@ -2229,15 +2821,118 @@
             .Select(g => g.Key)
             .FirstOrDefault() ?? "-";
 
+    private bool showAddCategoryDialog;
+    private bool isAddingSubCategory;
+    private string newCategoryName = "";
+    private decimal newCategoryAmount;
+
     private void AddMainCategory()
     {
-        // Inserted before the trailing auto-calculated Miscellaneous row.
-        mainExpenseRows.Insert(mainExpenseRows.Count - 1, new ExpenseRow { Id = _nextExpenseId++, Category = "New Category" });
+        isAddingSubCategory = false;
+        newCategoryName = "";
+        newCategoryAmount = 0;
+        showAddCategoryDialog = true;
     }
 
     private void AddSubCategory()
     {
-        subExpenseRows.Add(new ExpenseRow { Id = _nextExpenseId++, Category = "New Sub Category" });
+        isAddingSubCategory = true;
+        newCategoryName = "";
+        newCategoryAmount = 0;
+        showAddCategoryDialog = true;
+    }
+
+    private void SaveNewCategory()
+    {
+        if (string.IsNullOrWhiteSpace(newCategoryName))
+        {
+            Toast.Warning("Please enter a category name.");
+            return;
+        }
+
+        if (isAddingSubCategory)
+        {
+            subExpenseRows.Add(new ExpenseRow
+            {
+                Id = _nextExpenseId++,
+                Category = newCategoryName.Trim(),
+                Amount = newCategoryAmount
+            });
+            Toast.Success($"Sub-category \"{newCategoryName.Trim()}\" added.");
+        }
+        else
+        {
+            mainExpenseRows.Insert(mainExpenseRows.Count - 1, new ExpenseRow
+            {
+                Id = _nextExpenseId++,
+                Category = newCategoryName.Trim(),
+                Amount = newCategoryAmount
+            });
+            Toast.Success($"Category \"{newCategoryName.Trim()}\" added.");
+        }
+
+        showAddCategoryDialog = false;
+    }
+
+    private bool showEditCategoryDialog;
+    private ExpenseRow? editingExpenseRow;
+    private bool isEditingSubCategory;
+    private string editingCategoryName = "";
+    private decimal editingCategoryAmount;
+
+    private void OpenEditCategory(ExpenseRow row, bool isSub)
+    {
+        if (row.IsAutoCalculated) return;
+        editingExpenseRow = row;
+        isEditingSubCategory = isSub;
+        editingCategoryName = row.Category;
+        editingCategoryAmount = row.Amount;
+        showEditCategoryDialog = true;
+    }
+
+    private void SaveEditCategory()
+    {
+        if (editingExpenseRow == null) return;
+        if (string.IsNullOrWhiteSpace(editingCategoryName))
+        {
+            Toast.Warning("Please enter a category name.");
+            return;
+        }
+
+        editingExpenseRow.Category = editingCategoryName.Trim();
+        editingExpenseRow.Amount = editingCategoryAmount;
+        showEditCategoryDialog = false;
+        Toast.Success($"Category \"{editingExpenseRow.Category}\" updated.");
+    }
+
+    private bool showDeleteConfirmDialog;
+    private ExpenseRow? rowToDelete;
+    private bool isDeletingSubCategory;
+
+    private void PromptDeleteCategory(ExpenseRow row, bool isSub)
+    {
+        if (row.IsAutoCalculated) return;
+        rowToDelete = row;
+        isDeletingSubCategory = isSub;
+        showDeleteConfirmDialog = true;
+    }
+
+    private void ConfirmDeleteCategory()
+    {
+        if (rowToDelete == null) return;
+        var name = rowToDelete.Category;
+        if (isDeletingSubCategory)
+        {
+            subExpenseRows.Remove(rowToDelete);
+            Toast.Success($"Sub-category \"{name}\" deleted.");
+        }
+        else
+        {
+            mainExpenseRows.Remove(rowToDelete);
+            Toast.Success($"Category \"{name}\" deleted.");
+        }
+        showDeleteConfirmDialog = false;
+        rowToDelete = null;
     }
 
     // Review step: reflects the SAME Inventory/Income/Expense state captured in the
@@ -2359,7 +3054,31 @@
         _ => "Continue to Income"
     };
 
-    private void BackClicked()
+    private async Task ScrollToTopAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("scrollPageToTop");
+        }
+        catch
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("window.scrollTo", 0, 0);
+            }
+            catch { }
+        }
+    }
+
+    private async Task SetStep(string step)
+    {
+        SyncSoldToInventory();
+        await SaveReportToDbAsync("Draft", showToast: false);
+        currentStep = step;
+        await ScrollToTopAsync();
+    }
+
+    private async Task BackClicked()
     {
         if (currentStep == "Inventory")
         {
@@ -2374,19 +3093,33 @@
             "Review" => "Expense",
             _ => currentStep
         };
+        await ScrollToTopAsync();
     }
 
-    private void BackToList() => Nav.NavigateTo("/ProductRateManagement");
+    private void BackToList() => Nav.NavigateTo("/FarmDashboard");
 
-    private void SaveDraft() => Toast.Success("Saved as draft.");
-
-    private void ContinueClicked()
+    private async Task SaveDraft()
     {
+        await SaveReportToDbAsync("Draft", showToast: true);
+    }
+
+    private void DownloadReport()
+    {
+        Toast.Success("Downloading 15-day report summary...");
+    }
+
+    private async Task ContinueClicked()
+    {
+        SyncSoldToInventory();
+
         if (currentStep == "Review")
         {
             showSubmitConfirm = true;
             return;
         }
+
+        // Auto-save draft to database behind the scenes
+        await SaveReportToDbAsync("Draft", showToast: false);
 
         currentStep = currentStep switch
         {
@@ -2396,15 +3129,485 @@
             _ => currentStep
         };
 
-        Toast.Info(currentStep == "Review" ? "Ready to review." : $"Saved. Continue with {currentStep}.");
+        Toast.Info(currentStep == "Review" ? "Draft saved. Ready to review." : $"Draft saved. Continue with {currentStep}.");
+        await ScrollToTopAsync();
     }
 
-    private async Task DeleteRow(LedgerRow row)
+    private void SyncSoldToInventory()
     {
-        var ok = await Toast.ConfirmAsync("Remove product?", $"Remove \"{row.Name}\" from this period's ledger? This cannot be undone.", "Remove", danger: true);
-        if (!ok) return;
+        foreach (var lRow in ledgerRows)
+        {
+            var matched = livestockIncomeRows.FirstOrDefault(i => i.Id == lRow.Id || i.Name.Equals(lRow.Name, StringComparison.OrdinalIgnoreCase));
+            if (matched != null)
+            {
+                lRow.Sold = matched.SoldQuantity ?? 0;
+            }
+        }
+    }
 
-        ledgerRows.Remove(row);
-        Toast.Success($"\"{row.Name}\" removed from this period's ledger.");
+    public class CatalogProductDto
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = "";
+        public string Group { get; set; } = "";
+        public string Uom { get; set; } = "";
+        public decimal CurrentRate { get; set; }
+        public bool IsActive { get; set; }
+    }
+
+    public class ReportDetailsDto
+    {
+        public int Id { get; set; }
+        public string ReportingPeriod { get; set; } = "";
+        public string FinancialYear { get; set; } = "";
+        public DateTime PeriodStartDate { get; set; }
+        public DateTime PeriodEndDate { get; set; }
+        public string Status { get; set; } = "Draft";
+        public string SubmittedBy { get; set; } = "";
+        public DateTime? SubmittedAt { get; set; }
+        public decimal TotalIncome { get; set; }
+        public decimal TotalExpense { get; set; }
+        public decimal NetProfit { get; set; }
+        public string? InventoryRemarks { get; set; }
+        public string? IncomeRemarks { get; set; }
+        public string? ExpenseRemarks { get; set; }
+        public List<InventoryItemDetailDto> InventoryItems { get; set; } = new();
+        public List<IncomeItemDetailDto> IncomeItems { get; set; } = new();
+        public List<ExpenseItemDetailDto> ExpenseItems { get; set; } = new();
+    }
+
+    public class InventoryItemDetailDto
+    {
+        public int Id { get; set; }
+        public string ProductName { get; set; } = "";
+        public string? IconKey { get; set; }
+        public int Opening { get; set; }
+        public int Purchase { get; set; }
+        public int Hatched { get; set; }
+        public int Sold { get; set; }
+        public int Mortality { get; set; }
+        public int Others { get; set; }
+        public int Closing { get; set; }
+    }
+
+    public class IncomeItemDetailDto
+    {
+        public int Id { get; set; }
+        public string Group { get; set; } = "LiveStock";
+        public string ProductName { get; set; } = "";
+        public string? IconKey { get; set; }
+        public int SoldQuantity { get; set; }
+        public string Uom { get; set; } = "";
+        public decimal Rate { get; set; }
+        public decimal TotalAmount { get; set; }
+    }
+
+    public class ExpenseItemDetailDto
+    {
+        public int Id { get; set; }
+        public string Category { get; set; } = "";
+        public decimal Amount { get; set; }
+        public bool IsSubCategory { get; set; }
+        public bool IsAutoCalculated { get; set; }
+    }
+
+    public class SaveReportResponse
+    {
+        public bool Success { get; set; }
+        public string Message { get; set; } = "";
+        public int ReportId { get; set; }
+        public string Status { get; set; } = "";
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadCatalogProductsAsync();
+        SyncSoldToInventory();
+
+        if (ReportIdQuery.HasValue && ReportIdQuery.Value > 0)
+        {
+            await LoadReportByIdAsync(ReportIdQuery.Value);
+        }
+        else
+        {
+            await LoadLatestReportForPeriodAsync(CurrentReportingPeriod);
+        }
+    }
+
+    private async Task LoadReportByIdAsync(int id)
+    {
+        try
+        {
+            var r = await Http.GetFromJsonAsync<ReportDetailsDto>($"api/FarmReport/{id}");
+            if (r != null)
+            {
+                ApplyReportData(r);
+                currentStep = "Review";
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading report {id}: {ex.Message}");
+        }
+    }
+
+    private async Task LoadLatestReportForPeriodAsync(string period)
+    {
+        try
+        {
+            var r = await Http.GetFromJsonAsync<ReportDetailsDto>($"api/FarmReport/latest?period={Uri.EscapeDataString(period)}");
+            if (r != null)
+            {
+                ApplyReportData(r);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading latest report: {ex.Message}");
+        }
+    }
+
+    private void ApplyReportData(ReportDetailsDto r)
+    {
+        _reportId = r.Id;
+        remarks = r.InventoryRemarks ?? "";
+        livestockIncomeRemarks = r.IncomeRemarks ?? "";
+        mainExpenseRemarks = r.ExpenseRemarks ?? "";
+        if (r.Status == "Submitted")
+        {
+            reportSubmitted = true;
+            submittedAt = r.SubmittedAt ?? DateTime.Now;
+            if (ReportIdQuery.HasValue)
+            {
+                Nav.NavigateTo($"/FifteenDayReportReview?reportId={r.Id}");
+                return;
+            }
+        }
+
+        if (r.InventoryItems != null && r.InventoryItems.Count > 0)
+        {
+            foreach (var item in r.InventoryItems)
+            {
+                var existing = ledgerRows.FirstOrDefault(x => x.Name.Equals(item.ProductName, StringComparison.OrdinalIgnoreCase));
+                if (existing != null)
+                {
+                    existing.Opening = item.Opening;
+                    existing.Purchase = item.Purchase;
+                    existing.Hatched = item.Hatched;
+                    existing.Sold = item.Sold;
+                    existing.Mortality = item.Mortality;
+                    existing.Others = item.Others;
+                }
+                else
+                {
+                    ledgerRows.Add(new LedgerRow
+                    {
+                        Id = ledgerRows.Count + 1,
+                        Name = item.ProductName,
+                        IconKey = item.IconKey ?? item.ProductName,
+                        Opening = item.Opening,
+                        Purchase = item.Purchase,
+                        Hatched = item.Hatched,
+                        Sold = item.Sold,
+                        Mortality = item.Mortality,
+                        Others = item.Others
+                    });
+                }
+            }
+        }
+
+        if (r.IncomeItems != null && r.IncomeItems.Count > 0)
+        {
+            var liveItems = r.IncomeItems.Where(i => i.Group.Equals("LiveStock", StringComparison.OrdinalIgnoreCase)).ToList();
+            if (liveItems.Count > 0)
+            {
+                foreach (var li in liveItems)
+                {
+                    var existing = livestockIncomeRows.FirstOrDefault(x => x.Name.Equals(li.ProductName, StringComparison.OrdinalIgnoreCase));
+                    if (existing != null)
+                    {
+                        existing.SoldQuantity = li.SoldQuantity;
+                        if (!string.IsNullOrWhiteSpace(li.Uom)) existing.Uom = li.Uom;
+                        if (li.Rate > 0) existing.Rate = li.Rate;
+                    }
+                    else
+                    {
+                        livestockIncomeRows.Add(new IncomeRow
+                        {
+                            Id = livestockIncomeRows.Count + 1,
+                            Name = li.ProductName,
+                            IconKey = li.IconKey ?? li.ProductName,
+                            SoldQuantity = li.SoldQuantity,
+                            Uom = li.Uom,
+                            Rate = li.Rate
+                        });
+                    }
+                }
+            }
+
+            var orchardItems = r.IncomeItems.Where(i => i.Group.Equals("Orchard", StringComparison.OrdinalIgnoreCase)).ToList();
+            if (orchardItems.Count > 0)
+            {
+                foreach (var oi in orchardItems)
+                {
+                    var existing = orchardIncomeRows.FirstOrDefault(x => x.Name.Equals(oi.ProductName, StringComparison.OrdinalIgnoreCase));
+                    if (existing != null)
+                    {
+                        existing.SoldQuantity = oi.SoldQuantity;
+                        if (!string.IsNullOrWhiteSpace(oi.Uom)) existing.Uom = oi.Uom;
+                        if (oi.Rate > 0) existing.Rate = oi.Rate;
+                    }
+                    else
+                    {
+                        orchardIncomeRows.Add(new OrchardRow
+                        {
+                            Id = orchardIncomeRows.Count + 1,
+                            Name = oi.ProductName,
+                            IconKey = oi.IconKey ?? oi.ProductName,
+                            SoldQuantity = oi.SoldQuantity,
+                            Uom = oi.Uom,
+                            Rate = oi.Rate
+                        });
+                    }
+                }
+            }
+        }
+
+        if (r.ExpenseItems != null && r.ExpenseItems.Count > 0)
+        {
+            var mainItems = r.ExpenseItems.Where(e => !e.IsSubCategory).ToList();
+            if (mainItems.Count > 0)
+            {
+                foreach (var mi in mainItems)
+                {
+                    var existing = mainExpenseRows.FirstOrDefault(x => x.Category.Equals(mi.Category, StringComparison.OrdinalIgnoreCase));
+                    if (existing != null)
+                    {
+                        existing.Amount = mi.Amount;
+                        existing.IsAutoCalculated = mi.IsAutoCalculated;
+                    }
+                    else
+                    {
+                        mainExpenseRows.Add(new ExpenseRow
+                        {
+                            Id = mainExpenseRows.Count + 1,
+                            Category = mi.Category,
+                            Amount = mi.Amount,
+                            IsAutoCalculated = mi.IsAutoCalculated
+                        });
+                    }
+                }
+            }
+
+            var subItems = r.ExpenseItems.Where(e => e.IsSubCategory).ToList();
+            if (subItems.Count > 0)
+            {
+                var newSub = new List<ExpenseRow>();
+                int idx = 1;
+                foreach (var si in subItems)
+                {
+                    newSub.Add(new ExpenseRow
+                    {
+                        Id = idx++,
+                        Category = si.Category,
+                        Amount = si.Amount
+                    });
+                }
+                subExpenseRows = newSub;
+            }
+        }
+
+        SyncSoldToInventory();
+        StateHasChanged();
+    }
+
+    private async Task<bool> SaveReportToDbAsync(string status, bool showToast = true)
+    {
+        if (isSaving) return false;
+        try
+        {
+            isSaving = true;
+            SyncSoldToInventory();
+
+            int fyStart = reportDate.Month >= 4 ? reportDate.Year : reportDate.Year - 1;
+            string dynamicFy = $"{fyStart}-{(fyStart + 1) % 100:D2}";
+
+            var payload = new
+            {
+                Id = _reportId,
+                ReportingPeriod = CurrentReportingPeriod,
+                FinancialYear = dynamicFy,
+                PeriodStartDate = new DateTime(reportDate.Year, reportDate.Month, reportDate.Day <= 15 ? 1 : 16),
+                PeriodEndDate = new DateTime(reportDate.Year, reportDate.Month, reportDate.Day <= 15 ? 15 : DateTime.DaysInMonth(reportDate.Year, reportDate.Month)),
+                Status = status,
+                SubmittedBy = LoginState.DesignationName ?? "Farm Office",
+                TotalIncome = IncomeGrandTotal,
+                TotalExpense = MainCategoriesTotal,
+                NetProfit = NetProfit,
+                InventoryRemarks = remarks,
+                IncomeRemarks = CombinedIncomeRemarks,
+                ExpenseRemarks = CombinedExpenseRemarks,
+                InventoryItems = ledgerRows.Select(r => new
+                {
+                    ProductName = r.Name,
+                    IconKey = r.IconKey,
+                    Opening = r.Opening,
+                    Purchase = r.Purchase,
+                    Hatched = r.Hatched,
+                    Sold = r.Sold,
+                    Mortality = r.Mortality,
+                    Others = r.Others,
+                    Closing = ClosingStock(r)
+                }).ToList(),
+                IncomeItems = livestockIncomeRows.Select(r => new
+                {
+                    Group = "LiveStock",
+                    ProductName = r.Name,
+                    IconKey = r.IconKey,
+                    SoldQuantity = r.SoldQuantity ?? 0,
+                    Uom = r.Uom,
+                    Rate = r.Rate,
+                    TotalAmount = IncomeTotal(r)
+                }).Concat(orchardIncomeRows.Select(r => new
+                {
+                    Group = "Orchard",
+                    ProductName = r.Name,
+                    IconKey = r.IconKey,
+                    SoldQuantity = r.SoldQuantity ?? 0,
+                    Uom = r.Uom,
+                    Rate = r.Rate,
+                    TotalAmount = OrchardTotal(r)
+                })).ToList(),
+                ExpenseItems = mainExpenseRows.Select(r => new
+                {
+                    Category = r.Category,
+                    Amount = r.IsAutoCalculated ? SubCategoriesTotal : r.Amount,
+                    IsSubCategory = false,
+                    IsAutoCalculated = r.IsAutoCalculated
+                }).Concat(subExpenseRows.Select(r => new
+                {
+                    Category = r.Category,
+                    Amount = r.Amount,
+                    IsSubCategory = true,
+                    IsAutoCalculated = false
+                })).ToList()
+            };
+
+            var response = await Http.PostAsJsonAsync("api/FarmReport/save", payload);
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<SaveReportResponse>();
+                if (result != null && result.Success)
+                {
+                    _reportId = result.ReportId;
+                    if (status == "Submitted")
+                    {
+                        reportSubmitted = true;
+                        submittedAt = DateTime.Now;
+                        if (showToast) Toast.Success("15-day report submitted successfully to database!");
+                    }
+                    else
+                    {
+                        if (showToast) Toast.Success("15-day report saved as draft to database!");
+                    }
+                    return true;
+                }
+            }
+
+            var err = await response.Content.ReadAsStringAsync();
+            if (showToast) Toast.Error($"Failed to save report: {err}");
+            return false;
+        }
+        catch (Exception ex)
+        {
+            if (showToast) Toast.Error($"Error saving report: {ex.Message}");
+            return false;
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private async Task LoadCatalogProductsAsync()
+    {
+        try
+        {
+            var prods = await Http.GetFromJsonAsync<List<CatalogProductDto>>("api/FarmProduct/products");
+            if (prods != null && prods.Count > 0)
+            {
+                var liveStockProds = prods.Where(p => p.Group.Equals("LiveStock", StringComparison.OrdinalIgnoreCase)).ToList();
+                var orchardProds = prods.Where(p => p.Group.Equals("Orchard", StringComparison.OrdinalIgnoreCase)).ToList();
+
+                if (liveStockProds.Count > 0)
+                {
+                    var newLedger = new List<LedgerRow>();
+                    var newIncome = new List<IncomeRow>();
+                    int id = 1;
+
+                    foreach (var lp in liveStockProds)
+                    {
+                        var existingLedger = ledgerRows.FirstOrDefault(r => r.Name.Equals(lp.Name, StringComparison.OrdinalIgnoreCase));
+                        var existingIncome = livestockIncomeRows.FirstOrDefault(r => r.Name.Equals(lp.Name, StringComparison.OrdinalIgnoreCase));
+
+                        newLedger.Add(new LedgerRow
+                        {
+                            Id = id,
+                            Name = lp.Name,
+                            IconKey = lp.Name,
+                            Opening = existingLedger?.Opening ?? 0,
+                            Purchase = existingLedger?.Purchase ?? 0,
+                            Hatched = existingLedger?.Hatched ?? 0,
+                            Sold = existingIncome?.SoldQuantity ?? existingLedger?.Sold ?? 0,
+                            Mortality = existingLedger?.Mortality ?? 0,
+                            Others = existingLedger?.Others ?? 0
+                        });
+
+                        newIncome.Add(new IncomeRow
+                        {
+                            Id = id,
+                            Name = lp.Name,
+                            IconKey = lp.Name,
+                            SoldQuantity = existingIncome?.SoldQuantity ?? 0,
+                            QuantityPlaceholder = "Enter stock count",
+                            Uom = !string.IsNullOrWhiteSpace(lp.Uom) ? lp.Uom : (existingIncome?.Uom ?? ""),
+                            UomPlaceholder = $"Enter {lp.Uom}",
+                            Rate = lp.CurrentRate
+                        });
+
+                        id++;
+                    }
+
+                    ledgerRows = newLedger;
+                    livestockIncomeRows = newIncome;
+                }
+
+                if (orchardProds.Count > 0)
+                {
+                    var newOrchard = new List<OrchardRow>();
+                    int id = 1;
+                    foreach (var op in orchardProds)
+                    {
+                        var existing = orchardIncomeRows.FirstOrDefault(r => r.Name.Equals(op.Name, StringComparison.OrdinalIgnoreCase));
+                        newOrchard.Add(new OrchardRow
+                        {
+                            Id = id++,
+                            Name = op.Name,
+                            IconKey = op.Name,
+                            SoldQuantity = existing?.SoldQuantity ?? 0,
+                            QuantityPlaceholder = "Enter sold count",
+                            Uom = !string.IsNullOrWhiteSpace(op.Uom) ? op.Uom : (existing?.Uom ?? ""),
+                            UomPlaceholder = $"Enter {op.Uom}",
+                            Rate = op.CurrentRate
+                        });
+                    }
+                    orchardIncomeRows = newOrchard;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Catalog load fallback: {ex.Message}");
+        }
     }
 }

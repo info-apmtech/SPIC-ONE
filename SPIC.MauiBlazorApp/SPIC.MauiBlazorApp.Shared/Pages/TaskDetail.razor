@@ -29,6 +29,16 @@
         <p class="td-subtitle">Sanction No: @dynamicSanctionNo &middot; Sanction Date: @dynamicSanctionDate &middot; Budget: @dynamicBudget</p>
     }
 
+    @if (currentAllocation != null && currentAllocation.Status != "Approved")
+    {
+        <div class="alert alert-warning d-flex align-items-center gap-2 my-3" role="alert" style="border-radius: 8px;">
+            <i class="bi bi-clock-history fs-5"></i>
+            <div>
+                <strong>Allocation Awaiting MDO Approval</strong> &mdash; This task belongs to an allocation currently waiting for MDO approval and cannot be started until approved.
+            </div>
+        </div>
+    }
+
     <div class="td-timeline-card">
         <h3 class="td-timeline-title">Task Timeline</h3>
         <div class="td-timeline">
@@ -160,7 +170,7 @@
 
                 @if (!isStarted && !isClosed && LoginState.Can(PagePermission.TasksAllocation, "Update"))
                 {
-                    <button type="button" class="td-btn td-btn-primary" disabled="@isLocationCapturing" @onclick="StartTask">
+                    <button type="button" class="td-btn td-btn-primary" disabled="@(isLocationCapturing || (currentAllocation != null && currentAllocation.Status != "Approved"))" @onclick="StartTask">
                         @if (isLocationCapturing)
                         {
                             <span class="spinner-border spinner-border-sm me-1" role="status"></span>
@@ -1293,6 +1303,12 @@
     private async Task StartTask()
     {
         if (isStarted || isLocationCapturing) return;
+
+        if (currentAllocation != null && currentAllocation.Status != "Approved")
+        {
+            Toast.Warning("Allocation is awaiting MDO approval. Tasks can only be started after approval.");
+            return;
+        }
 
         // Friendly redirect before even touching the GPS/network work below - the server (PUT
         // mine/task-status) enforces this too (JmdoTaskAllocationController.UpdateMyTaskStatus), so

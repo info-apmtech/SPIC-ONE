@@ -3604,6 +3604,187 @@ namespace Spic.Infrastructure.Migrations
                     b.ToTable("ExpenseInformations");
                 });
 
+            modelBuilder.Entity("SPIC.Core.Entities.FarmFifteenDayExpenseItem", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsAutoCalculated")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsSubCategory")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("ReportId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ReportId");
+
+                    b.ToTable("FarmFifteenDayExpenseItems");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.FarmFifteenDayIncomeItem", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Group")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("IconKey")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ProductName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<decimal>("Rate")
+                        .HasColumnType("numeric");
+
+                    b.Property<int>("ReportId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SoldQuantity")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("TotalAmount")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("Uom")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ReportId");
+
+                    b.ToTable("FarmFifteenDayIncomeItems");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.FarmFifteenDayInventoryItem", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("Closing")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Hatched")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("IconKey")
+                        .HasColumnType("text");
+
+                    b.Property<int>("Mortality")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Opening")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Others")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ProductName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("Purchase")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ReportId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Sold")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ReportId");
+
+                    b.ToTable("FarmFifteenDayInventoryItems");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.FarmFifteenDayReport", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("ExpenseRemarks")
+                        .HasColumnType("text");
+
+                    b.Property<string>("FinancialYear")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("IncomeRemarks")
+                        .HasColumnType("text");
+
+                    b.Property<string>("InventoryRemarks")
+                        .HasColumnType("text");
+
+                    b.Property<decimal>("NetProfit")
+                        .HasColumnType("numeric");
+
+                    b.Property<DateTime>("PeriodEndDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime>("PeriodStartDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("ReportingPeriod")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("SubmittedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("SubmittedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<decimal>("TotalExpense")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("TotalIncome")
+                        .HasColumnType("numeric");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("FarmFifteenDayReports");
+                });
+
             modelBuilder.Entity("SPIC.Core.Entities.FarmProduct", b =>
                 {
                     b.Property<int>("Id")
@@ -11413,6 +11594,39 @@ namespace Spic.Infrastructure.Migrations
                     b.Navigation("State");
                 });
 
+            modelBuilder.Entity("SPIC.Core.Entities.FarmFifteenDayExpenseItem", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.FarmFifteenDayReport", "Report")
+                        .WithMany("ExpenseItems")
+                        .HasForeignKey("ReportId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Report");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.FarmFifteenDayIncomeItem", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.FarmFifteenDayReport", "Report")
+                        .WithMany("IncomeItems")
+                        .HasForeignKey("ReportId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Report");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.FarmFifteenDayInventoryItem", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.FarmFifteenDayReport", "Report")
+                        .WithMany("InventoryItems")
+                        .HasForeignKey("ReportId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Report");
+                });
+
             modelBuilder.Entity("SPIC.Core.Entities.FarmProductRateRequest", b =>
                 {
                     b.HasOne("SPIC.Core.Entities.FarmProduct", "FarmProduct")
@@ -12276,6 +12490,15 @@ namespace Spic.Infrastructure.Migrations
                     b.Navigation("Attachments");
 
                     b.Navigation("Replies");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.FarmFifteenDayReport", b =>
+                {
+                    b.Navigation("ExpenseItems");
+
+                    b.Navigation("IncomeItems");
+
+                    b.Navigation("InventoryItems");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.GuestHouse", b =>

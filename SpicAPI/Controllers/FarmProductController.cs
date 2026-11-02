@@ -127,7 +127,7 @@ namespace SpicAPI.Controllers
         [HttpGet("products")]
         public async Task<IActionResult> GetProducts([FromQuery] string? group, [FromQuery] bool includeInactive = false)
         {
-            if (!await UserHasAnyAsync(PagePermission.productRateManagement, PagePermission.ProductRateApprovals, PagePermission.FarmProductMaster))
+            if (!await UserHasAnyAsync(PagePermission.productRateManagement, PagePermission.ProductRateApprovals, PagePermission.FarmProductMaster, PagePermission.FifteenDaysEntry))
                 return Forbidden();
 
             var query = _db.FarmProducts.AsNoTracking().AsQueryable();

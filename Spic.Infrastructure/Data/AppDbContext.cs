@@ -827,6 +827,10 @@ namespace Spic.Infrastructure.Data
         // Deliberately separate from Product/ProductGroup above.
         public DbSet<FarmProduct> FarmProducts { get; set; }
         public DbSet<FarmProductRateRequest> FarmProductRateRequests { get; set; }
+        public DbSet<FarmFifteenDayReport> FarmFifteenDayReports { get; set; }
+        public DbSet<FarmFifteenDayInventoryItem> FarmFifteenDayInventoryItems { get; set; }
+        public DbSet<FarmFifteenDayIncomeItem> FarmFifteenDayIncomeItems { get; set; }
+        public DbSet<FarmFifteenDayExpenseItem> FarmFifteenDayExpenseItems { get; set; }
         public DbSet<Warehouse> Warehouses { get; set; }
         //public DbSet<CandFWarehouse> CandFWarehouses { get; set; }
         public DbSet<LyingWithMaster> LyingWithMasters { get; set; }

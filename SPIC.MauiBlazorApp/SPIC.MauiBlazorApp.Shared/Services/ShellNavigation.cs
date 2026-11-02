@@ -676,6 +676,13 @@ public static class ShellNavigation
         // literal "TrackPlayback", which no designation ever grants, and bounces the user to
         // LandingPage before the page can render.
         ["TrackPlayback"] = "MarkAttendance",
+        // farm operations & 15-day report review/finance summary
+        ["FarmOperations"] = "FarmDashboard",
+        ["FifteenDayReportReview"] = "FifteenDaysEntry",
+        ["15DayReportReview"] = "FifteenDaysEntry",
+        ["15daysEntry"] = "FifteenDaysEntry",
+        ["FinanceSummary"] = "FifteenDaysEntry",
+        ["FinanceSummaryOverall"] = "FifteenDaysEntry",
     };
 
     /// <summary>First path segment of an absolute or base-relative URI, without query/fragment.</summary>
