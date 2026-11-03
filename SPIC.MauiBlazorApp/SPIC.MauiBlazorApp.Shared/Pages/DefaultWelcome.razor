@@ -1,8 +1,8 @@
 @page "/DefaultWelcome"
+@inject NavigationManager Nav
 
 @*
-    Default landing page (LoginState.DefaultLandingPath). Just a welcome screen - no cards, menus,
-    statistics or other dashboard content.
+    Default landing page (LoginState.DefaultLandingPath).
 
     Deliberately independent of Pages/Welcome.razor, which remains the "no designation assigned"
     screen with its own markup, layout and wording. Nothing is shared between the two.
@@ -10,91 +10,614 @@
     No @layout is declared, so the router default (MainLayout) applies and the normal app shell
     provides navigation. Registered in PageGuard's _alwaysOpen set because it is the destination of
     LandingPage; without that it would be denied and redirected back to itself, looping forever.
+
+    Hero photo: no real agri/factory photograph exists anywhere in this project's assets, so
+    .dw-hero-image-inner currently shows a brand-colour gradient placeholder instead of a broken
+    image. Once a real photo is supplied, drop it at
+    wwwroot/Images/LayoutImages/welcome-hero.jpg and uncomment the background-image rule below
+    (search "REPLACE WITH REAL PHOTO").
 *@
-
-<div class="welcome-wrap">
-    <div class="welcome-card">
-      @*   <div class="welcome-icon">👋</div> *@
-
-        <h1 class="welcome-title">Welcome to SPIC ONE</h1>
-    </div>
-</div>
-
 <style>
-    .welcome-wrap {
-        /* Fills .main-content's own height (Layout.css gives it a definite flex
-           height = 100vh minus the topbar) rather than claiming a fresh 100vh on
-           top of it, which overflowed .main-content and forced its scrollbar. */
-        height: 100%;
+    .dw-wrap {
+        /* .main-content (Layout.css) is flex:1 and always fills the full app-shell
+                   height itself, with its own background-color - if this page is shorter
+                   than that, .main-content's background shows through as a visibly
+                   different-coloured band below the cards. min-height:100% makes this
+                   page's own gradient background extend the same full height instead, so
+                   there's no seam, while the gap/spacing BUGS inside the layout (hero-to-
+                   cards spacing) are fixed separately in the flex rules below - this is not
+                   a reintroduction of that earlier problem. */
+        box-sizing: border-box;
+        /* Include the 16px top + 28px bottom cancelled shell padding,
+                   so the gradient reaches the viewport bottom without adding scroll. */
+        min-height: calc(100% + 44px);
         /* .main-content (Layout.css) has its own padding: 16px 24px 28px - the
-           negative margins below cancel that out on all four sides so this
-           gradient bleeds to .main-content's actual edges instead of sitting
-           inset inside it. The matching height bump makes up the vertical
-           room the negative top/bottom margins open up (height:100% alone
-           doesn't grow to fill margin space, only width:auto does). */
+                   negative margins below cancel that out on all four sides so this
+                   page bleeds to .main-content's actual edges instead of sitting
+                   inset inside it. */
         margin: -16px -24px -28px -24px;
-        height: calc(100% + 16px + 28px);
+        padding: 12px 36px 40px;
+        font-family: 'Segoe UI', Arial, sans-serif;
+        background: linear-gradient(135deg, #ffffff 0%, #ffffff 55%, #e8f6ee 100%);
+    }
+
+    /* ---------- Hero ---------- */
+    .dw-hero {
+        display: flex;
+        align-items: center;
+        gap: 24px;
+        margin-right: -36px; /* Let the photo reach the right edge, like Figma. */
+        margin-bottom: 40px;
+    }
+
+    .dw-hero-text {
+        flex: 0 0 42%;
+        min-width: 0;
+    }
+
+    .dw-title {
+        margin: 0 0 16px;
+        font-size: clamp(2.15rem, 3.55vw, 2.65rem);
+        font-weight: 750;
+        line-height: 1.14;
+        color: #1f3b2d;
+        letter-spacing: 0.5px;
+    }
+
+    .dw-title-accent {
+        color: #0a6b3d;
+    }
+
+    .dw-tagline {
+        margin: 0 0 10px;
+        font-size: clamp(1.3rem, 2.15vw, 1.65rem);
+        font-weight: 600;
+        line-height: 1.34;
+        color: #1f2937;
+    }
+
+    .dw-sub {
+        margin: 0 0 16px;
+        max-width: 430px;
+        font-size: 0.94rem;
+        line-height: 1.45;
+        color: #6b7280;
+    }
+
+    .dw-cta {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        border: none;
+        background: #0a6b3d;
+        color: #fff;
+        font-weight: 600;
+        font-size: 1rem;
+        padding: 11px 30px;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: background 0.15s ease;
+    }
+
+        .dw-cta:hover {
+            background: #085a33;
+        }
+
+    .dw-hero-image {
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+
+    .dw-hero-image-inner {
+        width: 100%;
+        /* Slightly smaller than the previous version, without changing the
+                   image source or the original right-edge alignment. The broad curved
+                   left edge and thin pale-green outline follow the Figma reference. */
+        height: auto;
+        aspect-ratio: 1.83 / 1;
+        max-height: clamp(275px, calc(100dvh - 365px), 410px);
+        border-radius: 999px 0 0 999px;
+        /* Crisp, more visible 10px mint curve to match the Figma close-up.
+                   A solid stroke and padding-box clip prevent the photo colours
+                   from showing through the rounded border. */
+        border-left: 10px solid #c1dacb;
+        background: url('_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/welcome-hero.png') center / cover no-repeat;
+        background-clip: padding-box;
+        /* Keep depth subtle so the curved outline remains clean. */
+        box-shadow: 0 12px 28px rgba(10, 107, 61, 0.07);
+    }
+
+    /* ---------- Feature cards ---------- */
+    .dw-cards {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 16px;
+    }
+
+    .dw-card {
+        position: relative;
+        overflow: hidden;
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: 9px;
+        min-height: 186px; /* Taller, more square-like cards as in Figma. */
+        padding: 18px 18px 20px;
+        box-shadow: 0 1px 2px rgba(21, 56, 39, 0.04);
+    }
+
+    .dw-card-icon {
         display: flex;
         align-items: center;
         justify-content: center;
-        padding: 24px;
-        background: linear-gradient(135deg, #0a6b3d 0%, #1f3b2d 100%);
-        font-family: 'Segoe UI', Arial, sans-serif;
+        width: 44px;
+        height: 44px;
+        border-radius: 9px;
+        font-size: 1.4rem;
+        margin-bottom: 16px;
     }
 
-    .welcome-card {
-        width: 100%;
-        max-width: 460px;
-        background: rgba(255, 255, 255, 0.95);
-        border: 1px solid rgba(244, 216, 0, 0.35);
-        border-radius: 18px;
-        padding: 40px 32px;
-        text-align: center;
-        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
-        backdrop-filter: blur(8px);
+    /* Exact Figma symbol PNGs fit inside the existing coloured icon tiles.
+               They never stretch the cards or change the typography. */
+    .dw-card-icon-image {
+        display: block;
+        width: 29px;
+        height: 29px;
+        max-width: 100%;
+        max-height: 100%;
+        object-fit: contain;
+        flex-shrink: 0;
     }
 
-    .welcome-icon {
-        font-size: 3rem;
-        margin-bottom: 8px;
+    .dw-icon-green {
+        background: #dcfce7;
+        color: #16a34a;
     }
 
-    .welcome-title {
-        color: #1f3b2d;
-        font-size: 1.6rem;
-        font-weight: 700;
+    .dw-icon-blue {
+        background: #dbeafe;
+        color: #2563eb;
+    }
+
+    .dw-icon-orange {
+        background: #ffedd5;
+        color: #ea580c;
+    }
+
+    .dw-icon-purple {
+        background: #ede9fe;
+        color: #7c3aed;
+    }
+
+    /* Decorative watermark - a large, faint echo of each card's own icon sitting
+               behind the text, bottom-right. .dw-card already has position:relative and
+               overflow:hidden, so this just needs absolute positioning. */
+    .dw-card-watermark {
+        position: absolute;
+        right: -16px;
+        bottom: -20px;
+        font-size: 6.5rem;
+        line-height: 1;
+        opacity: 0.14;
+        pointer-events: none;
+        z-index: 0;
+    }
+
+    /* Download the faint decorative Figma motif separately for each card.
+               The card clips the motif at its lower-right edge as in the reference. */
+    .dw-card-watermark-image {
+        width: 119px;
+        height: 119px;
+        object-fit: contain;
+        user-select: none;
+    }
+
+    /* Blue/orange/purple must display their OWN SVG artwork and native colours.
+               Their source files already contain pastel/transparent fills, so adding
+               the shared watermark opacity (0.14) would fade them a second time.
+               Keep the green image and its appearance unchanged. */
+    .dw-card:nth-child(n+2) .dw-card-watermark-image {
+        width: 126px;
+        height: 126px;
+        opacity: 1;
+        filter: none;
+    }
+
+    .dw-watermark-green {
+        color: #16a34a;
+    }
+
+    .dw-watermark-blue {
+        color: #2563eb;
+    }
+
+    .dw-watermark-orange {
+        color: #ea580c;
+    }
+
+    .dw-watermark-purple {
+        color: #7c3aed;
+    }
+
+    .dw-card-icon,
+    .dw-card-title,
+    .dw-card-sub {
+        position: relative;
+        z-index: 1;
+    }
+
+    .dw-card-title {
+        margin: 0 0 7px;
+        font-size: 1.06rem;
+        line-height: 1.3;
+        font-weight: 600;
+        color: #111827;
+    }
+
+    .dw-card-sub {
         margin: 0;
+        max-width: 215px;
+        font-size: 0.91rem;
+        line-height: 1.43;
+        color: #6b7280;
+    }
+
+    /* Subtle Figma pastel surfaces; original icon and watermark colors remain. */
+    .dw-card:nth-child(1) {
+        background: #fcfefd;
+    }
+
+    .dw-card:nth-child(2) {
+        background: #f7faff;
+    }
+
+    .dw-card:nth-child(3) {
+        background: #fffcf8;
+    }
+
+    .dw-card:nth-child(4) {
+        background: #fcfaff;
     }
 
     /* tablet: .main-content's padding narrows to 16px 16px 24px (Layout.css) */
     @@media (min-width: 768px) and (max-width: 1199.98px) {
-        .welcome-wrap {
+        .dw-wrap {
             margin: -16px -16px -24px -16px;
-            height: calc(100% + 16px + 24px);
+            min-height: calc(100% + 40px);
+            padding: 16px 24px 26px;
+        }
+
+        .dw-hero {
+            margin-right: -24px;
+            gap: 20px;
+        }
+
+        .dw-title {
+            font-size: clamp(2.15rem, 3.55vw, 2.65rem);
+        }
+
+        .dw-tagline {
+            font-size: clamp(1.3rem, 2.15vw, 1.65rem);
+        }
+    }
+
+    /* below 992px: stack hero (image above text, matching the mobile reference) and
+               drop feature cards to a 2-column grid */
+    @@media (max-width: 991.98px) {
+        .dw-hero {
+            flex-direction: column;
+            align-items: stretch;
+            gap: 28px;
+            margin-right: 0; /* No desktop edge-bleed when stacked. */
+            margin-bottom: 32px;
+        }
+
+        .dw-hero-text {
+            /* flex-basis:520px is meant as a WIDTH for the desktop row layout - in this
+                       stacked column layout it would be read as a forced HEIGHT instead,
+                       leaving dead space below the button. Let it size to its own content. */
+            flex: 0 1 auto;
+            order: 2;
+        }
+
+        .dw-hero-image {
+            flex: 0 0 auto;
+            order: 1;
+        }
+
+        .dw-hero {
+            gap: 18px;
+        }
+
+        .dw-hero-image-inner {
+            height: auto; /* Restore natural image sizing for tablet/mobile. */
+            max-height: none;
+            aspect-ratio: 2.2 / 1;
+            border-radius: 150px 16px 16px 150px;
+        }
+
+        .dw-cards {
+            grid-template-columns: repeat(2, 1fr);
+        }
+    }
+
+    /* On desktop, distribute extra vertical room around the hero so
+               the four feature cards stay close to the viewport bottom. */
+    @@media (min-width: 992px) {
+        .dw-wrap {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .dw-hero {
+            flex: 1 0 auto;
+        }
+
+        .dw-cards {
+            flex-shrink: 0;
+        }
+    }
+
+    /* Short desktop browser windows: reduce vertical footprint without hiding overflow. */
+    @@media (min-width: 992px) and (max-height: 630px) {
+        .dw-wrap {
+            padding-top: 12px;
+            padding-bottom: 16px;
+        }
+
+        .dw-hero {
+            margin-bottom: 22px;
+        }
+
+        .dw-hero-image-inner {
+            max-height: clamp(210px, calc(100dvh - 335px), 290px);
+        }
+
+        .dw-card {
+            min-height: 145px;
+            padding: 12px 14px;
+        }
+
+        .dw-card-icon {
+            width: 38px;
+            height: 38px;
+            margin-bottom: 9px;
+        }
+
+        .dw-card-title {
+            font-size: 0.96rem;
+        }
+
+        .dw-card-sub {
+            font-size: 0.83rem;
         }
     }
 
     /* native: phone */
     @@media (max-width: 767.98px) {
-        .welcome-wrap {
+        .dw-wrap {
             min-height: 100dvh;
-            padding: calc(16px + var(--safe-top, 0px)) 16px calc(16px + var(--safe-bottom, 0px));
-            align-items: flex-start;
+            margin: calc(-16px - var(--safe-top, 0px)) -16px calc(-16px - var(--safe-bottom, 0px));
+            padding: calc(20px + var(--safe-top, 0px)) 16px calc(20px + var(--safe-bottom, 0px));
         }
 
-        .welcome-card {
-            max-width: none;
-            padding: 28px 20px;
-            border-radius: 16px;
-            margin-top: 8vh;
+        .dw-title {
+            font-size: 1.9rem;
         }
 
-        .welcome-icon {
-            font-size: 2.5rem;
+        .dw-tagline {
+            font-size: 1.2rem;
         }
 
-        .welcome-title {
-            font-size: 1.4rem;
+        .dw-sub {
+            font-size: 0.92rem;
+        }
+
+        .dw-cta {
+            width: 100%;
+            justify-content: center;
+            min-height: 48px;
+        }
+
+        .dw-hero {
+            gap: 14px;
+        }
+
+        .dw-hero-image-inner {
+            height: auto; /* Restore natural image sizing for tablet/mobile. */
+            max-height: none;
+            aspect-ratio: 2.2 / 1;
+            border-radius: 150px 16px 16px 150px;
+        }
+
+        .dw-cards {
+            gap: 14px;
+        }
+
+        .dw-card {
+            min-height: 0;
+            padding: 16px 14px;
+        }
+
+        .dw-card-watermark {
+            font-size: 4.2rem;
+            right: -10px;
+            bottom: -14px;
+        }
+
+        .dw-card-watermark-image {
+            width: 82px;
+            height: 82px;
+        }
+
+        .dw-card:nth-child(n+2) .dw-card-watermark-image {
+            width: 82px;
+            height: 82px;
         }
     }
 </style>
+
+<div class="dw-wrap">
+    <div class="dw-hero">
+        <div class="dw-hero-text">
+            <h1 class="dw-title">
+                WELCOME TO<br />
+                <span class="dw-title-accent">SPIC</span>
+            </h1>
+            <h2 class="dw-tagline">Nourishing People.<br />Nurturing the Future.</h2>
+            <p class="dw-sub">
+                Empowering farmers, communities and businesses through innovative and
+                sustainable Agri solutions.
+            </p>
+            <button type="button" class="dw-cta">
+                @* @onclick="GetStarted" *@
+                Get Started <i class="bi bi-chevron-double-right"></i>
+            </button>
+        </div>
+        <div class="dw-hero-image">
+            <div class="dw-hero-image-inner"></div>
+        </div>
+    </div>
+
+    @* Keep each card's original SVG artwork for its background watermark.
+       The foreground icon and the background reference are independent:
+       when you replace a top icon later, the background does not change. *@
+    <div class="dw-cards">
+        <div class="dw-card">
+            @if (_qualityWatermarkAvailable)
+            {
+                <img class="dw-card-watermark dw-card-watermark-image"
+                     src="_content/SPIC.MauiBlazorApp.Shared/Images/Defaultwelcomepage/greenbgicon.svg"
+                     alt="" aria-hidden="true" draggable="false"
+                     @onerror="() => _qualityWatermarkAvailable = false" />
+            }
+            else
+            {
+                <i class="bi bi-flower1 dw-card-watermark dw-watermark-green" aria-hidden="true"></i>
+            }
+            <div class="dw-card-icon dw-icon-green">
+                @if (_qualityIconAvailable)
+                {
+                    <img class="dw-card-icon-image"
+                         src="_content/SPIC.MauiBlazorApp.Shared/Images/Defaultwelcomepage/welcomegreentopimg.svg"
+                         alt="" aria-hidden="true" draggable="false"
+                         @onerror="() => _qualityIconAvailable = false" />
+                }
+                else
+                {
+                    <i class="bi bi-flower1" aria-hidden="true"></i>
+                }
+            </div>
+            <h3 class="dw-card-title">Quality Agri Products</h3>
+            <p class="dw-card-sub">For better yield and healthier Lives</p>
+        </div>
+        <div class="dw-card">
+            @* The large background watermark loads independently of the small top icon.
+               Changing the top icon later cannot hide this watermark. *@
+            @if (_communitiesWatermarkAvailable)
+            {
+                <img class="dw-card-watermark dw-card-watermark-image"
+                     src="_content/SPIC.MauiBlazorApp.Shared/Images/Defaultwelcomepage/bluebgicon.svg"
+                     alt="" aria-hidden="true" draggable="false"
+                     @onerror="() => _communitiesWatermarkAvailable = false" />
+            }
+            else
+            {
+                <i class="bi bi-people-fill dw-card-watermark dw-watermark-blue" aria-hidden="true"></i>
+            }
+            <div class="dw-card-icon dw-icon-blue">
+                @if (_communitiesIconAvailable)
+                {
+                    <img class="dw-card-icon-image"
+                         src="_content/SPIC.MauiBlazorApp.Shared/Images/Defaultwelcomepage/welcomebluetopimg.svg"
+                         alt="" aria-hidden="true" draggable="false"
+                         @onerror="() => _communitiesIconAvailable = false" />
+                }
+                else
+                {
+                    <i class="bi bi-people-fill" aria-hidden="true"></i>
+                }
+            </div>
+            <h3 class="dw-card-title">Stronger Communities</h3>
+            <p class="dw-card-sub">Supporting farmers and rural growth</p>
+        </div>
+        <div class="dw-card">
+            @* The large background watermark loads independently of the small top icon.
+               Changing the top icon later cannot hide this watermark. *@
+            @if (_innovationWatermarkAvailable)
+            {
+                <img class="dw-card-watermark dw-card-watermark-image"
+                     src="_content/SPIC.MauiBlazorApp.Shared/Images/Defaultwelcomepage/orangebgicon.svg"
+                     alt="" aria-hidden="true" draggable="false"
+                     @onerror="() => _innovationWatermarkAvailable = false" />
+            }
+            else
+            {
+                <i class="bi bi-lightbulb-fill dw-card-watermark dw-watermark-orange" aria-hidden="true"></i>
+            }
+            <div class="dw-card-icon dw-icon-orange">
+                @if (_innovationIconAvailable)
+                {
+                    <img class="dw-card-icon-image"
+                         src="_content/SPIC.MauiBlazorApp.Shared/Images/Defaultwelcomepage/welcomeorangetopimg.svg"
+                         alt="" aria-hidden="true" draggable="false"
+                         @onerror="() => _innovationIconAvailable = false" />
+                }
+                else
+                {
+                    <i class="bi bi-lightbulb-fill" aria-hidden="true"></i>
+                }
+            </div>
+            <h3 class="dw-card-title">Innovation for Growth</h3>
+            <p class="dw-card-sub">Driving sustainable agri solutions.</p>
+        </div>
+        <div class="dw-card">
+            @* The large background watermark loads independently of the small top icon.
+               Changing the top icon later cannot hide this watermark. *@
+            @if (_responsibleWatermarkAvailable)
+            {
+                <img class="dw-card-watermark dw-card-watermark-image"
+                     src="_content/SPIC.MauiBlazorApp.Shared/Images/Defaultwelcomepage/purplebgicon.svg"
+                     alt="" aria-hidden="true" draggable="false"
+                     @onerror="() => _responsibleWatermarkAvailable = false" />
+            }
+            else
+            {
+                <i class="bi bi-shield-check dw-card-watermark dw-watermark-purple" aria-hidden="true"></i>
+            }
+            <div class="dw-card-icon dw-icon-purple">
+                @if (_responsibleIconAvailable)
+                {
+                    <img class="dw-card-icon-image"
+                         src="_content/SPIC.MauiBlazorApp.Shared/Images/Defaultwelcomepage/welcomepurpletopimg.svg"
+                         alt="" aria-hidden="true" draggable="false"
+                         @onerror="() => _responsibleIconAvailable = false" />
+                }
+                else
+                {
+                    <i class="bi bi-shield-check" aria-hidden="true"></i>
+                }
+            </div>
+            <h3 class="dw-card-title">Responsible Business</h3>
+            <p class="dw-card-sub">For a greener and brighter tomorrow.</p>
+        </div>
+    </div>
+</div>
+
+
+
+@code {
+    // Foreground icons and background watermarks have INDEPENDENT load flags.
+    // Updating a small top icon later does not change its background watermark.
+    private bool _qualityIconAvailable = true;
+    private bool _communitiesIconAvailable = true;
+    private bool _innovationIconAvailable = true;
+    private bool _responsibleIconAvailable = true;
+    private bool _qualityWatermarkAvailable = true;
+    private bool _communitiesWatermarkAvailable = true;
+    private bool _innovationWatermarkAvailable = true;
+    private bool _responsibleWatermarkAvailable = true;
+
+    // No fixed "home" route exists for every role, so Get Started sends the user into the
+    // app shell's own dashboard entry point rather than a specific feature page.
+    private void GetStarted() => Nav.NavigateTo("/Dashboard");
+}
