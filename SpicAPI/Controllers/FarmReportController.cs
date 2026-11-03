@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Spic.Infrastructure.Data;
 using SPIC.Core.Entities;
 using System.Security.Claims;
+using ClosedXML.Excel;
 
 namespace SpicAPI.Controllers
 {
@@ -136,6 +137,84 @@ namespace SpicAPI.Controllers
             public decimal Expense { get; set; }
             public decimal NetProfit { get; set; }
             public DateTime? Date { get; set; }
+        }
+
+        public class InventoryMovementRowDto
+        {
+            public int ReportId { get; set; }
+            public string ReportingPeriod { get; set; } = "";
+            public DateTime PeriodStartDate { get; set; }
+            public DateTime PeriodEndDate { get; set; }
+            public string Status { get; set; } = "Draft";
+            public int Opening { get; set; }
+            public int Purchase { get; set; }
+            public int Hatched { get; set; }
+            public int Sold { get; set; }
+            public int Mortality { get; set; }
+            public int Others { get; set; }
+            public int Closing { get; set; }
+        }
+
+        public class InventorySummaryStatsDto
+        {
+            public int TotalPurchased { get; set; }
+            public int TotalHatched { get; set; }
+            public int TotalSold { get; set; }
+            public int TotalMortality { get; set; }
+            public int ClosingStock { get; set; }
+            public DateTime? ClosingStockAsOf { get; set; }
+            public string Uom { get; set; } = "";
+        }
+
+        public class InventorySummaryResponseDto
+        {
+            public string? SelectedProduct { get; set; }
+            public List<string> ReportingPeriods { get; set; } = new();
+            public List<string> AvailableFinancialYears { get; set; } = new() { "2026-27", "2025-26", "2024-25" };
+            public List<int> AvailableYears { get; set; } = new();
+            public InventorySummaryStatsDto Summary { get; set; } = new();
+            public List<InventoryMovementRowDto> Rows { get; set; } = new();
+        }
+
+        public class IncomeReportRowDto
+        {
+            public int ReportId { get; set; }
+            public string ReportingPeriod { get; set; } = "";
+            public DateTime PeriodStartDate { get; set; }
+            public DateTime PeriodEndDate { get; set; }
+            public decimal LivestockIncome { get; set; }
+            public decimal OrchardIncome { get; set; }
+            public decimal TotalIncome { get; set; }
+            public string Status { get; set; } = "Draft";
+        }
+
+        public class ProductIncomeDto
+        {
+            public string ProductName { get; set; } = "";
+            public decimal TotalAmount { get; set; }
+        }
+
+        public class IncomeSummaryResponseDto
+        {
+            public decimal TotalIncomeTillDate { get; set; }
+            public DateTime? EarliestPeriodStart { get; set; }
+            public int SalesRecordsCount { get; set; }
+            public int LivestockProductsCount { get; set; }
+            public int OrchardProductsCount { get; set; }
+            public string? LatestReportingPeriod { get; set; }
+            public DateTime? LatestPeriodEnd { get; set; }
+            /// <summary>Days left in the (hardcoded, see GetIncomeSummary) edit-grace-window after
+            /// LatestPeriodEnd - null once the window has closed, so the UI can show "no longer
+            /// editable" instead of a negative number.</summary>
+            public int? GraceDaysRemaining { get; set; }
+            public List<IncomeReportRowDto> Rows { get; set; } = new();
+            public List<ProductIncomeDto> TopLivestockProducts { get; set; } = new();
+            public decimal TotalLivestockIncome { get; set; }
+            public int OtherLivestockProductCount { get; set; }
+            public List<ProductIncomeDto> TopOrchardProducts { get; set; } = new();
+            public decimal TotalOrchardIncome { get; set; }
+            public int OtherOrchardProductCount { get; set; }
+            public List<int> AvailableYears { get; set; } = new();
         }
 
         // =====================================================================
@@ -500,6 +579,336 @@ namespace SpicAPI.Controllers
                 ChartPoints = chartPoints,
                 History = history
             });
+        }
+
+        // GET api/FarmReport/inventory-summary
+        // Real stock-movement history for one product across every 15-day report, filtered the same
+        // way the Inventory Summary page's own Filters panel does (year/month/reporting
+        // period/product - category only narrows which products api/FarmProduct/products returns for
+        // the tab list, so it isn't repeated here). Never hardcoded: the reporting-period dropdown
+        // options and the row data both come straight from FarmFifteenDayReports/InventoryItems.
+        [HttpGet("inventory-summary")]
+        public async Task<IActionResult> GetInventorySummary(
+            [FromQuery] string? financialYear,
+            [FromQuery] int? year,
+            [FromQuery] int? month,
+            [FromQuery] string? reportingPeriod,
+            [FromQuery] string? product)
+        {
+            var (rows, periodOptions) = await QueryInventoryRowsAsync(financialYear, year, month, reportingPeriod, product);
+
+            var uom = await _db.Set<FarmProduct>()
+                .Where(p => p.Name == product)
+                .Select(p => p.Uom)
+                .FirstOrDefaultAsync() ?? "";
+
+            var summary = new InventorySummaryStatsDto
+            {
+                TotalPurchased = rows.Sum(r => r.Purchase),
+                TotalHatched = rows.Sum(r => r.Hatched),
+                TotalSold = rows.Sum(r => r.Sold),
+                TotalMortality = rows.Sum(r => r.Mortality),
+                ClosingStock = rows.Count > 0 ? rows[^1].Closing : 0,
+                ClosingStockAsOf = rows.Count > 0 ? rows[^1].PeriodEndDate : null,
+                Uom = uom
+            };
+
+            var distinctYears = await _db.FarmFifteenDayReports
+                .Select(r => r.FinancialYear)
+                .Where(y => !string.IsNullOrEmpty(y))
+                .Distinct()
+                .ToListAsync();
+            var availableYears = new List<string> { "2026-27", "2025-26", "2024-25" };
+            foreach (var y in distinctYears)
+                if (!availableYears.Contains(y)) availableYears.Add(y);
+
+            // Calendar years actually present in the data (distinct from the "2026-27" financial-year
+            // strings above) - the Year filter picks a literal PeriodStartDate.Year.
+            var calendarYears = await _db.FarmFifteenDayReports
+                .Select(r => r.PeriodStartDate.Year)
+                .Distinct()
+                .OrderDescending()
+                .ToListAsync();
+
+            return Ok(new InventorySummaryResponseDto
+            {
+                SelectedProduct = product,
+                ReportingPeriods = periodOptions,
+                AvailableFinancialYears = availableYears,
+                AvailableYears = calendarYears,
+                Summary = summary,
+                Rows = rows
+            });
+        }
+
+        // Shared by GetInventorySummary and ExportInventorySummaryExcel so the on-screen table and
+        // the exported file can never disagree about which rows a given filter set matches.
+        private async Task<(List<InventoryMovementRowDto> Rows, List<string> PeriodOptions)> QueryInventoryRowsAsync(
+            string? financialYear, int? year, int? month, string? reportingPeriod, string? product)
+        {
+            var reportsQuery = _db.FarmFifteenDayReports.AsNoTracking().AsQueryable();
+            if (!string.IsNullOrWhiteSpace(financialYear))
+                reportsQuery = reportsQuery.Where(r => r.FinancialYear == financialYear);
+            if (year is > 0)
+                reportsQuery = reportsQuery.Where(r => r.PeriodStartDate.Year == year.Value);
+            if (month is > 0)
+                reportsQuery = reportsQuery.Where(r => r.PeriodStartDate.Month == month.Value);
+            if (!string.IsNullOrWhiteSpace(reportingPeriod) && !string.Equals(reportingPeriod, "All Periods", StringComparison.OrdinalIgnoreCase))
+                reportsQuery = reportsQuery.Where(r => r.ReportingPeriod == reportingPeriod);
+
+            var periodOptions = await reportsQuery
+                .OrderBy(r => r.PeriodStartDate)
+                .Select(r => r.ReportingPeriod)
+                .Distinct()
+                .ToListAsync();
+
+            var rows = new List<InventoryMovementRowDto>();
+            if (!string.IsNullOrWhiteSpace(product) && !string.Equals(product, "All Product", StringComparison.OrdinalIgnoreCase))
+            {
+                rows = await reportsQuery
+                    .OrderBy(r => r.PeriodStartDate)
+                    .SelectMany(r => r.InventoryItems
+                        .Where(i => i.ProductName == product)
+                        .Select(i => new InventoryMovementRowDto
+                        {
+                            ReportId = r.Id,
+                            ReportingPeriod = r.ReportingPeriod,
+                            PeriodStartDate = r.PeriodStartDate,
+                            PeriodEndDate = r.PeriodEndDate,
+                            Status = r.Status,
+                            Opening = i.Opening,
+                            Purchase = i.Purchase,
+                            Hatched = i.Hatched,
+                            Sold = i.Sold,
+                            Mortality = i.Mortality,
+                            Others = i.Others,
+                            Closing = i.Closing
+                        }))
+                    .ToListAsync();
+            }
+
+            return (rows, periodOptions);
+        }
+
+        // GET api/FarmReport/inventory-summary/export - same filters as inventory-summary, returned
+        // as a real .xlsx (ClosedXML, same library/pattern AckCycleController's own Excel export uses).
+        [HttpGet("inventory-summary/export")]
+        public async Task<IActionResult> ExportInventorySummaryExcel(
+            [FromQuery] string? financialYear,
+            [FromQuery] int? year,
+            [FromQuery] int? month,
+            [FromQuery] string? reportingPeriod,
+            [FromQuery] string? product)
+        {
+            var (rows, _) = await QueryInventoryRowsAsync(financialYear, year, month, reportingPeriod, product);
+
+            using var workbook = new XLWorkbook();
+            var sheetName = string.IsNullOrWhiteSpace(product) ? "Stock Movement" : product!.Length > 28 ? product[..28] : product;
+            var worksheet = workbook.Worksheets.Add(sheetName);
+
+            string[] headers = { "Period", "Opening Stock", "Purchase", "Hatched", "Sales", "Mortality", "Others", "Closing Stock" };
+            for (var c = 0; c < headers.Length; c++)
+                worksheet.Cell(1, c + 1).Value = headers[c];
+
+            var headerRange = worksheet.Range(1, 1, 1, headers.Length);
+            headerRange.Style.Font.Bold = true;
+            headerRange.Style.Fill.BackgroundColor = XLColor.FromHtml("#065f46");
+            headerRange.Style.Font.FontColor = XLColor.White;
+
+            var rowNum = 2;
+            foreach (var row in rows)
+            {
+                worksheet.Cell(rowNum, 1).Value = $"{row.PeriodStartDate:dd} - {row.PeriodEndDate:dd} {row.PeriodStartDate:MMM yyyy}";
+                worksheet.Cell(rowNum, 2).Value = row.Opening;
+                worksheet.Cell(rowNum, 3).Value = row.Purchase;
+                worksheet.Cell(rowNum, 4).Value = row.Hatched;
+                worksheet.Cell(rowNum, 5).Value = row.Sold;
+                worksheet.Cell(rowNum, 6).Value = row.Mortality;
+                worksheet.Cell(rowNum, 7).Value = row.Others;
+                worksheet.Cell(rowNum, 8).Value = row.Closing;
+                rowNum++;
+            }
+
+            worksheet.Columns().AdjustToContents();
+            worksheet.SheetView.FreezeRows(1);
+
+            var stream = new MemoryStream();
+            workbook.SaveAs(stream);
+            stream.Position = 0;
+
+            var fileProduct = string.IsNullOrWhiteSpace(product) ? "Inventory" : product!.Replace(" ", "");
+            return File(
+                stream,
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                $"InventorySummary_{fileProduct}_{DateTime.UtcNow:yyyyMMdd_HHmm}.xlsx");
+        }
+
+        // How many days after a period closes the JMDO/Farm Office may still amend its income entry -
+        // matches the Income Summary design's "Only 4 days Update after <date>" note. No real
+        // deadline/grace-period concept exists anywhere else in this module yet (see
+        // FarmFifteenDayReport - no Deadline/IsEditable field), so this is the one place that defines
+        // it; move it onto the entity/config if a real per-report deadline is ever needed.
+        private const int IncomeEditGraceDays = 4;
+
+        // GET api/FarmReport/income-summary
+        // Real income history across every 15-day report, filtered by calendar year and a
+        // from/to-month range (both inclusive) - matching the Income Summary page's own Filters
+        // panel. incomeCategory ("LiveStock"/"Orchard"/null=All) narrows every total and the table's
+        // own Livestock/Orchard columns to just that group, same convention as inventory-summary's
+        // category handling on the client side.
+        [HttpGet("income-summary")]
+        public async Task<IActionResult> GetIncomeSummary(
+            [FromQuery] int? year,
+            [FromQuery] int? fromMonth,
+            [FromQuery] int? toMonth,
+            [FromQuery] string? incomeCategory)
+        {
+            var reportsQuery = _db.FarmFifteenDayReports.AsNoTracking().AsQueryable();
+            if (year is > 0)
+                reportsQuery = reportsQuery.Where(r => r.PeriodStartDate.Year == year.Value);
+            if (fromMonth is >= 1 and <= 12)
+                reportsQuery = reportsQuery.Where(r => r.PeriodStartDate.Month >= fromMonth.Value);
+            if (toMonth is >= 1 and <= 12)
+                reportsQuery = reportsQuery.Where(r => r.PeriodStartDate.Month <= toMonth.Value);
+
+            var reports = await reportsQuery
+                .Include(r => r.IncomeItems)
+                .OrderByDescending(r => r.PeriodStartDate)
+                .ToListAsync();
+
+            var categoryFilter = string.IsNullOrWhiteSpace(incomeCategory) || string.Equals(incomeCategory, "All", StringComparison.OrdinalIgnoreCase)
+                ? null
+                : incomeCategory;
+
+            bool Included(string group) => categoryFilter is null || string.Equals(categoryFilter, group, StringComparison.OrdinalIgnoreCase);
+
+            var rows = reports.Select(r =>
+            {
+                var liveStockIncome = r.IncomeItems.Where(i => i.Group == "LiveStock").Sum(i => i.TotalAmount);
+                var orchardIncome = r.IncomeItems.Where(i => i.Group == "Orchard").Sum(i => i.TotalAmount);
+                return new IncomeReportRowDto
+                {
+                    ReportId = r.Id,
+                    ReportingPeriod = r.ReportingPeriod,
+                    PeriodStartDate = r.PeriodStartDate,
+                    PeriodEndDate = r.PeriodEndDate,
+                    LivestockIncome = Included("LiveStock") ? liveStockIncome : 0,
+                    OrchardIncome = Included("Orchard") ? orchardIncome : 0,
+                    TotalIncome = (Included("LiveStock") ? liveStockIncome : 0) + (Included("Orchard") ? orchardIncome : 0),
+                    Status = r.Status
+                };
+            }).ToList();
+
+            var allIncomeItems = reports.SelectMany(r => r.IncomeItems)
+                .Where(i => Included(i.Group))
+                .ToList();
+
+            var liveStockProducts = allIncomeItems.Where(i => i.Group == "LiveStock")
+                .GroupBy(i => i.ProductName)
+                .Select(g => new ProductIncomeDto { ProductName = g.Key, TotalAmount = g.Sum(i => i.TotalAmount) })
+                .OrderByDescending(p => p.TotalAmount)
+                .ToList();
+            var orchardProducts = allIncomeItems.Where(i => i.Group == "Orchard")
+                .GroupBy(i => i.ProductName)
+                .Select(g => new ProductIncomeDto { ProductName = g.Key, TotalAmount = g.Sum(i => i.TotalAmount) })
+                .OrderByDescending(p => p.TotalAmount)
+                .ToList();
+
+            var latest = reports.OrderByDescending(r => r.PeriodStartDate).FirstOrDefault();
+            int? graceDaysRemaining = null;
+            if (latest is not null)
+            {
+                var deadline = latest.PeriodEndDate.AddDays(IncomeEditGraceDays);
+                var remaining = (deadline.Date - DateTime.Today).Days;
+                if (remaining >= 0) graceDaysRemaining = remaining;
+            }
+
+            var calendarYears = await _db.FarmFifteenDayReports
+                .Select(r => r.PeriodStartDate.Year)
+                .Distinct()
+                .OrderDescending()
+                .ToListAsync();
+
+            return Ok(new IncomeSummaryResponseDto
+            {
+                TotalIncomeTillDate = rows.Sum(r => r.TotalIncome),
+                EarliestPeriodStart = reports.Count > 0 ? reports.Min(r => r.PeriodStartDate) : null,
+                SalesRecordsCount = allIncomeItems.Count,
+                LivestockProductsCount = liveStockProducts.Count,
+                OrchardProductsCount = orchardProducts.Count,
+                LatestReportingPeriod = latest?.ReportingPeriod,
+                LatestPeriodEnd = latest?.PeriodEndDate,
+                GraceDaysRemaining = graceDaysRemaining,
+                Rows = rows,
+                TopLivestockProducts = liveStockProducts.Take(5).ToList(),
+                TotalLivestockIncome = liveStockProducts.Sum(p => p.TotalAmount),
+                OtherLivestockProductCount = Math.Max(0, liveStockProducts.Count - 5),
+                TopOrchardProducts = orchardProducts.Take(5).ToList(),
+                TotalOrchardIncome = orchardProducts.Sum(p => p.TotalAmount),
+                OtherOrchardProductCount = Math.Max(0, orchardProducts.Count - 5),
+                AvailableYears = calendarYears
+            });
+        }
+
+        // GET api/FarmReport/income-summary/export - same filters as income-summary, as a real .xlsx.
+        [HttpGet("income-summary/export")]
+        public async Task<IActionResult> ExportIncomeSummaryExcel(
+            [FromQuery] int? year,
+            [FromQuery] int? fromMonth,
+            [FromQuery] int? toMonth,
+            [FromQuery] string? incomeCategory)
+        {
+            var reportsQuery = _db.FarmFifteenDayReports.AsNoTracking().AsQueryable();
+            if (year is > 0)
+                reportsQuery = reportsQuery.Where(r => r.PeriodStartDate.Year == year.Value);
+            if (fromMonth is >= 1 and <= 12)
+                reportsQuery = reportsQuery.Where(r => r.PeriodStartDate.Month >= fromMonth.Value);
+            if (toMonth is >= 1 and <= 12)
+                reportsQuery = reportsQuery.Where(r => r.PeriodStartDate.Month <= toMonth.Value);
+
+            var reports = await reportsQuery
+                .Include(r => r.IncomeItems)
+                .OrderByDescending(r => r.PeriodStartDate)
+                .ToListAsync();
+
+            using var workbook = new XLWorkbook();
+            var worksheet = workbook.Worksheets.Add("Income Summary");
+
+            string[] headers = { "S.No", "Reporting Period", "Livestock Income", "Orchard Income", "Total Income", "Status" };
+            for (var c = 0; c < headers.Length; c++)
+                worksheet.Cell(1, c + 1).Value = headers[c];
+
+            var headerRange = worksheet.Range(1, 1, 1, headers.Length);
+            headerRange.Style.Font.Bold = true;
+            headerRange.Style.Fill.BackgroundColor = XLColor.FromHtml("#065f46");
+            headerRange.Style.Font.FontColor = XLColor.White;
+
+            var rowNum = 2;
+            var sNo = 1;
+            foreach (var r in reports)
+            {
+                var liveStockIncome = r.IncomeItems.Where(i => i.Group == "LiveStock").Sum(i => i.TotalAmount);
+                var orchardIncome = r.IncomeItems.Where(i => i.Group == "Orchard").Sum(i => i.TotalAmount);
+                worksheet.Cell(rowNum, 1).Value = sNo++;
+                worksheet.Cell(rowNum, 2).Value = r.ReportingPeriod;
+                worksheet.Cell(rowNum, 3).Value = liveStockIncome;
+                worksheet.Cell(rowNum, 4).Value = orchardIncome;
+                worksheet.Cell(rowNum, 5).Value = liveStockIncome + orchardIncome;
+                worksheet.Cell(rowNum, 6).Value = r.Status;
+                rowNum++;
+            }
+
+            worksheet.Columns().AdjustToContents();
+            worksheet.SheetView.FreezeRows(1);
+
+            var stream = new MemoryStream();
+            workbook.SaveAs(stream);
+            stream.Position = 0;
+
+            return File(
+                stream,
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                $"IncomeSummary_{DateTime.UtcNow:yyyyMMdd_HHmm}.xlsx");
         }
 
         private static string FormatPeriodLabel(string period, DateTime? start, DateTime? end)

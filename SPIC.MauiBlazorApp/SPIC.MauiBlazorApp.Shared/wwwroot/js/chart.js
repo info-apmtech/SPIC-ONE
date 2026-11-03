@@ -734,3 +734,118 @@ window.destroySalesTrackingCharts = function () {
     if (window.trkGaugeChartInstance) { window.trkGaugeChartInstance.destroy(); window.trkGaugeChartInstance = null; }
     if (window.trkTrendChartInstance) { window.trkTrendChartInstance.destroy(); window.trkTrendChartInstance = null; }
 };
+
+// ── Income Summary: Top-5-by-income donut (Livestock) + horizontal bar (Orchard) ──
+// data shape: { livestock: { labels, values, colors, productCount }, orchard: { labels, values, colors } }
+// Real numbers passed in from IncomeSummary.razor - no hardcoded demo data, unlike most of this file.
+window.loadIncomeSummaryCharts = function (data) {
+    if (typeof Chart === 'undefined' || !data) return;
+    window.destroyIncomeSummaryCharts();
+
+    const rupee = v => '₹' + Number(v).toLocaleString('en-IN');
+    const tooltipStyle = {
+        backgroundColor: '#ffffff',
+        titleColor: '#1e293b',
+        titleFont: { size: 13, weight: 'bold' },
+        bodyColor: '#475569',
+        borderColor: '#e2e8f0',
+        borderWidth: 1,
+        padding: 10
+    };
+
+    // ── Live Income Overview: donut, center text = total product count ──
+    const donutCanvas = document.getElementById('incLiveDonutChart');
+    if (donutCanvas && data.livestock) {
+        const centerText = {
+            id: 'incDonutCenterText',
+            afterDraw(chart) {
+                const { ctx, chartArea: { left, right, top, bottom } } = chart;
+                const cx = (left + right) / 2;
+                const cy = (top + bottom) / 2;
+                ctx.save();
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillStyle = '#64748b';
+                ctx.font = "600 12px 'Inter', sans-serif";
+                ctx.fillText('Total', cx, cy - 22);
+                ctx.fillStyle = '#0f172a';
+                ctx.font = "700 24px 'Inter', sans-serif";
+                ctx.fillText(String(data.livestock.productCount || 0), cx, cy + 2);
+                ctx.fillStyle = '#64748b';
+                ctx.font = "600 12px 'Inter', sans-serif";
+                ctx.fillText('Products', cx, cy + 24);
+                ctx.restore();
+            }
+        };
+
+        window.incLiveDonutChartInstance = new Chart(donutCanvas.getContext('2d'), {
+            type: 'doughnut',
+            data: {
+                labels: data.livestock.labels,
+                datasets: [{
+                    data: data.livestock.values,
+                    backgroundColor: data.livestock.colors,
+                    borderWidth: 2,
+                    borderColor: '#ffffff'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: '68%',
+                plugins: {
+                    legend: { display: false },
+                    tooltip: Object.assign({}, tooltipStyle, {
+                        callbacks: { label: ctx => ` ${ctx.label}: ${rupee(ctx.raw)}` }
+                    })
+                }
+            },
+            plugins: [centerText]
+        });
+    }
+
+    // ── Orchard Income Overview: horizontal bar ──
+    const barCanvas = document.getElementById('incOrchardBarChart');
+    if (barCanvas && data.orchard) {
+        window.incOrchardBarChartInstance = new Chart(barCanvas.getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: data.orchard.labels,
+                datasets: [{
+                    data: data.orchard.values,
+                    backgroundColor: data.orchard.colors,
+                    borderRadius: 4,
+                    barThickness: 16
+                }]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: Object.assign({}, tooltipStyle, {
+                        callbacks: { label: ctx => ` ${rupee(ctx.raw)}` }
+                    })
+                },
+                scales: {
+                    x: {
+                        border: { display: false },
+                        grid: { color: '#f1f5f9' },
+                        ticks: { color: '#64748b', font: { size: 10 }, callback: v => rupee(v) }
+                    },
+                    y: {
+                        border: { display: false },
+                        grid: { display: false },
+                        ticks: { display: false } // labels are rendered in the HTML legend list next to the bars
+                    }
+                }
+            }
+        });
+    }
+};
+
+window.destroyIncomeSummaryCharts = function () {
+    if (window.incLiveDonutChartInstance) { window.incLiveDonutChartInstance.destroy(); window.incLiveDonutChartInstance = null; }
+    if (window.incOrchardBarChartInstance) { window.incOrchardBarChartInstance.destroy(); window.incOrchardBarChartInstance = null; }
+};
