@@ -6,9 +6,30 @@
 @using Microsoft.AspNetCore.Components
 
 <div class="container-fluid py-4 px-0 demo-details-page">
-    <div class="mb-3">
-        <h3>Demo Details</h3>
-        <p class="text-muted">Review demo summary and start the first treatment during field visit</p>
+    <div class="demo-page-heading mb-3" id="demo-page-top">
+        <div>
+            <h3>Demo Details</h3>
+            <p class="text-muted">Review demo summary and start the first treatment during field visit</p>
+        </div>
+        @if (!isLoading && string.IsNullOrWhiteSpace(error) && doc != null &&
+             string.IsNullOrWhiteSpace(journeyError) && treatments.Count > 0 && !IsDocumentationCompleted)
+        {
+            <div class="demo-heading-actions">
+                <a class="demo-outline-action" href="/DemoDocumentation">
+                    <i class="bi bi-arrow-left" aria-hidden="true"></i>
+                    Back to Demo Details
+                </a>
+                <a class="demo-outline-action" href="/DemoDocumentation">
+                    <i class="bi bi-clock-history" aria-hidden="true"></i> Treatment History
+                </a>
+                @if (CanStartNextTreatment)
+                {
+                    <button type="button" class="demo-primary-action" @onclick="StartNextTreatment">
+                        Start Next Treatment <i class="bi bi-arrow-right" aria-hidden="true"></i>
+                    </button>
+                }
+            </div>
+        }
     </div>
 
     @if (isLoading)
@@ -22,7 +43,7 @@
     }
     else if (program != null)
     {
-        <div class="demo-card demo-summary-card">
+        <div id="demo-summary" class="demo-card demo-summary-card">
             <div class="demo-title-row">
                 <span class="summary-heading">Farmer / Field Owner</span>
                 <span class="tag green"><i class="bi bi-circle-fill" aria-hidden="true"></i> @Display(program.ProgramType)</span>
@@ -71,15 +92,20 @@
             </div>
         </div>
 
-        <div class="demo-card treatment-card">
-            <h6>Treatment Journey</h6>
+        <div id="treatment-journey" class="demo-card treatment-card">
+            <div class="treatment-journey-header">
+                <h6>Treatment Journey</h6>
+                <span class="treatments-done-badge">Treatments Done <strong>@treatments.Count(t => t.Status == "Completed").ToString("00")</strong></span>
+            </div>
             @if (doc == null)
             {
-                <div class="empty-state">
-                    <p>Treatment history is unavailable until the documentation details endpoint returns a record.</p>
-                </div>
+                <div class="empty-state"><p>Treatment history is unavailable until documentation details have been saved.</p></div>
             }
-            else if (doc.TreatmentCount == 0)
+            else if (!string.IsNullOrWhiteSpace(journeyError))
+            {
+                <div class="alert alert-warning">@journeyError</div>
+            }
+            else if (treatments.Count == 0)
             {
                 <div class="empty-state">
                     <div class="empty-icon"><i class="bi bi-flower1"></i></div>
@@ -90,10 +116,28 @@
             }
             else
             {
-                <div class="empty-state">
-                    <h5>@doc.TreatmentCount treatment(s) recorded</h5>
-                    <p>Continue to the treatment journey to review or add field visits.</p>
-                    <button type="button" class="btn-start" @onclick="StartFirstTreatment">View Treatments</button>
+                <div class="treatment-journey-list">
+                    @foreach (var item in treatments.OrderBy(t => t.TreatmentNumber))
+                    {
+                        <div class="journey-row" @key="item.Id">
+                            <div class="journey-number">@item.TreatmentNumber.ToString("00")</div>
+                            <div class="journey-body">
+                                <div class="journey-title-row">
+                                    <div class="journey-title-wrap">
+                                        <strong>Treatment @item.TreatmentNumber.ToString("00")</strong>
+                                        <span class="journey-status @(item.Status == "Completed" ? "completed" : "draft")">@item.Status</span>
+                                    </div>
+                                    <button type="button" class="journey-view-btn" @onclick="() => OpenTreatment(item.TreatmentNumber)">View Details</button>
+                                </div>
+                                <div class="journey-info-grid">
+                                    <div class="journey-info-item"><label>Visit Date</label><div>@DateText(item.VisitDate)</div></div>
+                                    <div class="journey-info-item"><label>Plant Stage</label><div>@Display(item.CropStageName)</div></div>
+                                    <div class="journey-info-item"><label>Dosage</label><div>@Display(item.Dosage)</div></div>
+                                    <div class="journey-info-item"><label>Remarks</label><div>@Display(item.TreatmentRemarks)</div></div>
+                                </div>
+                            </div>
+                        </div>
+                    }
                 </div>
             }
         </div>
@@ -101,6 +145,69 @@
 </div>
 
 <style>
+    /* All navigation actions are inside DemoDetails; no separate component. */
+    .demo-details-page .demo-page-heading {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 12px;
+    }
+
+        .demo-details-page .demo-page-heading h3 {
+            margin-bottom: 3px;
+        }
+
+        .demo-details-page .demo-page-heading p {
+            margin-bottom: 0;
+        }
+
+    .demo-details-page .demo-heading-actions {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 7px;
+    }
+
+    .demo-details-page .demo-outline-action,
+    .demo-details-page .demo-primary-action {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 5px;
+        padding: 6px 9px;
+        border-radius: 4px;
+        font-size: 11px;
+        font-weight: 600;
+        text-decoration: none;
+        cursor: pointer;
+        white-space: nowrap;
+    }
+
+    .demo-details-page .demo-outline-action {
+        background: #fff;
+        border: 1px solid #b7d9ca;
+        color: #18764a;
+    }
+
+    .demo-details-page .demo-primary-action {
+        background: #087a46;
+        border: 1px solid #087a46;
+        color: #fff;
+    }
+
+        .demo-details-page .demo-outline-action:focus-visible,
+        .demo-details-page .demo-primary-action:focus-visible {
+            outline: 2px solid #1c9562;
+            outline-offset: 2px;
+        }
+
+    .demo-details-page #demo-summary,
+    .demo-details-page #treatment-journey {
+        scroll-margin-top: 80px;
+    }
+
+
     .demo-details-page .demo-card {
         background: #fff;
         border: 1px solid #e6eaee;
@@ -445,6 +552,192 @@
             grid-template-columns: repeat(2,minmax(0,1fr));
         }
     }
+
+    /* Compact Treatment Journey layout matching the supplied reference. */
+    .demo-details-page .treatment-card {
+        padding: 16px 18px 24px;
+    }
+
+    .demo-details-page .treatment-journey-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding-bottom: 12px;
+        margin-bottom: 12px;
+        border-bottom: 1px solid #edf0ee;
+    }
+
+        .demo-details-page .treatment-journey-header h6 {
+            margin: 0;
+            font-size: 15px;
+            font-weight: 700;
+        }
+
+    .demo-details-page .treatments-done-badge {
+        border: 1px solid #e3e9e5;
+        color: #68756e;
+        background: white;
+        border-radius: 4px;
+        padding: 6px 9px;
+        font-size: 10px;
+        white-space: nowrap;
+    }
+
+        .demo-details-page .treatments-done-badge strong {
+            font-size: 12px;
+            color: #172f26;
+            margin-left: 4px;
+        }
+
+    .demo-details-page .treatment-journey-list {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    /* Only show the next-treatment action after the current treatment is completed. */
+    .demo-details-page .journey-next-action {
+        display: flex;
+        justify-content: flex-end;
+        padding-top: 12px;
+    }
+
+        .demo-details-page .journey-next-action .btn-start {
+            margin-top: 0;
+        }
+
+    .demo-details-page .journey-row {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        border: 1px solid #ebf0ed;
+        background: #fbfcfb;
+        border-radius: 7px;
+        padding: 12px;
+    }
+
+    .demo-details-page .journey-number {
+        display: grid;
+        place-items: center;
+        flex: 0 0 34px;
+        width: 34px;
+        height: 34px;
+        border-radius: 50%;
+        background: #089a5c;
+        color: white;
+        font-size: 12px;
+        font-weight: 700;
+    }
+
+    .demo-details-page .journey-body {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .demo-details-page .journey-title-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        margin-bottom: 11px;
+    }
+
+    .demo-details-page .journey-title-wrap {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 7px;
+    }
+
+        .demo-details-page .journey-title-wrap strong {
+            font-size: 12px;
+            color: #283c35;
+        }
+
+    .demo-details-page .journey-status {
+        font-size: 9px;
+        font-weight: 600;
+        padding: 2px 7px;
+        border-radius: 20px;
+    }
+
+        .demo-details-page .journey-status.completed {
+            background: #e2f7e9;
+            color: #178149;
+        }
+
+        .demo-details-page .journey-status.draft {
+            background: #fff1d9;
+            color: #9d6c12;
+        }
+
+    .demo-details-page .journey-view-btn {
+        font-size: 10px;
+        padding: 4px 10px;
+        color: #168350;
+        background: white;
+        border: 1px solid #a9d5bc;
+        border-radius: 4px;
+        cursor: pointer;
+        white-space: nowrap;
+    }
+
+    .demo-details-page .journey-info-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr 2fr;
+    }
+
+    .demo-details-page .journey-info-item {
+        min-width: 0;
+        padding: 0 12px;
+        border-right: 1px solid #e3e9e6;
+    }
+
+        .demo-details-page .journey-info-item:first-child {
+            padding-left: 0;
+        }
+
+        .demo-details-page .journey-info-item:last-child {
+            border-right: 0;
+            padding-right: 0;
+        }
+
+        .demo-details-page .journey-info-item label {
+            display: block;
+            margin-bottom: 5px;
+            color: #88948e;
+            font-size: 10px;
+        }
+
+        .demo-details-page .journey-info-item div {
+            color: #314137;
+            font-size: 11px;
+            font-weight: 600;
+            overflow-wrap: anywhere;
+        }
+
+    @@media(max-width:700px) {
+        .demo-details-page .journey-info-grid {
+            grid-template-columns: repeat(2,minmax(0,1fr));
+            gap: 13px;
+        }
+
+        .demo-details-page .journey-info-item {
+            border-right: 0;
+            padding: 0;
+        }
+    }
+
+    @@media(max-width:450px) {
+        .demo-details-page .journey-info-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .demo-details-page .journey-title-row {
+            align-items: flex-start;
+        }
+    }
 </style>
 
 @code {
@@ -472,6 +765,7 @@
     // The API must scope this record to the authenticated user and return null/404 if absent.
     private sealed class DocumentationDetails
     {
+        public string? Status { get; set; }
         public string? FarmerName { get; set; }
         public string? MobileNumber { get; set; }
         public string? Village { get; set; }
@@ -488,6 +782,59 @@
         public int TreatmentCount { get; set; }
     }
 
+
+    private sealed class JourneyTreatment
+    {
+        public int Id { get; set; }
+        public int TreatmentNumber { get; set; }
+        public string Status { get; set; } = "Draft";
+        public DateTime? VisitDate { get; set; }
+        public DateTime? TreatmentDate { get; set; }
+        public string? FieldOfficerName { get; set; }
+        public string? CropStageName { get; set; }
+        public string? ProductName { get; set; }
+        public string? PlantCondition { get; set; }
+        public string? Dosage { get; set; }
+        public string? ApplicationMethod { get; set; }
+        public string? ApplicationStage { get; set; }
+        public string? TreatmentRemarks { get; set; }
+        public string? PhysicalParameters { get; set; }
+        public string? YieldParameters { get; set; }
+        public string? ObservationNotes { get; set; }
+        public bool HasProblem { get; set; }
+        public string? ProblemCategory { get; set; }
+        public string? ProblemDescription { get; set; }
+        public string? Severity { get; set; }
+        public string? Recommendation { get; set; }
+        public string? ActionTaken { get; set; }
+        public int ControlPhotoCount { get; set; }
+        public int TreatedPhotoCount { get; set; }
+        public List<string> QuickObservations { get; set; } = new();
+    }
+
+    private readonly List<JourneyTreatment> treatments = new();
+    private string journeyError = "";
+    private JourneyTreatment? LatestTreatment =>
+        treatments.OrderByDescending(t => t.TreatmentNumber).FirstOrDefault();
+
+    private bool IsDocumentationCompleted =>
+        string.Equals(doc?.Status, "Completed", StringComparison.OrdinalIgnoreCase);
+
+    private bool CanStartNextTreatment =>
+        doc != null && !IsDocumentationCompleted && string.IsNullOrWhiteSpace(journeyError) &&
+        LatestTreatment != null &&
+        string.Equals(LatestTreatment.Status, "Completed", StringComparison.OrdinalIgnoreCase);
+
+    private void OpenTreatment(int number) =>
+        NavigationManager.NavigateTo($"/TreatmentDetails?csr2Id={CSR2Id}&treatmentNumber={number}");
+
+    private void StartNextTreatment()
+    {
+        if (!CanStartNextTreatment || CSR2Id is null or <= 0) return;
+        var nextNumber = LatestTreatment!.TreatmentNumber + 1;
+        OpenTreatment(nextNumber);
+    }
+
     private DemoProgram? program;
     private DocumentationDetails? doc;
     private bool isLoading;
@@ -502,6 +849,8 @@
     {
         program = null;
         doc = null;
+        treatments.Clear();
+        journeyError = "";
         error = "";
         if (CSR2Id is null or <= 0) { error = "Missing or invalid csr2Id in the URL."; return; }
         isLoading = true;
@@ -527,6 +876,14 @@
             if (detailsResponse.IsSuccessStatusCode)
             {
                 doc = await detailsResponse.Content.ReadFromJsonAsync<DocumentationDetails>();
+                if (doc != null)
+                {
+                    using var journeyResponse = await Http.GetAsync($"api/DemoDocumentation/treatment/journey?csr2Id={CSR2Id.Value}");
+                    if (journeyResponse.IsSuccessStatusCode)
+                        treatments.AddRange(await journeyResponse.Content.ReadFromJsonAsync<List<JourneyTreatment>>() ?? new());
+                    else
+                        journeyError = $"Unable to load Treatment Journey (HTTP {(int)journeyResponse.StatusCode}).";
+                }
             }
             else if (detailsResponse.StatusCode != HttpStatusCode.NotFound)
             {
@@ -539,8 +896,8 @@
 
     private void StartFirstTreatment()
     {
-        if (program == null) return;
+        if (program == null || IsDocumentationCompleted) return;
         // Update this route to the actual treatment page route when available.
-        NavigationManager.NavigateTo($"/TreatmentDetails?csr2Id={program.Id}");
+        OpenTreatment(1);
     }
 }

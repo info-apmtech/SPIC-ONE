@@ -7,7 +7,8 @@ namespace SPIC.Core.Entities
     public enum DemoDocumentationStatus
     {
         Draft = 0,
-        Started = 1
+        Started = 1,
+        Completed = 2
     }
 
     public class DemoDocumentation

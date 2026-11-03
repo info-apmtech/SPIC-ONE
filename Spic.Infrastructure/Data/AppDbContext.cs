@@ -829,6 +829,13 @@ namespace Spic.Infrastructure.Data
                       .OnDelete(DeleteBehavior.Restrict);
                 entity.HasIndex(x => new { x.CropId, x.Name });
             });
+
+            builder.Entity<DemoTreatment>().HasIndex(x => new { x.DemoDocumentationId, x.TreatmentNumber }).IsUnique();
+            builder.Entity<DemoTreatment>().HasOne(x => x.DemoDocumentation).WithMany().HasForeignKey(x => x.DemoDocumentationId).OnDelete(DeleteBehavior.Restrict);
+            builder.Entity<DemoTreatment>().HasOne(x => x.CropStage).WithMany().HasForeignKey(x => x.CropStageId).OnDelete(DeleteBehavior.Restrict);
+            builder.Entity<DemoTreatment>().HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
+            builder.Entity<DemoTreatmentObservation>().HasOne(x => x.DemoTreatment).WithMany(x => x.Observations).HasForeignKey(x => x.DemoTreatmentId).OnDelete(DeleteBehavior.Cascade);
+            builder.Entity<DemoTreatmentPhoto>().HasOne(x => x.DemoTreatment).WithMany(x => x.Photos).HasForeignKey(x => x.DemoTreatmentId).OnDelete(DeleteBehavior.Cascade);
         }
 
         // User related
@@ -1069,5 +1076,11 @@ namespace Spic.Infrastructure.Data
         public DbSet<CropType> CropTypes => Set<CropType>();
         public DbSet<DemoDocumentation> DemoDocumentations => Set<DemoDocumentation>();
         public DbSet<CropStage> CropStages => Set<CropStage>();
+        public DbSet<DemoTreatment> DemoTreatments => Set<DemoTreatment>();
+        public DbSet<DemoTreatmentObservation> DemoTreatmentObservations => Set<DemoTreatmentObservation>();
+        public DbSet<DemoTreatmentPhoto> DemoTreatmentPhotos => Set<DemoTreatmentPhoto>();
+        public DbSet<SalesAuditRecord> SalesAuditRecords => Set<SalesAuditRecord>();
+        public DbSet<SalesAuditPlanLine> SalesAuditPlanLines => Set<SalesAuditPlanLine>();
+        public DbSet<SalesAuditAchievementLine> SalesAuditAchievementLines => Set<SalesAuditAchievementLine>();
     }
 }

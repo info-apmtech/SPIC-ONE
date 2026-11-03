@@ -1,0 +1,179 @@
+﻿@page "/SalesAuditDetails"
+@using System.Net.Http.Json
+@using Microsoft.AspNetCore.Components
+@inject HttpClient Http
+@inject NavigationManager Nav
+
+<PageTitle>Sales Audit Details · SPIC ONE</PageTitle>
+<div class="container-fluid py-4 px-3" style="max-width:1400px">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div><h3>Sales Audit — Plan & Achievement</h3><small class="text-muted">CSR-2 program-linked sales audit</small></div>
+        <button class="btn btn-outline-success" @onclick="BackToAudit">Back to Sales Audit</button>
+    </div>
+    @if (!string.IsNullOrWhiteSpace(error))
+    {
+        <div class="alert alert-danger">@error</div>
+    }
+    @if (!string.IsNullOrWhiteSpace(success))
+    {
+        <div class="alert alert-success">@success</div>
+    }
+    @if (isLoading)
+    {
+        <p>Loading CSR-2 Sales Audit...</p>
+    }
+    else if (data != null)
+    {
+        <div class="card mb-3">
+            <div class="card-body">
+                <h5>CSR-2 Auto-Filled Program Information</h5>
+                <div class="row g-3">
+                    <div class="col-md-3"><small>Sanction No.</small><div><b>@data.SanctionNo</b></div></div>
+                    <div class="col-md-3"><small>Program Name</small><div><b>@data.ProgramName</b></div></div>
+                    <div class="col-md-3"><small>Location</small><div><b>@data.Location</b></div></div>
+                    <div class="col-md-3"><small>CSR-2 Event Date</small><div><b>@data.ActualEventDate?.ToString("dd MMM yyyy")</b></div></div>
+                </div>
+            </div>
+        </div>
+        <div class="card mb-3">
+            <div class="card-body">
+                <h5>Scheme Period & Budget</h5>
+                <div class="row g-3">
+                    <div class="col-md-3"><label>Scheme From</label><input class="form-control" type="date" @bind="data.SchemeFrom" disabled="@data.IsFinalSubmitted" /></div>
+                    <div class="col-md-3"><label>Scheme To</label><input class="form-control" type="date" @bind="data.SchemeTo" disabled="@data.IsFinalSubmitted" /></div>
+                    <div class="col-md-3"><label>CSR-1 Budget (₹)</label><input class="form-control" value="@(data.Csr1BudgetRs.ToString("N2"))" disabled /></div>
+                    <div class="col-md-3"><label>Additional Approved Budget (₹)</label><input class="form-control" type="number" min="0" step="0.01" @bind="data.AdditionalApprovedBudgetRs" disabled="@data.IsFinalSubmitted" /></div>
+                </div>
+                <div class="row g-3 mt-1">
+                    <div class="col-md-4"><label>Total Approved Budget</label><h5>₹ @TotalBudget.ToString("N2")</h5></div>
+                    <div class="col-md-4"><label>Required Turnover (1.5×)</label><h5>₹ @RequiredTurnover.ToString("N2")</h5></div>
+                    <div class="col-md-4"><label>Audit Status</label><h5>@data.DocumentStatus</h5></div>
+                </div>
+                <small class="text-muted">Additional budget must be entered only after verifying its separate approval. Formula follows the sheet; example numbers need reconciliation.</small>
+            </div>
+        </div>
+        <div class="card mb-3">
+            <div class="card-body">
+                <div class="d-flex justify-content-between"><h5>P — Sales Plan / Committee (Product-wise Breakup)</h5><button class="btn btn-sm btn-outline-success" @onclick="AddPlan" disabled="@data.IsFinalSubmitted">+ Add Product</button></div>
+                <div class="table-responsive">
+                    <table class="table table-bordered align-middle">
+                        <thead><tr><th>Product</th><th>Qty (MT/L)</th><th>Value (₹)</th><th></th></tr></thead>
+                        <tbody>
+                            @foreach (var line in data.Plan)
+                            {
+                                <tr @key="line">
+                                    <td><select class="form-select" @bind="line.ProductId" disabled="@data.IsFinalSubmitted"><option value="0">Select Product</option>@foreach (var p in data.Products) {
+                                        <option value="@p.Id">@p.Name</option>
+                                    }
+                                </select></td>
+                                <td><input type="number" class="form-control" min="0" step="0.001" @bind="line.QuantityMT" disabled="@data.IsFinalSubmitted" /></td>
+                                <td><input type="number" class="form-control" min="0" step="0.01" @bind="line.ValueRs" disabled="@data.IsFinalSubmitted" /></td>
+                                <td><button class="btn btn-sm btn-outline-danger" @onclick="() => data.Plan.Remove(line)" disabled="@data.IsFinalSubmitted">Remove</button></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <div class="text-end"><strong>Plan Total: ₹ @PlanTotal.ToString("N2")</strong> <span class="ms-3 @(PlanTotal >= RequiredTurnover ? "text-success" : "text-danger")">@(PlanTotal >= RequiredTurnover ? "Target met" : "Below Required TO")</span></div>
+        </div>
+    </div>
+    <div class="card mb-3">
+        <div class="card-body">
+            <div class="d-flex justify-content-between"><h5>SP — Sales / Achievement</h5><button class="btn btn-sm btn-outline-success" @onclick="AddAchievement" disabled="@data.IsFinalSubmitted">+ Add Product</button></div>
+            <div class="table-responsive">
+                <table class="table table-bordered align-middle">
+                    <thead><tr><th>Product</th><th>Quantity (MT/L)</th><th>Value (₹)</th><th></th></tr></thead>
+                    <tbody>
+                        @foreach (var line in data.Achievement)
+                        {
+                            <tr @key="line">
+                                <td><select class="form-select" @bind="line.ProductId" disabled="@data.IsFinalSubmitted"><option value="0">Select Product</option>@foreach (var p in data.Products) {
+                                    <option value="@p.Id">@p.Name</option>
+                                }
+                            </select></td>
+                            <td><input type="number" class="form-control" min="0" step="0.001" @bind="line.QuantityMT" disabled="@data.IsFinalSubmitted" /></td>
+                            <td><input type="number" class="form-control" min="0" step="0.01" @bind="line.ValueRs" disabled="@data.IsFinalSubmitted" /></td>
+                            <td><button class="btn btn-sm btn-outline-danger" @onclick="() => data.Achievement.Remove(line)" disabled="@data.IsFinalSubmitted">Remove</button></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <div class="d-flex justify-content-end gap-4"><strong>Actual: ₹ @ActualTotal.ToString("N2")</strong><strong>Achievement: @AchievementPercent.ToString("N2")%</strong></div>
+    </div>
+</div>
+@if (!data.IsFinalSubmitted)
+{
+    <div class="d-flex justify-content-end gap-2"><button class="btn btn-outline-secondary" disabled="@isSaving" @onclick="() => Save(false)">Save Draft</button><button class="btn btn-success" disabled="@isSaving" @onclick="() => Save(true)">Final Submit</button></div>
+}
+else
+{
+
+    <div class="alert alert-success">Sales Audit final-submitted — read only.</div>
+}
+    }
+</div>
+@code {
+    [SupplyParameterFromQuery(Name = "csr2Id")] public int? CSR2Id { get; set; }
+    private bool isLoading = true, isSaving;
+    private string error = "", success = "";
+    private DetailDto? data;
+    private sealed class ProductOption { public int Id { get; set; } public string Name { get; set; } = ""; }
+    private sealed class LineDto { public int ProductId { get; set; } public decimal QuantityMT { get; set; } public decimal ValueRs { get; set; } }
+    private sealed class DetailDto
+    {
+        public int Csr2Id { get; set; }
+        public string? SanctionNo { get; set; }
+        public string? ProgramName { get; set; }
+        public string? Location { get; set; }
+        public DateTime? ActualEventDate { get; set; }
+        public decimal Csr1BudgetRs { get; set; }
+        public decimal? AdditionalApprovedBudgetRs { get; set; }
+        public DateTime? SchemeFrom { get; set; }
+        public DateTime? SchemeTo { get; set; }
+        public string DocumentStatus { get; set; } = "Not Started";
+        public bool IsFinalSubmitted { get; set; }
+        public List<LineDto> Plan { get; set; } = new();
+        public List<LineDto> Achievement { get; set; } = new();
+        public List<ProductOption> Products { get; set; } = new();
+    }
+    private decimal TotalBudget => (data?.Csr1BudgetRs ?? 0) + (data?.AdditionalApprovedBudgetRs ?? 0);
+    private decimal RequiredTurnover => TotalBudget * 1.5m;
+    private decimal PlanTotal => data?.Plan.Sum(x => x.ValueRs) ?? 0;
+    private decimal ActualTotal => data?.Achievement.Sum(x => x.ValueRs) ?? 0;
+    private decimal AchievementPercent => RequiredTurnover > 0 ? ActualTotal / RequiredTurnover * 100 : 0;
+    protected override async Task OnParametersSetAsync()
+    {
+        isLoading = true; error = ""; data = null;
+        try
+        {
+            if (CSR2Id is null or <= 0) { error = "Invalid CSR-2 ID"; return; }
+            using var response = await Http.GetAsync($"api/SalesAudit/details?csr2Id={CSR2Id}");
+            if (!response.IsSuccessStatusCode) { error = $"Unable to load Sales Audit (HTTP {(int)response.StatusCode})"; return; }
+            data = await response.Content.ReadFromJsonAsync<DetailDto>();
+        }
+        catch (Exception ex) { error = ex.Message; }
+        finally { isLoading = false; }
+    }
+    private void BackToAudit() => Nav.NavigateTo("/SalesAudit");
+    private void AddPlan() => data?.Plan.Add(new LineDto());
+    private void AddAchievement() => data?.Achievement.Add(new LineDto());
+    private async Task Save(bool finalSubmit)
+    {
+        if (data == null || isSaving) return;
+        error = success = "";
+        if (data.SchemeFrom.HasValue && data.SchemeTo.HasValue && data.SchemeTo < data.SchemeFrom) { error = "Invalid scheme period."; return; }
+        if (finalSubmit && (PlanTotal < RequiredTurnover || ActualTotal < RequiredTurnover || data.Plan.Count == 0 || !data.SchemeFrom.HasValue || !data.SchemeTo.HasValue)) { error = "Complete scheme dates and product plan meeting the required target."; return; }
+        isSaving = true;
+        try
+        {
+            var payload = new { data.Csr2Id, data.SchemeFrom, data.SchemeTo, data.AdditionalApprovedBudgetRs, data.Plan, data.Achievement };
+            using var response = await Http.PostAsJsonAsync($"api/SalesAudit/save?finalSubmit={finalSubmit.ToString().ToLowerInvariant()}", payload);
+            if (!response.IsSuccessStatusCode) { error = await response.Content.ReadAsStringAsync(); return; }
+            success = finalSubmit ? "Sales Audit submitted." : "Draft saved.";
+            if (finalSubmit) { data.IsFinalSubmitted = true; data.DocumentStatus = "Completed"; }
+        }
+        catch (Exception ex) { error = ex.Message; }
+        finally { isSaving = false; }
+    }
+}
