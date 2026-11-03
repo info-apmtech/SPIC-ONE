@@ -217,6 +217,44 @@ namespace SpicAPI.Controllers
             public List<int> AvailableYears { get; set; } = new();
         }
 
+        public class ExpenseReportRowDto
+        {
+            public int ReportId { get; set; }
+            public string ReportingPeriod { get; set; } = "";
+            public DateTime PeriodStartDate { get; set; }
+            public DateTime PeriodEndDate { get; set; }
+            public decimal TotalExpense { get; set; }
+            public string Status { get; set; } = "Draft";
+        }
+
+        public class ExpenseCategoryDto
+        {
+            public string Category { get; set; } = "";
+            public decimal Amount { get; set; }
+        }
+
+        public class MonthlyExpenseDto
+        {
+            public string MonthLabel { get; set; } = "";
+            public int Year { get; set; }
+            public int Month { get; set; }
+            public decimal TotalExpense { get; set; }
+        }
+
+        public class ExpenseSummaryResponseDto
+        {
+            public decimal TotalExpense { get; set; }
+            public DateTime? EarliestPeriodStart { get; set; }
+            public DateTime? LatestPeriodEnd { get; set; }
+            public string? HighestCategoryName { get; set; }
+            public decimal HighestCategoryAmount { get; set; }
+            public int CategoryCount { get; set; }
+            public List<ExpenseReportRowDto> Rows { get; set; } = new();
+            public List<MonthlyExpenseDto> MonthlyTrend { get; set; } = new();
+            public List<ExpenseCategoryDto> CategoryBreakdown { get; set; } = new();
+            public List<int> AvailableYears { get; set; } = new();
+        }
+
         // =====================================================================
         //  ENDPOINTS
         // =====================================================================
@@ -909,6 +947,133 @@ namespace SpicAPI.Controllers
                 stream,
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 $"IncomeSummary_{DateTime.UtcNow:yyyyMMdd_HHmm}.xlsx");
+        }
+
+        // Shared by GetExpenseSummary and ExportExpenseSummaryExcel. Only IsSubCategory == false rows
+        // are summed for a report/category total - sub-category rows already roll up into their
+        // parent "Miscellaneous" row at save time (FarmFifteenDayExpenseItem.IsAutoCalculated), so
+        // including both would double-count every sub-category entry.
+        private async Task<List<FarmFifteenDayReport>> QueryExpenseReportsAsync(int? year, int? fromMonth, int? toMonth)
+        {
+            var reportsQuery = _db.FarmFifteenDayReports.AsNoTracking().AsQueryable();
+            if (year is > 0)
+                reportsQuery = reportsQuery.Where(r => r.PeriodStartDate.Year == year.Value);
+            if (fromMonth is >= 1 and <= 12)
+                reportsQuery = reportsQuery.Where(r => r.PeriodStartDate.Month >= fromMonth.Value);
+            if (toMonth is >= 1 and <= 12)
+                reportsQuery = reportsQuery.Where(r => r.PeriodStartDate.Month <= toMonth.Value);
+
+            return await reportsQuery
+                .Include(r => r.ExpenseItems)
+                .OrderByDescending(r => r.PeriodStartDate)
+                .ToListAsync();
+        }
+
+        // GET api/FarmReport/expense-summary
+        [HttpGet("expense-summary")]
+        public async Task<IActionResult> GetExpenseSummary(
+            [FromQuery] int? year,
+            [FromQuery] int? fromMonth,
+            [FromQuery] int? toMonth)
+        {
+            var reports = await QueryExpenseReportsAsync(year, fromMonth, toMonth);
+
+            var rows = reports.Select(r => new ExpenseReportRowDto
+            {
+                ReportId = r.Id,
+                ReportingPeriod = r.ReportingPeriod,
+                PeriodStartDate = r.PeriodStartDate,
+                PeriodEndDate = r.PeriodEndDate,
+                TotalExpense = r.ExpenseItems.Where(i => !i.IsSubCategory).Sum(i => i.Amount),
+                Status = r.Status
+            }).ToList();
+
+            var mainItems = reports.SelectMany(r => r.ExpenseItems).Where(i => !i.IsSubCategory).ToList();
+
+            var categoryBreakdown = mainItems
+                .GroupBy(i => i.Category)
+                .Select(g => new ExpenseCategoryDto { Category = g.Key, Amount = g.Sum(i => i.Amount) })
+                .OrderByDescending(c => c.Amount)
+                .ToList();
+
+            var monthlyTrend = reports
+                .GroupBy(r => new { r.PeriodStartDate.Year, r.PeriodStartDate.Month })
+                .Select(g => new MonthlyExpenseDto
+                {
+                    Year = g.Key.Year,
+                    Month = g.Key.Month,
+                    MonthLabel = new DateTime(g.Key.Year, g.Key.Month, 1).ToString("MMM"),
+                    TotalExpense = g.SelectMany(r => r.ExpenseItems).Where(i => !i.IsSubCategory).Sum(i => i.Amount)
+                })
+                .OrderBy(m => m.Year).ThenBy(m => m.Month)
+                .ToList();
+
+            var highest = categoryBreakdown.FirstOrDefault();
+
+            var calendarYears = await _db.FarmFifteenDayReports
+                .Select(r => r.PeriodStartDate.Year)
+                .Distinct()
+                .OrderDescending()
+                .ToListAsync();
+
+            return Ok(new ExpenseSummaryResponseDto
+            {
+                TotalExpense = rows.Sum(r => r.TotalExpense),
+                EarliestPeriodStart = reports.Count > 0 ? reports.Min(r => r.PeriodStartDate) : null,
+                LatestPeriodEnd = reports.Count > 0 ? reports.Max(r => r.PeriodEndDate) : null,
+                HighestCategoryName = highest?.Category,
+                HighestCategoryAmount = highest?.Amount ?? 0,
+                CategoryCount = categoryBreakdown.Count,
+                Rows = rows,
+                MonthlyTrend = monthlyTrend,
+                CategoryBreakdown = categoryBreakdown,
+                AvailableYears = calendarYears
+            });
+        }
+
+        // GET api/FarmReport/expense-summary/export - same filters, as a real .xlsx.
+        [HttpGet("expense-summary/export")]
+        public async Task<IActionResult> ExportExpenseSummaryExcel(
+            [FromQuery] int? year,
+            [FromQuery] int? fromMonth,
+            [FromQuery] int? toMonth)
+        {
+            var reports = await QueryExpenseReportsAsync(year, fromMonth, toMonth);
+
+            using var workbook = new XLWorkbook();
+            var worksheet = workbook.Worksheets.Add("Expense Summary");
+
+            string[] headers = { "S.No", "Reporting Period", "Total Expense", "Status" };
+            for (var c = 0; c < headers.Length; c++)
+                worksheet.Cell(1, c + 1).Value = headers[c];
+
+            var headerRange = worksheet.Range(1, 1, 1, headers.Length);
+            headerRange.Style.Font.Bold = true;
+            headerRange.Style.Fill.BackgroundColor = XLColor.FromHtml("#065f46");
+            headerRange.Style.Font.FontColor = XLColor.White;
+
+            var rowNum = 2;
+            var sNo = 1;
+            foreach (var r in reports)
+            {
+                worksheet.Cell(rowNum, 1).Value = sNo++;
+                worksheet.Cell(rowNum, 2).Value = r.ReportingPeriod;
+                worksheet.Cell(rowNum, 3).Value = r.ExpenseItems.Where(i => !i.IsSubCategory).Sum(i => i.Amount);
+                worksheet.Cell(rowNum, 4).Value = r.Status;
+                rowNum++;
+            }
+
+            worksheet.Columns().AdjustToContents();
+            worksheet.SheetView.FreezeRows(1);
+
+            var stream = new MemoryStream();
+            workbook.SaveAs(stream);
+            stream.Position = 0;
+
+            return File(
+                stream,
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                $"ExpenseSummary_{DateTime.UtcNow:yyyyMMdd_HHmm}.xlsx");
         }
 
         private static string FormatPeriodLabel(string period, DateTime? start, DateTime? end)

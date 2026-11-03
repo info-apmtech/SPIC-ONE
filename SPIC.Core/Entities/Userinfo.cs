@@ -135,7 +135,7 @@ namespace SPIC.Core.Entities
         // Farm Operations approval workflow (2026-10-31): Farm Admin's two pages, separate from
         // productRateManagement (Farm Office's request/catalog page) so the two roles can be
         // granted Entry (request) vs Update (approve/manage) independently. Appended at the END.
-        ProductRateApprovals, FarmProductMaster, InventorySummary, IncomeSummary
+        ProductRateApprovals, FarmProductMaster, InventorySummary, IncomeSummary, ExpenseSummary
     }
 }
                                                                                                                                                                                                                                                                                                                                                                                                                             
