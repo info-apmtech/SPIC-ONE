@@ -1765,54 +1765,6 @@
         gap: 16px;
     }
 
-    .ie-confirm-checklist {
-        background: var(--primary-soft);
-        border-radius: 10px;
-        padding: 6px 16px;
-    }
-
-    .ie-confirm-checklist-row {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 12px;
-        padding: 12px 0;
-        font-size: 14px;
-        color: var(--text-main);
-    }
-
-        .ie-confirm-checklist-row:not(:last-child) {
-            border-bottom: 1px solid rgba(11,107,58,.12);
-        }
-
-    .ie-confirm-done {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        font-weight: 600;
-        color: var(--primary-dark);
-    }
-
-    .ie-confirm-pending {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        font-weight: 600;
-        color: #d97706;
-    }
-
-    .ie-confirm-error {
-        display: flex;
-        align-items: flex-start;
-        gap: 10px;
-        padding: 12px 16px;
-        background: #fef2f2;
-        color: #b91c1c;
-        border: 1px solid #fecaca;
-        border-radius: 8px;
-        font-size: 13px;
-    }
-
     .ie-confirm-warning {
         display: flex;
         align-items: flex-start;
@@ -2540,25 +2492,8 @@
 
     private void CloseSubmitConfirm() => showSubmitConfirm = false;
 
-    private bool IsInventoryCompleted =>
-        ledgerRows.Any(r => r.Purchase > 0 || r.Sold > 0 || r.Opening > 0 || r.Hatched > 0 || r.Mortality > 0 || r.Others > 0 || ClosingStock(r) > 0);
-
-    private bool IsIncomeCompleted =>
-        IncomeGrandTotal > 0 || livestockIncomeRows.Any(r => (r.SoldQuantity ?? 0) > 0) || orchardIncomeRows.Any(r => (r.SoldQuantity ?? 0) > 0);
-
-    private bool IsExpenseCompleted =>
-        MainCategoriesTotal > 0 || mainExpenseRows.Any(r => r.Amount > 0) || subExpenseRows.Any(r => r.Amount > 0);
-
-    private bool CanConfirmSubmit => IsInventoryCompleted && IsIncomeCompleted && IsExpenseCompleted;
-
     private async Task ConfirmSubmit()
     {
-        if (!CanConfirmSubmit)
-        {
-            Toast.Warning("Please fill in all sections (Inventory, Income, and Expense) before submitting.");
-            return;
-        }
-
         showSubmitConfirm = false;
         var ok = await SaveReportToDbAsync("Submitted");
         if (ok)
