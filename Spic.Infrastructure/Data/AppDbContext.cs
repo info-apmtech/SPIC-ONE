@@ -1070,5 +1070,8 @@ namespace Spic.Infrastructure.Data
         public DbSet<DemoTreatment> DemoTreatments => Set<DemoTreatment>();
         public DbSet<DemoTreatmentObservation> DemoTreatmentObservations => Set<DemoTreatmentObservation>();
         public DbSet<DemoTreatmentPhoto> DemoTreatmentPhotos => Set<DemoTreatmentPhoto>();
+        public DbSet<SalesAuditRecord> SalesAuditRecords => Set<SalesAuditRecord>();
+        public DbSet<SalesAuditPlanLine> SalesAuditPlanLines => Set<SalesAuditPlanLine>();
+        public DbSet<SalesAuditAchievementLine> SalesAuditAchievementLines => Set<SalesAuditAchievementLine>();
     }
 }

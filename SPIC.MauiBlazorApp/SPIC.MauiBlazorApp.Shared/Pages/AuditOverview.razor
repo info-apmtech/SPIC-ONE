@@ -1,156 +1,170 @@
 @page "/AuditOverview"
+@using System.Net.Http.Json
+@using Microsoft.AspNetCore.Components
 @inject NavigationManager Nav
+@inject HttpClient Http
 
 <PageTitle>Audit Overview · SPIC ONE</PageTitle>
-
 <div class="container-fluid py-4 px-0">
     <div class="ao-wrapper">
-
-        <!-- Header -->
-        <div class="ao-header">
-            <h1>Audit Overview</h1>
-            <p>Review auto-field details from CSR-2 and MD Portal sources.</p>
-        </div>
-
-        <!-- Stepper -->
+        <div class="ao-header"><h1>Audit Overview</h1><p>Review auto-filled CSR-1 and CSR-2 program details.</p></div>
         <SalesAuditStepper CurrentStep="1" />
-
-        <!-- Auto-load banner -->
         <div class="ao-banner">
             <SalesAuditIcon Name="check-circle" Size="16" />
-            <span>Program details are automatically loaded from CSR2 and MD Portal. Review the information before creating the sales plan.</span>
+            <span>Program details are loaded from approved CSR-2 and linked CSR-1. MD additional budget is shown only if a saved amount exists.</span>
         </div>
-
-        <!-- Program summary strip -->
-        <div class="ao-card ao-summary">
-            @foreach (var item in SummaryItems)
-            {
-                <div class="ao-summary-item">
-                    <div class="ao-summary-icon ao-tone-@item.Tone">
-                        <SalesAuditIcon Name="@item.Icon" Size="22" StrokeWidth="1.6" />
-                    </div>
-                    <div class="ao-summary-text">
-                        <span class="ao-label">@item.Label</span>
-                        <span class="ao-summary-value">@item.Value</span>
-                    </div>
-                </div>
-            }
-        </div>
-
-        <!-- Program Information -->
-        <div class="ao-card">
-            <h3 class="ao-card-title">Program Information</h3>
-
-            <div class="ao-info-grid">
-                @foreach (var info in ProgramInfo)
+        @if (isLoading)
+        {
+            <div class="alert alert-info">Loading program details...</div>
+        }
+        else if (!string.IsNullOrWhiteSpace(error))
+        {
+            <div class="alert alert-danger">@error</div>
+        }
+        else if (model is not null)
+        {
+            <div class="ao-card ao-summary">
+                @foreach (var item in SummaryItems)
                 {
-                    <div class="ao-info-item">
-                        <SalesAuditIcon Name="@info.Icon" Size="20" StrokeWidth="1.5" CssClass="ao-info-icon" />
-                        <div class="ao-info-text">
-                            <span class="ao-label">@info.Label</span>
-                            @if (info.IsBadge)
-                            {
-                                <span class="ao-status-pill">@info.Value</span>
-                            }
-                            else
-                            {
-                                <span class="ao-info-value">@info.Value</span>
-                            }
-                        </div>
+                    <div class="ao-summary-item">
+                        <div class="ao-summary-icon ao-tone-@item.Tone"><SalesAuditIcon Name="@item.Icon" Size="22" StrokeWidth="1.6" /></div>
+                        <div class="ao-summary-text"><span class="ao-label">@item.Label</span><span class="ao-summary-value">@item.Value</span></div>
                     </div>
                 }
             </div>
-        </div>
+            <div class="ao-card">
+                <h3 class="ao-card-title">Program Information</h3>
+                <div class="ao-info-grid">
+                    @foreach (var info in ProgramInfo)
+                    {
+                        <div class="ao-info-item">
+                            <SalesAuditIcon Name="@info.Icon" Size="20" StrokeWidth="1.5" CssClass="ao-info-icon" />
+                            <div class="ao-info-text">
+                                <span class="ao-label">@info.Label</span>
+                                @if (info.IsBadge)
+                                {
+                                    <span class="ao-status-pill">@info.Value</span>
+                                }
+                                else
+                                {
 
-        <!-- Program Budget & Turnover -->
-        <div class="ao-card">
-            <div class="ao-card-top">
-                <h3 class="ao-card-title">Program Budget &amp; Turnover</h3>
-                <span class="ao-ratio-pill">₹ 1.00 Cr Turnover for every ₹1.50 Lakh Budget</span>
-            </div>
-
-            <div class="ao-budget-grid">
-                <div class="ao-budget-tile">
-                    <span class="ao-label">CSR1 Approved Budget</span>
-                    <span class="ao-budget-value">@SalesAuditFormat.Rupees(Csr1Budget)</span>
-                    <span class="ao-budget-sub">From CSR1</span>
-                </div>
-                <div class="ao-budget-tile">
-                    <span class="ao-label">Additional Approved Budget</span>
-                    <span class="ao-budget-value">@SalesAuditFormat.Rupees(AdditionalBudget)</span>
-                    <span class="ao-budget-sub">Under MD</span>
-                </div>
-                <div class="ao-budget-tile ao-budget-total">
-                    <span class="ao-label">Total Approved Budget</span>
-                    <span class="ao-budget-value">@SalesAuditFormat.Rupees(TotalBudget)</span>
-                    <span class="ao-budget-sub">(CSR1 + Additional MD)</span>
-                </div>
-                <div class="ao-budget-tile ao-budget-required">
-                    <span class="ao-label">Required Turnover</span>
-                    <span class="ao-budget-value">@RequiredTurnoverCr.ToString("0.00") Cr</span>
-                    <span class="ao-budget-sub">Required Turnover is auto-calculated</span>
+                                    <span class="ao-info-value">@info.Value</span>
+                                }
+                            </div>
+                        </div>
+                    }
                 </div>
             </div>
-
-            <div class="ao-note">
-                <SalesAuditIcon Name="check-circle" Size="15" />
-                <span>Total Approved Budget is the sum of CSR1 Approved and Additional budget approved under MD</span>
+            <div class="ao-card">
+                <div class="ao-card-top">
+                    <h3 class="ao-card-title">Program Budget &amp; Turnover</h3>
+                    <span class="ao-ratio-pill">₹1.00 Cr turnover for every ₹1.50 Lakh budget</span>
+                </div>
+                <div class="ao-budget-grid">
+                    <div class="ao-budget-tile"><span class="ao-label">CSR1 Approved Budget</span><span class="ao-budget-value">@Rupees(model.Csr1BudgetRs)</span><span class="ao-budget-sub">From CSR1</span></div>
+                    <div class="ao-budget-tile"><span class="ao-label">Additional Approved Budget</span><span class="ao-budget-value">@Rupees(model.AdditionalApprovedBudgetRs)</span><span class="ao-budget-sub">Saved Sales Audit amount — MD approval not verified</span></div>
+                    <div class="ao-budget-tile ao-budget-total"><span class="ao-label">Total Approved Budget</span><span class="ao-budget-value">@Rupees(model.TotalApprovedBudgetRs)</span><span class="ao-budget-sub">CSR1 + saved additional amount</span></div>
+                    <div class="ao-budget-tile ao-budget-required"><span class="ao-label">Required Turnover</span><span class="ao-budget-value">₹ @model.RequiredTurnoverCr.ToString("0.00") Cr</span><span class="ao-budget-sub">Auto-calculated using the displayed budget ratio</span></div>
+                </div>
+                <div class="ao-note"><SalesAuditIcon Name="check-circle" Size="15" /><span>Additional budget needs approval-source verification before being treated as MD-approved.</span></div>
             </div>
-        </div>
-
-        <!-- Footer actions -->
+        }
+        @if (!string.IsNullOrWhiteSpace(success))
+        {
+            <div class="alert alert-success">@success</div>
+        }
         <div class="ao-footer">
-            <button type="button" class="ao-btn ao-btn-back" @onclick="BackToList">
-                <SalesAuditIcon Name="chevrons-left" Size="16" />
-                Back to List
-            </button>
-
+            <button type="button" class="ao-btn ao-btn-back" @onclick="BackToList"><SalesAuditIcon Name="chevrons-left" Size="16" /> Back to List</button>
             <div class="ao-footer-right">
-                <button type="button" class="ao-btn ao-btn-draft">
-                    <SalesAuditIcon Name="file-pen" Size="16" />
-                    Save Draft
-                </button>
-                <button type="button" class="ao-btn ao-btn-primary" @onclick="@(() => Nav.NavigateTo("/SalesPlan"))">
-                    Continue to sales plan
-                    <SalesAuditIcon Name="chevrons-right" Size="16" />
-                </button>
+                <button type="button" class="ao-btn ao-btn-draft" disabled="@(isLoading || isSaving || model is null || model.IsFinalSubmitted)" @onclick="SaveDraftAsync"><SalesAuditIcon Name="file-pen" Size="16" /> @(isSaving ? "Saving..." : "Save Draft")</button>
+                <button type="button" class="ao-btn ao-btn-primary" disabled="@(isLoading || model is null)" @onclick="ContinueToSalesPlan">Continue to sales plan <SalesAuditIcon Name="chevrons-right" Size="16" /></button>
             </div>
         </div>
-
     </div>
 </div>
-
 @code {
-    private record SummaryItem(string Label, string Value, string Icon, string Tone);
-    private record InfoItem(string Label, string Value, string Icon, bool IsBadge = false);
-
-    private readonly List<SummaryItem> SummaryItems = new()
+    [SupplyParameterFromQuery(Name = "csr2Id")] public int? CSR2Id { get; set; }
+    private OverviewDto? model;
+    private bool isLoading, isSaving;
+    private string error = "", success = "";
+    private sealed record SummaryItem(string Label, string Value, string Icon, string Tone);
+    private sealed record InfoItem(string Label, string Value, string Icon, bool IsBadge = false);
+    private sealed class OverviewDto
     {
-        new("Program Type", "Dealer Program", "users", "green"),
-        new("Program Name", "Dealers Meet - State Level", "clipboard", "purple"),
-        new("Sanction Number", "SPIC/MD/26/001", "stamp", "blue"),
-        new("CSR-2 Status", "Completed on 15 Jul 2026", "badge-check", "green"),
-    };
-
-    private readonly List<InfoItem> ProgramInfo = new()
+        public int CSR2Id { get; set; }
+        public int CSR1Id { get; set; }
+        public string? SanctionNumber { get; set; }
+        public string? ProgramName { get; set; }
+        public string? ProgramType { get; set; }
+        public string? Location { get; set; }
+        public string? CSR2Status { get; set; }
+        public DateTime? CSR2ApprovedAt { get; set; }
+        public DateTime? ActualEventDate { get; set; }
+        public decimal Csr1BudgetRs { get; set; }
+        public decimal AdditionalApprovedBudgetRs { get; set; }
+        public decimal TotalApprovedBudgetRs { get; set; }
+        public decimal RequiredTurnoverCr { get; set; }
+        public DateTime? SchemeFrom { get; set; }
+        public DateTime? SchemeTo { get; set; }
+        public string? DocumentStatus { get; set; }
+        public bool IsFinalSubmitted { get; set; }
+        public string? State { get; set; }
+        public string? Region { get; set; }
+        public string? HQ { get; set; }
+    }
+    private static string Display(string? v) => string.IsNullOrWhiteSpace(v) ? "--" : v;
+    private static string DateText(DateTime? value) => value?.ToString("dd MMM yyyy") ?? "--";
+    private static string Rupees(decimal amount) => "₹ " + amount.ToString("N2");
+    private IEnumerable<SummaryItem> SummaryItems => model is null ? Array.Empty<SummaryItem>() : new[]
     {
-        new("Sanction Number", "CSR/2024/TN/0847", "gavel"),
-        new("State", "Maharashtra", "map-pin"),
-        new("Region", "Pune", "calendar"),
-        new("HQ", "Pune", "calendar"),
-        new("Program Status", "CSR - 2 Completed", "user-check", IsBadge: true),
-        new("Month", "20 Jul 2026", "calendar"),
-        new("Program Start Date", "01 Apr 2026", "calendar"),
-        new("Program End Date", "31 Jul 2026", "calendar"),
+        new SummaryItem("Program Type", Display(model.ProgramType), "users", "green"),
+        new SummaryItem("Program Name", Display(model.ProgramName), "clipboard", "purple"),
+        new SummaryItem("Sanction Number", Display(model.SanctionNumber), "stamp", "blue"),
+        new SummaryItem("CSR-2 Status", $"{Display(model.CSR2Status)} · {DateText(model.CSR2ApprovedAt)}", "badge-check", "green")
     };
-
-    private const decimal Csr1Budget = 150000m;
-    private const decimal AdditionalBudget = 180000m;
-    private static decimal TotalBudget => Csr1Budget + AdditionalBudget;
-
-    // Figma sample value; the real figure will come from the configured
-    // "₹1.00 Cr turnover per ₹1.50 Lakh budget" rule once the API is wired.
-    private const decimal RequiredTurnoverCr = 2.20m;
-
+    private IEnumerable<InfoItem> ProgramInfo => model is null ? Array.Empty<InfoItem>() : new[]
+    {
+        new InfoItem("Sanction Number", Display(model.SanctionNumber), "gavel"),
+        new InfoItem("State", Display(model.State), "map-pin"),
+        new InfoItem("Region", Display(model.Region), "calendar"),
+        new InfoItem("HQ", Display(model.HQ), "calendar"),
+        new InfoItem("Program Status", Display(model.CSR2Status), "user-check", true),
+        new InfoItem("CSR-2 Event Date", DateText(model.ActualEventDate), "calendar"),
+        new InfoItem("Scheme Start Date", DateText(model.SchemeFrom), "calendar"),
+        new InfoItem("Scheme End Date", DateText(model.SchemeTo), "calendar")
+    };
+    protected override async Task OnParametersSetAsync()
+    {
+        error = success = "";
+        model = null;
+        if (CSR2Id is null or <= 0) { error = "Missing csr2Id. Open Audit Overview using Start Audit from the Sales Audit list."; return; }
+        isLoading = true;
+        try
+        {
+            using var response = await Http.GetAsync($"api/SalesAudit/overview?csr2Id={CSR2Id.Value}");
+            if (response.StatusCode == System.Net.HttpStatusCode.Forbidden)
+            { error = "Access denied (403). Check the authenticated UserId, active Employeelogin and CSR1.ResponsiblePersonId."; return; }
+            if (!response.IsSuccessStatusCode)
+            { error = $"Unable to load Audit Overview (HTTP {(int)response.StatusCode})."; return; }
+            model = await response.Content.ReadFromJsonAsync<OverviewDto>();
+        }
+        catch (Exception ex) { error = $"Unable to load Audit Overview: {ex.Message}"; }
+        finally { isLoading = false; }
+    }
+    private async Task SaveDraftAsync()
+    {
+        if (CSR2Id is null or <= 0 || model is null || isSaving || model.IsFinalSubmitted) return;
+        isSaving = true; error = success = "";
+        try
+        {
+            using var response = await Http.PostAsync($"api/SalesAudit/overview/save-draft?csr2Id={CSR2Id.Value}", null);
+            if (!response.IsSuccessStatusCode) { error = $"Could not save draft (HTTP {(int)response.StatusCode})."; return; }
+            success = "Sales Audit draft saved.";
+            model.DocumentStatus = "Draft";
+        }
+        catch (Exception ex) { error = $"Could not save draft: {ex.Message}"; }
+        finally { isSaving = false; }
+    }
+    private void ContinueToSalesPlan() { if (CSR2Id is > 0 && model != null) Nav.NavigateTo($"/SalesPlan?csr2Id={CSR2Id}"); }
     private void BackToList() => Nav.NavigateTo("/SalesAudit");
 }

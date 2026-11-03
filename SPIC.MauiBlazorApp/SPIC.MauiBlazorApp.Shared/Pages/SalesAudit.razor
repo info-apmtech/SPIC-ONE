@@ -1,5 +1,7 @@
 @page "/SalesAudit"
 @inject NavigationManager Nav
+@inject HttpClient Http
+@using System.Net.Http.Json
 
 <PageTitle>Sales Audit · SPIC ONE</PageTitle>
 
@@ -15,9 +17,18 @@
 
             <div class="sa-info-alert">
                 <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4"></path><path d="M12 8h.01"></path></svg>
-                <span>Sales Audit records are automatically created from CSR2 Completed programs based on the configured program type</span>
+                <span>Sales Audit records are automatically created from finally approved CSR-2 programs based on the configured program type</span>
             </div>
         </div>
+
+        @if (!string.IsNullOrWhiteSpace(LoadError))
+        {
+            <div class="alert alert-danger" role="alert">@LoadError</div>
+        }
+        @if (IsLoading)
+        {
+            <div class="alert alert-info">Loading sales audit records...</div>
+        }
 
         <!-- Filters (expandable) -->
         <div class="sa-filter-card">
@@ -38,7 +49,7 @@
                             <label class="sa-form-label">Sanction Number</label>
                             <select class="sa-form-select @(string.IsNullOrEmpty(SelectedSanction) ? "" : "sa-has-value")" @bind="SelectedSanction">
                                 <option value="">Select Sanction Number</option>
-                                @foreach (var item in AuditList.Select(x => x.SanctionNumber).Distinct())
+                                @foreach (var item in AuditList.Select(x => x.SanctionNumber).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct().OrderBy(x => x))
                                 {
                                     <option value="@item">@item</option>
                                 }
@@ -48,8 +59,8 @@
                         <div class="sa-form-group">
                             <label class="sa-form-label">Program Name</label>
                             <select class="sa-form-select @(string.IsNullOrEmpty(SelectedProgram) ? "" : "sa-has-value")" @bind="SelectedProgram">
-                                <option value="">Select Program Type</option>
-                                @foreach (var item in AuditList.Select(x => x.ProgramName).Distinct())
+                                <option value="">Select Program Name</option>
+                                @foreach (var item in AuditList.Select(x => x.ProgramName).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct().OrderBy(x => x))
                                 {
                                     <option value="@item">@item</option>
                                 }
@@ -60,7 +71,7 @@
                             <label class="sa-form-label">Location</label>
                             <select class="sa-form-select @(string.IsNullOrEmpty(SelectedLocation) ? "" : "sa-has-value")" @bind="SelectedLocation">
                                 <option value="">Select Location</option>
-                                @foreach (var item in AuditList.Select(x => x.Location).Distinct())
+                                @foreach (var item in AuditList.Select(x => x.Location).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct().OrderBy(x => x))
                                 {
                                     <option value="@item">@item</option>
                                 }
@@ -86,7 +97,7 @@
                                             <label class="sa-form-label">To</label>
                                             <input type="date" class="sa-form-control sa-has-value" @bind="ToDate" />
                                         </div>
-                                        <button type="button" class="sa-btn sa-btn-solid" @onclick="() => DatePickerOpen = false">Done</button>
+                                        <button type="button" class="sa-btn sa-btn-solid" @onclick="() => { DatePickerOpen = false; DateFilterApplied = true; ApplyFilter(); }">Done</button>
                                     </div>
                                 }
                             </div>
@@ -172,7 +183,7 @@
         <div class="sa-table-card">
 
             <div class="sa-table-top">
-                <h3>Demo Documentation List</h3>
+                <h3>Sales Audit List</h3>
                 <input type="text" class="sa-search-input" placeholder="Search zones..."
                        @bind="SearchText" @bind:event="oninput" @bind:after="ResetPage" />
             </div>
@@ -196,7 +207,7 @@
                         @if (!PagedList.Any())
                         {
                             <tr>
-                                <td colspan="9" class="sa-empty-cell">No records found</td>
+                                <td colspan="9" class="sa-empty-cell">@(IsLoading ? "Loading records..." : "No eligible sales audit records found")</td>
                             </tr>
                         }
                         @foreach (var item in PagedList)
@@ -223,7 +234,7 @@
                                         }
                                     </div>
                                 </td>
-                                <td data-label="Required TO (Auto)"><span class="sa-amount">@FormatCrore(item.RequiredTurnover)</span></td>
+                                <td data-label="Required TO (Auto)"><span class="sa-amount">@(item.RequiredTurnover.HasValue ? FormatCrore(item.RequiredTurnover.Value) : "--")</span></td>
                                 <td data-label="Actual Turnover">
                                     @if (item.ActualTurnover is null)
                                     {
@@ -235,16 +246,16 @@
                                     }
                                 </td>
                                 <td data-label="Achievement">
-                                    @if (item.Achievement is null)
+                                    @if (AchievementPercent(item) is null)
                                     {
                                         <span class="sa-dash">--</span>
                                     }
                                     else
                                     {
                                         <div class="sa-achievement">
-                                            <span>@item.Achievement.Value.ToString("0.00")%</span>
+                                            <span>@AchievementPercent(item)!.Value.ToString("0.00")%</span>
                                             <div class="sa-progress-track">
-                                                <div class="sa-progress-fill" style="width: @(Math.Min(100m, item.Achievement.Value).ToString(System.Globalization.CultureInfo.InvariantCulture))%;"></div>
+                                                <div class="sa-progress-fill" style="width: @(Math.Clamp(AchievementPercent(item)!.Value, 0m, 100m).ToString(System.Globalization.CultureInfo.InvariantCulture))%;"></div>
                                             </div>
                                         </div>
                                     }
@@ -256,7 +267,7 @@
                                     </span>
                                 </td>
                                 <td data-label="Status">
-                                    <button class="sa-action-btn @(string.IsNullOrEmpty(item.ActionTone) ? "" : "sa-action-" + item.ActionTone)" @onclick="() => OnAction(item)">@item.ActionText</button>
+                                    <button type="button" class="sa-action-btn @(string.IsNullOrEmpty(item.ActionTone) ? "" : "sa-action-" + item.ActionTone)" @onclick="() => OnAction(item)">@ActionText(item)</button>
                                 </td>
                             </tr>
                         }
@@ -287,7 +298,7 @@
                         }
                         else
                         {
-                            <button class="sa-page-btn @(pageNo == CurrentPage ? "active" : "")" @onclick="() => GoToPage(pageNo)">@pageNo</button>
+                            <button class="sa-page-btn @(pageNo == CurrentPage ? "active" : "")" @onclick="() => GoToPage(pageNo)">@(pageNo)</button>
                         }
                     }
                     <button class="sa-page-btn" disabled="@(CurrentPage >= TotalPages)" @onclick="() => GoToPage(CurrentPage + 1)" aria-label="Next page">
@@ -306,61 +317,81 @@
 
     private bool FiltersOpen = true;
     private bool DatePickerOpen;
+    private bool DateFilterApplied;
 
     private string SearchText = "";
     private string SelectedSanction = "";
     private string SelectedProgram = "";
     private string SelectedLocation = "";
     private string SelectedStatus = "";
-    private DateTime FromDate = new(2025, 4, 1);
-    private DateTime ToDate = new(2025, 4, 28);
+    private DateTime FromDate = DateTime.Today.AddMonths(-1);
+    private DateTime ToDate = DateTime.Today;
 
     private int CurrentPage = 1;
     private int PageSize = 16;
 
     private static readonly string[] DocumentStatuses =
-        { "Not Started", "Sales Tracking", "Period Expired", "Extension Request", "Completed" };
+        { "Not Started", "Draft", "In Progress", "Sales Tracking", "Period Expired", "Extension Request", "Completed" };
 
     private record SummaryCard(string Title, int Value, string Description, string Icon, string Tone);
 
-    private readonly List<SummaryCard> SummaryCards = new()
+    private IEnumerable<SummaryCard> SummaryCards => new[]
     {
-        new("Total Programs", 42, "Eligible programs", "file-chart", "blue"),
-        new("Not started", 7, "Audit not yet started", "file-pen", "gray"),
-        new("In Progress", 22, "Plan preparation in progress", "clock", "yellow"),
-        new("Sales Tracking", 2, "Period active", "file-chart", "teal"),
-        new("Period expired", 22, "Target not Archived", "clock", "yellow"),
-        new("Extension Request", 1, "Awaiting admin decision", "file-up", "purple"),
-        new("Draft", 7, "Continue the plan", "file-pen", "gray"),
-        new("Completed", 2, "Audit Completed", "badge-check", "green"),
+        new SummaryCard("Total Programs", AuditList.Count, "Eligible programs", "file-chart", "blue"),
+        new SummaryCard("Not started", AuditList.Count(x => x.DocumentStatus == "Not Started"), "Audit not yet started", "file-pen", "gray"),
+        new SummaryCard("In Progress", AuditList.Count(x => x.DocumentStatus == "In Progress"), "Plan preparation in progress", "clock", "yellow"),
+        new SummaryCard("Sales Tracking", AuditList.Count(x => x.DocumentStatus == "Sales Tracking"), "Period active", "file-chart", "teal"),
+        new SummaryCard("Period expired", AuditList.Count(x => x.DocumentStatus == "Period Expired"), "Target not achieved", "clock", "yellow"),
+        new SummaryCard("Extension Request", AuditList.Count(x => x.DocumentStatus == "Extension Request"), "Awaiting decision", "file-up", "purple"),
+        new SummaryCard("Draft", AuditList.Count(x => x.DocumentStatus == "Draft"), "Continue the plan", "file-pen", "gray"),
+        new SummaryCard("Completed", AuditList.Count(x => x.DocumentStatus == "Completed"), "Audit completed", "badge-check", "green")
     };
 
-    protected override void OnInitialized()
-    {
-        LoadData();
-    }
+    private bool IsLoading;
+    private string LoadError = "";
 
-    private void LoadData()
-    {
-        var from = new DateTime(2026, 8, 17);
-        var to = new DateTime(2026, 10, 31);
-        const string program = "SUb Dealer Training Program";
-        const string location = "Pune, Maharashtra";
+    protected override async Task OnInitializedAsync() => await LoadDataAsync();
 
-        AuditList = new()
+    // This endpoint must enforce approved CSR-2 eligibility and user/geographical scope server-side.
+    // No synthetic sales, targets, achievements, or programs are displayed.
+    private async Task LoadDataAsync()
+    {
+        IsLoading = true;
+        LoadError = "";
+        try
         {
-            new() { SanctionNumber = "SN-2024-0412", ProgramName = program, Location = location, RequiredTurnover = 2.20m, DocumentStatus = "Not Started", ActionText = "Start Audit" },
-            new() { SanctionNumber = "SN-2024-0412", ProgramName = program, Location = location, SchemeFrom = from, SchemeTo = to, RequiredTurnover = 1.50m, ActualTurnover = 0.20m, Achievement = 43.33m, DocumentStatus = "Sales Tracking", ActionText = "View Achievement" },
-            new() { SanctionNumber = "SN-2024-0412", ProgramName = program, Location = location, SchemeFrom = from, SchemeTo = to, RequiredTurnover = 2.20m, ActualTurnover = 0.20m, Achievement = 43.33m, DocumentStatus = "Period Expired", ActionText = "Request Extension", ActionTone = "orange" },
-            new() { SanctionNumber = "SN-2024-0412", ProgramName = program, Location = location, SchemeFrom = from, SchemeTo = to, RequiredTurnover = 2.20m, ActualTurnover = 0.20m, Achievement = 104.00m, DocumentStatus = "Completed", ActionText = "View Audit" },
-            new() { SanctionNumber = "SN-2024-0412", ProgramName = program, Location = location, SchemeFrom = from, SchemeTo = to, RequiredTurnover = 2.20m, ActualTurnover = 0.20m, Achievement = 43.33m, DocumentStatus = "Extension Request", ActionText = "View Request", ActionTone = "purple" },
-            new() { SanctionNumber = "SN-2024-0412", ProgramName = program, Location = location, RequiredTurnover = 2.20m, DocumentStatus = "Not Started", ActionText = "Start Audit" },
-            new() { SanctionNumber = "SN-2024-0412", ProgramName = program, Location = location, SchemeFrom = from, SchemeTo = to, RequiredTurnover = 2.20m, ActualTurnover = 0.20m, Achievement = 43.33m, DocumentStatus = "Period Expired", ActionText = "Request Extension" },
-            new() { SanctionNumber = "SN-2024-0412", ProgramName = program, Location = location, SchemeFrom = from, SchemeTo = to, RequiredTurnover = 2.20m, ActualTurnover = 0.20m, Achievement = 43.33m, DocumentStatus = "Completed", ActionText = "View / Continue" },
-        };
-
-        FilteredList = AuditList;
+            using var response = await Http.GetAsync("api/SalesAudit/eligible");
+            if (!response.IsSuccessStatusCode)
+            {
+                AuditList = new();
+                LoadError = $"Unable to load Sales Audit data (HTTP {(int)response.StatusCode}). Check the Sales Audit API and authentication.";
+                return;
+            }
+            AuditList = await response.Content.ReadFromJsonAsync<List<SalesAuditDto>>() ?? new();
+            ApplyFilter();
+        }
+        catch (Exception ex)
+        {
+            AuditList = new();
+            LoadError = $"Unable to load Sales Audit data: {ex.Message}";
+        }
+        finally { IsLoading = false; }
     }
+
+    private static decimal? AchievementPercent(SalesAuditDto item) =>
+        item.RequiredTurnover is > 0m && item.ActualTurnover.HasValue
+            ? Math.Round(item.ActualTurnover.Value / item.RequiredTurnover.Value * 100m, 2)
+            : null;
+
+    private static string ActionText(SalesAuditDto item) => item.DocumentStatus switch
+    {
+        "Not Started" => "Start Audit",
+        "Completed" => "View Audit",
+        "Sales Tracking" => "View Achievement",
+        "Period Expired" => "Request Extension",
+        "Extension Request" => "View Request",
+        _ => "View / Continue"
+    };
 
     private IEnumerable<SalesAuditDto> SearchedList =>
         string.IsNullOrWhiteSpace(SearchText)
@@ -404,7 +435,9 @@
                 (string.IsNullOrEmpty(SelectedSanction) || x.SanctionNumber == SelectedSanction) &&
                 (string.IsNullOrEmpty(SelectedProgram) || x.ProgramName == SelectedProgram) &&
                 (string.IsNullOrEmpty(SelectedLocation) || x.Location == SelectedLocation) &&
-                (string.IsNullOrEmpty(SelectedStatus) || x.DocumentStatus == SelectedStatus))
+                (string.IsNullOrEmpty(SelectedStatus) || x.DocumentStatus == SelectedStatus) &&
+                (!DateFilterApplied || ((!x.SchemeFrom.HasValue || x.SchemeFrom.Value.Date <= ToDate.Date) &&
+                (!x.SchemeTo.HasValue || x.SchemeTo.Value.Date >= FromDate.Date))))
             .ToList();
         ResetPage();
     }
@@ -416,8 +449,9 @@
         SelectedLocation = "";
         SelectedStatus = "";
         SearchText = "";
-        FromDate = new(2025, 4, 1);
-        ToDate = new(2025, 4, 28);
+        DateFilterApplied = false;
+        FromDate = DateTime.Today.AddMonths(-1);
+        ToDate = DateTime.Today;
         FilteredList = AuditList;
         ResetPage();
     }
@@ -425,14 +459,25 @@
     // Only the audit entry points are wired for now; the other actions get their pages later.
     private void OnAction(SalesAuditDto item)
     {
-        if (item.ActionText is "Start Audit" or "View / Continue")
-            Nav.NavigateTo("/AuditOverview");
-        else if (item.ActionText == "View Achievement")
-            Nav.NavigateTo("/SalesTracking");
-        else if (item.ActionText == "Request Extension")
-            Nav.NavigateTo("/RequestExtension");
-        else if (item.ActionText == "View Request")
-            Nav.NavigateTo("/SalesTracking?extension=pending");
+        if (item.CSR2Id <= 0) return;
+        var query = $"?csr2Id={item.CSR2Id}";
+        switch (ActionText(item))
+        {
+            case "Start Audit":
+            case "View / Continue":
+            case "View Audit":
+                Nav.NavigateTo("/AuditOverview" + query);
+                break;
+            case "View Achievement":
+                Nav.NavigateTo("/SalesAuditDetails" + query);
+                break;
+            case "Request Extension":
+                Nav.NavigateTo("/SalesAuditDetails" + query);
+                break;
+            case "View Request":
+                Nav.NavigateTo("/SalesTracking" + query + "&extension=pending");
+                break;
+        }
     }
 
     private static string FormatCrore(decimal value) => $"₹ {value:0.00} Cr";
@@ -455,19 +500,22 @@
 
     public class SalesAuditDto
     {
+        public int CSR2Id { get; set; }
         public string SanctionNumber { get; set; } = "";
         public string ProgramName { get; set; } = "";
         public string Location { get; set; } = "";
         public DateTime? SchemeFrom { get; set; }
         public DateTime? SchemeTo { get; set; }
         /// <summary>Required turnover in crores.</summary>
-        public decimal RequiredTurnover { get; set; }
+        public decimal? RequiredTurnover { get; set; }
         /// <summary>Actual turnover in crores; null until sales tracking starts.</summary>
         public decimal? ActualTurnover { get; set; }
-        public decimal? Achievement { get; set; }
         public string DocumentStatus { get; set; } = "";
-        public string ActionText { get; set; } = "";
-        /// <summary>Button colour: "" (green), "orange" or "purple".</summary>
-        public string ActionTone { get; set; } = "";
+        public string ActionTone => DocumentStatus switch
+        {
+            "Period Expired" => "orange",
+            "Extension Request" => "purple",
+            _ => ""
+        };
     }
 }

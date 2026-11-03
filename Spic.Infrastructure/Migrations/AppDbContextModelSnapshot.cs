@@ -8588,6 +8588,112 @@ namespace Spic.Infrastructure.Migrations
                     b.ToTable("SalesAndReceipts");
                 });
 
+            modelBuilder.Entity("SPIC.Core.Entities.SalesAuditAchievementLine", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("CSR2Id")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ProductId")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("QuantityMT")
+                        .HasColumnType("numeric(18,3)");
+
+                    b.Property<decimal>("ValueRs")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("SalesAuditAchievementLines");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.SalesAuditPlanLine", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("CSR2Id")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ProductId")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("QuantityMT")
+                        .HasColumnType("numeric(18,3)");
+
+                    b.Property<decimal>("ValueRs")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("SalesAuditPlanLines");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.SalesAuditRecord", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal?>("ActualTurnover")
+                        .HasColumnType("numeric(18,4)");
+
+                    b.Property<decimal?>("AdditionalApprovedBudgetRs")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<int>("CSR2Id")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("DocumentStatus")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<DateTime?>("FinalSubmittedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<bool>("IsFinalSubmitted")
+                        .HasColumnType("boolean");
+
+                    b.Property<decimal?>("RequiredTurnover")
+                        .HasColumnType("numeric(18,4)");
+
+                    b.Property<DateTime?>("SchemeFrom")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime?>("SchemeTo")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("SalesAuditRecords");
+                });
+
             modelBuilder.Entity("SPIC.Core.Entities.SalesCompanySale", b =>
                 {
                     b.Property<int>("Id")

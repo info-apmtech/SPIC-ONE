@@ -308,23 +308,56 @@
             return;
         }
 
-        var permissionKey = ShellNavigation.ResolvePermissionKey(firstSegment);
-        bool allowed = SPIC.MauiBlazorApp.Shared.Services.LoginState.DesignationOnlyPages.Contains(permissionKey)
+        
+        // ============================================================
+        // PAGE PERMISSION RESOLUTION
+        // ============================================================
+
+        // Sales Audit child pages use the same page permission
+        // as the parent Sales Audit page.
+        //
+        // IMPORTANT:
+        // This does not bypass authorization.
+        // The user must have access to SalesAudit.
+        // API-level CSR-2 ownership and eligibility checks remain active.
+
+        var permissionKey = firstSegment.ToLowerInvariant() switch
+        {
+            // Sales Audit workflow
+            "auditoverview" => nameof(PagePermission.SalesAudit),
+            "salesplan" => nameof(PagePermission.SalesAudit),
+            "salesauditdetails" => nameof(PagePermission.SalesAudit),
+            "salestracking" => nameof(PagePermission.SalesAudit),
+
+            // Existing permission resolution for all other pages
+            _ => ShellNavigation.ResolvePermissionKey(firstSegment)
+        };
+
+        // Preserve existing designation-only permission checks.
+        bool allowed =
+            SPIC.MauiBlazorApp.Shared.Services.LoginState
+                .DesignationOnlyPages.Contains(permissionKey)
             ? LoginState.HasPageStrict(permissionKey)
-            : (LoginState.CanAccess(permissionKey) || (permissionKey != firstSegment && LoginState.CanAccess(firstSegment)));
+            : (
+                LoginState.CanAccess(permissionKey)
+                ||
+                (
+                    permissionKey != firstSegment
+                    && LoginState.CanAccess(firstSegment)
+                )
+            );
+
+        // Preserve existing authorization redirect.
         if (!allowed && !isDirectorSchemeApproval)
         {
-            // Redirect to the SAME landing page the login flow uses (Admin / SuperAdmin ->
-            // /DefaultWelcome, any other role holding a designation -> /DefaultWelcome, a role
-            // with no designation -> /Welcome). Because LandingPage is the
-            // one place that knows which pages a role actually has, it also gives a
-            // designation-driven role such as CommonRole a destination it is allowed to open. The
-            // previous hardcoded "/Dashboard" fallback would have bounced a CommonRole user whose
-            // designation does not grant Dashboard back to /Dashboard forever, because /Dashboard
-            // is denied by the very check above. Keyed off the authorization model, so any future
-            // designation-driven role inherits it without a change here.
-            Nav.NavigateTo(LoginState.LandingPage, replace: true);
+            Nav.NavigateTo(
+                LoginState.LandingPage,
+                replace: true
+            );
+
+            return;
         }
+
     }
     public void Dispose()
     {
