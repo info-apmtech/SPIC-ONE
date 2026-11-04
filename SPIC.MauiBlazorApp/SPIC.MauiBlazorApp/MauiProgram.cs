@@ -4,6 +4,10 @@ using SPIC.MauiBlazorApp.Services;
 using SPIC.Core.Entities;
 using SPIC.MauiBlazorApp.Shared.Services;
 using SPIC.MauiBlazorApp.Shared.Services.Telemetry;
+#if MAUI_DEVFLOW
+using Microsoft.Maui.DevFlow.Agent;
+using Microsoft.Maui.DevFlow.Blazor;
+#endif
 
 namespace SPIC.MauiBlazorApp
 {
@@ -16,7 +20,7 @@ namespace SPIC.MauiBlazorApp
             typeof(MauiProgram).Assembly
                 .GetCustomAttributes<AssemblyMetadataAttribute>()
                 .FirstOrDefault(a => a.Key == "SpicApiBaseUrl")?.Value
-            ?? "https://previewspicapi.apmiot.com/";
+            ?? "https://api.spicone.in/";
 
         public static MauiApp CreateMauiApp()
         {
@@ -32,6 +36,9 @@ namespace SPIC.MauiBlazorApp
                 Log("MauiProgram.CreateMauiApp: UseMauiApp<App>() starting");
                 builder.UseMauiApp<App>();
                 Log("MauiProgram.CreateMauiApp: UseMauiApp<App>() succeeded");
+#if MAUI_DEVFLOW
+                builder.AddMauiDevFlowAgent();
+#endif
             }
             catch (Exception ex)
             {
@@ -55,6 +62,9 @@ namespace SPIC.MauiBlazorApp
 
             Log("MauiProgram.CreateMauiApp: AddMauiBlazorWebView()");
             builder.Services.AddMauiBlazorWebView();
+#if MAUI_DEVFLOW
+            builder.AddMauiBlazorDevFlowTools();
+#endif
 			builder.Services.AddScoped<LoginState>();
 			builder.Services.AddScoped<NavHistoryService>();
 			builder.Services.AddScoped<FieldAttendanceState>();

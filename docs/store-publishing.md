@@ -150,6 +150,12 @@ dotnet publish SPIC.MauiBlazorApp/SPIC.MauiBlazorApp/SPIC.MauiBlazorApp.csproj -
 
 Output: `bin/Release/net10.0-ios/ios-arm64/publish/SPIC.MauiBlazorApp.ipa`.
 
+If Transporter rejects the IPA with **"Missing Provisioning Profile - Apps must contain a provisioning profile in a file named embedded.mobileprovision"**, rebuild with explicit signing values and verify the IPA contains the profile:
+
+```bash
+unzip -l SPIC.MauiBlazorApp/SPIC.MauiBlazorApp/bin/Release/net10.0-ios/ios-arm64/publish/SPIC.MauiBlazorApp.ipa | grep embedded.mobileprovision
+```
+
 1. Open **Transporter** (free, Mac App Store), sign in, drag the `.ipa`, *Deliver*.
 2. In App Store Connect the build appears under **TestFlight** after processing
    (10 to 30 minutes). Internal testers (your team, up to 100) can install at once via

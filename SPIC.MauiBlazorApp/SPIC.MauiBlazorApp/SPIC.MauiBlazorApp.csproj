@@ -37,7 +37,7 @@
     <!-- App Identifier -->
     <ApplicationId>com.apmiot.spicone</ApplicationId>
 
-    <!-- Versions -->
+    <!-- Default version fallback (overridden per platform below). -->
     <ApplicationDisplayVersion>1.2</ApplicationDisplayVersion>
     <ApplicationVersion>2</ApplicationVersion>
 
@@ -83,16 +83,27 @@
   <ItemGroup>
     <ProjectReference Include="..\SPIC.MauiBlazorApp.Shared\SPIC.MauiBlazorApp.Shared.csproj" />
   </ItemGroup>
+
+  <!-- Platform-specific app versions -->
+  <PropertyGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">
+    <ApplicationDisplayVersion>1.2</ApplicationDisplayVersion>
+    <ApplicationVersion>2</ApplicationVersion>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">
+    <ApplicationDisplayVersion>1.2.1</ApplicationDisplayVersion>
+    <ApplicationVersion>3</ApplicationVersion>
+  </PropertyGroup>
+
   <!-- API address. Override per environment at build time:
          dotnet publish ... -p:SpicApiBaseUrl=https://previewspicapi.apmiot.com/
        MauiProgram reads it back from the AssemblyMetadata attribute below. -->
-  <!--<PropertyGroup>
+  <PropertyGroup>
     <SpicApiBaseUrl Condition="'$(SpicApiBaseUrl)' == ''">https://api.spicone.in/</SpicApiBaseUrl>
-  </PropertyGroup>-->
+  </PropertyGroup>
 	<!-- Preview / Testing API -->
-	<PropertyGroup>
+	<!-- <PropertyGroup>
 		<SpicApiBaseUrl Condition="'$(SpicApiBaseUrl)' == ''">https://previewspicapi.apmiot.com/</SpicApiBaseUrl>
-	</PropertyGroup>
+	</PropertyGroup> -->
 	<!-- Local testing (uncomment when debugging against local SpicAPI):
 	<PropertyGroup>
 		<SpicApiBaseUrl Condition="'$(SpicApiBaseUrl)' == ''">http://localhost:5034/</SpicApiBaseUrl>
@@ -125,7 +136,8 @@
   <!-- iOS: SecureStorage uses the Keychain, which needs the keychain-access-groups entitlement. -->
   <PropertyGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">
     <CodesignEntitlements>Platforms/iOS/Entitlements.plist</CodesignEntitlements>
-    <CodesignRequireProvisioningProfile>false</CodesignRequireProvisioningProfile>
+    <CodesignRequireProvisioningProfile Condition="'$(Configuration)' == 'Release'">true</CodesignRequireProvisioningProfile>
+    <CodesignRequireProvisioningProfile Condition="'$(Configuration)' != 'Release'">false</CodesignRequireProvisioningProfile>
     <_MlaunchWaitForExit Condition="'$(_MlaunchWaitForExit)' == ''">false</_MlaunchWaitForExit>
   </PropertyGroup>
 
