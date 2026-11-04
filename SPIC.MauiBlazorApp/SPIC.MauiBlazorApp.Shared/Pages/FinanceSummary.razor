@@ -169,87 +169,124 @@
                 </div>
             </div>
 
-            <div class="fs-chart-container">
-                <svg viewBox="0 0 1000 320" class="fs-svg-chart" preserveAspectRatio="none">
-                    <!-- Dynamic Grid Lines & Y-Labels -->
-                    @for (int i = 0; i < DynamicYGridLevels.Count; i++)
-                    {
-                        var y = 20 + i * 36;
-                        <line x1="50" y1="@y" x2="980" y2="@y" stroke="#f1f5f9" stroke-width="1" stroke-dasharray="3,3" />
-                        @((MarkupString)$"<text x=\"40\" y=\"{y + 4}\" text-anchor=\"end\" class=\"fs-axis-label\">{DynamicYGridLevels[i]}</text>")
-                    }
+            <div class="fs-chart-container" @onmouseleave="() => hoveredPeriodIndex = null">
+                @if (ActiveChartData.Count == 0)
+                {
+                    <EmptyState Icon="bi-bar-chart" Title="No report history yet" Message="Submit a 15-day report to see trends here." Compact="true" />
+                }
+                else
+                {
+                    <svg viewBox="0 0 1000 320" class="fs-svg-chart" preserveAspectRatio="none">
+                        <defs>
+                            <filter id="fsChartShadow" x="-20%" y="-20%" width="140%" height="140%">
+                                <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#0f172a" flood-opacity="0.12" />
+                            </filter>
+                        </defs>
 
-                    <!-- Y-Axis Title -->
-                    <text x="12" y="160" transform="rotate(-90 12 160)" text-anchor="middle" class="fs-axis-title">Amount (₹)</text>
+                        <!-- Dynamic Grid Lines & Y-Labels (Starts at x=75 to leave plenty of room for labels) -->
+                        @for (int i = 0; i < DynamicYGridLevels.Count; i++)
+                        {
+                            var y = 20 + i * 36;
+                            <line x1="75" y1="@y" x2="970" y2="@y" stroke="#f1f5f9" stroke-width="1" stroke-dasharray="3,3" />
+                            @((MarkupString)$"<text x=\"65\" y=\"{y + 4}\" text-anchor=\"end\" class=\"fs-axis-label\">{DynamicYGridLevels[i]}</text>")
+                        }
 
-                    <!-- Baseline -->
-                    <line x1="50" y1="272" x2="980" y2="272" stroke="#e2e8f0" stroke-width="1.2" />
+                        <!-- Y-Axis Title (Shifted to x=18 to avoid overlapping any Y-axis numbers) -->
+                        <text x="18" y="146" transform="rotate(-90 18 146)" text-anchor="middle" class="fs-axis-title">Amount (₹)</text>
 
-                    <!-- Clustered Period Bars -->
-                    @for (int p = 0; p < ActiveChartData.Count; p++)
-                    {
-                        var item = ActiveChartData[p];
-                        var stepW = Math.Max(40, (930.0 / Math.Max(1, ActiveChartData.Count)));
-                        var groupX = 75 + p * stepW;
-                        var incomeBarH = Math.Min(252, (item.Income / MaxChartValue) * 240);
-                        var expenseBarH = Math.Min(252, (item.Expense / MaxChartValue) * 240);
-                        var incomeY = 272 - incomeBarH;
-                        var expenseY = 272 - expenseBarH;
-                        var isHighlighted = (p == ActiveTooltipIndex);
+                        <!-- Baseline -->
+                        <line x1="75" y1="272" x2="970" y2="272" stroke="#cbd5e1" stroke-width="1.2" />
 
-                        <!-- Income Bar (Green) -->
-                        <rect x="@(groupX - 9)" y="@incomeY" width="15" height="@incomeBarH"
-                              rx="3" ry="3" class="fs-bar-income @(isHighlighted ? "fs-bar-active" : "")"
-                              @onmouseenter="() => SetActivePeriod(p)"
-                              @onclick="() => SetActivePeriod(p)" />
+                        @{
+                            var colCount = Math.Max(1, ActiveChartData.Count);
+                            var chartW = 895.0; // 970 - 75
+                            var colW = chartW / colCount;
+                        }
 
-                        <!-- Expense Bar (Pink/Coral) -->
-                        <rect x="@(groupX + 8)" y="@expenseY" width="15" height="@expenseBarH"
-                              rx="3" ry="3" class="fs-bar-expense @(isHighlighted ? "fs-bar-active" : "")"
-                              @onmouseenter="() => SetActivePeriod(p)"
-                              @onclick="() => SetActivePeriod(p)" />
+                        <!-- Hover Guide Line (shown only when hovered) -->
+                        @if (hoveredPeriodIndex.HasValue && hoveredPeriodIndex.Value >= 0 && hoveredPeriodIndex.Value < ActiveChartData.Count)
+                        {
+                            var guideX = 75 + (hoveredPeriodIndex.Value + 0.5) * colW;
+                            <line x1="@guideX" y1="20" x2="@guideX" y2="272" stroke="#94a3b8" stroke-width="1.2" stroke-dasharray="3,3" opacity="0.6" pointer-events="none" />
+                        }
 
-                        <!-- X Label -->
-                        @((MarkupString)$"<text x=\"{groupX + 7}\" y=\"292\" text-anchor=\"middle\" class=\"fs-x-label\">{item.Period}</text>")
-                    }
+                        <!-- Clustered Period Bars -->
+                        @for (int p = 0; p < ActiveChartData.Count; p++)
+                        {
+                            var item = ActiveChartData[p];
+                            var groupX = 75 + (p + 0.5) * colW;
+                            var barW = Math.Clamp(colW * 0.16, 12.0, 22.0);
+                            var incomeBarH = Math.Max(2, Math.Min(252, (item.Income / MaxChartValue) * 240));
+                            var expenseBarH = Math.Max(2, Math.Min(252, (item.Expense / MaxChartValue) * 240));
+                            var incomeY = 272 - incomeBarH;
+                            var expenseY = 272 - expenseBarH;
+                            var isHovered = (hoveredPeriodIndex == p);
 
-                    <!-- Net Profit Line Curve -->
-                    <path d="@NetProfitSvgPath" fill="none" stroke="#3b82f6" stroke-width="2.5" class="fs-line-profit" />
+                            <!-- Income Bar (Green) -->
+                            <rect x="@(groupX - barW - 2)" y="@incomeY" width="@barW" height="@incomeBarH"
+                                  rx="4" ry="4" class="fs-bar-income @(isHovered ? "fs-bar-active" : "")" />
 
-                    <!-- Point Dots -->
-                    @for (int p = 0; p < ActiveChartData.Count; p++)
-                    {
-                        var item = ActiveChartData[p];
-                        var stepW = Math.Max(40, (930.0 / Math.Max(1, ActiveChartData.Count)));
-                        var groupX = 75 + p * stepW + 7;
-                        var profitH = (item.NetProfit / MaxChartValue) * 240;
-                        var profitY = Math.Clamp(272 - profitH, 20, 272);
-                        <circle cx="@groupX" cy="@profitY" r="4" fill="#3b82f6" stroke="#ffffff" stroke-width="2"
-                                class="fs-profit-point"
-                                @onmouseenter="() => SetActivePeriod(p)"
-                                @onclick="() => SetActivePeriod(p)" />
-                    }
+                            <!-- Expense Bar (Pink/Coral) -->
+                            <rect x="@(groupX + 2)" y="@expenseY" width="@barW" height="@expenseBarH"
+                                  rx="4" ry="4" class="fs-bar-expense @(isHovered ? "fs-bar-active" : "")" />
 
-                    <!-- Dynamic Tooltip Callout -->
-                    @if (ActiveTooltipIndex >= 0 && ActiveTooltipIndex < ActiveChartData.Count)
-                    {
-                        var activeItem = ActiveChartData[ActiveTooltipIndex];
-                        var stepW = Math.Max(40, (930.0 / Math.Max(1, ActiveChartData.Count)));
-                        var tX = Math.Clamp(75 + ActiveTooltipIndex * stepW + 7, 70, 920);
-                        var tY = 85;
+                            <!-- X Label -->
+                            @((MarkupString)$"<text x=\"{groupX:0.#}\" y=\"294\" text-anchor=\"middle\" class=\"fs-x-label\">{item.Period}</text>")
+                        }
 
-                        <g class="fs-chart-tooltip-group" transform="translate(@(tX - 56), @tY)">
-                            <rect width="118" height="96" rx="8" ry="8" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.2" filter="drop-shadow(0 4px 8px rgba(0,0,0,0.08))" />
-                            @((MarkupString)$"<text x=\"12\" y=\"22\" font-size=\"11\" font-weight=\"700\" fill=\"#1e293b\">{activeItem.Period}</text>")
-                            @((MarkupString)"<text x=\"12\" y=\"44\" font-size=\"10\" font-weight=\"500\" fill=\"#64748b\">Income</text>")
-                            @((MarkupString)$"<text x=\"106\" y=\"44\" text-anchor=\"end\" font-size=\"10\" font-weight=\"700\" fill=\"#10b981\">₹{activeItem.Income.ToString("N0", IndianCulture)}</text>")
-                            @((MarkupString)"<text x=\"12\" y=\"64\" font-size=\"10\" font-weight=\"500\" fill=\"#64748b\">Expense:</text>")
-                            @((MarkupString)$"<text x=\"106\" y=\"64\" text-anchor=\"end\" font-size=\"10\" font-weight=\"700\" fill=\"#f43f5e\">₹{activeItem.Expense.ToString("N0", IndianCulture)}</text>")
-                            @((MarkupString)"<text x=\"12\" y=\"84\" font-size=\"10\" font-weight=\"500\" fill=\"#64748b\">Net Profit</text>")
-                            @((MarkupString)$"<text x=\"106\" y=\"84\" text-anchor=\"end\" font-size=\"10\" font-weight=\"700\" fill=\"#3b82f6\">₹{activeItem.NetProfit.ToString("N0", IndianCulture)}</text>")
-                        </g>
-                    }
-                </svg>
+                        <!-- Net Profit Line Curve -->
+                        <path d="@NetProfitSvgPath" fill="none" stroke="#3b82f6" stroke-width="2.5" class="fs-line-profit" />
+
+                        <!-- Point Dots -->
+                        @for (int p = 0; p < ActiveChartData.Count; p++)
+                        {
+                            var item = ActiveChartData[p];
+                            var groupX = 75 + (p + 0.5) * colW;
+                            var profitH = (item.NetProfit / MaxChartValue) * 240;
+                            var profitY = Math.Clamp(272 - profitH, 20, 272);
+                            var isHovered = (hoveredPeriodIndex == p);
+                            <circle cx="@groupX" cy="@profitY" r="@(isHovered ? 6 : 4.5)" fill="#3b82f6" stroke="#ffffff" stroke-width="2"
+                                    class="fs-profit-point" />
+                        }
+
+                        <!-- Full Column Hit Areas for Smooth Hover Interaction -->
+                        @for (int p = 0; p < ActiveChartData.Count; p++)
+                        {
+                            var pIdx = p;
+                            var colX = 75 + p * colW;
+                            <rect x="@colX" y="20" width="@colW" height="260"
+                                  fill="transparent"
+                                  style="cursor: pointer;"
+                                  @onmouseenter="() => hoveredPeriodIndex = pIdx"
+                                  @onmousemove="() => hoveredPeriodIndex = pIdx" />
+                        }
+
+                        <!-- Dynamic Tooltip Callout (ONLY rendered on hover) -->
+                        @if (hoveredPeriodIndex.HasValue && hoveredPeriodIndex.Value >= 0 && hoveredPeriodIndex.Value < ActiveChartData.Count)
+                        {
+                            var activeItem = ActiveChartData[hoveredPeriodIndex.Value];
+                            var groupX = 75 + (hoveredPeriodIndex.Value + 0.5) * colW;
+                            var tX = Math.Clamp(groupX, 100, 880);
+
+                            <g class="fs-chart-tooltip-group" transform="translate(@(tX - 70), 30)" pointer-events="none">
+                                <rect width="140" height="98" rx="8" ry="8" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.2" filter="url(#fsChartShadow)" />
+                                <text x="14" y="24" font-size="12" font-weight="700" fill="#0f172a">@activeItem.Period</text>
+                                
+                                <circle cx="18" cy="44" r="3" fill="#10b981" />
+                                <text x="26" y="48" font-size="11" font-weight="500" fill="#64748b">Income</text>
+                                <text x="126" y="48" text-anchor="end" font-size="11" font-weight="700" fill="#10b981">₹@activeItem.Income.ToString("N0", IndianCulture)</text>
+
+                                <circle cx="18" cy="65" r="3" fill="#f43f5e" />
+                                <text x="26" y="69" font-size="11" font-weight="500" fill="#64748b">Expense:</text>
+                                <text x="126" y="69" text-anchor="end" font-size="11" font-weight="700" fill="#f43f5e">₹@activeItem.Expense.ToString("N0", IndianCulture)</text>
+
+                                <circle cx="18" cy="86" r="3" fill="#3b82f6" />
+                                <text x="26" y="90" font-size="11" font-weight="500" fill="#64748b">Net Profit</text>
+                                <text x="126" y="90" text-anchor="end" font-size="11" font-weight="700" fill="#3b82f6">₹@activeItem.NetProfit.ToString("N0", IndianCulture)</text>
+                            </g>
+                        }
+                    </svg>
+                }
             </div>
         </div>
 
@@ -381,7 +418,7 @@
     private string SelectedFinancialYear = "2026-27";
     private string SelectedViewMode = "15-day";
     private string SelectedChartRange = "6m";
-    private int ActiveTooltipIndex = 2;
+    private int? hoveredPeriodIndex = null;
 
     private List<string> AvailableFinancialYears = new() { "2026-27", "2025-26", "2024-25" };
 
@@ -438,10 +475,12 @@
         get
         {
             if (!ActiveChartData.Any()) return "";
-            var stepW = Math.Max(40, (930.0 / Math.Max(1, ActiveChartData.Count)));
+            var colCount = Math.Max(1, ActiveChartData.Count);
+            var chartW = 895.0; // 970 - 75
+            var colW = chartW / colCount;
             var points = ActiveChartData.Select((item, p) =>
             {
-                var x = 75 + p * stepW + 7;
+                var x = 75 + (p + 0.5) * colW;
                 var profitH = (item.NetProfit / MaxChartValue) * 240;
                 var profitY = Math.Clamp(272 - profitH, 20, 272);
                 return $"{x:0.#},{profitY:0.#}";
@@ -450,8 +489,6 @@
             return "M " + string.Join(" L ", points);
         }
     }
-
-    private void SetActivePeriod(int index) => ActiveTooltipIndex = index;
 
     public record ReportHistoryRow(int Id, string SNo, string Period, decimal Income, decimal Expense, decimal NetResult, string Status, DateTime? PeriodDate = null);
 
@@ -633,10 +670,7 @@
             ActiveChartData = PeriodData.ToList();
         }
 
-        if (ActiveTooltipIndex >= ActiveChartData.Count)
-        {
-            ActiveTooltipIndex = Math.Max(0, ActiveChartData.Count - 1);
-        }
+        hoveredPeriodIndex = null;
 
         // 4. Recalculate KPIs based on dateFilteredHistory
         TotalIncome = dateFilteredHistory.Sum(r => r.Income);
@@ -804,7 +838,7 @@
                 }
 
                 ApplyDataPipeline();
-                ActiveTooltipIndex = Math.Max(0, ActiveChartData.Count - 1);
+                hoveredPeriodIndex = null;
             }
         }
         catch (Exception ex)

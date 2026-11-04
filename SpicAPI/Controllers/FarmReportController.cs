@@ -128,6 +128,34 @@ namespace SpicAPI.Controllers
             public List<string> AvailableFinancialYears { get; set; } = new() { "2026-27", "2025-26", "2024-25" };
             public List<ChartTrendPointDto> ChartPoints { get; set; } = new();
             public List<ReportHistoryItemDto> History { get; set; } = new();
+
+            // ---- FarmDashboard-only additions: everything below comes from the SAME `reports` query
+            // already loaded for the KPIs/chart above, so adding these costs no extra round trips. ----
+            public DateTime? LatestStockAsOf { get; set; }
+            public List<DashboardStockRowDto> LatestStockRows { get; set; } = new();
+            public decimal LivestockIncomeTotal { get; set; }
+            public decimal OrchardIncomeTotal { get; set; }
+            public List<ExpenseCategoryDto> TopExpenseCategories { get; set; } = new();
+
+            // The next not-yet-submitted 15-day period to work on, walked forward from today's own
+            // IST date exactly the way FifteenDaysEntry.razor's own LoadActivePeriodReportAsync does -
+            // deliberately independent of the financialYear filter above, since "what do I enter next"
+            // is always about the real calendar, not whichever year the dashboard happens to be showing.
+            public string? ActivePeriodLabel { get; set; }
+            public bool ActivePeriodExists { get; set; }
+        }
+
+        public class DashboardStockRowDto
+        {
+            public string ProductName { get; set; } = "";
+            public string? IconKey { get; set; }
+            public string Uom { get; set; } = "";
+            public int Opening { get; set; }
+            public int Purchase { get; set; }
+            public int Hatched { get; set; }
+            public int Sold { get; set; }
+            public int Mortality { get; set; }
+            public int Closing { get; set; }
         }
 
         public class ChartTrendPointDto
@@ -612,6 +640,58 @@ namespace SpicAPI.Controllers
                     availableYears.Add(y);
             }
 
+            // ---- FarmDashboard-only aggregates, all derived from the SAME `reports` collection above ----
+            var latestReport = reports.OrderByDescending(r => r.PeriodStartDate).FirstOrDefault();
+            var productUoms = await _db.Set<FarmProduct>()
+                .ToDictionaryAsync(p => p.Name, p => p.Uom, StringComparer.OrdinalIgnoreCase);
+            var latestStockRows = latestReport?.InventoryItems.Select(i => new DashboardStockRowDto
+            {
+                ProductName = i.ProductName,
+                IconKey = i.IconKey ?? i.ProductName,
+                Uom = productUoms.TryGetValue(i.ProductName, out var uom) ? uom : "",
+                Opening = i.Opening,
+                Purchase = i.Purchase,
+                Hatched = i.Hatched,
+                Sold = i.Sold,
+                Mortality = i.Mortality,
+                Closing = i.Closing
+            }).ToList() ?? new List<DashboardStockRowDto>();
+
+            var livestockIncomeTotal = reports.SelectMany(r => r.IncomeItems).Where(i => i.Group == "LiveStock").Sum(i => i.TotalAmount);
+            var orchardIncomeTotal = reports.SelectMany(r => r.IncomeItems).Where(i => i.Group == "Orchard").Sum(i => i.TotalAmount);
+
+            var topExpenseCategories = reports.SelectMany(r => r.ExpenseItems)
+                .Where(i => !i.IsSubCategory)
+                .GroupBy(i => i.Category)
+                .Select(g => new ExpenseCategoryDto { Category = g.Key, Amount = g.Sum(i => i.Amount) })
+                .OrderByDescending(c => c.Amount)
+                .Take(6)
+                .ToList();
+
+            // Walk forward from today (IST) past any already-Submitted period, exactly like
+            // FifteenDaysEntry.razor's own LoadActivePeriodReportAsync - independent of the
+            // financialYear filter, since "what's next to enter" is always about the real calendar.
+            var cursor = IndiaNow().Date;
+            string? activePeriodLabel = null;
+            var activePeriodExists = false;
+            for (var guard = 0; guard < 24; guard++)
+            {
+                var label = cursor.Day <= 15
+                    ? $"01 - 15 {cursor:MMM yyyy}"
+                    : $"16 - {DateTime.DaysInMonth(cursor.Year, cursor.Month)} {cursor:MMM yyyy}";
+                var existing = await _db.FarmFifteenDayReports.AsNoTracking()
+                    .FirstOrDefaultAsync(r => r.ReportingPeriod == label);
+                if (existing is null || existing.Status != "Submitted")
+                {
+                    activePeriodLabel = label;
+                    activePeriodExists = existing is not null;
+                    break;
+                }
+                cursor = cursor.Day <= 15
+                    ? new DateTime(cursor.Year, cursor.Month, 16)
+                    : new DateTime(cursor.Year, cursor.Month, 1).AddMonths(1);
+            }
+
             return Ok(new FinanceSummaryDto
             {
                 AnnualBudget = annualBudget,
@@ -621,8 +701,38 @@ namespace SpicAPI.Controllers
                 Roi = roi,
                 AvailableFinancialYears = availableYears,
                 ChartPoints = chartPoints,
-                History = history
+                History = history,
+                LatestStockAsOf = latestReport?.PeriodEndDate,
+                LatestStockRows = latestStockRows,
+                LivestockIncomeTotal = livestockIncomeTotal,
+                OrchardIncomeTotal = orchardIncomeTotal,
+                TopExpenseCategories = topExpenseCategories,
+                ActivePeriodLabel = activePeriodLabel,
+                ActivePeriodExists = activePeriodExists
             });
+        }
+
+        // The API container runs on UTC (no TZ is set in the Docker image); FarmDashboard's "next
+        // period to enter" must be the JMDO/Farm Office's own India day, same reasoning and
+        // fallback chain as JMDOAttendanceController.IndiaNow() / StockReconciliationController's
+        // GetIndiaBusinessDate.
+        private static DateTime IndiaNow()
+        {
+            try
+            {
+                return TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, TimeZoneInfo.FindSystemTimeZoneById("Asia/Kolkata"));
+            }
+            catch
+            {
+                try
+                {
+                    return TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, TimeZoneInfo.FindSystemTimeZoneById("India Standard Time"));
+                }
+                catch
+                {
+                    return DateTime.UtcNow.AddHours(5.5);
+                }
+            }
         }
 
         // GET api/FarmReport/inventory-summary

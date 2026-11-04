@@ -96,7 +96,7 @@ public static class ShellNavigation
 
         new("SubDealerList", "Sub Dealer Master", "bi-people-fill", "/SubDealerList", nameof(PagePermission.SubDealerList))
         {
-            ShortLabel = "Dealers"
+            ShortLabel = "Sub Dealers"
         },
 
         new("DigitalLibrary", "Digital Library", "bi-collection-play", "/DigitalLibrary", "DigitalLibrary")
@@ -271,15 +271,16 @@ public static class ShellNavigation
             // away from /SchemeApproval to /SDWADashboard ("must NEVER reach the SchemeApproval
             // page"), so a menu shown here would be a link the route guard rejects.
             Rule = s => s.UserRole != AppRole.Dealer
-                        && s.CanSeeMenu(PagePermission.SchemeApproval)
+                        && s.CanSeeMenu(PagePermission.SchemeApproval),
+            MoreOnly = true
         },
         new("SMMApprovals", "SMM Approvals", "bi-clipboard2-check-fill", "/SMMApprovals", nameof(PagePermission.SMMApprovals))
         {
-            ShortLabel = "Approvals", Group = GroupApprovals
+            ShortLabel = "Approvals", Group = GroupApprovals, MoreOnly = true
         },
         new("AVPApprovals", "AVP Approvals", "bi-patch-check-fill", "/AVPApprovals", nameof(PagePermission.AVPApprovals))
         {
-            ShortLabel = "Approvals", Group = GroupApprovals
+            ShortLabel = "Approvals", Group = GroupApprovals, MoreOnly = true
         },
         new("RMDValidationQueue", "RMD Validation Queue", "bi-list-check", "/RMDValidationQueue", nameof(PagePermission.RMDValidationQueue))
         {
@@ -496,8 +497,8 @@ public static class ShellNavigation
     private static readonly string[] JmdoPriority = { "FieldDashboard", "TasksAllocation", "MarkAttendance" };
     private static readonly string[] MdoPriority = { "MdoDashboard", "AllocationRequests", "TaskMonitoring" };
     private static readonly string[] RegionPriority = { "Dashboard", "SubDealerList", "RMDValidationQueue", "ReportsCenter" };  // RM / RMD
-    private static readonly string[] StatePriority = { "Dashboard", "SMMApprovals", "SubDealerList", "ReportsCenter" };         // SMD / SMM
-    private static readonly string[] AdminPriority = { "Dashboard", "AVPApprovals", "ReportsCenter", "DigitalLibrary" };        // Admin / CorporateAdmin / Director / AVP (Library falls through for Director / AVP)
+    private static readonly string[] StatePriority = { "Dashboard", "SubDealerList", "ReportsCenter", "DigitalLibrary" };         // SMD / SMM
+    private static readonly string[] AdminPriority = { "Dashboard", "SubDealerList", "ReportsCenter", "DigitalLibrary" };        // Admin / CorporateAdmin / Director / AVP
     private static readonly string[] SpecialAdminPriority = { "Logistics", "LogisticsMaster", "LogisticsReport", "UserProfile" };
     private static readonly string[] DefaultPriority = FieldStaffPriority;
 
