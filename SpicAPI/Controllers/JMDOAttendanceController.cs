@@ -68,7 +68,7 @@ namespace SpicAPI.Controllers
             }
 
             var userId = CurrentUserId();
-            var date = dto.Date.Date;
+            var date = ToIndiaDate(dto.Date);
             var actor = User.Identity?.Name;
             var now = IndiaNow();
 
@@ -286,23 +286,32 @@ namespace SpicAPI.Controllers
         // (UTC) is still yesterday, so a row saved with the device's IST date never matches GetToday's
         // lookup even though the save itself succeeded. Mirrors StockReconciliationController's
         // GetIndiaBusinessDate fallback chain for environments missing the IANA/Windows tz database.
-        private static DateTime IndiaNow()
+        private static DateTime IndiaNow() =>
+            IndiaTimeZone is { } tz ? TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz) : DateTime.UtcNow.AddHours(5.5);
+
+        // The India calendar day a client meant. The phone sends DateTime.Today with its offset
+        // ("2026-11-04T00:00:00+05:30"), and System.Text.Json turns an offset value into the SERVER's
+        // local time - on the UTC container that is 2026-11-03 18:30, so a plain .Date saved the row
+        // under the previous day and GetToday never found it. Local/Utc values are converted to India
+        // time first; an offset-less "2026-11-04" (Unspecified, e.g. from the date picker) already is one.
+        private static DateTime ToIndiaDate(DateTime value)
         {
-            try
+            if (value.Kind == DateTimeKind.Unspecified) return value.Date;
+            var utc = value.ToUniversalTime();
+            return (IndiaTimeZone is { } tz ? TimeZoneInfo.ConvertTimeFromUtc(utc, tz) : utc.AddHours(5.5)).Date;
+        }
+
+        // Asia/Kolkata (IANA), then India Standard Time (Windows); null if neither tz database is present.
+        private static readonly TimeZoneInfo? IndiaTimeZone = FindIndiaTimeZone();
+
+        private static TimeZoneInfo? FindIndiaTimeZone()
+        {
+            foreach (var id in new[] { "Asia/Kolkata", "India Standard Time" })
             {
-                return TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, TimeZoneInfo.FindSystemTimeZoneById("Asia/Kolkata"));
+                try { return TimeZoneInfo.FindSystemTimeZoneById(id); }
+                catch (Exception) { /* try the next id */ }
             }
-            catch
-            {
-                try
-                {
-                    return TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, TimeZoneInfo.FindSystemTimeZoneById("India Standard Time"));
-                }
-                catch
-                {
-                    return DateTime.UtcNow.AddHours(5.5);
-                }
-            }
+            return null;
         }
 
         private static bool IsValidCoordinate(double? latitude, double? longitude)
