@@ -79,8 +79,11 @@
                 <button type="button" class="ie-btn-view-submitted" @onclick="ViewSubmittedReport">
                     <i class="bi bi-eye"></i> View Submitted Report
                 </button>
-                <button type="button" class="ie-btn-go-finance" @onclick="GoToFinanceSummary">
-                    Go to finance summary <i class="bi bi-arrow-right"></i>
+                <button type="button" class="ie-btn-view-submitted" @onclick="GoToFinanceSummary">
+                    Go to finance summary
+                </button>
+                <button type="button" class="ie-btn-go-finance" @onclick="StartNextPeriodEntry">
+                    Enter @NextReportingPeriod Report <i class="bi bi-arrow-right"></i>
                 </button>
             </div>
         </div>
@@ -2523,6 +2526,12 @@
     }
 
     private void GoToFinanceSummary() => Nav.NavigateTo("/FinanceSummary");
+
+    // 1-15 and 16-end are entered separately. The URI doesn't change, so a plain NavigateTo would
+    // no-op (Blazor only re-runs OnInitializedAsync on an actual route change) - forceLoad reruns
+    // it, which now walks forward past the just-submitted period to the next one (see
+    // LoadActivePeriodReportAsync) and lands on its blank Inventory tab.
+    private void StartNextPeriodEntry() => Nav.NavigateTo("/FifteenDaysEntry", forceLoad: true);
     private string remarks = "";
 
     private DateTime reportDate = DateTime.Today;
@@ -3119,7 +3128,43 @@
         }
         else
         {
-            await LoadLatestReportForPeriodAsync(CurrentReportingPeriod);
+            await LoadActivePeriodReportAsync();
+        }
+    }
+
+    // 1-15 and 16-end are separate, sequential entries. A plain visit (no reportId) must never
+    // re-show an already-Submitted period as if it still needed attention - it should land the
+    // JMDO on the next not-yet-submitted period's blank Inventory tab instead. Bounded to 24 hops
+    // (a year of periods) so a data issue can't spin this forever.
+    private async Task LoadActivePeriodReportAsync()
+    {
+        for (var guard = 0; guard < 24; guard++)
+        {
+            ReportDetailsDto? r;
+            try
+            {
+                r = await Http.GetFromJsonAsync<ReportDetailsDto>($"api/FarmReport/latest?period={Uri.EscapeDataString(CurrentReportingPeriod)}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error loading latest report: {ex.Message}");
+                return;
+            }
+
+            if (r is null)
+            {
+                return; // Nothing saved for this period yet - fresh entry on the catalog defaults.
+            }
+
+            if (r.Status != "Submitted")
+            {
+                ApplyReportData(r); // Draft - resume editing where they left off.
+                return;
+            }
+
+            reportDate = reportDate.Day <= 15
+                ? new DateTime(reportDate.Year, reportDate.Month, 16)
+                : new DateTime(reportDate.Year, reportDate.Month, 1).AddMonths(1);
         }
     }
 
@@ -3137,22 +3182,6 @@
         catch (Exception ex)
         {
             Console.WriteLine($"Error loading report {id}: {ex.Message}");
-        }
-    }
-
-    private async Task LoadLatestReportForPeriodAsync(string period)
-    {
-        try
-        {
-            var r = await Http.GetFromJsonAsync<ReportDetailsDto>($"api/FarmReport/latest?period={Uri.EscapeDataString(period)}");
-            if (r != null)
-            {
-                ApplyReportData(r);
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error loading latest report: {ex.Message}");
         }
     }
 
