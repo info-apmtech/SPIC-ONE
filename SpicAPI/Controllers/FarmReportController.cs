@@ -128,6 +128,34 @@ namespace SpicAPI.Controllers
             public List<string> AvailableFinancialYears { get; set; } = new() { "2026-27", "2025-26", "2024-25" };
             public List<ChartTrendPointDto> ChartPoints { get; set; } = new();
             public List<ReportHistoryItemDto> History { get; set; } = new();
+
+            // ---- FarmDashboard-only additions: everything below comes from the SAME `reports` query
+            // already loaded for the KPIs/chart above, so adding these costs no extra round trips. ----
+            public DateTime? LatestStockAsOf { get; set; }
+            public List<DashboardStockRowDto> LatestStockRows { get; set; } = new();
+            public decimal LivestockIncomeTotal { get; set; }
+            public decimal OrchardIncomeTotal { get; set; }
+            public List<ExpenseCategoryDto> TopExpenseCategories { get; set; } = new();
+
+            // The next not-yet-submitted 15-day period to work on, walked forward from today's own
+            // IST date exactly the way FifteenDaysEntry.razor's own LoadActivePeriodReportAsync does -
+            // deliberately independent of the financialYear filter above, since "what do I enter next"
+            // is always about the real calendar, not whichever year the dashboard happens to be showing.
+            public string? ActivePeriodLabel { get; set; }
+            public bool ActivePeriodExists { get; set; }
+        }
+
+        public class DashboardStockRowDto
+        {
+            public string ProductName { get; set; } = "";
+            public string? IconKey { get; set; }
+            public string Uom { get; set; } = "";
+            public int Opening { get; set; }
+            public int Purchase { get; set; }
+            public int Hatched { get; set; }
+            public int Sold { get; set; }
+            public int Mortality { get; set; }
+            public int Closing { get; set; }
         }
 
         public class ChartTrendPointDto
@@ -171,7 +199,6 @@ namespace SpicAPI.Controllers
             public string? SelectedProduct { get; set; }
             public List<string> ReportingPeriods { get; set; } = new();
             public List<string> AvailableFinancialYears { get; set; } = new() { "2026-27", "2025-26", "2024-25" };
-            public List<int> AvailableYears { get; set; } = new();
             public InventorySummaryStatsDto Summary { get; set; } = new();
             public List<InventoryMovementRowDto> Rows { get; set; } = new();
         }
@@ -179,6 +206,10 @@ namespace SpicAPI.Controllers
         public class IncomeReportRowDto
         {
             public int ReportId { get; set; }
+            // The FarmFifteenDayReport id(s) behind this row - one for a "15Days" row, up to two for
+            // a merged "1Month" row. View drawers fetch every id here and merge the results, since a
+            // merged row has no single report to "View" into via ReportId alone.
+            public List<int> ReportIds { get; set; } = new();
             public string ReportingPeriod { get; set; } = "";
             public DateTime PeriodStartDate { get; set; }
             public DateTime PeriodEndDate { get; set; }
@@ -220,6 +251,9 @@ namespace SpicAPI.Controllers
         public class ExpenseReportRowDto
         {
             public int ReportId { get; set; }
+            // Same convention as IncomeReportRowDto.ReportIds - one id for "15Days", up to two for a
+            // merged "1Month" row, so the View drawer can fetch and merge every report behind it.
+            public List<int> ReportIds { get; set; } = new();
             public string ReportingPeriod { get; set; } = "";
             public DateTime PeriodStartDate { get; set; }
             public DateTime PeriodEndDate { get; set; }
@@ -606,6 +640,58 @@ namespace SpicAPI.Controllers
                     availableYears.Add(y);
             }
 
+            // ---- FarmDashboard-only aggregates, all derived from the SAME `reports` collection above ----
+            var latestReport = reports.OrderByDescending(r => r.PeriodStartDate).FirstOrDefault();
+            var productUoms = await _db.Set<FarmProduct>()
+                .ToDictionaryAsync(p => p.Name, p => p.Uom, StringComparer.OrdinalIgnoreCase);
+            var latestStockRows = latestReport?.InventoryItems.Select(i => new DashboardStockRowDto
+            {
+                ProductName = i.ProductName,
+                IconKey = i.IconKey ?? i.ProductName,
+                Uom = productUoms.TryGetValue(i.ProductName, out var uom) ? uom : "",
+                Opening = i.Opening,
+                Purchase = i.Purchase,
+                Hatched = i.Hatched,
+                Sold = i.Sold,
+                Mortality = i.Mortality,
+                Closing = i.Closing
+            }).ToList() ?? new List<DashboardStockRowDto>();
+
+            var livestockIncomeTotal = reports.SelectMany(r => r.IncomeItems).Where(i => i.Group == "LiveStock").Sum(i => i.TotalAmount);
+            var orchardIncomeTotal = reports.SelectMany(r => r.IncomeItems).Where(i => i.Group == "Orchard").Sum(i => i.TotalAmount);
+
+            var topExpenseCategories = reports.SelectMany(r => r.ExpenseItems)
+                .Where(i => !i.IsSubCategory)
+                .GroupBy(i => i.Category)
+                .Select(g => new ExpenseCategoryDto { Category = g.Key, Amount = g.Sum(i => i.Amount) })
+                .OrderByDescending(c => c.Amount)
+                .Take(6)
+                .ToList();
+
+            // Walk forward from today (IST) past any already-Submitted period, exactly like
+            // FifteenDaysEntry.razor's own LoadActivePeriodReportAsync - independent of the
+            // financialYear filter, since "what's next to enter" is always about the real calendar.
+            var cursor = IndiaNow().Date;
+            string? activePeriodLabel = null;
+            var activePeriodExists = false;
+            for (var guard = 0; guard < 24; guard++)
+            {
+                var label = cursor.Day <= 15
+                    ? $"01 - 15 {cursor:MMM yyyy}"
+                    : $"16 - {DateTime.DaysInMonth(cursor.Year, cursor.Month)} {cursor:MMM yyyy}";
+                var existing = await _db.FarmFifteenDayReports.AsNoTracking()
+                    .FirstOrDefaultAsync(r => r.ReportingPeriod == label);
+                if (existing is null || existing.Status != "Submitted")
+                {
+                    activePeriodLabel = label;
+                    activePeriodExists = existing is not null;
+                    break;
+                }
+                cursor = cursor.Day <= 15
+                    ? new DateTime(cursor.Year, cursor.Month, 16)
+                    : new DateTime(cursor.Year, cursor.Month, 1).AddMonths(1);
+            }
+
             return Ok(new FinanceSummaryDto
             {
                 AnnualBudget = annualBudget,
@@ -615,25 +701,55 @@ namespace SpicAPI.Controllers
                 Roi = roi,
                 AvailableFinancialYears = availableYears,
                 ChartPoints = chartPoints,
-                History = history
+                History = history,
+                LatestStockAsOf = latestReport?.PeriodEndDate,
+                LatestStockRows = latestStockRows,
+                LivestockIncomeTotal = livestockIncomeTotal,
+                OrchardIncomeTotal = orchardIncomeTotal,
+                TopExpenseCategories = topExpenseCategories,
+                ActivePeriodLabel = activePeriodLabel,
+                ActivePeriodExists = activePeriodExists
             });
+        }
+
+        // The API container runs on UTC (no TZ is set in the Docker image); FarmDashboard's "next
+        // period to enter" must be the JMDO/Farm Office's own India day, same reasoning and
+        // fallback chain as JMDOAttendanceController.IndiaNow() / StockReconciliationController's
+        // GetIndiaBusinessDate.
+        private static DateTime IndiaNow()
+        {
+            try
+            {
+                return TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, TimeZoneInfo.FindSystemTimeZoneById("Asia/Kolkata"));
+            }
+            catch
+            {
+                try
+                {
+                    return TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, TimeZoneInfo.FindSystemTimeZoneById("India Standard Time"));
+                }
+                catch
+                {
+                    return DateTime.UtcNow.AddHours(5.5);
+                }
+            }
         }
 
         // GET api/FarmReport/inventory-summary
         // Real stock-movement history for one product across every 15-day report, filtered the same
-        // way the Inventory Summary page's own Filters panel does (year/month/reporting
+        // way the Inventory Summary page's own Filters panel does (from/to date/reporting
         // period/product - category only narrows which products api/FarmProduct/products returns for
         // the tab list, so it isn't repeated here). Never hardcoded: the reporting-period dropdown
         // options and the row data both come straight from FarmFifteenDayReports/InventoryItems.
         [HttpGet("inventory-summary")]
         public async Task<IActionResult> GetInventorySummary(
             [FromQuery] string? financialYear,
-            [FromQuery] int? year,
-            [FromQuery] int? month,
+            [FromQuery] DateTime? fromDate,
+            [FromQuery] DateTime? toDate,
             [FromQuery] string? reportingPeriod,
             [FromQuery] string? product)
         {
-            var (rows, periodOptions) = await QueryInventoryRowsAsync(financialYear, year, month, reportingPeriod, product);
+            var (rows, periodOptions) = await QueryInventoryRowsAsync(financialYear, fromDate, toDate, reportingPeriod, product);
 
             var uom = await _db.Set<FarmProduct>()
                 .Where(p => p.Name == product)
@@ -660,37 +776,31 @@ namespace SpicAPI.Controllers
             foreach (var y in distinctYears)
                 if (!availableYears.Contains(y)) availableYears.Add(y);
 
-            // Calendar years actually present in the data (distinct from the "2026-27" financial-year
-            // strings above) - the Year filter picks a literal PeriodStartDate.Year.
-            var calendarYears = await _db.FarmFifteenDayReports
-                .Select(r => r.PeriodStartDate.Year)
-                .Distinct()
-                .OrderDescending()
-                .ToListAsync();
-
             return Ok(new InventorySummaryResponseDto
             {
                 SelectedProduct = product,
                 ReportingPeriods = periodOptions,
                 AvailableFinancialYears = availableYears,
-                AvailableYears = calendarYears,
                 Summary = summary,
                 Rows = rows
             });
         }
 
         // Shared by GetInventorySummary and ExportInventorySummaryExcel so the on-screen table and
-        // the exported file can never disagree about which rows a given filter set matches.
+        // the exported file can never disagree about which rows a given filter set matches. fromDate
+        // and toDate are inclusive and match any report whose 15-day period OVERLAPS the chosen
+        // range, not just reports fully contained in it, so picking e.g. a single mid-period day
+        // still surfaces that period's row instead of looking empty.
         private async Task<(List<InventoryMovementRowDto> Rows, List<string> PeriodOptions)> QueryInventoryRowsAsync(
-            string? financialYear, int? year, int? month, string? reportingPeriod, string? product)
+            string? financialYear, DateTime? fromDate, DateTime? toDate, string? reportingPeriod, string? product)
         {
             var reportsQuery = _db.FarmFifteenDayReports.AsNoTracking().AsQueryable();
             if (!string.IsNullOrWhiteSpace(financialYear))
                 reportsQuery = reportsQuery.Where(r => r.FinancialYear == financialYear);
-            if (year is > 0)
-                reportsQuery = reportsQuery.Where(r => r.PeriodStartDate.Year == year.Value);
-            if (month is > 0)
-                reportsQuery = reportsQuery.Where(r => r.PeriodStartDate.Month == month.Value);
+            if (fromDate.HasValue)
+                reportsQuery = reportsQuery.Where(r => r.PeriodEndDate >= fromDate.Value.Date);
+            if (toDate.HasValue)
+                reportsQuery = reportsQuery.Where(r => r.PeriodStartDate <= toDate.Value.Date);
             if (!string.IsNullOrWhiteSpace(reportingPeriod) && !string.Equals(reportingPeriod, "All Periods", StringComparison.OrdinalIgnoreCase))
                 reportsQuery = reportsQuery.Where(r => r.ReportingPeriod == reportingPeriod);
 
@@ -733,12 +843,12 @@ namespace SpicAPI.Controllers
         [HttpGet("inventory-summary/export")]
         public async Task<IActionResult> ExportInventorySummaryExcel(
             [FromQuery] string? financialYear,
-            [FromQuery] int? year,
-            [FromQuery] int? month,
+            [FromQuery] DateTime? fromDate,
+            [FromQuery] DateTime? toDate,
             [FromQuery] string? reportingPeriod,
             [FromQuery] string? product)
         {
-            var (rows, _) = await QueryInventoryRowsAsync(financialYear, year, month, reportingPeriod, product);
+            var (rows, _) = await QueryInventoryRowsAsync(financialYear, fromDate, toDate, reportingPeriod, product);
 
             using var workbook = new XLWorkbook();
             var sheetName = string.IsNullOrWhiteSpace(product) ? "Stock Movement" : product!.Length > 28 ? product[..28] : product;
@@ -789,25 +899,25 @@ namespace SpicAPI.Controllers
         private const int IncomeEditGraceDays = 4;
 
         // GET api/FarmReport/income-summary
-        // Real income history across every 15-day report, filtered by calendar year and a
-        // from/to-month range (both inclusive) - matching the Income Summary page's own Filters
-        // panel. incomeCategory ("LiveStock"/"Orchard"/null=All) narrows every total and the table's
-        // own Livestock/Orchard columns to just that group, same convention as inventory-summary's
-        // category handling on the client side.
+        // Real income history across every 15-day report, filtered by a from/to date range (both
+        // inclusive, overlap-matched the same way inventory-summary does) - matching the Income
+        // Summary page's own Filters panel. incomeCategory ("LiveStock"/"Orchard"/null=All) narrows
+        // every total and the table's own Livestock/Orchard columns to just that group, same
+        // convention as inventory-summary's category handling on the client side. periodType
+        // ("15Days", the default, or "1Month") controls only how the Rows list is grouped - every
+        // other total/chart below is computed over the full matched report set either way.
         [HttpGet("income-summary")]
         public async Task<IActionResult> GetIncomeSummary(
-            [FromQuery] int? year,
-            [FromQuery] int? fromMonth,
-            [FromQuery] int? toMonth,
-            [FromQuery] string? incomeCategory)
+            [FromQuery] DateTime? fromDate,
+            [FromQuery] DateTime? toDate,
+            [FromQuery] string? incomeCategory,
+            [FromQuery] string? periodType)
         {
             var reportsQuery = _db.FarmFifteenDayReports.AsNoTracking().AsQueryable();
-            if (year is > 0)
-                reportsQuery = reportsQuery.Where(r => r.PeriodStartDate.Year == year.Value);
-            if (fromMonth is >= 1 and <= 12)
-                reportsQuery = reportsQuery.Where(r => r.PeriodStartDate.Month >= fromMonth.Value);
-            if (toMonth is >= 1 and <= 12)
-                reportsQuery = reportsQuery.Where(r => r.PeriodStartDate.Month <= toMonth.Value);
+            if (fromDate.HasValue)
+                reportsQuery = reportsQuery.Where(r => r.PeriodEndDate >= fromDate.Value.Date);
+            if (toDate.HasValue)
+                reportsQuery = reportsQuery.Where(r => r.PeriodStartDate <= toDate.Value.Date);
 
             var reports = await reportsQuery
                 .Include(r => r.IncomeItems)
@@ -820,22 +930,7 @@ namespace SpicAPI.Controllers
 
             bool Included(string group) => categoryFilter is null || string.Equals(categoryFilter, group, StringComparison.OrdinalIgnoreCase);
 
-            var rows = reports.Select(r =>
-            {
-                var liveStockIncome = r.IncomeItems.Where(i => i.Group == "LiveStock").Sum(i => i.TotalAmount);
-                var orchardIncome = r.IncomeItems.Where(i => i.Group == "Orchard").Sum(i => i.TotalAmount);
-                return new IncomeReportRowDto
-                {
-                    ReportId = r.Id,
-                    ReportingPeriod = r.ReportingPeriod,
-                    PeriodStartDate = r.PeriodStartDate,
-                    PeriodEndDate = r.PeriodEndDate,
-                    LivestockIncome = Included("LiveStock") ? liveStockIncome : 0,
-                    OrchardIncome = Included("Orchard") ? orchardIncome : 0,
-                    TotalIncome = (Included("LiveStock") ? liveStockIncome : 0) + (Included("Orchard") ? orchardIncome : 0),
-                    Status = r.Status
-                };
-            }).ToList();
+            var rows = BuildIncomeRows(reports, Included, periodType);
 
             var allIncomeItems = reports.SelectMany(r => r.IncomeItems)
                 .Where(i => Included(i.Group))
@@ -888,26 +983,87 @@ namespace SpicAPI.Controllers
             });
         }
 
+        // Shared by GetIncomeSummary and ExportIncomeSummaryExcel so the on-screen list and the
+        // exported file can never disagree. "15Days" (default) returns one row per report, exactly
+        // as saved. "1Month" merges every calendar month's (up to two) 15-day reports into a single
+        // row spanning the 1st to the last day of that month - summed incomes, and Status is only
+        // "Submitted" once every report in that month is, so a half-submitted month still reads as
+        // in-progress rather than falsely "done". ReportId is 0 on merged rows: there is no single
+        // FarmFifteenDayReport they can "View" into, since a merged row is two reports' totals.
+        private static List<IncomeReportRowDto> BuildIncomeRows(
+            List<FarmFifteenDayReport> reports, Func<string, bool> included, string? periodType)
+        {
+            if (!string.Equals(periodType, "1Month", StringComparison.OrdinalIgnoreCase))
+            {
+                return reports.Select(r =>
+                {
+                    var liveStockIncome = r.IncomeItems.Where(i => i.Group == "LiveStock").Sum(i => i.TotalAmount);
+                    var orchardIncome = r.IncomeItems.Where(i => i.Group == "Orchard").Sum(i => i.TotalAmount);
+                    return new IncomeReportRowDto
+                    {
+                        ReportId = r.Id,
+                        ReportIds = new List<int> { r.Id },
+                        ReportingPeriod = r.ReportingPeriod,
+                        PeriodStartDate = r.PeriodStartDate,
+                        PeriodEndDate = r.PeriodEndDate,
+                        LivestockIncome = included("LiveStock") ? liveStockIncome : 0,
+                        OrchardIncome = included("Orchard") ? orchardIncome : 0,
+                        TotalIncome = (included("LiveStock") ? liveStockIncome : 0) + (included("Orchard") ? orchardIncome : 0),
+                        Status = r.Status
+                    };
+                }).ToList();
+            }
+
+            return reports
+                .GroupBy(r => new { r.PeriodStartDate.Year, r.PeriodStartDate.Month })
+                .OrderByDescending(g => g.Key.Year).ThenByDescending(g => g.Key.Month)
+                .Select(g =>
+                {
+                    var monthStart = new DateTime(g.Key.Year, g.Key.Month, 1);
+                    var monthEnd = new DateTime(g.Key.Year, g.Key.Month, DateTime.DaysInMonth(g.Key.Year, g.Key.Month));
+                    var items = g.SelectMany(r => r.IncomeItems).ToList();
+                    var liveStockIncome = items.Where(i => i.Group == "LiveStock").Sum(i => i.TotalAmount);
+                    var orchardIncome = items.Where(i => i.Group == "Orchard").Sum(i => i.TotalAmount);
+                    return new IncomeReportRowDto
+                    {
+                        ReportId = 0,
+                        ReportIds = g.Select(r => r.Id).ToList(),
+                        ReportingPeriod = $"{monthStart:dd} - {monthEnd:dd MMM yyyy}",
+                        PeriodStartDate = monthStart,
+                        PeriodEndDate = monthEnd,
+                        LivestockIncome = included("LiveStock") ? liveStockIncome : 0,
+                        OrchardIncome = included("Orchard") ? orchardIncome : 0,
+                        TotalIncome = (included("LiveStock") ? liveStockIncome : 0) + (included("Orchard") ? orchardIncome : 0),
+                        Status = g.All(r => r.Status == "Submitted") ? "Submitted" : "Draft"
+                    };
+                })
+                .ToList();
+        }
+
         // GET api/FarmReport/income-summary/export - same filters as income-summary, as a real .xlsx.
         [HttpGet("income-summary/export")]
         public async Task<IActionResult> ExportIncomeSummaryExcel(
-            [FromQuery] int? year,
-            [FromQuery] int? fromMonth,
-            [FromQuery] int? toMonth,
-            [FromQuery] string? incomeCategory)
+            [FromQuery] DateTime? fromDate,
+            [FromQuery] DateTime? toDate,
+            [FromQuery] string? incomeCategory,
+            [FromQuery] string? periodType)
         {
             var reportsQuery = _db.FarmFifteenDayReports.AsNoTracking().AsQueryable();
-            if (year is > 0)
-                reportsQuery = reportsQuery.Where(r => r.PeriodStartDate.Year == year.Value);
-            if (fromMonth is >= 1 and <= 12)
-                reportsQuery = reportsQuery.Where(r => r.PeriodStartDate.Month >= fromMonth.Value);
-            if (toMonth is >= 1 and <= 12)
-                reportsQuery = reportsQuery.Where(r => r.PeriodStartDate.Month <= toMonth.Value);
+            if (fromDate.HasValue)
+                reportsQuery = reportsQuery.Where(r => r.PeriodEndDate >= fromDate.Value.Date);
+            if (toDate.HasValue)
+                reportsQuery = reportsQuery.Where(r => r.PeriodStartDate <= toDate.Value.Date);
 
             var reports = await reportsQuery
                 .Include(r => r.IncomeItems)
                 .OrderByDescending(r => r.PeriodStartDate)
                 .ToListAsync();
+
+            var categoryFilter = string.IsNullOrWhiteSpace(incomeCategory) || string.Equals(incomeCategory, "All", StringComparison.OrdinalIgnoreCase)
+                ? null
+                : incomeCategory;
+            bool Included(string group) => categoryFilter is null || string.Equals(categoryFilter, group, StringComparison.OrdinalIgnoreCase);
+            var exportRows = BuildIncomeRows(reports, Included, periodType);
 
             using var workbook = new XLWorkbook();
             var worksheet = workbook.Worksheets.Add("Income Summary");
@@ -923,15 +1079,13 @@ namespace SpicAPI.Controllers
 
             var rowNum = 2;
             var sNo = 1;
-            foreach (var r in reports)
+            foreach (var r in exportRows)
             {
-                var liveStockIncome = r.IncomeItems.Where(i => i.Group == "LiveStock").Sum(i => i.TotalAmount);
-                var orchardIncome = r.IncomeItems.Where(i => i.Group == "Orchard").Sum(i => i.TotalAmount);
                 worksheet.Cell(rowNum, 1).Value = sNo++;
                 worksheet.Cell(rowNum, 2).Value = r.ReportingPeriod;
-                worksheet.Cell(rowNum, 3).Value = liveStockIncome;
-                worksheet.Cell(rowNum, 4).Value = orchardIncome;
-                worksheet.Cell(rowNum, 5).Value = liveStockIncome + orchardIncome;
+                worksheet.Cell(rowNum, 3).Value = r.LivestockIncome;
+                worksheet.Cell(rowNum, 4).Value = r.OrchardIncome;
+                worksheet.Cell(rowNum, 5).Value = r.TotalIncome;
                 worksheet.Cell(rowNum, 6).Value = r.Status;
                 rowNum++;
             }
@@ -952,16 +1106,16 @@ namespace SpicAPI.Controllers
         // Shared by GetExpenseSummary and ExportExpenseSummaryExcel. Only IsSubCategory == false rows
         // are summed for a report/category total - sub-category rows already roll up into their
         // parent "Miscellaneous" row at save time (FarmFifteenDayExpenseItem.IsAutoCalculated), so
-        // including both would double-count every sub-category entry.
-        private async Task<List<FarmFifteenDayReport>> QueryExpenseReportsAsync(int? year, int? fromMonth, int? toMonth)
+        // including both would double-count every sub-category entry. fromDate/toDate are inclusive
+        // and overlap-matched against each report's 15-day period, same convention as
+        // inventory-summary/income-summary.
+        private async Task<List<FarmFifteenDayReport>> QueryExpenseReportsAsync(DateTime? fromDate, DateTime? toDate)
         {
             var reportsQuery = _db.FarmFifteenDayReports.AsNoTracking().AsQueryable();
-            if (year is > 0)
-                reportsQuery = reportsQuery.Where(r => r.PeriodStartDate.Year == year.Value);
-            if (fromMonth is >= 1 and <= 12)
-                reportsQuery = reportsQuery.Where(r => r.PeriodStartDate.Month >= fromMonth.Value);
-            if (toMonth is >= 1 and <= 12)
-                reportsQuery = reportsQuery.Where(r => r.PeriodStartDate.Month <= toMonth.Value);
+            if (fromDate.HasValue)
+                reportsQuery = reportsQuery.Where(r => r.PeriodEndDate >= fromDate.Value.Date);
+            if (toDate.HasValue)
+                reportsQuery = reportsQuery.Where(r => r.PeriodStartDate <= toDate.Value.Date);
 
             return await reportsQuery
                 .Include(r => r.ExpenseItems)
@@ -969,24 +1123,59 @@ namespace SpicAPI.Controllers
                 .ToListAsync();
         }
 
+        // Shared by GetExpenseSummary and ExportExpenseSummaryExcel so the on-screen list and the
+        // exported file can never disagree. "15Days" (default) returns one row per report, exactly
+        // as saved. "1Month" merges every calendar month's (up to two) 15-day reports into a single
+        // row spanning the 1st to the last day of that month - summed expense, and Status is only
+        // "Submitted" once every report in that month is. ReportId is 0 on merged rows - ReportIds
+        // carries every id behind the row instead, so the View drawer can still fetch and merge them.
+        private static List<ExpenseReportRowDto> BuildExpenseRows(List<FarmFifteenDayReport> reports, string? periodType)
+        {
+            if (!string.Equals(periodType, "1Month", StringComparison.OrdinalIgnoreCase))
+            {
+                return reports.Select(r => new ExpenseReportRowDto
+                {
+                    ReportId = r.Id,
+                    ReportIds = new List<int> { r.Id },
+                    ReportingPeriod = r.ReportingPeriod,
+                    PeriodStartDate = r.PeriodStartDate,
+                    PeriodEndDate = r.PeriodEndDate,
+                    TotalExpense = r.ExpenseItems.Where(i => !i.IsSubCategory).Sum(i => i.Amount),
+                    Status = r.Status
+                }).ToList();
+            }
+
+            return reports
+                .GroupBy(r => new { r.PeriodStartDate.Year, r.PeriodStartDate.Month })
+                .OrderByDescending(g => g.Key.Year).ThenByDescending(g => g.Key.Month)
+                .Select(g =>
+                {
+                    var monthStart = new DateTime(g.Key.Year, g.Key.Month, 1);
+                    var monthEnd = new DateTime(g.Key.Year, g.Key.Month, DateTime.DaysInMonth(g.Key.Year, g.Key.Month));
+                    return new ExpenseReportRowDto
+                    {
+                        ReportId = 0,
+                        ReportIds = g.Select(r => r.Id).ToList(),
+                        ReportingPeriod = $"{monthStart:dd} - {monthEnd:dd MMM yyyy}",
+                        PeriodStartDate = monthStart,
+                        PeriodEndDate = monthEnd,
+                        TotalExpense = g.SelectMany(r => r.ExpenseItems).Where(i => !i.IsSubCategory).Sum(i => i.Amount),
+                        Status = g.All(r => r.Status == "Submitted") ? "Submitted" : "Draft"
+                    };
+                })
+                .ToList();
+        }
+
         // GET api/FarmReport/expense-summary
         [HttpGet("expense-summary")]
         public async Task<IActionResult> GetExpenseSummary(
-            [FromQuery] int? year,
-            [FromQuery] int? fromMonth,
-            [FromQuery] int? toMonth)
+            [FromQuery] DateTime? fromDate,
+            [FromQuery] DateTime? toDate,
+            [FromQuery] string? periodType)
         {
-            var reports = await QueryExpenseReportsAsync(year, fromMonth, toMonth);
+            var reports = await QueryExpenseReportsAsync(fromDate, toDate);
 
-            var rows = reports.Select(r => new ExpenseReportRowDto
-            {
-                ReportId = r.Id,
-                ReportingPeriod = r.ReportingPeriod,
-                PeriodStartDate = r.PeriodStartDate,
-                PeriodEndDate = r.PeriodEndDate,
-                TotalExpense = r.ExpenseItems.Where(i => !i.IsSubCategory).Sum(i => i.Amount),
-                Status = r.Status
-            }).ToList();
+            var rows = BuildExpenseRows(reports, periodType);
 
             var mainItems = reports.SelectMany(r => r.ExpenseItems).Where(i => !i.IsSubCategory).ToList();
 
@@ -1034,11 +1223,12 @@ namespace SpicAPI.Controllers
         // GET api/FarmReport/expense-summary/export - same filters, as a real .xlsx.
         [HttpGet("expense-summary/export")]
         public async Task<IActionResult> ExportExpenseSummaryExcel(
-            [FromQuery] int? year,
-            [FromQuery] int? fromMonth,
-            [FromQuery] int? toMonth)
+            [FromQuery] DateTime? fromDate,
+            [FromQuery] DateTime? toDate,
+            [FromQuery] string? periodType)
         {
-            var reports = await QueryExpenseReportsAsync(year, fromMonth, toMonth);
+            var reports = await QueryExpenseReportsAsync(fromDate, toDate);
+            var exportRows = BuildExpenseRows(reports, periodType);
 
             using var workbook = new XLWorkbook();
             var worksheet = workbook.Worksheets.Add("Expense Summary");
@@ -1054,11 +1244,11 @@ namespace SpicAPI.Controllers
 
             var rowNum = 2;
             var sNo = 1;
-            foreach (var r in reports)
+            foreach (var r in exportRows)
             {
                 worksheet.Cell(rowNum, 1).Value = sNo++;
                 worksheet.Cell(rowNum, 2).Value = r.ReportingPeriod;
-                worksheet.Cell(rowNum, 3).Value = r.ExpenseItems.Where(i => !i.IsSubCategory).Sum(i => i.Amount);
+                worksheet.Cell(rowNum, 3).Value = r.TotalExpense;
                 worksheet.Cell(rowNum, 4).Value = r.Status;
                 rowNum++;
             }

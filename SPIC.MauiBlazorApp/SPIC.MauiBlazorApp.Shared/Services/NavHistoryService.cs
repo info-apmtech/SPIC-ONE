@@ -45,6 +45,15 @@ public sealed class NavHistoryService : IDisposable
 
     public bool CanGoBack => _history.Count > 1;
 
+    /// <summary>
+    /// Native-initiated navigation (currently: tapping the JMDO live-tracking notification while the
+    /// app process is already alive - MainActivity.OnNewIntent calls this directly via Current, since
+    /// the circuit already exists at that point and there's nothing to hand off through
+    /// PendingDeepLink). Goes through the same NavigationManager every in-app NavigateTo does, so it
+    /// shows up in the back-stack like any other navigation.
+    /// </summary>
+    public void NavigateTo(string path) => _nav.NavigateTo(path);
+
     private void OnLocationChanged(object? sender, LocationChangedEventArgs e) => Track(e.Location);
 
     private void Track(string url)

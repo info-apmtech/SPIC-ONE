@@ -40,16 +40,23 @@ namespace SPIC.MauiBlazorApp.Platforms.Android
         {
             try
             {
-                var seconds = Microsoft.Maui.Storage.Preferences.Default.Get("GpsTrackingIntervalSeconds", 20);
-                if (seconds is < 1 or > 100) seconds = 20;
+                var seconds = Microsoft.Maui.Storage.Preferences.Default.Get("GpsTrackingIntervalSeconds", 10);
+                if (seconds is < 1 or > 100) seconds = 10;
                 return TimeSpan.FromSeconds(seconds);
             }
             catch
             {
-                return TimeSpan.FromSeconds(20);
+                return TimeSpan.FromSeconds(10);
             }
         }
-        private const float MinDistanceMeters = 25f;
+        // 0 - purely time-gated (minTime alone), matching the foreground polling loop
+        // (JmdoTrackingClientLoop) and the admin-configured GPS Settings interval. A nonzero value
+        // here (previously 25m) made RequestLocationUpdates withhold EVERY fix until the device moved
+        // that far since the last one - invisible while the app is foregrounded (the JS/getCurrentPosition
+        // loop has no such filter and masks it), but it meant a stationary JMDO closing the app saw
+        // zero location updates reach the server at all: the foreground service notification stayed
+        // up (the service itself was alive) while OnLocationChanged simply never fired again.
+        private const float MinDistanceMeters = 0f;
 
         private LocationManager? _locationManager;
         private int _sessionId;
@@ -57,11 +64,86 @@ namespace SPIC.MauiBlazorApp.Platforms.Android
 
         public static bool IsRunning { get; private set; }
 
+        // Last-known-active session id, outliving process death - without this, a Sticky restart
+        // (OS recreates the process after a kill) calls OnStartCommand with a null Intent, finds no
+        // SessionIdExtra, and stops itself right back down: Sticky's redelivery was a no-op in
+        // practice. Cleared only by an explicit Stop() call, never by OnDestroy, so it survives
+        // exactly the kill scenarios it exists for.
+        private const string PersistedSessionKey = "JmdoTrackingActiveSessionId";
+
+        private static int GetPersistedSessionId()
+        {
+            try { return Microsoft.Maui.Storage.Preferences.Default.Get(PersistedSessionKey, 0); }
+            catch { return 0; }
+        }
+
+        private static void SavePersistedSessionId(int sessionId)
+        {
+            try { Microsoft.Maui.Storage.Preferences.Default.Set(PersistedSessionKey, sessionId); }
+            catch { }
+        }
+
+        private static void ClearPersistedSessionId()
+        {
+            try { Microsoft.Maui.Storage.Preferences.Default.Remove(PersistedSessionKey); }
+            catch { }
+        }
+
+        // Backstop for OEM kills that bypass OnTaskRemoved entirely - some "clear all"/task-manager
+        // kills (MIUI/ColorOS/etc.) SIGKILL the whole process without running any of its components'
+        // normal shutdown lifecycle, so OnTaskRemoved's restart-on-swipe never gets a chance to run.
+        // An inexact, Doze-aware alarm (SetAndAllowWhileIdle, not SetExactAndAllowWhileIdle) needs no
+        // special permission and re-checks every WatchdogInterval whether a session is still meant to
+        // be active; if so and the service isn't running, it restarts it and reschedules itself -
+        // Stop() is the only thing that breaks the chain (CancelWatchdog).
+        private const int WatchdogRequestCode = 4302;
+        private static readonly TimeSpan WatchdogInterval = TimeSpan.FromMinutes(10);
+
+        private static PendingIntent? WatchdogPendingIntent(Context context)
+        {
+            var intent = new Intent(context, typeof(TrackingWatchdogReceiver));
+            return PendingIntent.GetBroadcast(context, WatchdogRequestCode, intent,
+                PendingIntentFlags.UpdateCurrent | PendingIntentFlags.Immutable);
+        }
+
+        private static void ScheduleWatchdog(Context context)
+        {
+            try
+            {
+                if ((AlarmManager?)context.GetSystemService(AlarmService) is not { } alarmManager) return;
+                var triggerAt = SystemClock.ElapsedRealtime() + (long)WatchdogInterval.TotalMilliseconds;
+                alarmManager.SetAndAllowWhileIdle(AlarmType.ElapsedRealtimeWakeup, triggerAt, WatchdogPendingIntent(context));
+            }
+            catch (Exception) { }
+        }
+
+        private static void CancelWatchdog(Context context)
+        {
+            try
+            {
+                ((AlarmManager?)context.GetSystemService(AlarmService))?.Cancel(WatchdogPendingIntent(context));
+            }
+            catch (Exception) { }
+        }
+
+        /// <summary>Called by <see cref="TrackingWatchdogReceiver"/> on each alarm fire.</summary>
+        public static void WatchdogCheck(Context context)
+        {
+            var sessionId = GetPersistedSessionId();
+            if (sessionId <= 0) return; // tracking was explicitly stopped - nothing to watch for
+
+            if (!IsRunning)
+                EnsureRunning(context, sessionId);
+
+            ScheduleWatchdog(context); // always re-arm while a session is persisted
+        }
+
         public override IBinder? OnBind(Intent? intent) => null;
 
         public override StartCommandResult OnStartCommand(Intent? intent, StartCommandFlags flags, int startId)
         {
-            _sessionId = intent?.GetIntExtra(SessionIdExtra, 0) ?? 0;
+            var incoming = intent?.GetIntExtra(SessionIdExtra, 0) ?? 0;
+            _sessionId = incoming > 0 ? incoming : GetPersistedSessionId();
             if (_sessionId <= 0)
             {
                 StopSelf();
@@ -72,6 +154,8 @@ namespace SPIC.MauiBlazorApp.Platforms.Android
             {
                 CreateChannel();
                 StartInForeground(BuildNotification());
+                SavePersistedSessionId(_sessionId);
+                ScheduleWatchdog(this);
 
                 _cts?.Cancel();
                 _cts = new CancellationTokenSource();
@@ -92,6 +176,38 @@ namespace SPIC.MauiBlazorApp.Platforms.Android
             // under memory pressure, battery-saver policies, or OEM-specific background limits - a
             // restart attempt is not a guarantee of continuous coverage.
             return StartCommandResult.Sticky;
+        }
+
+        // Fires when the user swipes the app away from Recents while this service is running (the
+        // exact scenario reported as "closing the app from Recents stops tracking"). Restarting the
+        // foreground service from here is explicitly exempt from Android 8+'s background-start
+        // restrictions - unlike a cold/external start attempt, this process still has a live
+        // component (this service) at the moment it runs. This does not override an OEM's own
+        // process-kill behavior (MIUI/ColorOS/etc. can still kill the whole process outright - see
+        // the class-level honesty note), but it fixes the stock-Android gap where nothing attempted
+        // a restart at all.
+        public override void OnTaskRemoved(Intent? rootIntent)
+        {
+            base.OnTaskRemoved(rootIntent);
+
+            if (_sessionId <= 0 || ApplicationContext is not { } appContext) return;
+
+            try
+            {
+                var intent = new Intent(appContext, typeof(JmdoTrackingForegroundService));
+                intent.PutExtra(SessionIdExtra, _sessionId);
+                if (OperatingSystem.IsAndroidVersionAtLeast(26))
+                    appContext.StartForegroundService(intent);
+                else
+                    appContext.StartService(intent);
+            }
+            catch (Exception) { }
+
+            // Also (re-)arm the watchdog here, not just in OnStartCommand - if the OEM kills the
+            // process again right after this restart attempt (before OnStartCommand's own
+            // ScheduleWatchdog call runs), the watchdog alarm scheduled below still survives the
+            // process death and can recover it later.
+            ScheduleWatchdog(appContext);
         }
 
         public override void OnDestroy()
@@ -179,10 +295,17 @@ namespace SPIC.MauiBlazorApp.Platforms.Android
 
         private Notification BuildNotification()
         {
+            // The "route" extra is how MainActivity (cold start via OnCreate -> PendingDeepLink, or
+            // warm via OnNewIntent -> NavHistoryService.Current directly) knows to land on
+            // FieldDashboard specifically, instead of wherever the app would otherwise open to -
+            // see MainActivity's OnCreate/OnNewIntent for the two paths that consume this.
+            var openIntent = new Intent(this, typeof(MainActivity))
+                .SetFlags(ActivityFlags.SingleTop)
+                .PutExtra("route", "/FieldDashboard");
             var open = PendingIntent.GetActivity(
                 this,
                 0,
-                new Intent(this, typeof(MainActivity)).SetFlags(ActivityFlags.SingleTop),
+                openIntent,
                 PendingIntentFlags.UpdateCurrent | PendingIntentFlags.Immutable);
 
             var builder = new NotificationCompat.Builder(this, ChannelId);
@@ -246,6 +369,9 @@ namespace SPIC.MauiBlazorApp.Platforms.Android
 
         public static void Stop(Context context)
         {
+            ClearPersistedSessionId();
+            CancelWatchdog(context);
+
             try
             {
                 context.StopService(new Intent(context, typeof(JmdoTrackingForegroundService)));

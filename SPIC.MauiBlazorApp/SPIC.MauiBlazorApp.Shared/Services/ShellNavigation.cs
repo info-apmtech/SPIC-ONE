@@ -96,7 +96,7 @@ public static class ShellNavigation
 
         new("SubDealerList", "Sub Dealer Master", "bi-people-fill", "/SubDealerList", nameof(PagePermission.SubDealerList))
         {
-            ShortLabel = "Dealers"
+            ShortLabel = "Sub Dealers"
         },
 
         new("DigitalLibrary", "Digital Library", "bi-collection-play", "/DigitalLibrary", "DigitalLibrary")
@@ -271,15 +271,16 @@ public static class ShellNavigation
             // away from /SchemeApproval to /SDWADashboard ("must NEVER reach the SchemeApproval
             // page"), so a menu shown here would be a link the route guard rejects.
             Rule = s => s.UserRole != AppRole.Dealer
-                        && s.CanSeeMenu(PagePermission.SchemeApproval)
+                        && s.CanSeeMenu(PagePermission.SchemeApproval),
+            MoreOnly = true
         },
         new("SMMApprovals", "SMM Approvals", "bi-clipboard2-check-fill", "/SMMApprovals", nameof(PagePermission.SMMApprovals))
         {
-            ShortLabel = "Approvals", Group = GroupApprovals
+            ShortLabel = "Approvals", Group = GroupApprovals, MoreOnly = true
         },
         new("AVPApprovals", "AVP Approvals", "bi-patch-check-fill", "/AVPApprovals", nameof(PagePermission.AVPApprovals))
         {
-            ShortLabel = "Approvals", Group = GroupApprovals
+            ShortLabel = "Approvals", Group = GroupApprovals, MoreOnly = true
         },
         new("RMDValidationQueue", "RMD Validation Queue", "bi-list-check", "/RMDValidationQueue", nameof(PagePermission.RMDValidationQueue))
         {
@@ -493,11 +494,11 @@ public static class ShellNavigation
     // FieldStaffPriority so MO (who still uses the generic field-staff bar above) is unaffected.
     // Deliberately 3 items, not 4: the product owner wants the 4th slot to stay "More", not get
     // filled by an unrelated page - see the early-return in Pick() below for the JMDO/MDO case.
-    private static readonly string[] JmdoPriority = { "FieldDashboard", "TasksAllocation", "MarkAttendance" };
+    private static readonly string[] JmdoPriority = { "FieldDashboard", "TasksAllocation", "FieldReports" };
     private static readonly string[] MdoPriority = { "MdoDashboard", "AllocationRequests", "TaskMonitoring" };
     private static readonly string[] RegionPriority = { "Dashboard", "SubDealerList", "RMDValidationQueue", "ReportsCenter" };  // RM / RMD
-    private static readonly string[] StatePriority = { "Dashboard", "SMMApprovals", "SubDealerList", "ReportsCenter" };         // SMD / SMM
-    private static readonly string[] AdminPriority = { "Dashboard", "AVPApprovals", "ReportsCenter", "DigitalLibrary" };        // Admin / CorporateAdmin / Director / AVP (Library falls through for Director / AVP)
+    private static readonly string[] StatePriority = { "Dashboard", "SubDealerList", "ReportsCenter", "DigitalLibrary" };         // SMD / SMM
+    private static readonly string[] AdminPriority = { "Dashboard", "SubDealerList", "ReportsCenter", "DigitalLibrary" };        // Admin / CorporateAdmin / Director / AVP
     private static readonly string[] SpecialAdminPriority = { "Logistics", "LogisticsMaster", "LogisticsReport", "UserProfile" };
     private static readonly string[] DefaultPriority = FieldStaffPriority;
 
@@ -670,12 +671,12 @@ public static class ShellNavigation
         ["EntryInfo"] = "CSR2",
         // JMDO Portal
         ["TaskDetail"] = "TasksAllocation",
-        // "/TrackPlayback" is MarkAttendance.razor's own second @page route (added purely so the
-        // sidebar's NavLink can tell "Mark Attendance" and "Track Playback" apart by path instead
-        // of by query string) - without this alias PageGuard.Check() resolves a permission key of
-        // literal "TrackPlayback", which no designation ever grants, and bounces the user to
-        // LandingPage before the page can render.
-        ["TrackPlayback"] = "MarkAttendance",
+        // NOTE: Track Playback is its OWN page/route (TrackPlayback.razor) with its own Candidate
+        // entry above (PermissionKey = PagePermission.MarkAttendance, since no separate
+        // PagePermission exists for it) - ResolvePermissionKey/PageGuard already resolve it
+        // correctly via that direct Candidate match, with no alias needed here. An alias used to
+        // sit here mapping "TrackPlayback" -> "MarkAttendance", but that only fed ActiveKey() and
+        // made the tab bar/rail wrongly highlight "Mark Attendance" while viewing Track Playback.
         // farm operations & 15-day report review/finance summary
         ["FarmOperations"] = "FarmDashboard",
         ["FifteenDayReportReview"] = "FifteenDaysEntry",

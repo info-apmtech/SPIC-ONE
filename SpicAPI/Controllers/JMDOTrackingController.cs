@@ -54,7 +54,7 @@ namespace SpicAPI.Controllers
             }
             catch { }
 
-            return _config.GetValue<int?>("JmdoTracking:IntervalSeconds") ?? 20;
+            return _config.GetValue<int?>("JmdoTracking:IntervalSeconds") ?? 10;
         }
 
         private int GetEffectiveIntervalSecondsSync()
@@ -72,10 +72,33 @@ namespace SpicAPI.Controllers
             }
             catch { }
 
-            return _config.GetValue<int?>("JmdoTracking:IntervalSeconds") ?? 20;
+            return _config.GetValue<int?>("JmdoTracking:IntervalSeconds") ?? 10;
         }
 
         private double AutoEndAfterHours => _config.GetValue<double?>("JmdoTracking:AutoEndAfterHours") ?? 24;
+
+        // The API container runs on UTC with no TZ configured (see Dockerfile) - bare DateTime.Today/
+        // DateTime.Now would silently use UTC, causing day-boundary bugs for IST users roughly between
+        // 00:00-05:30 IST (e.g. "today's" attendance/session landing on what the server still thinks
+        // is yesterday). Same pattern as JMDOAttendanceController/FarmReportController.
+        private static DateTime IndiaNow()
+        {
+            try
+            {
+                return TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, TimeZoneInfo.FindSystemTimeZoneById("Asia/Kolkata"));
+            }
+            catch
+            {
+                try
+                {
+                    return TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, TimeZoneInfo.FindSystemTimeZoneById("India Standard Time"));
+                }
+                catch
+                {
+                    return DateTime.UtcNow.AddHours(5.5);
+                }
+            }
+        }
 
         // POST /api/JMDOTracking/start
         [HttpPost("start")]
@@ -85,7 +108,7 @@ namespace SpicAPI.Controllers
                 return Forbid403("Only JMDO users track field visits here.");
 
             var userId = CurrentUserId();
-            var today = DateTime.Today;
+            var today = IndiaNow().Date;
 
             // A session that's been silent too long must not be resumed as if it were still live -
             // see the class doc comment. Closed at its last recorded point (or its own start, if it
@@ -113,7 +136,7 @@ namespace SpicAPI.Controllers
                 return BadRequest(new { Success = false, Message = "A valid current location (latitude/longitude) is required to start tracking." });
 
             var actor = User.Identity?.Name;
-            var now = DateTime.Now;
+            var now = IndiaNow();
 
             var session = new JMDOTrackingSession
             {
@@ -167,7 +190,7 @@ namespace SpicAPI.Controllers
                 return Forbid403("Only JMDO users track field visits here.");
 
             var userId = CurrentUserId();
-            var today = DateTime.Today;
+            var today = IndiaNow().Date;
             var session = await _db.JMDOTrackingSessions
                 .AsNoTracking()
                 .Where(s => s.UserId == userId && s.StartTime >= today)
@@ -180,23 +203,27 @@ namespace SpicAPI.Controllers
             return Ok(await MapAsync(session));
         }
 
-        // GET /api/JMDOTracking/mine/today
-        // Every one of the caller's own sessions that started today, oldest first - a JMDO can
-        // Start/Stop Live Tracking more than once in a day (separate site visits), and each one is
-        // its own session/route; MineActive/MineLatest only ever surface a single session, so
-        // MarkAttendance's session picker uses this to let the JMDO switch between all of them.
-        [HttpGet("mine/today")]
-        public async Task<IActionResult> MineToday()
+        // GET /api/JMDOTracking/mine/history?days=7
+        // Every one of the caller's own sessions that started in the last `days` calendar days
+        // (today inclusive), most recent first - a JMDO can Start/Stop Live Tracking more than once
+        // in a day (separate site visits), and each one is its own session/route; MineActive/
+        // MineLatest only ever surface a single session, so MarkAttendance's "Track Playback" picker
+        // uses this to let the JMDO browse and switch between all of them. Formerly "mine/today"
+        // (hardcoded to the current day only); renamed when the window became configurable. Capped
+        // at 31 days - this is a browse list, not an export, and RetentionDays (180, see
+        // TrackingRetentionCleanupService) comfortably covers any value in that range.
+        [HttpGet("mine/history")]
+        public async Task<IActionResult> MineHistory([FromQuery] int days = 7)
         {
             if (!IsJmdo())
                 return Forbid403("Only JMDO users track field visits here.");
 
             var userId = CurrentUserId();
-            var today = DateTime.Today;
+            var cutoff = IndiaNow().Date.AddDays(-(Math.Clamp(days, 1, 31) - 1));
             var sessions = await _db.JMDOTrackingSessions
                 .AsNoTracking()
-                .Where(s => s.UserId == userId && s.StartTime >= today)
-                .OrderBy(s => s.StartTime)
+                .Where(s => s.UserId == userId && s.StartTime >= cutoff)
+                .OrderByDescending(s => s.StartTime)
                 .ToListAsync();
 
             var result = new List<JMDOTrackingSessionDto>(sessions.Count);
@@ -225,7 +252,7 @@ namespace SpicAPI.Controllers
             if (session.Status != JMDOTrackingSessionStatus.Active)
                 return BadRequest(new { Success = false, Message = "This tracking session is no longer active." });
 
-            var now = DateTime.Now;
+            var now = IndiaNow();
             _db.JMDOTrackingPoints.Add(NewPoint(session.Id, dto, now));
             await _db.SaveChangesAsync();
 
@@ -260,7 +287,7 @@ namespace SpicAPI.Controllers
             if (session.Status != JMDOTrackingSessionStatus.Active)
                 return BadRequest(new { Success = false, Message = "This tracking session is no longer active." });
 
-            var now = DateTime.Now;
+            var now = IndiaNow();
             var ordered = points
                 .OrderBy(p => p.DeviceCapturedAt ?? now)
                 .Select(p => NewPoint(session.Id, p, now));
@@ -296,7 +323,7 @@ namespace SpicAPI.Controllers
             if (session is null)
                 return BadRequest(new { Success = false, Message = "No active tracking session found." });
 
-            var now = DateTime.Now;
+            var now = IndiaNow();
 
             var point = new JMDOTrackingPoint
             {
@@ -465,7 +492,7 @@ namespace SpicAPI.Controllers
         // JMDO choosing to stop.
         private async Task CloseStaleSessionsAsync(string userId)
         {
-            var cutoff = DateTime.Now.AddHours(-AutoEndAfterHours);
+            var cutoff = IndiaNow().AddHours(-AutoEndAfterHours);
 
             var stale = await _db.JMDOTrackingSessions
                 .Where(s => s.UserId == userId && s.Status == JMDOTrackingSessionStatus.Active)
@@ -481,7 +508,7 @@ namespace SpicAPI.Controllers
                 .ToList();
             if (toClose.Count == 0) return;
 
-            var now = DateTime.Now;
+            var now = IndiaNow();
             foreach (var item in toClose)
             {
                 var end = item.LastPointAt is { } last && last > item.Session.StartTime ? last : item.Session.StartTime;
@@ -548,7 +575,7 @@ namespace SpicAPI.Controllers
             if (session.Status == JMDOTrackingSessionStatus.Cancelled) return JmdoTrackingLiveStatus.Stopped;
 
             var effectiveInterval = interval ?? GetEffectiveIntervalSecondsSync();
-            var since = DateTime.Now - (lastPointAt ?? session.StartTime);
+            var since = IndiaNow() - (lastPointAt ?? session.StartTime);
             if (since <= TimeSpan.FromSeconds(effectiveInterval * 2)) return JmdoTrackingLiveStatus.Live;
             if (since <= TimeSpan.FromMinutes(15)) return JmdoTrackingLiveStatus.Stale;
             return JmdoTrackingLiveStatus.Offline;
