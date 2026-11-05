@@ -41,11 +41,19 @@
     <ApplicationDisplayVersion>1.3.2</ApplicationDisplayVersion>
     <ApplicationVersion>5</ApplicationVersion>
 
+    <!-- NuGet/VS project-info evaluation (e.g. Solution Explorer, restore) reads PackageVersion
+         without pinning a TargetFramework, and the MAUI SDK otherwise derives it from
+         ApplicationDisplayVersion above - which the platform-specific PropertyGroups below
+         deliberately override per-TFM (Android/iOS ship on their own store version cadence). An
+         unconditioned, TFM-independent value here is what that cross-targeting evaluation needs;
+         it has no effect on what's actually embedded in an Android APK or iOS IPA. -->
+    <PackageVersion>1.4.0</PackageVersion>
+
     <!-- To develop, package, and publish an app to the Microsoft Store, see: https://aka.ms/MauiTemplateUnpackaged -->
 	  <WindowsPackageType>MSIX</WindowsPackageType>
 
     <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">15.0</SupportedOSPlatformVersion>
-    <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'maccatalyst'">15.0</SupportedOSPlatformVersion>
+    <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'maccatalyst'">17.0</SupportedOSPlatformVersion>
     <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">24.0</SupportedOSPlatformVersion>
     <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</SupportedOSPlatformVersion>
     <TargetPlatformMinVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</TargetPlatformMinVersion>
@@ -83,21 +91,35 @@
   <ItemGroup>
     <ProjectReference Include="..\SPIC.MauiBlazorApp.Shared\SPIC.MauiBlazorApp.Shared.csproj" />
   </ItemGroup>
+
+  <!-- Platform-specific app versions -->
+  <PropertyGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">
+    <ApplicationDisplayVersion>1.4</ApplicationDisplayVersion>
+    <ApplicationVersion>6</ApplicationVersion>
+    <EmbedAssembliesIntoApk>true</EmbedAssembliesIntoApk>
+    <AndroidPackageFormat>apk</AndroidPackageFormat>
+    <AndroidUseAapt2>true</AndroidUseAapt2>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">
+    <ApplicationDisplayVersion>1.2.1</ApplicationDisplayVersion>
+    <ApplicationVersion>3</ApplicationVersion>
+  </PropertyGroup>
+
   <!-- API address. Override per environment at build time:
          dotnet publish ... -p:SpicApiBaseUrl=https://previewspicapi.apmiot.com/
        MauiProgram reads it back from the AssemblyMetadata attribute below. -->
-  <PropertyGroup>
+  <!--<PropertyGroup>
     <SpicApiBaseUrl Condition="'$(SpicApiBaseUrl)' == ''">https://api.spicone.in/</SpicApiBaseUrl>
-  </PropertyGroup>
+  </PropertyGroup>-->
 	<!-- Preview / Testing API -->
-	<!--<PropertyGroup>
-		<SpicApiBaseUrl Condition="'$(SpicApiBaseUrl)' == ''">https://previewspicapi.apmiot.com/</SpicApiBaseUrl>
-	</PropertyGroup>-->
-	<!-- Local testing (uncomment when debugging against local SpicAPI):
 	<PropertyGroup>
-		<SpicApiBaseUrl Condition="'$(SpicApiBaseUrl)' == ''">http://localhost:5034/</SpicApiBaseUrl>
+		<SpicApiBaseUrl Condition="'$(SpicApiBaseUrl)' == ''">https://previewspicapi.apmiot.com/</SpicApiBaseUrl>
 	</PropertyGroup>
-	-->
+	 <!--Local testing (uncomment when debugging against local SpicAPI):-->
+	<!--<PropertyGroup>
+		<SpicApiBaseUrl Condition="'$(SpicApiBaseUrl)' == ''">http://localhost:7032/</SpicApiBaseUrl>
+	</PropertyGroup>-->
+	
   <ItemGroup>
     <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
       <_Parameter1>SpicApiBaseUrl</_Parameter1>
@@ -113,6 +135,8 @@
   <PropertyGroup Condition="'$(Configuration)' == 'Release' And $([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">
     <AndroidPackageFormats>aab</AndroidPackageFormats>
     <AndroidUseAapt2>true</AndroidUseAapt2>
+    <AndroidLinkTool>r8</AndroidLinkTool>
+    <AndroidEnableProguard>true</AndroidEnableProguard>
   </PropertyGroup>
   <PropertyGroup Condition="'$(SPICONE_ANDROID_KEYSTORE)' != '' And $([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">
     <AndroidKeyStore>true</AndroidKeyStore>
@@ -125,7 +149,8 @@
   <!-- iOS: SecureStorage uses the Keychain, which needs the keychain-access-groups entitlement. -->
   <PropertyGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">
     <CodesignEntitlements>Platforms/iOS/Entitlements.plist</CodesignEntitlements>
-    <CodesignRequireProvisioningProfile>false</CodesignRequireProvisioningProfile>
+    <CodesignRequireProvisioningProfile Condition="'$(Configuration)' == 'Release'">true</CodesignRequireProvisioningProfile>
+    <CodesignRequireProvisioningProfile Condition="'$(Configuration)' != 'Release'">false</CodesignRequireProvisioningProfile>
     <_MlaunchWaitForExit Condition="'$(_MlaunchWaitForExit)' == ''">false</_MlaunchWaitForExit>
   </PropertyGroup>
 

@@ -8,7 +8,7 @@ namespace SPIC.Core.Entities
         [Key]
         public int Id { get; set; }
 
-        public int IntervalSeconds { get; set; } = 20;
+        public int IntervalSeconds { get; set; } = 10;
 
         public bool IsActive { get; set; } = true;
 

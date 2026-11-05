@@ -4,13 +4,13 @@ namespace SPIC.MauiBlazorApp.Shared.Services;
 
 /// <summary>
 /// Holds the runtime and cached GPS tracking interval for JMDO tracking.
-/// Fallback default is 20 seconds. Platform hosts (e.g. MAUI) can bind OnGetNativeInterval
+/// Fallback default is 10 seconds. Platform hosts (e.g. MAUI) can bind OnGetNativeInterval
 /// and OnSaveNativeInterval to persistent Preferences so the interval survives app restarts
 /// and offline sessions.
 /// </summary>
 public static class GpsTrackingConfiguration
 {
-    public const int DefaultIntervalSeconds = 20;
+    public const int DefaultIntervalSeconds = 10;
     public const int MinIntervalSeconds = 1;
     public const int MaxIntervalSeconds = 100;
 

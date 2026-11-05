@@ -316,16 +316,20 @@
     padding: 1.1rem 1.4rem 1.4rem;
 }
 
+/* TrackPlayback.razor's own standalone Live Tracking card - a distinct green-tinted treatment so
+   "this is happening right now" reads at a glance, separate from the (optionally shown below it)
+   historical playback card for whichever session is selected. */
+.ma-tracking-card-live {
+    border-color: #86efac;
+    background: #f0fdf4;
+}
+
 .ma-tracking-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 16px;
-    /* Always one line: title/subtitle on the left, the timer badge pinned to the right - this used
-       to be flex-wrap: wrap, which (with no Stop button to share the right-hand side in the
-       Tracking Stopped state) dropped the badge onto its own line below instead of keeping it
-       beside the title. The left side truncates instead of wrapping if it ever runs out of room. */
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
     padding-bottom: 1.1rem;
     margin-bottom: 1.1rem;
     border-bottom: 1px solid #f1f5f9;
@@ -335,7 +339,12 @@
     display: flex;
     align-items: center;
     gap: 14px;
-    min-width: 0;
+    /* Not 0 - letting this shrink arbitrarily far defeats .ma-tracking-header's flex-wrap: the row
+       "fits" by squeezing this column down to nothing instead of ever wrapping .ma-tracking-actions
+       onto its own line, which is what let the title text wrap mid-word on a phone-width screen
+       instead of the header stacking cleanly. A real floor forces the wrap to trigger once there
+       genuinely isn't room, independently of any specific @media breakpoint. */
+    min-width: 180px;
     flex: 1 1 auto;
 }
 
@@ -365,6 +374,7 @@
     align-items: center;
     gap: 8px;
     min-width: 0;
+    white-space: nowrap;
 }
 
 .ma-tracking-dot {
@@ -466,6 +476,23 @@
 .jt-map-pin-playback {
     background: #f59e0b;
     box-shadow: 0 0 0 6px rgba(245, 158, 11, 0.22), 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+.jt-playback-marker-wrapper {
+    background: transparent !important;
+    border: none !important;
+}
+
+.jt-playback-disc {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: #ea580c;
+    border: 2.5px solid #ffffff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 0 0 5px rgba(234, 88, 12, 0.28), 0 3px 8px rgba(0, 0, 0, 0.35);
 }
 
 /* ---------- Today's sessions picker ---------- */
@@ -845,12 +872,54 @@
     }
 
     .ma-tracking-card {
-        padding: 1rem 1.1rem 1.1rem;
+        padding: 1rem 1rem 1.1rem;
     }
 
-    .ma-btn-stop,
+    .ma-tracking-header {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 12px;
+        padding-bottom: 0.9rem;
+        margin-bottom: 0.9rem;
+    }
+
+    .ma-tracking-left {
+        width: 100%;
+        gap: 12px;
+    }
+
+    .ma-tracking-sub {
+        white-space: normal;
+        line-height: 1.35;
+        color: #4b5563;
+    }
+
+    .ma-tracking-actions {
+        width: 100%;
+        margin-left: 0;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .ma-btn-stop {
+        flex: 1 1 auto;
+        justify-content: center;
+        min-height: 42px;
+        padding: 0.5rem 1rem;
+        font-size: 0.88rem;
+        border-radius: 20px;
+        white-space: nowrap;
+    }
+
     .ma-timer-badge {
-        min-height: 44px;
+        flex-shrink: 0;
+        justify-content: center;
+        min-height: 42px;
+        padding: 0.5rem 0.85rem;
+        font-size: 0.85rem;
+        border-radius: 20px;
+        white-space: nowrap;
     }
 
     .ma-map {
@@ -865,6 +934,19 @@
 @media (max-width: 420px) {
     .ma-weekly-row {
         gap: 6px;
+    }
+}
+
+@media (max-width: 380px) {
+    .ma-tracking-actions {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+    }
+
+    .ma-btn-stop,
+    .ma-timer-badge {
+        width: 100%;
     }
 }
 
