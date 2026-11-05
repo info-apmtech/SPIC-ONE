@@ -33,81 +33,128 @@
                 <div class="exs-filters-grid">
                     <div class="exs-filter-group">
                         <label>Period Type</label>
-                        <select class="exs-select-chevron">
-                            <option>15 days</option>
-                        </select>
+                        @if (isLoadingInitial)
+                        {
+                            <Skeleton Variant="text" Height="38px" Rows="1" />
+                        }
+                        else
+                        {
+                            <select class="exs-select-chevron" @bind="periodType" @bind:after="OnPeriodTypeChanged">
+                                <option value="15Days">15 Days</option>
+                                <option value="1Month">1 Month</option>
+                            </select>
+                        }
                     </div>
                     <div class="exs-filter-group">
-                        <label>From Month</label>
-                        <select class="exs-select-date" @bind="fromMonthFilter">
-                            <option value="">Any</option>
-                            @for (var m = 1; m <= 12; m++)
-                            {
-                                <option value="@m">@MonthName(m)</option>
-                            }
-                        </select>
+                        <label for="exs-from-date">From Date</label>
+                        @if (isLoadingInitial)
+                        {
+                            <Skeleton Variant="text" Height="38px" Rows="1" />
+                        }
+                        else
+                        {
+                            <input id="exs-from-date" type="date" class="exs-input-date @(!string.IsNullOrEmpty(dateValidationError) ? "exs-input-error" : "")"
+                                   @bind="fromDateFilter" @bind:after="OnDatesChanged" max="@(toDateFilter?.ToString("yyyy-MM-dd"))" />
+                        }
                     </div>
                     <div class="exs-filter-group">
-                        <label>To Month</label>
-                        <select class="exs-select-date" @bind="toMonthFilter">
-                            <option value="">Any</option>
-                            @for (var m = 1; m <= 12; m++)
-                            {
-                                <option value="@m">@MonthName(m)</option>
-                            }
-                        </select>
+                        <label for="exs-to-date">To Date</label>
+                        @if (isLoadingInitial)
+                        {
+                            <Skeleton Variant="text" Height="38px" Rows="1" />
+                        }
+                        else
+                        {
+                            <input id="exs-to-date" type="date" class="exs-input-date @(!string.IsNullOrEmpty(dateValidationError) ? "exs-input-error" : "")"
+                                   @bind="toDateFilter" @bind:after="OnDatesChanged" min="@(fromDateFilter?.ToString("yyyy-MM-dd"))" />
+                        }
                     </div>
                     <div class="exs-filter-group">
                         <label>Expense Category</label>
-                        <select class="exs-select-chevron" @bind="categoryFilter">
-                            <option value="">All Category</option>
-                            @foreach (var c in summary.CategoryBreakdown)
-                            {
-                                <option value="@c.Category">@c.Category</option>
-                            }
-                        </select>
+                        @if (isLoadingInitial)
+                        {
+                            <Skeleton Variant="text" Height="38px" Rows="1" />
+                        }
+                        else
+                        {
+                            <select class="exs-select-chevron" @bind="categoryFilter">
+                                <option value="">All Category</option>
+                                @foreach (var c in summary.CategoryBreakdown)
+                                {
+                                    <option value="@c.Category">@c.Category</option>
+                                }
+                            </select>
+                        }
                     </div>
                 </div>
+
+                @if (!string.IsNullOrEmpty(dateValidationError))
+                {
+                    <div class="exs-filter-validation-error">
+                        <i class="bi bi-exclamation-triangle-fill"></i> @dateValidationError
+                    </div>
+                }
+
                 <div class="exs-filters-actions">
-                    <button type="button" class="exs-btn-clear" @onclick="ClearFiltersAsync"><i class="bi bi-x"></i> Clear All</button>
-                    <button type="button" class="exs-btn-primary" @onclick="ApplyFiltersAsync"><i class="bi bi-filter"></i> Apply Filters</button>
+                    <button type="button" class="exs-btn-clear" disabled="@isLoading" @onclick="ClearFiltersAsync"><i class="bi bi-x"></i> Clear All</button>
+                    <button type="button" class="exs-btn-primary" disabled="@isLoading" @onclick="ApplyFiltersAsync"><i class="bi bi-filter"></i> Apply Filters</button>
                 </div>
             </div>
         }
     </div>
 
-    @if (isLoading)
+    @if (!string.IsNullOrEmpty(loadError))
     {
-        <EmptyState Icon="bi-hourglass-split" Title="Loading expense summary..." Compact="true" />
+        <div class="exs-card exs-error-card">
+            <EmptyState Icon="bi-exclamation-circle" Title="Could not load expense data" Message="@loadError">
+                <button type="button" class="exs-btn-primary" @onclick="LoadSummaryAsync">
+                    <i class="bi bi-arrow-clockwise"></i> Retry
+                </button>
+            </EmptyState>
+        </div>
     }
     else
     {
         <!-- Stat cards -->
         <div class="exs-stats-grid">
-            <div class="exs-stat-card">
-                <div class="exs-stat-label">Total Expense</div>
-                <div class="exs-stat-value">@FormatCurrency(summary.TotalExpense)</div>
-                <div class="exs-stat-desc">@(summary.EarliestPeriodStart is { } s ? $"From {s:MMM yyyy} - {(summary.LatestPeriodEnd ?? s):dd MMM yyyy}" : "No records yet")</div>
-                <div class="exs-stat-icon exs-icon-green"><i class="bi bi-file-earmark-arrow-up"></i></div>
-            </div>
-            <div class="exs-stat-card">
-                <div class="exs-stat-label">Highest Expense Category</div>
-                <div class="exs-stat-value">@FormatCurrency(summary.HighestCategoryAmount)</div>
-                <div class="exs-stat-desc">@(summary.HighestCategoryName ?? "-")</div>
-                <div class="exs-stat-icon exs-icon-blue"><i class="bi bi-file-earmark-arrow-up"></i></div>
-            </div>
-            <div class="exs-stat-card">
-                <div class="exs-stat-label">Expense Categories</div>
-                <div class="exs-stat-value">@summary.CategoryCount Categor@(summary.CategoryCount == 1 ? "y" : "ies")</div>
-                <div class="exs-stat-desc">Including Miscellaneous</div>
-                <div class="exs-stat-icon exs-icon-purple"><i class="bi bi-clock-history"></i></div>
-            </div>
-            <div class="exs-stat-card">
-                <div class="exs-stat-label">Summary Coverage</div>
-                <div class="exs-stat-value exs-stat-value-sm">@(summary.EarliestPeriodStart is { } es && summary.LatestPeriodEnd is { } le ? $"{es:dd MMM yyyy} - {le:dd MMM yyyy}" : "No reports yet")</div>
-                <div class="exs-stat-desc">@summary.Rows.Count Complete 15 Day report@(summary.Rows.Count == 1 ? "" : "s")</div>
-                <div class="exs-stat-icon exs-icon-amber"><i class="bi bi-clock-history"></i></div>
-            </div>
+            @if (isLoading)
+            {
+                @for (int i = 0; i < 4; i++)
+                {
+                    <div class="exs-stat-card exs-stat-skeleton-card">
+                        <Skeleton Variant="text" Height="14px" Rows="1" />
+                        <div style="margin: 8px 0;"><Skeleton Variant="text" Height="24px" Rows="1" /></div>
+                        <Skeleton Variant="text" Height="12px" Rows="1" />
+                    </div>
+                }
+            }
+            else
+            {
+                <div class="exs-stat-card">
+                    <div class="exs-stat-label">Total Expense</div>
+                    <div class="exs-stat-value">@FormatCurrency(summary.TotalExpense)</div>
+                    <div class="exs-stat-desc">@(summary.EarliestPeriodStart is { } s ? $"From {s:MMM yyyy} - {(summary.LatestPeriodEnd ?? s):dd MMM yyyy}" : "No records yet")</div>
+                    <div class="exs-stat-icon exs-icon-green"><i class="bi bi-file-earmark-arrow-up"></i></div>
+                </div>
+                <div class="exs-stat-card">
+                    <div class="exs-stat-label">Highest Expense Category</div>
+                    <div class="exs-stat-value">@FormatCurrency(summary.HighestCategoryAmount)</div>
+                    <div class="exs-stat-desc">@(summary.HighestCategoryName ?? "-")</div>
+                    <div class="exs-stat-icon exs-icon-blue"><i class="bi bi-file-earmark-arrow-up"></i></div>
+                </div>
+                <div class="exs-stat-card">
+                    <div class="exs-stat-label">Expense Categories</div>
+                    <div class="exs-stat-value">@summary.CategoryCount Categor@(summary.CategoryCount == 1 ? "y" : "ies")</div>
+                    <div class="exs-stat-desc">Including Miscellaneous</div>
+                    <div class="exs-stat-icon exs-icon-purple"><i class="bi bi-clock-history"></i></div>
+                </div>
+                <div class="exs-stat-card">
+                    <div class="exs-stat-label">Summary Coverage</div>
+                    <div class="exs-stat-value exs-stat-value-sm">@(summary.EarliestPeriodStart is { } es && summary.LatestPeriodEnd is { } le ? $"{es:dd MMM yyyy} - {le:dd MMM yyyy}" : "No reports yet")</div>
+                    <div class="exs-stat-desc">@summary.Rows.Count Complete 15 Day report@(summary.Rows.Count == 1 ? "" : "s")</div>
+                    <div class="exs-stat-icon exs-icon-amber"><i class="bi bi-clock-history"></i></div>
+                </div>
+            }
         </div>
 
         <!-- Table -->
@@ -117,53 +164,105 @@
                     <h2>15 - Day Expense Summary</h2>
                     <p>List of all 15-day expense reports from Jan 2026 to till date</p>
                 </div>
-                <button type="button" class="exs-btn-outline" disabled="@_exporting" @onclick="DownloadExcelAsync"><i class="bi bi-file-earmark-excel"></i> Download Excel</button>
+                <button type="button" class="exs-btn-outline" disabled="@(_exporting || isLoading)" @onclick="DownloadExcelAsync"><i class="bi bi-file-earmark-excel"></i> Download Excel</button>
+            </div>
+
+            <!-- DataTables Toolbar: Search -->
+            <div class="exs-dt-toolbar">
+                <div class="exs-dt-search">
+                    <label>
+                        Search:
+                        <div class="exs-dt-search-input-wrap">
+                            <i class="bi bi-search exs-dt-search-icon"></i>
+                            <input type="text" class="exs-dt-input" placeholder="Search expense reports..."
+                                   @bind="tableSearchText" @bind:event="oninput" @bind:after="OnSearchChanged"
+                                   disabled="@isLoading" />
+                            @if (!string.IsNullOrEmpty(tableSearchText))
+                            {
+                                <button type="button" class="exs-dt-search-clear" @onclick="ClearSearch" title="Clear search">
+                                    <i class="bi bi-x"></i>
+                                </button>
+                            }
+                        </div>
+                    </label>
+                </div>
             </div>
 
             <div class="exs-table-scroll">
-                <table class="exs-table">
-                    <thead>
-                        <tr>
-                            <th>S.NO</th>
-                            <th>Reporting Period</th>
-                            <th>Total Expense (₹)</th>
-                            <th>Status</th>
-                            <th>View</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @if (allRows.Count == 0)
-                        {
-                            <tr><td colspan="5" class="exs-empty-td">No expense reports found for this filter.</td></tr>
-                        }
-                        else
-                        {
-                            @foreach (var (row, index) in PagedRows)
+                @if (isLoading)
+                {
+                    <div class="exs-skeleton-table-wrap">
+                        <Skeleton Variant="table" Rows="6" LoadingText="Loading expense reports..." />
+                    </div>
+                }
+                else
+                {
+                    <table class="exs-table">
+                        <thead>
+                            <tr>
+                                <th>S.NO</th>
+                                <th class="exs-sortable" @onclick='() => SortBy("Period")' title="Sort by Reporting Period">
+                                    <div class="exs-th-content"><span>Reporting Period</span><i class="bi @GetSortIcon("Period")"></i></div>
+                                </th>
+                                <th class="exs-sortable" @onclick='() => SortBy("Total")' title="Sort by Total Expense">
+                                    <div class="exs-th-content"><span>Total Expense (₹)</span><i class="bi @GetSortIcon("Total")"></i></div>
+                                </th>
+                                <th class="exs-sortable" @onclick='() => SortBy("Status")' title="Sort by Status">
+                                    <div class="exs-th-content"><span>Status</span><i class="bi @GetSortIcon("Status")"></i></div>
+                                </th>
+                                <th>View</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (allRows.Count == 0)
+                            {
+                                <tr><td colspan="5" class="exs-empty-td">No expense reports found for this filter.</td></tr>
+                            }
+                            else if (TotalFilteredCount == 0)
                             {
                                 <tr>
-                                    <td>@(((currentPage - 1) * pageSize) + index + 1)</td>
-                                    <td>@row.ReportingPeriod</td>
-                                    <td>@FormatCurrency(row.TotalExpense)</td>
-                                    <td><span class="@("exs-badge-status " + (row.Status == "Submitted" ? "exs-badge-submitted" : "exs-badge-draft"))">@row.Status</span></td>
-                                    <td><button type="button" class="exs-view-btn" @onclick="() => ViewReportAsync(row.ReportId)" aria-label="View"><i class="bi bi-eye"></i></button></td>
+                                    <td colspan="5" class="exs-empty-td">
+                                        <div>No matching records found for "<strong>@tableSearchText</strong>".</div>
+                                        <button type="button" class="exs-btn-clear" style="margin-top: 10px;" @onclick="ClearSearch">
+                                            <i class="bi bi-x"></i> Clear Search
+                                        </button>
+                                    </td>
                                 </tr>
                             }
-                        }
-                    </tbody>
-                </table>
+                            else
+                            {
+                                @foreach (var (row, index) in PagedRows)
+                                {
+                                    <tr>
+                                        <td>@(((currentPage - 1) * pageSize) + index + 1)</td>
+                                        <td>@row.ReportingPeriod</td>
+                                        <td>@FormatCurrency(row.TotalExpense)</td>
+                                        <td><span class="@("exs-badge-status " + (row.Status == "Submitted" ? "exs-badge-submitted" : "exs-badge-draft"))">@row.Status</span></td>
+                                        <td>
+                                            <button type="button" class="exs-view-btn" @onclick="() => ViewReportAsync(row)" aria-label="View"><i class="bi bi-eye"></i></button>
+                                        </td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                }
             </div>
 
-            @if (allRows.Count > 0)
+            @if (!isLoading && allRows.Count > 0)
             {
-                <div class="exs-pagination">
-                    <div class="exs-items-per-page">
-                        <span>Items Per Page</span>
-                        <select @bind="pageSize" @bind:after="() => GoToPage(1)">
-                            <option value="10">10</option>
-                            <option value="16">16</option>
-                            <option value="25">25</option>
-                            <option value="50">50</option>
-                        </select>
+                <div class="exs-pagination exs-dt-footer">
+                    <div class="exs-dt-footer-left">
+                        <div class="exs-items-per-page">
+                            <span>Items Per Page</span>
+                            <select @bind="pageSize" @bind:after="OnPageSizeChanged">
+                                <option value="10">10</option>
+                                <option value="25">25</option>
+                                <option value="50">50</option>
+                                <option value="100">100</option>
+                            </select>
+                        </div>
+                        <div class="exs-dt-info">@ShowingEntriesText</div>
                     </div>
                     <div class="exs-pagination-buttons">
                         <button type="button" class="exs-page-btn" disabled="@(currentPage == 1)" @onclick="() => GoToPage(currentPage - 1)"><i class="bi bi-chevron-left"></i></button>
@@ -348,8 +447,24 @@
     .exs-filters-actions { display: flex; justify-content: flex-end; gap: 12px; }
     .exs-btn-clear { padding: 8px 16px; background: #fff; border: 1px solid #e5e7eb; color: #374151; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
     .exs-btn-primary { padding: 8px 20px; background: #4f46e5; border: none; color: #fff; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+    .exs-btn-primary:disabled, .exs-btn-clear:disabled { opacity: .6; cursor: not-allowed; }
+
+    .exs-input-date {
+        width: 100%; padding: 9px 12px; border: 1px solid #e5e7eb; border-radius: 6px;
+        font-size: 13px; color: #374151; background-color: #F8F9FA; box-sizing: border-box;
+        font-family: inherit;
+    }
+    .exs-input-error { border-color: #ef4444 !important; background-color: #fef2f2 !important; }
+    .exs-filter-validation-error {
+        display: flex; align-items: center; gap: 6px; margin: -6px 0 16px; padding: 8px 12px;
+        background-color: #fef2f2; border: 1px solid #fecaca; border-radius: 6px;
+        color: #b91c1c; font-size: 12px; font-weight: 500;
+    }
+
+    .exs-error-card { padding: 32px 20px; }
 
     .exs-stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+    .exs-stat-skeleton-card { display: flex; flex-direction: column; justify-content: space-between; min-height: 90px; }
     .exs-stat-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; position: relative; box-shadow: 0 1px 2px rgba(0,0,0,.02); }
     .exs-stat-label { font-size: 12px; color: #111827; font-weight: 600; margin-bottom: 6px; }
     .exs-stat-value { font-size: 22px; font-weight: 700; color: #111827; margin-bottom: 6px; }
@@ -367,8 +482,26 @@
     .exs-btn-outline { padding: 6px 12px; background: #fff; border: 1px solid #065f46; color: #065f46; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
     .exs-btn-outline:disabled { opacity: .6; cursor: not-allowed; }
 
+    /* DataTables Toolbar */
+    .exs-dt-toolbar {
+        display: flex; justify-content: flex-end; align-items: center; padding: 12px 20px;
+        background: #fafafa; border-top: 1px solid #f3f4f6; border-bottom: 1px solid #e5e7eb;
+        flex-wrap: wrap; gap: 12px;
+    }
+    .exs-dt-search label { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: #374151; margin: 0; font-weight: 500; }
+    .exs-dt-search-input-wrap { position: relative; display: inline-flex; align-items: center; }
+    .exs-dt-search-icon { position: absolute; left: 10px; color: #9ca3af; font-size: 13px; pointer-events: none; }
+    .exs-dt-input {
+        padding: 6px 30px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px;
+        color: #111827; background: #fff; width: 220px;
+    }
+    .exs-dt-input:focus { outline: none; border-color: #065f46; box-shadow: 0 0 0 2px rgba(6, 95, 70, 0.15); }
+    .exs-dt-search-clear { position: absolute; right: 6px; background: transparent; border: none; color: #9ca3af; cursor: pointer; padding: 2px 4px; font-size: 14px; display: flex; align-items: center; }
+    .exs-dt-search-clear:hover { color: #374151; }
+
     .exs-table-card { overflow: hidden; }
     .exs-table-scroll { overflow-x: auto; }
+    .exs-skeleton-table-wrap { padding: 20px; }
     .exs-table { width: 100%; border-collapse: collapse; text-align: center; }
     .exs-table th { padding: 14px 16px; background: #f3f4f6; font-size: 12px; font-weight: 700; color: #374151; border-bottom: 1px solid #e5e7eb; }
     .exs-table td { padding: 14px 16px; font-size: 13px; color: #4b5563; border-bottom: 1px solid #e5e7eb; }
@@ -376,14 +509,23 @@
     .exs-table tbody tr:last-child td { border-bottom: none; }
     .exs-empty-td { text-align: center !important; padding: 32px !important; color: #9ca3af; font-style: italic; }
 
+    .exs-sortable { cursor: pointer; user-select: none; }
+    .exs-sortable:hover { background-color: #e5e7eb; }
+    .exs-th-content { display: inline-flex; align-items: center; gap: 6px; }
+    .exs-sort-muted { opacity: 0.35; font-size: 11px; }
+    .exs-sort-active { opacity: 1; color: #065f46; font-size: 12px; }
+
     .exs-badge-status { padding: 4px 12px; border-radius: 999px; font-size: 11px; font-weight: 700; }
     .exs-badge-submitted { background: #16a34a; color: #fff; }
     .exs-badge-draft { background: #fde68a; color: #92400e; }
 
     .exs-view-btn { width: 30px; height: 30px; border-radius: 6px; border: 1px solid #e5e7eb; background: #fff; color: #2563eb; cursor: pointer; }
     .exs-view-btn:hover { background: #eff6ff; }
+    .exs-view-btn:disabled { opacity: .5; cursor: not-allowed; color: #9ca3af; }
 
-    .exs-pagination { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-top: 1px solid #e5e7eb; }
+    .exs-pagination { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-top: 1px solid #e5e7eb; flex-wrap: wrap; gap: 16px; }
+    .exs-dt-footer-left { display: flex; align-items: center; flex-wrap: wrap; gap: 16px; }
+    .exs-dt-info { font-size: 13px; color: #6b7280; font-weight: 500; }
     .exs-items-per-page { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #111827; }
     .exs-items-per-page select { padding: 6px 28px 6px 12px; border: 1px solid #e5e7eb; border-radius: 6px; background: #fff; appearance: none; }
     .exs-pagination-buttons { display: flex; align-items: center; gap: 4px; }
@@ -435,29 +577,88 @@
         .exs-filters-grid { grid-template-columns: 1fr; }
         .exs-stats-grid { grid-template-columns: 1fr; }
         .exs-cat-name { width: 90px; }
+        .exs-dt-toolbar { flex-direction: column; align-items: stretch; }
+        .exs-dt-input { width: 100%; }
+        .exs-pagination { flex-direction: column; align-items: center; }
+        .exs-dt-footer-left { justify-content: center; }
     }
 </style>
 
 @code {
     private bool filtersExpanded = true;
+    private bool isLoadingInitial = true;
     private bool isLoading = true;
+    private string? loadError;
     private bool _exporting;
 
-    private string yearFilter = "";
-    private string fromMonthFilter = "";
-    private string toMonthFilter = "";
+    private string periodType = "15Days";
+    private DateTime? fromDateFilter;
+    private DateTime? toDateFilter;
     private string categoryFilter = "";
+    private string? dateValidationError;
 
     private ExpenseSummaryResponseDto summary = new();
     private List<ExpenseReportRowDto> allRows = new();
 
+    // ---- DataTables State ----
+    private string tableSearchText = "";
+    private string sortColumn = "Period";
+    private bool sortAscending = false; // Default: latest period first
     private int currentPage = 1;
-    private int pageSize = 16;
+    private int pageSize = 10;
 
-    private int TotalPages => allRows.Count == 0 ? 1 : (int)Math.Ceiling(allRows.Count / (double)pageSize);
+    private IEnumerable<ExpenseReportRowDto> FilteredRows
+    {
+        get
+        {
+            var rows = allRows.AsEnumerable();
+
+            if (!string.IsNullOrWhiteSpace(tableSearchText))
+            {
+                var q = tableSearchText.Trim();
+                rows = rows.Where(r =>
+                    (r.ReportingPeriod ?? "").Contains(q, StringComparison.OrdinalIgnoreCase) ||
+                    (r.Status ?? "").Contains(q, StringComparison.OrdinalIgnoreCase) ||
+                    r.TotalExpense.ToString("N0").Contains(q));
+            }
+
+            rows = sortColumn switch
+            {
+                "Period" => sortAscending ? rows.OrderBy(r => r.PeriodStartDate) : rows.OrderByDescending(r => r.PeriodStartDate),
+                "Total" => sortAscending ? rows.OrderBy(r => r.TotalExpense) : rows.OrderByDescending(r => r.TotalExpense),
+                "Status" => sortAscending ? rows.OrderBy(r => r.Status) : rows.OrderByDescending(r => r.Status),
+                _ => sortAscending ? rows.OrderBy(r => r.PeriodStartDate) : rows.OrderByDescending(r => r.PeriodStartDate)
+            };
+
+            return rows;
+        }
+    }
+
+    private int TotalFilteredCount => FilteredRows.Count();
+    private int TotalPages => Math.Max(1, (int)Math.Ceiling(TotalFilteredCount / (double)pageSize));
 
     private IEnumerable<(ExpenseReportRowDto Row, int Index)> PagedRows =>
-        allRows.Skip((currentPage - 1) * pageSize).Select((r, i) => (r, i)).Take(pageSize);
+        FilteredRows.Skip((currentPage - 1) * pageSize).Select((r, i) => (r, i)).Take(pageSize);
+
+    private string ShowingEntriesText
+    {
+        get
+        {
+            var total = TotalFilteredCount;
+            var grandTotal = allRows.Count;
+            if (total == 0)
+            {
+                return grandTotal == 0
+                    ? "Showing 0 to 0 of 0 entries"
+                    : $"Showing 0 to 0 of 0 entries (filtered from {grandTotal} total entries)";
+            }
+            var start = ((currentPage - 1) * pageSize) + 1;
+            var end = Math.Min(currentPage * pageSize, total);
+            return total == grandTotal
+                ? $"Showing {start} to {end} of {total} entries"
+                : $"Showing {start} to {end} of {total} entries (filtered from {grandTotal} total entries)";
+        }
+    }
 
     private IEnumerable<int> VisiblePageNumbers
     {
@@ -490,20 +691,26 @@
     // the data, but filtering the table/charts down to a single category isn't wired server-side yet
     // - expense-summary's rows/trend are always the full per-report totals). Revisit if per-category
     // row filtering turns out to be needed.
-    protected override async Task OnInitializedAsync() => await LoadSummaryAsync();
+    protected override async Task OnInitializedAsync()
+    {
+        isLoadingInitial = true;
+        await LoadSummaryAsync();
+        isLoadingInitial = false;
+    }
 
     private string CurrentQueryString()
     {
         var qp = new List<string>();
-        if (int.TryParse(yearFilter, out var y)) qp.Add($"year={y}");
-        if (int.TryParse(fromMonthFilter, out var fm)) qp.Add($"fromMonth={fm}");
-        if (int.TryParse(toMonthFilter, out var tm)) qp.Add($"toMonth={tm}");
+        if (fromDateFilter.HasValue) qp.Add($"fromDate={fromDateFilter.Value:yyyy-MM-dd}");
+        if (toDateFilter.HasValue) qp.Add($"toDate={toDateFilter.Value:yyyy-MM-dd}");
+        if (!string.IsNullOrWhiteSpace(periodType)) qp.Add($"periodType={Uri.EscapeDataString(periodType)}");
         return qp.Count > 0 ? "?" + string.Join("&", qp) : "";
     }
 
     private async Task LoadSummaryAsync()
     {
         isLoading = true;
+        loadError = null;
         StateHasChanged();
 
         try
@@ -515,6 +722,7 @@
         catch (Exception ex)
         {
             Console.WriteLine($"Loading expense summary failed: {ex.Message}");
+            loadError = "Unable to load expense data from the server. Please try again.";
             summary = new();
             allRows = new();
         }
@@ -526,6 +734,54 @@
         }
 
         await RenderChartAsync();
+    }
+
+    private void OnDatesChanged()
+    {
+        if (fromDateFilter.HasValue && toDateFilter.HasValue && fromDateFilter.Value.Date > toDateFilter.Value.Date)
+        {
+            dateValidationError = "From Date cannot be later than To Date.";
+        }
+        else
+        {
+            dateValidationError = null;
+        }
+    }
+
+    private async Task OnPeriodTypeChanged()
+    {
+        tableSearchText = "";
+        await LoadSummaryAsync();
+    }
+
+    private void SortBy(string column)
+    {
+        if (sortColumn == column)
+        {
+            sortAscending = !sortAscending;
+        }
+        else
+        {
+            sortColumn = column;
+            sortAscending = true;
+        }
+        currentPage = 1;
+    }
+
+    private string GetSortIcon(string column)
+    {
+        if (sortColumn != column) return "bi-arrow-down-up exs-sort-muted";
+        return sortAscending ? "bi-arrow-up exs-sort-active" : "bi-arrow-down exs-sort-active";
+    }
+
+    private void OnPageSizeChanged() => currentPage = 1;
+
+    private void OnSearchChanged() => currentPage = 1;
+
+    private void ClearSearch()
+    {
+        tableSearchText = "";
+        currentPage = 1;
     }
 
     private async Task RenderChartAsync()
@@ -542,18 +798,28 @@
         catch (Exception ex) { Console.WriteLine($"Chart render failed: {ex.Message}"); }
     }
 
-    private async Task ApplyFiltersAsync() => await LoadSummaryAsync();
-
-    private async Task ClearFiltersAsync()
+    private async Task ApplyFiltersAsync()
     {
-        yearFilter = "";
-        fromMonthFilter = "";
-        toMonthFilter = "";
-        categoryFilter = "";
+        OnDatesChanged();
+        if (!string.IsNullOrEmpty(dateValidationError))
+        {
+            Toast.Warning(dateValidationError);
+            return;
+        }
+        tableSearchText = "";
         await LoadSummaryAsync();
     }
 
-    private static string MonthName(int m) => new DateTime(2000, m, 1).ToString("MMMM");
+    private async Task ClearFiltersAsync()
+    {
+        periodType = "15Days";
+        fromDateFilter = null;
+        toDateFilter = null;
+        categoryFilter = "";
+        dateValidationError = null;
+        tableSearchText = "";
+        await LoadSummaryAsync();
+    }
 
     private static string FormatCurrency(decimal v) => $"₹{v:N0}";
 
@@ -607,7 +873,10 @@
     private bool isLoadingDetail;
     private ReportDetailsDto? selectedDetail;
 
-    private async Task ViewReportAsync(int reportId)
+    // A "15Days" row has one id; a merged "1Month" row has up to two - fetch every one and, when
+    // there's more than one, merge them into a single combined view (summed per-category amounts)
+    // rather than just showing the first report and silently dropping the other.
+    private async Task ViewReportAsync(ExpenseReportRowDto row)
     {
         showDetailsDrawer = true;
         isLoadingDetail = true;
@@ -616,7 +885,16 @@
 
         try
         {
-            selectedDetail = await Http.GetFromJsonAsync<ReportDetailsDto>($"api/FarmReport/{reportId}");
+            var ids = row.ReportIds.Count > 0 ? row.ReportIds : (row.ReportId > 0 ? new List<int> { row.ReportId } : new List<int>());
+            var details = (await Task.WhenAll(ids.Select(id => Http.GetFromJsonAsync<ReportDetailsDto>($"api/FarmReport/{id}"))))
+                .Where(d => d is not null).Select(d => d!).ToList();
+
+            selectedDetail = details.Count switch
+            {
+                0 => null,
+                1 => details[0],
+                _ => MergeDetails(row, details)
+            };
         }
         catch (Exception ex)
         {
@@ -629,9 +907,33 @@
         }
     }
 
+    private static ReportDetailsDto MergeDetails(ExpenseReportRowDto row, List<ReportDetailsDto> details)
+    {
+        var mergedItems = details
+            .SelectMany(d => d.ExpenseItems)
+            .GroupBy(i => (i.Category, i.IsSubCategory))
+            .Select(g => new ExpenseItemDto
+            {
+                Category = g.Key.Category,
+                Amount = g.Sum(i => i.Amount),
+                IsSubCategory = g.Key.IsSubCategory,
+                IsAutoCalculated = g.Any(i => i.IsAutoCalculated)
+            })
+            .ToList();
+
+        return new ReportDetailsDto
+        {
+            Id = 0,
+            ReportingPeriod = row.ReportingPeriod,
+            Status = row.Status,
+            ExpenseItems = mergedItems
+        };
+    }
+
     public class ExpenseReportRowDto
     {
         public int ReportId { get; set; }
+        public List<int> ReportIds { get; set; } = new();
         public string ReportingPeriod { get; set; } = "";
         public DateTime PeriodStartDate { get; set; }
         public DateTime PeriodEndDate { get; set; }

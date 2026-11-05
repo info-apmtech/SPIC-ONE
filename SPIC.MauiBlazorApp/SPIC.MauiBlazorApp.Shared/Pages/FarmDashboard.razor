@@ -1,7 +1,11 @@
 @page "/FarmDashboard"
 @page "/FarmOperations"
+@using System.Net.Http.Json
 @inject SPIC.MauiBlazorApp.Shared.Services.ToastService Toast
+@inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
 @inject NavigationManager Nav
+@inject HttpClient Http
+@inject IJSRuntime JS
 
 <PageTitle>Farm Operations & Financial Dashboard · SPIC ONE</PageTitle>
 
@@ -11,611 +15,1073 @@
         <!-- Top Header -->
         <div class="fd-header">
             <div class="fd-header-text">
-                <h1>Good Morning, Rajesh Kumar</h1>
+                <h1>@Greeting, @DisplayName</h1>
                 <p>Here's an overview of your farm operation and financial performance</p>
             </div>
             <div class="fd-header-action">
                 <div class="fd-fy-picker">
                     <span class="fd-fy-label">Financial Year:</span>
-                    <select class="fd-fy-select" @bind="SelectedFinancialYear">
-                        <option value="2026">2026</option>
-                        <option value="2025">2025</option>
-                        <option value="2024">2024</option>
+                    <select class="fd-fy-select" @bind="SelectedFinancialYear" @bind:after="OnFinancialYearChanged">
+                        @foreach (var fy in AvailableFinancialYears)
+                        {
+                            <option value="@fy">@fy</option>
+                        }
                     </select>
                 </div>
             </div>
         </div>
 
-        <!-- Metric KPI Cards (Reference: ExtensionRequestList.razor erl-stat-card pattern) -->
-        <div class="fd-stats-grid">
-            <!-- 1. Total Budget -->
-            <div class="fd-stat-card">
-                <div class="fd-stat-text">
-                    <p class="fd-stat-title">Total Budget</p>
-                    <h2>₹6,82,450</h2>
-                    <span class="fd-stat-desc">From 01 Jan 2026 - 15 Sep 2026</span>
-                </div>
-                <div class="fd-stat-icon fd-tone-green" title="Total Budget">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <rect width="16" height="20" x="4" y="2" rx="2"></rect>
-                        <line x1="8" x2="16" y1="6" y2="6"></line>
-                        <line x1="8" x2="16" y1="10" y2="10"></line>
-                        <path d="M9 14h6"></path>
-                    </svg>
-                </div>
+        @if (!string.IsNullOrEmpty(loadError))
+        {
+            <div class="fd-card">
+                <EmptyState Icon="bi-exclamation-circle" Title="Could not load dashboard data" Message="@loadError">
+                    <button type="button" class="fd-btn-outline-green" @onclick="LoadDashboardAsync">Retry</button>
+                </EmptyState>
             </div>
-
-            <!-- 2. Total Income Till Date -->
-            <div class="fd-stat-card">
-                <div class="fd-stat-text">
-                    <p class="fd-stat-title">Total Income Till Date</p>
-                    <h2>₹6,82,450</h2>
-                    <span class="fd-stat-desc">From 01 Jan 2026 - 15 Sep 2026</span>
-                </div>
-                <div class="fd-stat-icon fd-tone-lightgreen" title="Total Income Till Date">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <rect width="16" height="20" x="4" y="2" rx="2"></rect>
-                        <path d="m9 14 3-3 3 3"></path>
-                        <path d="M12 11v6"></path>
-                    </svg>
-                </div>
-            </div>
-
-            <!-- 3. Total Expense Till Date -->
-            <div class="fd-stat-card">
-                <div class="fd-stat-text">
-                    <p class="fd-stat-title">Total Expense Till Date</p>
-                    <h2>₹ 4,29,212</h2>
-                    <span class="fd-stat-desc">From 01 Jan 2026 - 15 Sep 2026</span>
-                </div>
-                <div class="fd-stat-icon fd-tone-red" title="Total Expense Till Date">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="12" cy="12" r="10"></circle>
-                        <polyline points="12 6 12 12 16 14"></polyline>
-                    </svg>
-                </div>
-            </div>
-
-            <!-- 4. Net Profit Till Date -->
-            <div class="fd-stat-card">
-                <div class="fd-stat-text">
-                    <p class="fd-stat-title">Net Profit Till Date</p>
-                    <h2>₹ 2,53,238</h2>
-                    <span class="fd-stat-desc">From 01 Jan 2026 - 15 Sep 2026</span>
-                </div>
-                <div class="fd-stat-icon fd-tone-blue" title="Net Profit Till Date">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                        <polyline points="14 2 14 8 20 8"></polyline>
-                        <line x1="16" y1="13" x2="8" y2="13"></line>
-                        <line x1="16" y1="17" x2="8" y2="17"></line>
-                        <polyline points="10 9 9 9 8 9"></polyline>
-                    </svg>
-                </div>
-            </div>
-
-            <!-- 5. ROI Till Date -->
-            <div class="fd-stat-card">
-                <div class="fd-stat-text">
-                    <p class="fd-stat-title">ROI Till Date</p>
-                    <h2>59.6%</h2>
-                    <span class="fd-stat-desc">From 01 Jan 2026 - 15 Sep 2026</span>
-                </div>
-                <div class="fd-stat-icon fd-tone-orange" title="ROI Till Date">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="12" cy="12" r="10"></circle>
-                        <polyline points="12 6 12 12 14 10"></polyline>
-                    </svg>
-                </div>
-            </div>
-        </div>
-
-        <!-- Middle Row: Quick Action & Next 15-day Period -->
-        <div class="fd-mid-grid">
-            <!-- Quick Action Card -->
-            <div class="fd-card fd-quickaction-card">
-                <div class="fd-card-header">
-                    <div class="fd-card-header-left">
-                        <h3>Quick Action</h3>
-                        <p class="fd-card-subtitle">View summaries or manage products.</p>
-                    </div>
-                    <button type="button" class="fd-btn-outline-green" @onclick="ViewAllReport">
-                        View All Report
-                    </button>
-                </div>
-
-                <div class="fd-quickactions-grid">
-                    <!-- Top Row -->
-                    <div class="fd-action-tile" @onclick='() => HandleAction("Product Management")'>
-                        <div class="fd-action-info">
-                            <span class="fd-action-title">Product Management</span>
-                            <span class="fd-action-desc">Request New product &amp; Rate change</span>
+        }
+        else
+        {
+            <!-- Metric KPI Cards -->
+            <div class="fd-stats-grid">
+                @if (isLoading)
+                {
+                    @for (var i = 0; i < 5; i++)
+                    {
+                        <div class="fd-stat-card">
+                            <div class="fd-stat-text" style="width: 100%;">
+                                <Skeleton Variant="text" Rows="1" Height="12px" />
+                                <div style="margin: 6px 0;"><Skeleton Variant="text" Rows="1" Height="22px" /></div>
+                                <Skeleton Variant="text" Rows="1" Height="10px" />
+                            </div>
                         </div>
-                        <div class="fd-action-icon-circle fd-tone-circle-blue">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    }
+                }
+                else
+                {
+                    <!-- 1. Total Budget -->
+                    <div class="fd-stat-card">
+                        <div class="fd-stat-text">
+                            <p class="fd-stat-title">Total Budget</p>
+                            <h2>₹@AnnualBudget.ToString("N0", IndianCulture)</h2>
+                            <span class="fd-stat-desc">Financial Year @SelectedFinancialYear</span>
+                        </div>
+                        <div class="fd-stat-icon fd-tone-green" title="Total Budget">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <rect width="16" height="20" x="4" y="2" rx="2"></rect>
+                                <line x1="8" x2="16" y1="6" y2="6"></line>
+                                <line x1="8" x2="16" y1="10" y2="10"></line>
+                                <path d="M9 14h6"></path>
+                            </svg>
+                        </div>
+                    </div>
+
+                    <!-- 2. Total Income Till Date -->
+                    <div class="fd-stat-card">
+                        <div class="fd-stat-text">
+                            <p class="fd-stat-title">Total Income Till Date</p>
+                            <h2>₹@TotalIncome.ToString("N0", IndianCulture)</h2>
+                            <span class="fd-stat-desc">Financial Year @SelectedFinancialYear</span>
+                        </div>
+                        <div class="fd-stat-icon fd-tone-lightgreen" title="Total Income Till Date">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <rect width="16" height="20" x="4" y="2" rx="2"></rect>
+                                <path d="m9 14 3-3 3 3"></path>
+                                <path d="M12 11v6"></path>
+                            </svg>
+                        </div>
+                    </div>
+
+                    <!-- 3. Total Expense Till Date -->
+                    <div class="fd-stat-card">
+                        <div class="fd-stat-text">
+                            <p class="fd-stat-title">Total Expense Till Date</p>
+                            <h2>₹@TotalExpense.ToString("N0", IndianCulture)</h2>
+                            <span class="fd-stat-desc">Financial Year @SelectedFinancialYear</span>
+                        </div>
+                        <div class="fd-stat-icon fd-tone-red" title="Total Expense Till Date">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <circle cx="12" cy="12" r="10"></circle>
                                 <polyline points="12 6 12 12 16 14"></polyline>
                             </svg>
                         </div>
                     </div>
 
-                    <div class="fd-action-tile" @onclick='() => HandleAction("Inventory Summary")'>
-                        <div class="fd-action-info">
-                            <span class="fd-action-title">Inventory Summary</span>
-                            <span class="fd-action-desc">View Reports Inventory</span>
+                    <!-- 4. Net Profit Till Date -->
+                    <div class="fd-stat-card">
+                        <div class="fd-stat-text">
+                            <p class="fd-stat-title">Net Profit Till Date</p>
+                            <h2>₹@NetProfit.ToString("N0", IndianCulture)</h2>
+                            <span class="fd-stat-desc">Financial Year @SelectedFinancialYear</span>
                         </div>
-                        <div class="fd-action-icon-circle fd-tone-circle-green">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <circle cx="12" cy="12" r="10"></circle>
-                                <polyline points="12 6 12 12 16 14"></polyline>
+                        <div class="fd-stat-icon fd-tone-blue" title="Net Profit Till Date">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                <polyline points="14 2 14 8 20 8"></polyline>
+                                <line x1="16" y1="13" x2="8" y2="13"></line>
+                                <line x1="16" y1="17" x2="8" y2="17"></line>
+                                <polyline points="10 9 9 9 8 9"></polyline>
                             </svg>
                         </div>
                     </div>
 
-                    <!-- Bottom Row: 3 items -->
-                    <div class="fd-action-tile" @onclick='() => HandleAction("Income Summary")'>
-                        <div class="fd-action-info">
-                            <span class="fd-action-title">Income Summary</span>
-                            <span class="fd-action-desc">View Reports Income</span>
+                    <!-- 5. ROI Till Date -->
+                    <div class="fd-stat-card">
+                        <div class="fd-stat-text">
+                            <p class="fd-stat-title">ROI Till Date</p>
+                            <h2>@Roi.ToString("0.0")%</h2>
+                            <span class="fd-stat-desc">Till Date (Profit / Budget)</span>
                         </div>
-                        <div class="fd-action-icon-circle fd-tone-circle-blue">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <div class="fd-stat-icon fd-tone-orange" title="ROI Till Date">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <circle cx="12" cy="12" r="10"></circle>
-                                <polyline points="12 6 12 12 16 14"></polyline>
+                                <polyline points="12 6 12 12 14 10"></polyline>
+                            </svg>
+                        </div>
+                    </div>
+                }
+            </div>
+
+            <!-- Middle Row: Quick Action & Next 15-day Period -->
+            <div class="fd-mid-grid">
+                <!-- Quick Action Card -->
+                <div class="fd-card fd-quickaction-card">
+                    <div class="fd-card-header">
+                        <div class="fd-card-header-left">
+                            <h3>Quick Action</h3>
+                            <p class="fd-card-subtitle">View summaries or manage products.</p>
+                        </div>
+                        <button type="button" class="fd-btn-outline-green" @onclick="ViewAllReport">
+                            View All Report
+                        </button>
+                    </div>
+
+                    <div class="fd-quickactions-grid">
+                        <!-- Top Row -->
+                        <div class="fd-action-tile" @onclick='() => HandleAction("Product Management")'>
+                            <div class="fd-action-info">
+                                <span class="fd-action-title">Product Management</span>
+                                <span class="fd-action-desc">Request New product &amp; Rate change</span>
+                            </div>
+                            <div class="fd-action-icon-circle fd-tone-circle-blue">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="12" cy="12" r="10"></circle>
+                                    <polyline points="12 6 12 12 16 14"></polyline>
+                                </svg>
+                            </div>
+                        </div>
+
+                        <div class="fd-action-tile" @onclick='() => HandleAction("Inventory Summary")'>
+                            <div class="fd-action-info">
+                                <span class="fd-action-title">Inventory Summary</span>
+                                <span class="fd-action-desc">View Reports Inventory</span>
+                            </div>
+                            <div class="fd-action-icon-circle fd-tone-circle-green">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="12" cy="12" r="10"></circle>
+                                    <polyline points="12 6 12 12 16 14"></polyline>
+                                </svg>
+                            </div>
+                        </div>
+
+                        <!-- Bottom Row: 3 items -->
+                        <div class="fd-action-tile" @onclick='() => HandleAction("Income Summary")'>
+                            <div class="fd-action-info">
+                                <span class="fd-action-title">Income Summary</span>
+                                <span class="fd-action-desc">View Reports Income</span>
+                            </div>
+                            <div class="fd-action-icon-circle fd-tone-circle-blue">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="12" cy="12" r="10"></circle>
+                                    <polyline points="12 6 12 12 16 14"></polyline>
+                                </svg>
+                            </div>
+                        </div>
+
+                        <div class="fd-action-tile" @onclick='() => HandleAction("Expense Summary")'>
+                            <div class="fd-action-info">
+                                <span class="fd-action-title">Expense Summary</span>
+                                <span class="fd-action-desc">View Reports Expense</span>
+                            </div>
+                            <div class="fd-action-icon-circle fd-tone-circle-red">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="12" cy="12" r="10"></circle>
+                                    <polyline points="12 6 12 12 16 14"></polyline>
+                                </svg>
+                            </div>
+                        </div>
+
+                        <div class="fd-action-tile" @onclick='() => HandleAction("Finance Summary")'>
+                            <div class="fd-action-info">
+                                <span class="fd-action-title">Finance Summary</span>
+                                <span class="fd-action-desc">View overall financial performance</span>
+                            </div>
+                            <div class="fd-action-icon-circle fd-tone-circle-green">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="12" cy="12" r="10"></circle>
+                                    <polyline points="12 6 12 12 16 14"></polyline>
+                                </svg>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Next 15-day Period Card -->
+                <div class="fd-card fd-period-card">
+                    <div class="fd-card-header">
+                        <div class="fd-card-header-left">
+                            <h3>Next 15-day Period</h3>
+                            <p class="fd-card-subtitle">@(ActivePeriodLabel ?? "—")</p>
+                        </div>
+                        <div class="fd-period-icon fd-tone-orange">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <polyline points="12 6 12 12 14 10"></polyline>
                             </svg>
                         </div>
                     </div>
 
-                    <div class="fd-action-tile" @onclick='() => HandleAction("Inventory Summary")'>
-                        <div class="fd-action-info">
-                            <span class="fd-action-title">Inventory Summary</span>
-                            <span class="fd-action-desc">View Reports Inventory</span>
-                        </div>
-                        <div class="fd-action-icon-circle fd-tone-circle-green">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <circle cx="12" cy="12" r="10"></circle>
-                                <polyline points="12 6 12 12 16 14"></polyline>
-                            </svg>
-                        </div>
-                    </div>
+                    <div class="fd-period-body">
+                        <div class="fd-period-box">
+                            <div class="fd-period-cal-icon">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                                    <line x1="16" y1="2" x2="16" y2="6"></line>
+                                    <line x1="8" y1="2" x2="8" y2="6"></line>
+                                    <line x1="3" y1="10" x2="21" y2="10"></line>
+                                </svg>
+                            </div>
+                            <span class="fd-period-notice">@(ActivePeriodExists ? "You have a draft saved for" : "Entry is open for")</span>
+                            <strong class="fd-period-date">@(ActivePeriodLabel ?? "—")</strong>
+                            <div class="fd-period-countdown">@(ActivePeriodExists ? "Draft in progress - not yet submitted" : "Not started yet")</div>
 
-                    <div class="fd-action-tile" @onclick='() => HandleAction("Finance Summary")'>
-                        <div class="fd-action-info">
-                            <span class="fd-action-title">Finance Summary</span>
-                            <span class="fd-action-desc">View Reports Expense</span>
-                        </div>
-                        <div class="fd-action-icon-circle fd-tone-circle-red">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <circle cx="12" cy="12" r="10"></circle>
-                                <polyline points="12 6 12 12 16 14"></polyline>
-                            </svg>
+                            <button type="button" class="fd-period-btn" @onclick="Start15DaysEntry">
+                                @(ActivePeriodExists ? "Continue 15 Days Entry" : "Start 15 Days Entry")
+                            </button>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Next 15-day Period Card -->
-            <div class="fd-card fd-period-card">
-                <div class="fd-card-header">
-                    <div class="fd-card-header-left">
-                        <h3>Next 15-day Period</h3>
-                        <p class="fd-card-subtitle">16-30 Sep 2026</p>
+            <!-- Income, Expense & Profit Trends Section -->
+            <div class="fd-card fd-chart-card">
+                <div class="fd-card-header fd-chart-header">
+                    <h3>Income, Expense &amp; Profit Trends</h3>
+
+                    <div class="fd-chart-controls">
+                        <div class="fd-chart-legend">
+                            <span class="fd-legend-item">
+                                <span class="fd-legend-dot fd-dot-income"></span>
+                                Income
+                            </span>
+                            <span class="fd-legend-item">
+                                <span class="fd-legend-dot fd-dot-expense"></span>
+                                Expense
+                            </span>
+                            <span class="fd-legend-item">
+                                <span class="fd-legend-dot fd-dot-profit"></span>
+                                Net Profit
+                            </span>
+                        </div>
+
+                        <select class="fd-chart-select" @bind="SelectedChartRange" @bind:after="OnChartRangeChanged">
+                            <option value="6m">Last 6 Periods</option>
+                            <option value="3m">Last 3 Periods</option>
+                            <option value="1y">All Periods</option>
+                        </select>
                     </div>
-                    <div class="fd-period-icon fd-tone-orange">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <circle cx="12" cy="12" r="10"></circle>
-                            <polyline points="12 6 12 12 14 10"></polyline>
+                </div>
+
+                <div class="fd-chart-container" @onmouseleave="() => hoveredPeriodIndex = null">
+                    @if (isLoading)
+                    {
+                        <Skeleton Variant="text" Rows="6" Height="28px" LoadingText="Loading trend chart..." />
+                    }
+                    else if (ActiveChartData.Count == 0)
+                    {
+                        <EmptyState Icon="bi-bar-chart" Title="No report history yet" Message="Submit a 15-day report to see trends here." Compact="true" />
+                    }
+                    else
+                    {
+                        <svg viewBox="0 0 1000 320" class="fd-svg-chart" preserveAspectRatio="none">
+                            <defs>
+                                <filter id="fdChartShadow" x="-20%" y="-20%" width="140%" height="140%">
+                                    <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#0f172a" flood-opacity="0.12" />
+                                </filter>
+                            </defs>
+
+                            <!-- Dynamic Grid Lines & Y-Labels (Starts at x=75 to leave plenty of room for labels) -->
+                            @for (int i = 0; i < DynamicYGridLevels.Count; i++)
+                            {
+                                var y = 20 + i * 36;
+                                <line x1="75" y1="@y" x2="970" y2="@y" stroke="#f1f5f9" stroke-width="1" stroke-dasharray="3,3" />
+                                @((MarkupString)$"<text x=\"65\" y=\"{y + 4}\" text-anchor=\"end\" class=\"fd-axis-label\">{DynamicYGridLevels[i]}</text>")
+                            }
+
+                            <!-- Y-Axis Title (Shifted to x=18 to avoid overlapping any Y-axis numbers) -->
+                            <text x="18" y="146" transform="rotate(-90 18 146)" text-anchor="middle" class="fd-axis-title">Amount (₹)</text>
+
+                            <!-- Baseline -->
+                            <line x1="75" y1="272" x2="970" y2="272" stroke="#cbd5e1" stroke-width="1.2" />
+
+                            @{
+                                var colCount = Math.Max(1, ActiveChartData.Count);
+                                var chartW = 895.0; // 970 - 75
+                                var colW = chartW / colCount;
+                            }
+
+                            <!-- Hover Guide Line (shown only when hovered) -->
+                            @if (hoveredPeriodIndex.HasValue && hoveredPeriodIndex.Value >= 0 && hoveredPeriodIndex.Value < ActiveChartData.Count)
+                            {
+                                var guideX = 75 + (hoveredPeriodIndex.Value + 0.5) * colW;
+                                <line x1="@guideX" y1="20" x2="@guideX" y2="272" stroke="#94a3b8" stroke-width="1.2" stroke-dasharray="3,3" opacity="0.6" pointer-events="none" />
+                            }
+
+                            <!-- Clustered Period Bars -->
+                            @for (int p = 0; p < ActiveChartData.Count; p++)
+                            {
+                                var item = ActiveChartData[p];
+                                var groupX = 75 + (p + 0.5) * colW;
+                                var barW = Math.Clamp(colW * 0.16, 12.0, 22.0);
+                                var incomeBarH = Math.Max(2, Math.Min(252, (item.Income / MaxChartValue) * 240));
+                                var expenseBarH = Math.Max(2, Math.Min(252, (item.Expense / MaxChartValue) * 240));
+                                var incomeY = 272 - incomeBarH;
+                                var expenseY = 272 - expenseBarH;
+                                var isHovered = (hoveredPeriodIndex == p);
+
+                                <!-- Income Bar (Green) -->
+                                <rect x="@(groupX - barW - 2)" y="@incomeY" width="@barW" height="@incomeBarH"
+                                      rx="4" ry="4" class="fd-bar-income @(isHovered ? "fd-bar-active" : "")" />
+
+                                <!-- Expense Bar (Pink/Coral) -->
+                                <rect x="@(groupX + 2)" y="@expenseY" width="@barW" height="@expenseBarH"
+                                      rx="4" ry="4" class="fd-bar-expense @(isHovered ? "fd-bar-active" : "")" />
+
+                                <!-- X Label -->
+                                @((MarkupString)$"<text x=\"{groupX:0.#}\" y=\"294\" text-anchor=\"middle\" class=\"fd-x-label\">{item.Period}</text>")
+                            }
+
+                            <!-- Net Profit Line Curve -->
+                            <path d="@NetProfitSvgPath" fill="none" stroke="#3b82f6" stroke-width="2.5" class="fd-line-profit" />
+
+                            <!-- Point Dots -->
+                            @for (int p = 0; p < ActiveChartData.Count; p++)
+                            {
+                                var item = ActiveChartData[p];
+                                var groupX = 75 + (p + 0.5) * colW;
+                                var profitH = (item.NetProfit / MaxChartValue) * 240;
+                                var profitY = Math.Clamp(272 - profitH, 20, 272);
+                                var isHovered = (hoveredPeriodIndex == p);
+                                <circle cx="@groupX" cy="@profitY" r="@(isHovered ? 6 : 4.5)" fill="#3b82f6" stroke="#ffffff" stroke-width="2"
+                                        class="fd-profit-point" />
+                            }
+
+                            <!-- Full Column Hit Areas for Smooth Hover Interaction -->
+                            @for (int p = 0; p < ActiveChartData.Count; p++)
+                            {
+                                var pIdx = p;
+                                var colX = 75 + p * colW;
+                                <rect x="@colX" y="20" width="@colW" height="260"
+                                      fill="transparent"
+                                      style="cursor: pointer;"
+                                      @onmouseenter="() => hoveredPeriodIndex = pIdx"
+                                      @onmousemove="() => hoveredPeriodIndex = pIdx" />
+                            }
+
+                            <!-- Dynamic Tooltip Callout (ONLY rendered on hover) -->
+                            @if (hoveredPeriodIndex.HasValue && hoveredPeriodIndex.Value >= 0 && hoveredPeriodIndex.Value < ActiveChartData.Count)
+                            {
+                                var activeItem = ActiveChartData[hoveredPeriodIndex.Value];
+                                var groupX = 75 + (hoveredPeriodIndex.Value + 0.5) * colW;
+                                var tX = Math.Clamp(groupX, 100, 880);
+
+                                <g class="fd-chart-tooltip-group" transform="translate(@(tX - 70), 30)" pointer-events="none">
+                                    <rect width="140" height="98" rx="8" ry="8" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.2" filter="url(#fdChartShadow)" />
+                                    <text x="14" y="24" font-size="12" font-weight="700" fill="#0f172a">@activeItem.Period</text>
+                                    
+                                    <circle cx="18" cy="44" r="3" fill="#10b981" />
+                                    <text x="26" y="48" font-size="11" font-weight="500" fill="#64748b">Income</text>
+                                    <text x="126" y="48" text-anchor="end" font-size="11" font-weight="700" fill="#10b981">₹@activeItem.Income.ToString("N0", IndianCulture)</text>
+
+                                    <circle cx="18" cy="65" r="3" fill="#f43f5e" />
+                                    <text x="26" y="69" font-size="11" font-weight="500" fill="#64748b">Expense:</text>
+                                    <text x="126" y="69" text-anchor="end" font-size="11" font-weight="700" fill="#f43f5e">₹@activeItem.Expense.ToString("N0", IndianCulture)</text>
+
+                                    <circle cx="18" cy="86" r="3" fill="#3b82f6" />
+                                    <text x="26" y="90" font-size="11" font-weight="500" fill="#64748b">Net Profit</text>
+                                    <text x="126" y="90" text-anchor="end" font-size="11" font-weight="700" fill="#3b82f6">₹@activeItem.NetProfit.ToString("N0", IndianCulture)</text>
+                                </g>
+                            }
                         </svg>
-                    </div>
+                    }
                 </div>
+            </div>
 
-                <div class="fd-period-body">
-                    <div class="fd-period-box">
-                        <div class="fd-period-cal-icon">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-                                <line x1="16" y1="2" x2="16" y2="6"></line>
-                                <line x1="8" y1="2" x2="8" y2="6"></line>
-                                <line x1="3" y1="10" x2="21" y2="10"></line>
-                            </svg>
-                        </div>
-                        <span class="fd-period-notice">Entry will be Available from</span>
-                        <strong class="fd-period-date">16 Sep 2026 Onward</strong>
-                        <div class="fd-period-countdown">Starts in 4 days</div>
-
-                        <button type="button" class="fd-period-btn" @onclick="Start15DaysEntry">
-                            Start 15 Days Enrty
+            <!-- Latest Stock Position Table Card (with DataTables & Skeleton Loading) -->
+            <div class="fd-card fd-table-card">
+                <div class="fd-card-header">
+                    <div class="fd-card-header-left">
+                        <h3>Latest Stock Position <span class="fd-as-on">@(LatestStockAsOf is { } dAsOf ? $"(As on {dAsOf:dd MMM yyyy})" : "")</span></h3>
+                        <p class="fd-card-subtitle">Showing last updated closing stock for each product</p>
+                    </div>
+                    <div class="fd-card-header-right">
+                        @if (!isLoading && StockRows.Count > 0)
+                        {
+                            <div class="fd-dt-search">
+                                <i class="bi bi-search"></i>
+                                <input type="text" class="fd-dt-search-input" placeholder="Search products..."
+                                       @bind="stockSearchText" @bind:event="oninput" @bind:after="OnStockSearchChanged" />
+                                @if (!string.IsNullOrWhiteSpace(stockSearchText))
+                                {
+                                    <button type="button" class="fd-dt-search-clear" @onclick="ClearStockSearch" title="Clear search">
+                                        <i class="bi bi-x"></i>
+                                    </button>
+                                }
+                            </div>
+                        }
+                        <button type="button" class="fd-btn-outline-green" @onclick="ViewAllStock">
+                            View All
                         </button>
                     </div>
                 </div>
-            </div>
-        </div>
 
-        <!-- Income, Expense & Profit Trends Section -->
-        <div class="fd-card fd-chart-card">
-            <div class="fd-card-header fd-chart-header">
-                <h3>Income, Expense &amp; Profit Trens</h3>
-
-                <div class="fd-chart-controls">
-                    <!-- Legend -->
-                    <div class="fd-chart-legend">
-                        <span class="fd-legend-item">
-                            <span class="fd-legend-dot fd-dot-income"></span>
-                            Income
-                        </span>
-                        <span class="fd-legend-item">
-                            <span class="fd-legend-dot fd-dot-expense"></span>
-                            Expense
-                        </span>
-                        <span class="fd-legend-item">
-                            <span class="fd-legend-dot fd-dot-profit"></span>
-                            Net Profit
-                        </span>
-                    </div>
-
-                    <!-- Period Filter -->
-                    <select class="fd-chart-select" @bind="SelectedChartRange">
-                        <option value="6m">Last 6 Months</option>
-                        <option value="3m">Last 3 Months</option>
-                        <option value="1y">Last 1 Year</option>
-                    </select>
-                </div>
-            </div>
-
-            <div class="fd-chart-container">
-                <!-- SVG Chart matching the visual layout in screenshot -->
-                <svg viewBox="0 0 1000 320" class="fd-svg-chart" preserveAspectRatio="none">
-                    <!-- Y Axis Grid Lines -->
-                    @for (int i = 0; i < YGridLevels.Length; i++)
+                <div class="fd-table-wrapper">
+                    @if (isLoading)
                     {
-                        var y = 20 + i * 36;
-                        <line x1="50" y1="@y" x2="980" y2="@y" stroke="#f1f5f9" stroke-width="1" stroke-dasharray="3,3" />
-                        @((MarkupString)$"<text x=\"40\" y=\"{y + 4}\" text-anchor=\"end\" class=\"fd-axis-label\">{YGridLevels[i]}</text>")
+                        <div class="fd-skeleton-table-wrap">
+                            <Skeleton Variant="table" Rows="5" LoadingText="Loading latest stock position..." />
+                        </div>
                     }
-
-                    <!-- Y-Axis Title -->
-                    <text x="12" y="160" transform="rotate(-90 12 160)" text-anchor="middle" class="fd-axis-title">Amount (₹)</text>
-
-                    <!-- Bottom Axis Line -->
-                    <line x1="50" y1="272" x2="980" y2="272" stroke="#e2e8f0" stroke-width="1.2" />
-
-                    <!-- Clustered Bars for 11 Periods -->
-                    @for (int p = 0; p < PeriodData.Count; p++)
+                    else if (StockRows.Count == 0)
                     {
-                        var item = PeriodData[p];
-                        var groupX = 75 + p * 81;
-                        var incomeBarH = (item.Income / 350000.0) * 252;
-                        var expenseBarH = (item.Expense / 350000.0) * 252;
-                        var incomeY = 272 - incomeBarH;
-                        var expenseY = 272 - expenseBarH;
-                        var isHighlighted = (p == ActiveTooltipIndex);
-
-                        <!-- Income Bar (Green) -->
-                        <rect x="@(groupX - 10)" y="@incomeY" width="16" height="@incomeBarH"
-                              rx="3" ry="3" class="fd-bar-income @(isHighlighted ? "fd-bar-active" : "")"
-                              @onclick="() => SetActivePeriod(p)" />
-
-                        <!-- Expense Bar (Pink/Coral) -->
-                        <rect x="@(groupX + 8)" y="@expenseY" width="16" height="@expenseBarH"
-                              rx="3" ry="3" class="fd-bar-expense @(isHighlighted ? "fd-bar-active" : "")"
-                              @onclick="() => SetActivePeriod(p)" />
-
-                        <!-- X-Axis Label -->
-                        @((MarkupString)$"<text x=\"{groupX + 7}\" y=\"292\" text-anchor=\"middle\" class=\"fd-x-label\">{item.Period}</text>")
+                        <EmptyState Icon="bi-box-seam" Title="No stock data yet" Message="Submit a 15-day report with inventory entries to see stock here." Compact="true" />
                     }
-
-                    <!-- Net Profit Line -->
-                    <path d="@NetProfitSvgPath" fill="none" stroke="#3b82f6" stroke-width="2.5" class="fd-line-profit" />
-
-                    <!-- Profit Data Points -->
-                    @for (int p = 0; p < PeriodData.Count; p++)
+                    else
                     {
-                        var item = PeriodData[p];
-                        var groupX = 75 + p * 81 + 7;
-                        var profitY = 272 - (item.NetProfit / 350000.0) * 252;
-                        <circle cx="@groupX" cy="@profitY" r="4" fill="#3b82f6" stroke="#ffffff" stroke-width="2"
-                                class="fd-profit-point" @onclick="() => SetActivePeriod(p)" />
-                    }
-
-                    <!-- Active Tooltip Callout (Period index 2 = "01-15 Sep" as in the reference image) -->
-                    @if (ActiveTooltipIndex >= 0 && ActiveTooltipIndex < PeriodData.Count)
-                    {
-                        var activeItem = PeriodData[ActiveTooltipIndex];
-                        var tX = 75 + ActiveTooltipIndex * 81 + 7;
-                        var tY = 90;
-
-                        <g class="fd-chart-tooltip-group" transform="translate(@(tX - 52), @tY)">
-                            <!-- Tooltip Box -->
-                            <rect width="105" height="92" rx="6" ry="6" fill="#ffffff" stroke="#e2e8f0" filter="drop-shadow(0 4px 6px rgba(0,0,0,0.06))" />
-                            @((MarkupString)$"<text x=\"12\" y=\"22\" font-size=\"11\" font-weight=\"700\" fill=\"#1e293b\">{activeItem.Period}</text>")
-                            @((MarkupString)"<text x=\"12\" y=\"42\" font-size=\"10\" fill=\"#64748b\">Income</text>")
-                            @((MarkupString)"<text x=\"92\" y=\"42\" text-anchor=\"end\" font-size=\"10\" font-weight=\"700\" fill=\"#10b981\">24</text>")
-                            @((MarkupString)"<text x=\"12\" y=\"60\" font-size=\"10\" fill=\"#64748b\">Expense:</text>")
-                            @((MarkupString)"<text x=\"92\" y=\"60\" text-anchor=\"end\" font-size=\"10\" font-weight=\"700\" fill=\"#f43f5e\">24</text>")
-                            @((MarkupString)"<text x=\"12\" y=\"78\" font-size=\"10\" fill=\"#64748b\">Net Profit</text>")
-                            @((MarkupString)"<text x=\"92\" y=\"78\" text-anchor=\"end\" font-size=\"10\" font-weight=\"700\" fill=\"#3b82f6\">24</text>")
-                        </g>
-                    }
-                </svg>
-            </div>
-        </div>
-
-        <!-- Latest Stock Position Table Card -->
-        <div class="fd-card fd-table-card">
-            <div class="fd-card-header">
-                <div class="fd-card-header-left">
-                    <h3>Latest Stock Possition <span class="fd-as-on">(As on 15 Sep 2026)</span></h3>
-                    <p class="fd-card-subtitle">Showing lats updated closing stock for each product</p>
-                </div>
-                <button type="button" class="fd-btn-outline-green" @onclick="ViewAllStock">
-                    View All
-                </button>
-            </div>
-
-            <div class="fd-table-wrapper">
-                <table class="fd-table">
-                    <thead>
-                        <tr>
-                            <th>Product</th>
-                            <th>Opening</th>
-                            <th>Purchase</th>
-                            <th>Production</th>
-                            <th>Sales</th>
-                            <th>Motaility</th>
-                            <th>Closing Stock</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var row in StockRows)
-                        {
-                            <tr>
-                                <td>
-                                    <div class="fd-product-cell">
-                                        <div class="fd-product-icon">
-                                            @if (row.Product == "Chicken")
-                                            {
-                                                <!-- Chicken Icon -->
-                                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                                    <path d="M16 16v1a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v2"></path>
-                                                    <path d="M16 8h4a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-4"></path>
-                                                    <circle cx="8" cy="9" r="1"></circle>
-                                                </svg>
-                                            }
-                                            else if (row.Product == "Chicken Eggs")
-                                            {
-                                                <!-- Eggs Icon -->
-                                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                                    <ellipse cx="12" cy="13" rx="7" ry="9"></ellipse>
-                                                </svg>
-                                            }
-                                            else if (row.Product == "Goat")
-                                            {
-                                                <!-- Goat / Livestock Icon -->
-                                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                                    <path d="M4 19V9a2 2 0 0 1 2-2h4l2-4 3 2-1 2h3a2 2 0 0 1 2 2v10"></path>
-                                                    <path d="M4 15h16"></path>
-                                                </svg>
-                                            }
-                                            else if (row.Product == "Quail")
-                                            {
-                                                <!-- Bird / Quail Icon -->
-                                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                                    <path d="M16 7h.01"></path>
-                                                    <path d="M3.4 18H12a8 8 0 0 0 8-8V7a4 4 0 0 0-7-2.6A4 4 0 0 0 5 8v1a4 4 0 0 1-2 3.5V18z"></path>
-                                                </svg>
-                                            }
-                                            else
-                                            {
-                                                <!-- Duck / Bird Icon -->
-                                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                                    <path d="M12 2a4 4 0 0 0-4 4v1c0 1.5.8 2.8 2 3.5V15a4 4 0 0 0 4 4h4v-3a5 5 0 0 0-5-5h-1"></path>
-                                                </svg>
-                                            }
+                        <table class="fd-table">
+                            <thead>
+                                <tr>
+                                    <th class="fd-sortable" @onclick='() => SortByStock("Product")' title="Sort by Product">
+                                        <div class="fd-th-content">
+                                            <span>Product</span>
+                                            <i class="bi @GetStockSortIcon("Product")"></i>
                                         </div>
-                                        <span class="fd-product-name">@row.Product</span>
-                                    </div>
-                                </td>
-                                <td>@row.Opening</td>
-                                <td>@row.Purchase</td>
-                                <td>@row.Production</td>
-                                <td>@row.Sales</td>
-                                <td>@row.Mortality</td>
-                                <td><span class="fd-closing-num">@row.ClosingStock</span></td>
-                            </tr>
+                                    </th>
+                                    <th class="fd-sortable" @onclick='() => SortByStock("Opening")' title="Sort by Opening">
+                                        <div class="fd-th-content">
+                                            <span>Opening</span>
+                                            <i class="bi @GetStockSortIcon("Opening")"></i>
+                                        </div>
+                                    </th>
+                                    <th class="fd-sortable" @onclick='() => SortByStock("Purchase")' title="Sort by Purchase">
+                                        <div class="fd-th-content">
+                                            <span>Purchase</span>
+                                            <i class="bi @GetStockSortIcon("Purchase")"></i>
+                                        </div>
+                                    </th>
+                                    <th class="fd-sortable" @onclick='() => SortByStock("Production")' title="Sort by Production">
+                                        <div class="fd-th-content">
+                                            <span>Production</span>
+                                            <i class="bi @GetStockSortIcon("Production")"></i>
+                                        </div>
+                                    </th>
+                                    <th class="fd-sortable" @onclick='() => SortByStock("Sales")' title="Sort by Sales">
+                                        <div class="fd-th-content">
+                                            <span>Sales</span>
+                                            <i class="bi @GetStockSortIcon("Sales")"></i>
+                                        </div>
+                                    </th>
+                                    <th class="fd-sortable" @onclick='() => SortByStock("Mortality")' title="Sort by Mortality">
+                                        <div class="fd-th-content">
+                                            <span>Mortality</span>
+                                            <i class="bi @GetStockSortIcon("Mortality")"></i>
+                                        </div>
+                                    </th>
+                                    <th class="fd-sortable" @onclick='() => SortByStock("Closing")' title="Sort by Closing Stock">
+                                        <div class="fd-th-content">
+                                            <span>Closing Stock</span>
+                                            <i class="bi @GetStockSortIcon("Closing")"></i>
+                                        </div>
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @if (PagedStockRows.Count == 0)
+                                {
+                                    <tr>
+                                        <td colspan="7" class="fd-empty-td">
+                                            <div>No matching products found for "<strong>@stockSearchText</strong>".</div>
+                                            <button type="button" class="fd-btn-clear" style="margin-top: 10px;" @onclick="ClearStockSearch">
+                                                <i class="bi bi-x"></i> Clear Search
+                                            </button>
+                                        </td>
+                                    </tr>
+                                }
+                                else
+                                {
+                                    @foreach (var row in PagedStockRows)
+                                    {
+                                        <tr>
+                                            <td>
+                                                <div class="fd-product-cell">
+                                                    <div class="fd-product-icon">
+                                                        @FarmProductIcons.IconFor(row.IconKey ?? row.Product, "fd-product-monogram")
+                                                    </div>
+                                                    <span class="fd-product-name">@row.Product</span>
+                                                </div>
+                                            </td>
+                                            <td>@row.Opening @row.Uom</td>
+                                            <td>@row.Purchase @row.Uom</td>
+                                            <td>@row.Hatched @row.Uom</td>
+                                            <td>@row.Sold @row.Uom</td>
+                                            <td>@row.Mortality @row.Uom</td>
+                                            <td><span class="fd-closing-num">@row.Closing @row.Uom</span></td>
+                                        </tr>
+                                    }
+                                }
+                            </tbody>
+                        </table>
+                    }
+                </div>
+
+                <!-- DataTables Footer: Showing Info, Items Per Page & Pagination -->
+                @if (!isLoading && StockRows.Count > 0)
+                {
+                    <div class="fd-dt-footer pagination-container">
+                        <div class="fd-dt-footer-left">
+                            <div class="fd-items-per-page items-per-page">
+                                <span>Items Per Page</span>
+                                <select class="fd-dt-select" @bind="stockPageSize" @bind:after="OnStockPageSizeChanged">
+                                    <option value="10">10</option>
+                                    <option value="25">25</option>
+                                    <option value="50">50</option>
+                                    <option value="100">100</option>
+                                </select>
+                            </div>
+                            <div class="fd-dt-info">
+                                @ShowingStockEntriesText
+                            </div>
+                        </div>
+
+                        <div class="fd-pagination-buttons pagination-controls">
+                            <button type="button" class="fd-page-btn page-btn" disabled="@(stockCurrentPage <= 1)" @onclick="() => GoToStockPage(stockCurrentPage - 1)" aria-label="Previous page" title="Previous page">
+                                <i class="bi bi-chevron-left"></i>
+                            </button>
+                            @foreach (var pNum in VisibleStockPageNumbers)
+                            {
+                                @if (pNum == -1)
+                                {
+                                    <span class="fd-page-ellipsis page-btn ellipsis">..</span>
+                                }
+                                else
+                                {
+                                    <button type="button" class="@("fd-page-btn page-btn" + (pNum == stockCurrentPage ? " fd-page-active active" : ""))"
+                                            disabled="@(TotalFilteredStockCount == 0)"
+                                            @onclick="() => GoToStockPage(pNum)" aria-label="Page @pNum">
+                                        @pNum
+                                    </button>
+                                }
+                            }
+                            <button type="button" class="fd-page-btn page-btn" disabled="@(stockCurrentPage >= TotalStockPages)" @onclick="() => GoToStockPage(stockCurrentPage + 1)" aria-label="Next page" title="Next page">
+                                <i class="bi bi-chevron-right"></i>
+                            </button>
+                        </div>
+                    </div>
+                }
+            </div>
+
+            <!-- Bottom Row: Income Overview & Top Expense Categories -->
+            <div class="fd-bottom-grid">
+                <!-- Left: Income Overview -->
+                <div class="fd-card fd-income-overview-card">
+                    <div class="fd-card-header">
+                        <div class="fd-card-header-left">
+                            <h3>Income Overview <span class="fd-as-on">(Till Date)</span></h3>
+                        </div>
+                        <button type="button" class="fd-btn-outline-green" @onclick="ViewIncomeDetails">
+                            View Details
+                        </button>
+                    </div>
+
+                    <div class="fd-income-body">
+                        @if (LivestockIncomeTotal + OrchardIncomeTotal <= 0)
+                        {
+                            <EmptyState Icon="bi-pie-chart" Title="No income recorded yet" Compact="true" />
                         }
-                    </tbody>
-                </table>
-            </div>
-        </div>
+                        else
+                        {
+                            <div class="fd-donut-wrap">
+                                <svg viewBox="0 0 160 160" class="fd-donut-svg">
+                                    <circle cx="80" cy="80" r="54" fill="transparent" stroke="#f1f5f9" stroke-width="20" />
 
-        <!-- Bottom Row: Income Overview & Top Expense Categories -->
-        <div class="fd-bottom-grid">
-            <!-- Left: Income Overview -->
-            <div class="fd-card fd-income-overview-card">
-                <div class="fd-card-header">
-                    <div class="fd-card-header-left">
-                        <h3>Income Overview <span class="fd-as-on">(Till 15 Sep 2026)</span></h3>
-                    </div>
-                    <button type="button" class="fd-btn-outline-green" @onclick="ViewIncomeDetails">
-                        View Details
-                    </button>
-                </div>
+                                    <circle cx="80" cy="80" r="54" fill="transparent" stroke="#3b82f6" stroke-width="20"
+                                            stroke-dasharray="@OrchardDashArray" stroke-dashoffset="@OrchardDashOffset.ToString("0.#")"
+                                            stroke-linecap="butt" />
 
-                <div class="fd-income-body">
-                    <!-- Donut Chart -->
-                    <div class="fd-donut-wrap">
-                        <svg viewBox="0 0 160 160" class="fd-donut-svg">
-                            <!-- Background Circle -->
-                            <circle cx="80" cy="80" r="54" fill="transparent" stroke="#f1f5f9" stroke-width="20" />
+                                    <circle cx="80" cy="80" r="54" fill="transparent" stroke="#10b981" stroke-width="20"
+                                            stroke-dasharray="@LivestockDashArray" stroke-dashoffset="@LivestockDashOffset.ToString("0.#")"
+                                            stroke-linecap="butt" />
 
-                            <!-- Blue Segment: Orchard Income (37% -> 339 * 0.37 = 125.4) -->
-                            <!-- Perimeter 2 * PI * 54 = 339.29 -->
-                            <circle cx="80" cy="80" r="54" fill="transparent" stroke="#3b82f6" stroke-width="20"
-                                    stroke-dasharray="125.5 213.8" stroke-dashoffset="85"
-                                    stroke-linecap="butt" />
-
-                            <!-- Green Segment: Livestock Income (63% -> 339 * 0.63 = 213.7) -->
-                            <circle cx="80" cy="80" r="54" fill="transparent" stroke="#10b981" stroke-width="20"
-                                    stroke-dasharray="213.8 125.5" stroke-dashoffset="-40.5"
-                                    stroke-linecap="butt" />
-
-                            <!-- Donut Center Text -->
-                            <text x="80" y="66" text-anchor="middle" class="fd-donut-center-muted">Total</text>
-                            <text x="80" y="88" text-anchor="middle" class="fd-donut-center-val">50</text>
-                            <text x="80" y="104" text-anchor="middle" class="fd-donut-center-muted">Program</text>
-                        </svg>
-                    </div>
-
-                    <!-- Donut Legend & Values -->
-                    <div class="fd-income-legend">
-                        <div class="fd-income-legend-item">
-                            <span class="fd-income-dot fd-dot-green"></span>
-                            <div class="fd-income-item-text">
-                                <span class="fd-income-item-title">Livestock Income</span>
-                                <strong class="fd-income-item-amount">₹4,34,450 (63%)</strong>
-                            </div>
-                        </div>
-
-                        <div class="fd-income-legend-item">
-                            <span class="fd-income-dot fd-dot-blue"></span>
-                            <div class="fd-income-item-text">
-                                <span class="fd-income-item-title">Orchard Income</span>
-                                <strong class="fd-income-item-amount">₹ 2,50,000 (37%)</strong>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Right: Top Expense Categories -->
-            <div class="fd-card fd-expense-card">
-                <div class="fd-card-header">
-                    <div class="fd-card-header-left">
-                        <h3>Top Expense Categories <span class="fd-as-on">( Till 15 Sep 2026)</span></h3>
-                    </div>
-                    <button type="button" class="fd-btn-outline-green" @onclick="ViewExpenseDetails">
-                        View Details
-                    </button>
-                </div>
-
-                <div class="fd-expense-body">
-                    @foreach (var exp in ExpenseCategories)
-                    {
-                        <div class="fd-expense-row">
-                            <div class="fd-expense-name-col">
-                                <span class="fd-expense-dot @exp.DotColorClass"></span>
-                                <span class="fd-expense-label">@exp.Name</span>
+                                    <text x="80" y="66" text-anchor="middle" class="fd-donut-center-muted">Total</text>
+                                    <text x="80" y="88" text-anchor="middle" class="fd-donut-center-val">@FormatCompactCurrency((double)(LivestockIncomeTotal + OrchardIncomeTotal))</text>
+                                    <text x="80" y="104" text-anchor="middle" class="fd-donut-center-muted">Income</text>
+                                </svg>
                             </div>
 
-                            <div class="fd-expense-progress-col">
-                                <div class="fd-expense-bar-track">
-                                    <div class="fd-expense-bar-fill @exp.FillColorClass" style="width: @(exp.Percentage)%;"></div>
+                            <div class="fd-income-legend">
+                                <div class="fd-income-legend-item">
+                                    <span class="fd-income-dot fd-dot-green"></span>
+                                    <div class="fd-income-item-text">
+                                        <span class="fd-income-item-title">Livestock Income</span>
+                                        <strong class="fd-income-item-amount">₹@LivestockIncomeTotal.ToString("N0", IndianCulture) (@LivestockPctDisplay%)</strong>
+                                    </div>
+                                </div>
+
+                                <div class="fd-income-legend-item">
+                                    <span class="fd-income-dot fd-dot-blue"></span>
+                                    <div class="fd-income-item-text">
+                                        <span class="fd-income-item-title">Orchard Income</span>
+                                        <strong class="fd-income-item-amount">₹@OrchardIncomeTotal.ToString("N0", IndianCulture) (@OrchardPctDisplay%)</strong>
+                                    </div>
                                 </div>
                             </div>
+                        }
+                    </div>
+                </div>
 
-                            <div class="fd-expense-val-col">
-                                <span class="fd-expense-val">₹@exp.Amount.ToString("N0", new System.Globalization.CultureInfo("en-IN"))</span>
-                            </div>
+                <!-- Right: Top Expense Categories -->
+                <div class="fd-card fd-expense-card">
+                    <div class="fd-card-header">
+                        <div class="fd-card-header-left">
+                            <h3>Top Expense Categories <span class="fd-as-on">(Till Date)</span></h3>
                         </div>
-                    }
+                        <button type="button" class="fd-btn-outline-green" @onclick="ViewExpenseDetails">
+                            View Details
+                        </button>
+                    </div>
+
+                    <div class="fd-expense-body">
+                        @if (TopExpenseCategories.Count == 0)
+                        {
+                            <EmptyState Icon="bi-list-ul" Title="No expense recorded yet" Compact="true" />
+                        }
+                        else
+                        {
+                            @for (var i = 0; i < TopExpenseCategories.Count; i++)
+                            {
+                                var exp = TopExpenseCategories[i];
+                                var pct = MaxExpenseCategoryAmount > 0 ? (double)(exp.Amount / MaxExpenseCategoryAmount) * 100 : 0;
+                                <div class="fd-expense-row">
+                                    <div class="fd-expense-name-col">
+                                        <span class="fd-expense-dot" style="background:@ChartColor(i)"></span>
+                                        <span class="fd-expense-label">@exp.Category</span>
+                                    </div>
+
+                                    <div class="fd-expense-progress-col">
+                                        <div class="fd-expense-bar-track">
+                                            <div class="fd-expense-bar-fill" style="width: @(pct.ToString("0.##"))%; background:@ChartColor(i)"></div>
+                                        </div>
+                                    </div>
+
+                                    <div class="fd-expense-val-col">
+                                        <span class="fd-expense-val">₹@exp.Amount.ToString("N0", IndianCulture)</span>
+                                    </div>
+                                </div>
+                            }
+                        }
+                    </div>
                 </div>
             </div>
-        </div>
+        }
 
     </div>
 </div>
 
 @code {
-    private string SelectedFinancialYear = "2026";
+    private static readonly System.Globalization.CultureInfo IndianCulture = new("en-IN");
+    private static readonly string[] Palette = { "#10b981", "#3b82f6", "#a855f7", "#f59e0b", "#f43f5e", "#64748b" };
+    private static string ChartColor(int i) => Palette[i % Palette.Length];
+    private const double DonutCircumference = 2 * Math.PI * 54;
+
+    private bool isLoading = true;
+    private string? loadError;
+
+    private string SelectedFinancialYear = "2026-27";
+    private List<string> AvailableFinancialYears = new() { "2026-27", "2025-26", "2024-25" };
     private string SelectedChartRange = "6m";
-    private int ActiveTooltipIndex = 2; // Period index 2 matches the mockup screenshot ("01-15 Sep")
 
-    private readonly string[] YGridLevels = new[] { "3.5L", "3L", "2.5L", "2L", "1.5L", "1L", "50K", "0" };
+    private decimal AnnualBudget;
+    private decimal TotalIncome;
+    private decimal TotalExpense;
+    private decimal NetProfit;
+    private decimal Roi;
+    private decimal LivestockIncomeTotal;
+    private decimal OrchardIncomeTotal;
+    private DateTime? LatestStockAsOf;
+    private string? ActivePeriodLabel;
+    private bool ActivePeriodExists;
 
-    private record ChartPeriodItem(string Period, double Income, double Expense, double NetProfit);
+    public record ChartPeriodItem(string Period, double Income, double Expense, double NetProfit, DateTime? Date = null);
+    private List<ChartPeriodItem> RawPeriodData = new();
+    private List<ChartPeriodItem> ActiveChartData = new();
 
-    private readonly List<ChartPeriodItem> PeriodData = new()
+    public record StockRow(string Product, string? IconKey, string Uom, int Opening, int Purchase, int Hatched, int Sold, int Mortality, int Closing);
+    private List<StockRow> StockRows = new();
+
+    public record ExpenseCategoryRow(string Category, decimal Amount);
+    private List<ExpenseCategoryRow> TopExpenseCategories = new();
+
+    private string DisplayName => string.IsNullOrWhiteSpace(LoginState.UserName) ? "Farm Office" : LoginState.UserName!;
+
+    private static string Greeting => DateTime.Now.Hour switch
     {
-        new("01-15 Sep", 110000, 95000, 95000),
-        new("01-15 Sep", 155000, 105000, 80000),
-        new("01-15 Sep", 185000, 125000, 90000), // Default active tool-tip index
-        new("01-15 Sep", 110000, 100000, 65000),
-        new("01-15 Sep", 130000, 45000, 40000),
-        new("01-15 Sep", 115000, 35000, 45000),
-        new("01-15 Sep", 125000, 110000, 125000),
-        new("01-15 Sep", 235000, 150000, 100000),
-        new("01-15 Sep", 185000, 85000, 65000),
-        new("01-15 Sep", 120000, 50000, 45000),
-        new("01-15 Sep", 118000, 45000, 35000),
+        < 12 => "Good Morning",
+        < 17 => "Good Afternoon",
+        _ => "Good Evening"
     };
+
+    private static string FormatCompactCurrency(double val)
+    {
+        if (val <= 0) return "0";
+        if (val >= 10000000) return $"{(val / 10000000.0):0.#}Cr";
+        if (val >= 100000) return $"{(val / 100000.0):0.#}L";
+        if (val >= 1000) return $"{(val / 1000.0):0.#}K";
+        return val.ToString("0");
+    }
+
+    // Donut math: a 2-segment ring starting at 12 o'clock (the .fd-donut-svg CSS rotates the whole
+    // SVG -90deg already) - each segment's dashoffset is "a quarter turn, minus every segment drawn
+    // before it", so segments always sit flush against each other regardless of the actual split.
+    private double IncomeGrandTotal => (double)(LivestockIncomeTotal + OrchardIncomeTotal);
+    private double OrchardLen => IncomeGrandTotal > 0 ? DonutCircumference * ((double)OrchardIncomeTotal / IncomeGrandTotal) : 0;
+    private double LivestockLen => IncomeGrandTotal > 0 ? DonutCircumference * ((double)LivestockIncomeTotal / IncomeGrandTotal) : 0;
+    private string OrchardDashArray => $"{OrchardLen.ToString("0.#")} {(DonutCircumference - OrchardLen).ToString("0.#")}";
+    private string LivestockDashArray => $"{LivestockLen.ToString("0.#")} {(DonutCircumference - LivestockLen).ToString("0.#")}";
+    private double OrchardDashOffset => DonutCircumference / 4;
+    private double LivestockDashOffset => OrchardDashOffset - OrchardLen;
+    private int LivestockPctDisplay => IncomeGrandTotal > 0 ? (int)Math.Round((double)LivestockIncomeTotal / IncomeGrandTotal * 100) : 0;
+    private int OrchardPctDisplay => IncomeGrandTotal > 0 ? (int)Math.Round((double)OrchardIncomeTotal / IncomeGrandTotal * 100) : 0;
+
+    private decimal MaxExpenseCategoryAmount => TopExpenseCategories.Count > 0 ? TopExpenseCategories.Max(c => c.Amount) : 0;
+
+    protected override async Task OnInitializedAsync() => await LoadDashboardAsync();
+
+    private async Task OnFinancialYearChanged() => await LoadDashboardAsync();
+
+    private void OnChartRangeChanged()
+    {
+        ApplyChartRange();
+    }
+
+    private async Task LoadDashboardAsync()
+    {
+        isLoading = true;
+        loadError = null;
+        StateHasChanged();
+
+        try
+        {
+            var res = await Http.GetFromJsonAsync<FinanceSummaryApiResponse>(
+                $"api/FarmReport/finance-summary?financialYear={Uri.EscapeDataString(SelectedFinancialYear)}");
+
+            if (res != null)
+            {
+                AnnualBudget = res.AnnualBudget;
+                TotalIncome = res.TotalIncome;
+                TotalExpense = res.TotalExpense;
+                NetProfit = res.NetProfit;
+                Roi = res.Roi;
+                LivestockIncomeTotal = res.LivestockIncomeTotal;
+                OrchardIncomeTotal = res.OrchardIncomeTotal;
+                LatestStockAsOf = res.LatestStockAsOf;
+                ActivePeriodLabel = res.ActivePeriodLabel;
+                ActivePeriodExists = res.ActivePeriodExists;
+
+                if (res.AvailableFinancialYears.Count > 0)
+                    AvailableFinancialYears = res.AvailableFinancialYears;
+
+                RawPeriodData = res.ChartPoints
+                    .Select(pt => new ChartPeriodItem(pt.PeriodLabel, (double)pt.Income, (double)pt.Expense, (double)pt.NetProfit, pt.Date))
+                    .ToList();
+
+                StockRows = res.LatestStockRows
+                    .Select(r => new StockRow(r.ProductName, r.IconKey, r.Uom, r.Opening, r.Purchase, r.Hatched, r.Sold, r.Mortality, r.Closing))
+                    .ToList();
+
+                TopExpenseCategories = res.TopExpenseCategories
+                    .Select(c => new ExpenseCategoryRow(c.Category, c.Amount))
+                    .ToList();
+
+                ApplyChartRange();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Loading farm dashboard failed: {ex.Message}");
+            loadError = "Unable to load dashboard data from the server. Please try again.";
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void ApplyChartRange()
+    {
+        ActiveChartData = SelectedChartRange switch
+        {
+            "3m" => RawPeriodData.TakeLast(3).ToList(),
+            "1y" => RawPeriodData.ToList(),
+            _ => RawPeriodData.TakeLast(6).ToList()
+        };
+        hoveredPeriodIndex = null;
+    }
+
+    // ---- Trend Chart Calculations & Hover State ----
+    private int? hoveredPeriodIndex = null;
+
+    private double MaxChartValue
+    {
+        get
+        {
+            var maxData = ActiveChartData.SelectMany(p => new[] { p.Income, p.Expense, Math.Abs(p.NetProfit) }).DefaultIfEmpty(100000.0).Max();
+            return Math.Max(50000.0, Math.Ceiling((maxData * 1.2) / 10000.0) * 10000.0);
+        }
+    }
+
+    private List<string> DynamicYGridLevels
+    {
+        get
+        {
+            var max = MaxChartValue;
+            var list = new List<string>();
+            for (int i = 7; i >= 0; i--)
+            {
+                var val = (max / 7.0) * i;
+                list.Add(FormatCompactCurrency(val));
+            }
+            return list;
+        }
+    }
 
     private string NetProfitSvgPath
     {
         get
         {
-            var points = PeriodData.Select((item, p) =>
+            if (!ActiveChartData.Any()) return "";
+            var colCount = Math.Max(1, ActiveChartData.Count);
+            var chartW = 895.0; // 970 - 75
+            var colW = chartW / colCount;
+            var points = ActiveChartData.Select((item, p) =>
             {
-                var x = 75 + p * 81 + 7;
-                var y = 272 - (item.NetProfit / 350000.0) * 252;
-                return $"{x},{y:0.#}";
+                var x = 75 + (p + 0.5) * colW;
+                var profitH = (item.NetProfit / MaxChartValue) * 240;
+                var profitY = Math.Clamp(272 - profitH, 20, 272);
+                return $"{x:0.#},{profitY:0.#}";
             }).ToList();
 
-            if (!points.Any()) return "";
             return "M " + string.Join(" L ", points);
         }
     }
 
-    private void SetActivePeriod(int index) => ActiveTooltipIndex = index;
+    // ---- Stock Table DataTables State ----
+    private string stockSearchText = "";
+    private string stockSortColumn = "Product";
+    private bool stockSortAscending = true;
+    private int stockCurrentPage = 1;
+    private int stockPageSize = 10;
 
-    private record StockItem(string Product, string Opening, string Purchase, string Production, string Sales, string Mortality, int ClosingStock);
-
-    private readonly List<StockItem> StockRows = new()
+    private IEnumerable<StockRow> FilteredStockRows
     {
-        new("Chicken", "100 Nos", "300 KG", "300 KG", "300 KG", "₹250", 120),
-        new("Chicken Eggs", "100 Nos", "100 NOS", "100 NOS", "100 NOS", "₹10", 120),
-        new("Goat", "100 Nos", "80 Kg", "80 Kg", "80 Kg", "₹800", 120),
-        new("Quail", "100 Nos", "40 Kg", "40 Kg", "40 Kg", "₹20", 120),
-        new("Other Poultry", "100 Nos", "40 Kg", "40 Kg", "40 Kg", "₹20", 120),
-    };
+        get
+        {
+            var rows = StockRows.AsEnumerable();
 
-    private record ExpenseItem(string Name, int Percentage, long Amount, string DotColorClass, string FillColorClass);
+            if (!string.IsNullOrWhiteSpace(stockSearchText))
+            {
+                var q = stockSearchText.Trim();
+                rows = rows.Where(r =>
+                    r.Product.Contains(q, StringComparison.OrdinalIgnoreCase) ||
+                    r.Uom.Contains(q, StringComparison.OrdinalIgnoreCase) ||
+                    r.Opening.ToString().Contains(q) ||
+                    r.Purchase.ToString().Contains(q) ||
+                    r.Hatched.ToString().Contains(q) ||
+                    r.Sold.ToString().Contains(q) ||
+                    r.Mortality.ToString().Contains(q) ||
+                    r.Closing.ToString().Contains(q));
+            }
 
-    private readonly List<ExpenseItem> ExpenseCategories = new()
+            rows = stockSortColumn switch
+            {
+                "Product" => stockSortAscending ? rows.OrderBy(r => r.Product) : rows.OrderByDescending(r => r.Product),
+                "Opening" => stockSortAscending ? rows.OrderBy(r => r.Opening) : rows.OrderByDescending(r => r.Opening),
+                "Purchase" => stockSortAscending ? rows.OrderBy(r => r.Purchase) : rows.OrderByDescending(r => r.Purchase),
+                "Production" => stockSortAscending ? rows.OrderBy(r => r.Hatched) : rows.OrderByDescending(r => r.Hatched),
+                "Sales" => stockSortAscending ? rows.OrderBy(r => r.Sold) : rows.OrderByDescending(r => r.Sold),
+                "Mortality" => stockSortAscending ? rows.OrderBy(r => r.Mortality) : rows.OrderByDescending(r => r.Mortality),
+                "Closing" => stockSortAscending ? rows.OrderBy(r => r.Closing) : rows.OrderByDescending(r => r.Closing),
+                _ => stockSortAscending ? rows.OrderBy(r => r.Product) : rows.OrderByDescending(r => r.Product)
+            };
+
+            return rows;
+        }
+    }
+
+    private int TotalFilteredStockCount => FilteredStockRows.Count();
+    private int TotalStockPages => Math.Max(1, (int)Math.Ceiling(TotalFilteredStockCount / (double)stockPageSize));
+
+    private List<StockRow> PagedStockRows =>
+        FilteredStockRows.Skip((stockCurrentPage - 1) * stockPageSize).Take(stockPageSize).ToList();
+
+    private string ShowingStockEntriesText
     {
-        new("Labour Charges", 82, 1250000, "fd-dot-labour", "fd-fill-labour"),
-        new("Feed", 70, 1250000, "fd-dot-feed", "fd-fill-feed"),
-        new("Miscellaneous", 54, 1250000, "fd-dot-misc", "fd-fill-misc"),
-        new("Plant Production", 46, 1250000, "fd-dot-plant", "fd-fill-plant"),
-        new("Seeds/Seedlings", 38, 1250000, "fd-dot-seeds", "fd-fill-seeds"),
-        new("Others", 26, 1250000, "fd-dot-others", "fd-fill-others"),
-    };
+        get
+        {
+            var total = TotalFilteredStockCount;
+            var grandTotal = StockRows.Count;
+            if (total == 0)
+            {
+                return grandTotal == 0
+                    ? "Showing 0 to 0 of 0 entries"
+                    : $"Showing 0 to 0 of 0 entries (filtered from {grandTotal} total entries)";
+            }
+            var start = ((stockCurrentPage - 1) * stockPageSize) + 1;
+            var end = Math.Min(stockCurrentPage * stockPageSize, total);
+            if (total == grandTotal)
+            {
+                return $"Showing {start} to {end} of {total} entries";
+            }
+            return $"Showing {start} to {end} of {total} entries (filtered from {grandTotal} total entries)";
+        }
+    }
+
+    private IEnumerable<int> VisibleStockPageNumbers
+    {
+        get
+        {
+            var total = TotalStockPages;
+            if (total <= 7) return Enumerable.Range(1, total);
+
+            var set = new SortedSet<int> { 1, total };
+            for (var i = Math.Max(1, stockCurrentPage - 1); i <= Math.Min(total, stockCurrentPage + 1); i++) set.Add(i);
+            for (var i = 1; i <= Math.Min(3, total); i++) set.Add(i);
+            for (var i = Math.Max(1, total - 2); i <= total; i++) set.Add(i);
+
+            var result = new List<int>();
+            int? prev = null;
+            foreach (var n in set)
+            {
+                if (prev is { } p && n - p > 1) result.Add(-1);
+                result.Add(n);
+                prev = n;
+            }
+            return result;
+        }
+    }
+
+    private void SortByStock(string column)
+    {
+        if (stockSortColumn == column)
+        {
+            stockSortAscending = !stockSortAscending;
+        }
+        else
+        {
+            stockSortColumn = column;
+            stockSortAscending = true;
+        }
+        stockCurrentPage = 1;
+    }
+
+    private string GetStockSortIcon(string column)
+    {
+        if (stockSortColumn != column) return "bi-arrow-down-up fd-sort-muted";
+        return stockSortAscending ? "bi-arrow-up fd-sort-active" : "bi-arrow-down fd-sort-active";
+    }
+
+    private void OnStockSearchChanged() => stockCurrentPage = 1;
+    private void ClearStockSearch()
+    {
+        stockSearchText = "";
+        stockCurrentPage = 1;
+    }
+    private void OnStockPageSizeChanged() => stockCurrentPage = 1;
+    private void GoToStockPage(int page) => stockCurrentPage = Math.Clamp(page, 1, TotalStockPages);
 
     private void ViewAllReport() => Nav.NavigateTo("/FifteenDaysEntry");
     private void Start15DaysEntry() => Nav.NavigateTo("/FifteenDaysEntry");
     private void ViewAllStock() => Nav.NavigateTo("/InventorySummary");
     private void ViewIncomeDetails() => Nav.NavigateTo("/IncomeSummary");
     private void ViewExpenseDetails() => Nav.NavigateTo("/ExpenseSummary");
+
     private void HandleAction(string action)
     {
-        if (action == "Finance Summary")
+        switch (action)
         {
-            Nav.NavigateTo("/FinanceSummary");
+            case "Finance Summary":
+                Nav.NavigateTo("/FinanceSummary");
+                break;
+            case "Product Management":
+                Nav.NavigateTo("/ProductRateManagement");
+                break;
+            case "Inventory Summary":
+                Nav.NavigateTo("/InventorySummary");
+                break;
+            case "Income Summary":
+                Nav.NavigateTo("/IncomeSummary");
+                break;
+            case "Expense Summary":
+                Nav.NavigateTo("/ExpenseSummary");
+                break;
+            default:
+                Toast.Info($"Selected action: {action}");
+                break;
         }
-        else if (action == "Product Management")
-        {
-            Nav.NavigateTo("/ProductRateManagement");
-        }
-        else if (action == "Inventory Summary")
-        {
-            Nav.NavigateTo("/InventorySummary");
-        }
-        else if (action == "Income Summary")
-        {
-            Nav.NavigateTo("/IncomeSummary");
-        }
-        else
-        {
-            Toast.Info($"Selected action: {action}");
-        }
+    }
+
+    public class FinanceSummaryApiResponse
+    {
+        public decimal AnnualBudget { get; set; }
+        public decimal TotalIncome { get; set; }
+        public decimal TotalExpense { get; set; }
+        public decimal NetProfit { get; set; }
+        public decimal Roi { get; set; }
+        public List<string> AvailableFinancialYears { get; set; } = new();
+        public List<ApiChartPoint> ChartPoints { get; set; } = new();
+        public DateTime? LatestStockAsOf { get; set; }
+        public List<ApiStockRow> LatestStockRows { get; set; } = new();
+        public decimal LivestockIncomeTotal { get; set; }
+        public decimal OrchardIncomeTotal { get; set; }
+        public List<ApiExpenseCategory> TopExpenseCategories { get; set; } = new();
+        public string? ActivePeriodLabel { get; set; }
+        public bool ActivePeriodExists { get; set; }
+    }
+
+    public class ApiChartPoint
+    {
+        public string PeriodLabel { get; set; } = "";
+        public decimal Income { get; set; }
+        public decimal Expense { get; set; }
+        public decimal NetProfit { get; set; }
+        public DateTime? Date { get; set; }
+    }
+
+    public class ApiStockRow
+    {
+        public string ProductName { get; set; } = "";
+        public string? IconKey { get; set; }
+        public string Uom { get; set; } = "";
+        public int Opening { get; set; }
+        public int Purchase { get; set; }
+        public int Hatched { get; set; }
+        public int Sold { get; set; }
+        public int Mortality { get; set; }
+        public int Closing { get; set; }
+    }
+
+    public class ApiExpenseCategory
+    {
+        public string Category { get; set; } = "";
+        public decimal Amount { get; set; }
     }
 }

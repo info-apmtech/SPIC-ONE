@@ -9,15 +9,15 @@
 
 <div class="is-page">
 
-        <PageHeader Title="Inventory Summary"
-                    Subtitle="View stock movement and closing balance for each 15-days reporting period (Livestock / Orchard)"
-                    ShowBack="false">
-            <Actions>
-                <button type="button" class="is-btn-back" @onclick="GoBack">
-                    <i class="bi bi-arrow-left"></i> Back to Inventory Entry
-                </button>
-            </Actions>
-        </PageHeader>
+    <PageHeader Title="Inventory Summary"
+                Subtitle="View stock movement and closing balance for each 15-days reporting period (Livestock / Orchard)"
+                ShowBack="false">
+        <Actions>
+            <button type="button" class="is-btn-back" @onclick="GoBack">
+                <i class="bi bi-arrow-left"></i> Back to Inventory Entry
+            </button>
+        </Actions>
+    </PageHeader>
 
     <!-- Filters -->
     <div class="is-card is-filters-card">
@@ -33,65 +33,90 @@
             <div class="is-filters-body">
                 <div class="is-filters-grid">
                     <div class="is-filter-group">
-                        <label>Year</label>
-                        <select class="is-select-date" @bind="yearFilter">
-                            <option value="">All Years</option>
-                            @foreach (var y in availableYears)
-                            {
-                                <option value="@y">@y</option>
-                            }
-                        </select>
+                        <label for="is-from-date">From Date</label>
+                        @if (isLoadingInitial)
+                        {
+                            <Skeleton Variant="text" Height="38px" Rows="1" />
+                        }
+                        else
+                        {
+                            <input id="is-from-date" type="date" class="is-input-date @(!string.IsNullOrEmpty(dateValidationError) ? "is-input-error" : "")"
+                                   @bind="fromDateFilter" @bind:after="OnDatesChanged" max="@(toDateFilter?.ToString("yyyy-MM-dd"))" />
+                        }
                     </div>
                     <div class="is-filter-group">
-                        <label>Month</label>
-                        <select class="is-select-date" @bind="monthFilter">
-                            <option value="">All Months</option>
-                            @for (var m = 1; m <= 12; m++)
-                            {
-                                <option value="@m">@MonthName(m)</option>
-                            }
-                        </select>
-                    </div>
-                    <div class="is-filter-group">
-                        <label>Reporting Period</label>
-                        <select class="is-select-chevron" @bind="periodFilter">
-                            <option value="">All Periods</option>
-                            @foreach (var p in reportingPeriods)
-                            {
-                                <option value="@p">@p</option>
-                            }
-                        </select>
+                        <label for="is-to-date">To Date</label>
+                        @if (isLoadingInitial)
+                        {
+                            <Skeleton Variant="text" Height="38px" Rows="1" />
+                        }
+                        else
+                        {
+                            <input id="is-to-date" type="date" class="is-input-date @(!string.IsNullOrEmpty(dateValidationError) ? "is-input-error" : "")"
+                                   @bind="toDateFilter" @bind:after="OnDatesChanged" min="@(fromDateFilter?.ToString("yyyy-MM-dd"))" />
+                        }
                     </div>
                     <div class="is-filter-group">
                         <label>Category</label>
-                        <select class="is-select-chevron" @bind="categoryFilter">
-                            <option value="">All</option>
-                            <option value="LiveStock">Livestock</option>
-                            <option value="Orchard">Orchard</option>
-                        </select>
+                        @if (isLoadingInitial)
+                        {
+                            <Skeleton Variant="text" Height="38px" Rows="1" />
+                        }
+                        else
+                        {
+                            <select class="is-select-chevron" @bind="categoryFilter" @bind:after="OnCategoryChanged">
+                                <option value="">All</option>
+                                <option value="LiveStock">Livestock</option>
+                                <option value="Orchard">Orchard</option>
+                            </select>
+                        }
                     </div>
                     <div class="is-filter-group">
                         <label>Product</label>
-                        <select class="is-select-chevron" @bind="productFilter">
-                            <option value="">All Product</option>
-                            @foreach (var p in TabProducts)
-                            {
-                                <option value="@p.Name">@p.Name</option>
-                            }
-                        </select>
+                        @if (isLoadingProducts || isLoadingInitial)
+                        {
+                            <Skeleton Variant="text" Height="38px" Rows="1" />
+                        }
+                        else
+                        {
+                            <select class="is-select-chevron" @bind="productFilter">
+                                <option value="">All Product</option>
+                                @foreach (var p in TabProducts)
+                                {
+                                    <option value="@p.Name">@p.Name</option>
+                                }
+                            </select>
+                        }
                     </div>
                 </div>
+
+                @if (!string.IsNullOrEmpty(dateValidationError))
+                {
+                    <div class="is-filter-validation-error">
+                        <i class="bi bi-exclamation-triangle-fill"></i> @dateValidationError
+                    </div>
+                }
+
                 <div class="is-filters-actions">
-                    <button type="button" class="is-btn-clear" @onclick="ClearFiltersAsync"><i class="bi bi-x"></i> Clear All</button>
-                    <button type="button" class="is-btn-primary" @onclick="ApplyFiltersAsync"><i class="bi bi-filter"></i> Apply Filters</button>
+                    <button type="button" class="is-btn-clear" @onclick="ClearFiltersAsync" disabled="@(isLoadingSummary)">
+                        <i class="bi bi-x"></i> Clear All
+                    </button>
+                    <button type="button" class="is-btn-primary" @onclick="ApplyFiltersAsync" disabled="@(isLoadingSummary)">
+                        <i class="bi bi-filter"></i> Apply Filters
+                    </button>
                 </div>
             </div>
         }
     </div>
 
+    <!-- Product Tabs -->
     @if (isLoadingProducts)
     {
-        <EmptyState Icon="bi-hourglass-split" Title="Loading products..." Compact="true" />
+        <div class="is-tabs">
+            <div style="width: 120px;"><Skeleton Variant="text" Height="38px" Rows="1" /></div>
+            <div style="width: 110px;"><Skeleton Variant="text" Height="38px" Rows="1" /></div>
+            <div style="width: 130px;"><Skeleton Variant="text" Height="38px" Rows="1" /></div>
+        </div>
     }
     else if (TabProducts.Count == 0)
     {
@@ -99,57 +124,82 @@
     }
     else
     {
-        <!-- Tabs -->
         <div class="is-tabs">
             @foreach (var p in TabProducts)
             {
-                <button type="button" class="@("is-tab" + (p.Name == activeProduct ? " active" : ""))" @onclick="() => SelectProductAsync(p.Name)">
-                    <span class="is-tab-icon">@FarmProductIcons.IconFor(p.Name, "is-tab-monogram")</span> @p.Name
+                <button type="button"
+                        class="@("is-tab" + (p.Name == activeProduct ? " active" : ""))"
+                        @onclick="() => SelectProductAsync(p.Name)"
+                        title="@p.Name">
+                    <span class="is-tab-icon">@FarmProductIcons.IconFor(p.Name, "is-tab-monogram")</span>
+                    <span>@p.Name</span>
                 </button>
             }
         </div>
 
-        @if (isLoadingSummary)
+        @if (!string.IsNullOrEmpty(loadError))
         {
-            <EmptyState Icon="bi-hourglass-split" Title="Loading inventory data..." Compact="true" />
+            <div class="is-card is-error-card">
+                <EmptyState Icon="bi-exclamation-circle" Title="Could not load inventory data" Message="@loadError">
+                    <button type="button" class="is-btn-primary" @onclick="LoadSummaryAsync">
+                        <i class="bi bi-arrow-clockwise"></i> Retry
+                    </button>
+                </EmptyState>
+            </div>
         }
         else
         {
             <!-- Summary Cards -->
             <div class="is-summary-grid">
-                <div class="is-summary-card">
-                    <div class="is-summary-label">Total Purchased</div>
-                    <div class="is-summary-value">@summary.TotalPurchased @summary.Uom</div>
-                    <div class="is-summary-desc">Total purchased during period</div>
-                    <div class="is-summary-icon is-icon-blue"><i class="bi bi-file-earmark-plus"></i></div>
-                </div>
-                <div class="is-summary-card">
-                    <div class="is-summary-label">Total Hatched</div>
-                    <div class="is-summary-value">@summary.TotalHatched</div>
-                    <div class="is-summary-desc">Total hatched during period</div>
-                    <div class="is-summary-icon is-icon-orange"><i class="bi bi-clock-history"></i></div>
-                </div>
-                <div class="is-summary-card">
-                    <div class="is-summary-label">Total Sold</div>
-                    <div class="is-summary-value">@summary.TotalSold</div>
-                    <div class="is-summary-desc">Total sold during period</div>
-                    <div class="is-summary-icon is-icon-teal"><i class="bi bi-file-earmark-arrow-up"></i></div>
-                </div>
-                <div class="is-summary-card">
-                    <div class="is-summary-label">Mortality</div>
-                    <div class="is-summary-value">@summary.TotalMortality</div>
-                    <div class="is-summary-desc">Total deaths during period</div>
-                    <div class="is-summary-icon is-icon-red"><i class="bi bi-file-earmark-minus"></i></div>
-                </div>
-                <div class="is-summary-card">
-                    <div class="is-summary-label">Closing Stock</div>
-                    <div class="is-summary-value">@summary.ClosingStock</div>
-                    <div class="is-summary-desc">@(summary.ClosingStockAsOf is { } d ? $"As on {d:dd MMM yyyy}" : "No data yet")</div>
-                    <div class="is-summary-icon is-icon-green"><i class="bi bi-file-earmark-check"></i></div>
-                </div>
+                @if (isLoadingSummary)
+                {
+                    @for (int i = 0; i < 5; i++)
+                    {
+                        <div class="is-summary-card is-summary-skeleton-card">
+                            <Skeleton Variant="text" Height="14px" Rows="1" />
+                            <div style="margin: 8px 0;">
+                                <Skeleton Variant="text" Height="24px" Rows="1" />
+                            </div>
+                            <Skeleton Variant="text" Height="12px" Rows="1" />
+                        </div>
+                    }
+                }
+                else
+                {
+                    <div class="is-summary-card">
+                        <div class="is-summary-label">Total Purchased</div>
+                        <div class="is-summary-value">@summary.TotalPurchased @summary.Uom</div>
+                        <div class="is-summary-desc">Total purchased during period</div>
+                        <div class="is-summary-icon is-icon-blue"><i class="bi bi-file-earmark-plus"></i></div>
+                    </div>
+                    <div class="is-summary-card">
+                        <div class="is-summary-label">Total Hatched</div>
+                        <div class="is-summary-value">@summary.TotalHatched</div>
+                        <div class="is-summary-desc">Total hatched during period</div>
+                        <div class="is-summary-icon is-icon-orange"><i class="bi bi-clock-history"></i></div>
+                    </div>
+                    <div class="is-summary-card">
+                        <div class="is-summary-label">Total Sold</div>
+                        <div class="is-summary-value">@summary.TotalSold</div>
+                        <div class="is-summary-desc">Total sold during period</div>
+                        <div class="is-summary-icon is-icon-teal"><i class="bi bi-file-earmark-arrow-up"></i></div>
+                    </div>
+                    <div class="is-summary-card">
+                        <div class="is-summary-label">Mortality</div>
+                        <div class="is-summary-value">@summary.TotalMortality</div>
+                        <div class="is-summary-desc">Total deaths during period</div>
+                        <div class="is-summary-icon is-icon-red"><i class="bi bi-file-earmark-minus"></i></div>
+                    </div>
+                    <div class="is-summary-card">
+                        <div class="is-summary-label">Closing Stock</div>
+                        <div class="is-summary-value">@summary.ClosingStock</div>
+                        <div class="is-summary-desc">@(summary.ClosingStockAsOf is { } d ? $"As on {d:dd MMM yyyy}" : "No data yet")</div>
+                        <div class="is-summary-icon is-icon-green"><i class="bi bi-file-earmark-check"></i></div>
+                    </div>
+                }
             </div>
 
-            <!-- Table Card -->
+            <!-- Table Card with DataTables Features -->
             <div class="is-card is-table-card">
                 <div class="is-table-top-header">
                     <div class="is-table-title-row">
@@ -157,80 +207,180 @@
                         <span class="is-table-subtitle">15 - day reporting periods</span>
                     </div>
                     <div class="is-table-actions">
-                        <button type="button" class="is-btn-outline" disabled="@_exporting" @onclick="DownloadExcelAsync"><i class="bi bi-file-earmark-excel"></i> Download Excel</button>
-                        <button type="button" class="is-btn-outline" @onclick="DownloadPdfAsync"><i class="bi bi-file-earmark-pdf"></i> Download PDF</button>
+                        <button type="button" class="is-btn-outline" disabled="@(_exporting || isLoadingSummary)" @onclick="DownloadExcelAsync">
+                            <i class="bi bi-file-earmark-excel"></i> Download Excel
+                        </button>
+                        <button type="button" class="is-btn-outline" disabled="@(isLoadingSummary)" @onclick="DownloadPdfAsync">
+                            <i class="bi bi-file-earmark-pdf"></i> Download PDF
+                        </button>
                     </div>
                 </div>
 
-                <div class="is-table-scroll">
-                    <table class="is-table">
-                        <thead>
-                            <tr>
-                                <th>Period</th>
-                                <th>Opening Stock</th>
-                                <th>Purchase</th>
-                                <th>Hatched</th>
-                                <th>Sales <span class="is-badge-auto">Auto from Income</span></th>
-                                <th>Mortality</th>
-                                <th>Closing Stock</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @if (allRows.Count == 0)
-                            {
-                                <tr><td colspan="7" class="is-empty-td">No stock movement recorded for this product/period yet.</td></tr>
-                            }
-                            else
-                            {
-                                @foreach (var row in PagedRows)
+                <!-- DataTables Toolbar: Search -->
+                <div class="is-dt-toolbar">
+                    <div class="is-dt-search">
+                        <label>
+                            Search:
+                            <div class="is-dt-search-input-wrap">
+                                <i class="bi bi-search is-dt-search-icon"></i>
+                                <input type="text" class="is-dt-input" placeholder="Search history..."
+                                       @bind="tableSearchText" @bind:event="oninput" @bind:after="OnSearchChanged"
+                                       disabled="@(isLoadingSummary)" />
+                                @if (!string.IsNullOrEmpty(tableSearchText))
                                 {
-                                    <tr class="@(row.Status == "Draft" ? "is-row-highlight" : "")">
-                                        <td>
-                                            @FormatPeriod(row)
-                                            @if (row.Status == "Draft")
-                                            {
-                                                <span class="is-badge-draft">Draft</span>
-                                            }
-                                        </td>
-                                        <td>@row.Opening</td>
-                                        <td>@row.Purchase</td>
-                                        <td>@row.Hatched</td>
-                                        <td>@row.Sold</td>
-                                        <td>@row.Mortality</td>
-                                        <td>@row.Closing</td>
-                                    </tr>
+                                    <button type="button" class="is-dt-search-clear" @onclick="ClearSearch" title="Clear search">
+                                        <i class="bi bi-x"></i>
+                                    </button>
                                 }
-                            }
-                        </tbody>
-                    </table>
+                            </div>
+                        </label>
+                    </div>
                 </div>
 
-                @if (allRows.Count > 0)
-                {
-                    <div class="is-pagination">
-                        <div class="is-items-per-page">
-                            <span>Items Per Page</span>
-                            <select @bind="pageSize" @bind:after="() => GoToPage(1)">
-                                <option value="10">10</option>
-                                <option value="16">16</option>
-                                <option value="25">25</option>
-                                <option value="50">50</option>
-                            </select>
+                <!-- Table Container with Sorting -->
+                <div class="is-table-scroll">
+                    @if (isLoadingSummary)
+                    {
+                        <div class="is-skeleton-table-wrap">
+                            <Skeleton Variant="table" Rows="6" LoadingText="Loading stock movement history..." />
                         </div>
-                        <div class="is-pagination-buttons">
-                            <button type="button" class="is-page-btn" disabled="@(currentPage == 1)" @onclick="() => GoToPage(currentPage - 1)"><i class="bi bi-chevron-left"></i></button>
+                    }
+                    else
+                    {
+                        <table class="is-table">
+                            <thead>
+                                <tr>
+                                    <th class="is-sortable" @onclick='() => SortBy("Period")' title="Sort by Period">
+                                        <div class="is-th-content">
+                                            <span>Period</span>
+                                            <i class="bi @GetSortIcon("Period")"></i>
+                                        </div>
+                                    </th>
+                                    <th class="is-sortable" @onclick='() => SortBy("Opening")' title="Sort by Opening Stock">
+                                        <div class="is-th-content">
+                                            <span>Opening Stock</span>
+                                            <i class="bi @GetSortIcon("Opening")"></i>
+                                        </div>
+                                    </th>
+                                    <th class="is-sortable" @onclick='() => SortBy("Purchase")' title="Sort by Purchase">
+                                        <div class="is-th-content">
+                                            <span>Purchase</span>
+                                            <i class="bi @GetSortIcon("Purchase")"></i>
+                                        </div>
+                                    </th>
+                                    <th class="is-sortable" @onclick='() => SortBy("Hatched")' title="Sort by Hatched">
+                                        <div class="is-th-content">
+                                            <span>Hatched</span>
+                                            <i class="bi @GetSortIcon("Hatched")"></i>
+                                        </div>
+                                    </th>
+                                    <th class="is-sortable" @onclick='() => SortBy("Sold")' title="Sort by Sales">
+                                        <div class="is-th-content">
+                                            <span>Sales <span class="is-badge-auto">Auto from Income</span></span>
+                                            <i class="bi @GetSortIcon("Sold")"></i>
+                                        </div>
+                                    </th>
+                                    <th class="is-sortable" @onclick='() => SortBy("Mortality")' title="Sort by Mortality">
+                                        <div class="is-th-content">
+                                            <span>Mortality</span>
+                                            <i class="bi @GetSortIcon("Mortality")"></i>
+                                        </div>
+                                    </th>
+                                    <th class="is-sortable" @onclick='() => SortBy("Closing")' title="Sort by Closing Stock">
+                                        <div class="is-th-content">
+                                            <span>Closing Stock</span>
+                                            <i class="bi @GetSortIcon("Closing")"></i>
+                                        </div>
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @if (allRows.Count == 0)
+                                {
+                                    <tr>
+                                        <td colspan="7" class="is-empty-td">
+                                            No stock movement recorded for this product/period yet.
+                                        </td>
+                                    </tr>
+                                }
+                                else if (PagedRows.Count == 0)
+                                {
+                                    <tr>
+                                        <td colspan="7" class="is-empty-td">
+                                            <div>No matching records found for "<strong>@tableSearchText</strong>".</div>
+                                            <button type="button" class="is-btn-clear" style="margin-top: 10px;" @onclick="ClearSearch">
+                                                <i class="bi bi-x"></i> Clear Search
+                                            </button>
+                                        </td>
+                                    </tr>
+                                }
+                                else
+                                {
+                                    @foreach (var row in PagedRows)
+                                    {
+                                        <tr class="@(row.Status == "Draft" ? "is-row-highlight" : "")">
+                                            <td>
+                                                @FormatPeriod(row)
+                                                @if (row.Status == "Draft")
+                                                {
+                                                    <span class="is-badge-draft">Draft</span>
+                                                }
+                                            </td>
+                                            <td>@row.Opening</td>
+                                            <td>@row.Purchase</td>
+                                            <td>@row.Hatched</td>
+                                            <td>@row.Sold</td>
+                                            <td>@row.Mortality</td>
+                                            <td>@row.Closing</td>
+                                        </tr>
+                                    }
+                                }
+                            </tbody>
+                        </table>
+                    }
+                </div>
+
+                <!-- DataTables Footer: Showing Info, Items Per Page & Pagination -->
+                @if (!isLoadingSummary)
+                {
+                    <div class="is-dt-footer pagination-container">
+                        <div class="is-dt-footer-left">
+                            <div class="is-items-per-page items-per-page">
+                                <span>Items Per Page</span>
+                                <select class="is-dt-select" @bind="pageSize" @bind:after="OnPageSizeChanged">
+                                    <option value="10">10</option>
+                                    <option value="25">25</option>
+                                    <option value="50">50</option>
+                                    <option value="100">100</option>
+                                </select>
+                            </div>
+                            <div class="is-dt-info">
+                                @ShowingEntriesText
+                            </div>
+                        </div>
+
+                        <div class="is-pagination-buttons pagination-controls">
+                            <button type="button" class="is-page-btn page-btn" disabled="@(currentPage <= 1)" @onclick="() => GoToPage(currentPage - 1)" aria-label="Previous page" title="Previous page">
+                                <i class="bi bi-chevron-left"></i>
+                            </button>
                             @foreach (var pNum in VisiblePageNumbers)
                             {
                                 @if (pNum == -1)
                                 {
-                                    <span class="is-page-ellipsis">..</span>
+                                    <span class="is-page-ellipsis page-btn ellipsis">..</span>
                                 }
                                 else
                                 {
-                                    <button type="button" class="@("is-page-btn" + (pNum == currentPage ? " is-page-active" : ""))" @onclick="() => GoToPage(pNum)">@pNum</button>
+                                    <button type="button" class="@("is-page-btn page-btn" + (pNum == currentPage ? " is-page-active active" : ""))"
+                                            disabled="@(TotalFilteredCount == 0)"
+                                            @onclick="() => GoToPage(pNum)" aria-label="Page @pNum">
+                                        @pNum
+                                    </button>
                                 }
                             }
-                            <button type="button" class="is-page-btn" disabled="@(currentPage == TotalPages)" @onclick="() => GoToPage(currentPage + 1)"><i class="bi bi-chevron-right"></i></button>
+                            <button type="button" class="is-page-btn page-btn" disabled="@(currentPage >= TotalPages)" @onclick="() => GoToPage(currentPage + 1)" aria-label="Next page" title="Next page">
+                                <i class="bi bi-chevron-right"></i>
+                            </button>
                         </div>
                     </div>
                 }
@@ -245,7 +395,6 @@
         font-family: inherit;
     }
 
-
     .is-btn-back {
         display: inline-flex;
         align-items: center;
@@ -258,6 +407,11 @@
         font-size: 13px;
         font-weight: 600;
         cursor: pointer;
+        transition: all 0.15s ease;
+    }
+
+    .is-btn-back:hover {
+        background: #f0fdf4;
     }
 
     .is-card {
@@ -268,10 +422,7 @@
         box-shadow: 0 1px 2px rgba(0,0,0,.03);
     }
 
-    /* Filters: header strip keeps the mint tint, the expanded body below it is
-       plain white. overflow:hidden on the card clips both to its own rounded
-       corners, so the header alone still looks fully rounded while collapsed
-       (no body) and doesn't need its own conditional border-radius. */
+    /* Filters Card */
     .is-filters-card {
         overflow: hidden;
     }
@@ -283,6 +434,7 @@
         padding: 16px 20px;
         cursor: pointer;
         background-color: #F5F8F6;
+        user-select: none;
     }
 
     .is-filters-title {
@@ -291,18 +443,19 @@
         gap: 8px;
         font-weight: 600;
         font-size: 14px;
+        color: #111827;
     }
 
     .is-filters-body {
-        padding: 0 20px 20px 20px;
+        padding: 20px;
         background-color: #FFFFFF;
     }
 
     .is-filters-grid {
         display: grid;
-        grid-template-columns: repeat(5, 1fr);
+        grid-template-columns: repeat(4, 1fr);
         gap: 16px;
-        margin-bottom: 20px;
+        margin-bottom: 16px;
     }
 
     .is-filter-group label {
@@ -313,23 +466,53 @@
         margin-bottom: 6px;
     }
 
-    .is-filter-group select {
+    .is-filter-group select,
+    .is-input-date {
         width: 100%;
-        padding: 10px 32px 10px 12px;
+        padding: 9px 12px;
         border: 1px solid #e5e7eb;
         border-radius: 6px;
         font-size: 13px;
         color: #374151;
         background-color: #F8F9FA;
+        box-sizing: border-box;
+        font-family: inherit;
+        transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .is-filter-group select {
+        padding-right: 32px;
         -webkit-appearance: none;
         -moz-appearance: none;
         appearance: none;
     }
 
-    .is-select-date {
-        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='18' rx='2' ry='2'%3E%3C/rect%3E%3Cline x1='16' y1='2' x2='16' y2='6'%3E%3C/line%3E%3Cline x1='8' y1='2' x2='8' y2='6'%3E%3C/line%3E%3Cline x1='3' y1='10' x2='21' y2='10'%3E%3C/line%3E%3C/svg%3E");
-        background-repeat: no-repeat;
-        background-position: right 12px center;
+    .is-filter-group select:focus,
+    .is-input-date:focus {
+        outline: none;
+        border-color: #065f46;
+        background-color: #fff;
+        box-shadow: 0 0 0 2px rgba(6, 95, 70, 0.15);
+    }
+
+    .is-input-error {
+        border-color: #ef4444 !important;
+        background-color: #fef2f2 !important;
+    }
+
+    .is-filter-validation-error {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-top: -6px;
+        margin-bottom: 16px;
+        padding: 8px 12px;
+        background-color: #fef2f2;
+        border: 1px solid #fecaca;
+        border-radius: 6px;
+        color: #b91c1c;
+        font-size: 12px;
+        font-weight: 500;
     }
 
     .is-select-chevron {
@@ -356,11 +539,21 @@
         display: inline-flex;
         align-items: center;
         gap: 6px;
+        transition: all 0.15s ease;
+    }
+
+    .is-btn-clear:hover:not(:disabled) {
+        background: #f3f4f6;
+    }
+
+    .is-btn-clear:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
     }
 
     .is-btn-primary {
         padding: 8px 20px;
-        background: #4f46e5;
+        background: #065f46;
         border: none;
         color: #fff;
         border-radius: 8px;
@@ -370,14 +563,25 @@
         display: inline-flex;
         align-items: center;
         gap: 6px;
+        transition: background 0.15s ease;
     }
 
-    /* Tabs */
+    .is-btn-primary:hover:not(:disabled) {
+        background: #044e39;
+    }
+
+    .is-btn-primary:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
+
+    /* Product Tabs */
     .is-tabs {
         display: flex;
         gap: 12px;
         margin-bottom: 24px;
         flex-wrap: wrap;
+        align-items: center;
     }
 
     .is-tab {
@@ -392,28 +596,70 @@
         font-weight: 600;
         color: #111827;
         cursor: pointer;
+        transition: all 0.18s ease;
+    }
+
+    .is-tab:hover:not(.active) {
+        background: #f9fafb;
+        border-color: #d1d5db;
+        color: #111827;
     }
 
     .is-tab.active {
         background: #065f46;
-        color: #fff;
+        color: #ffffff;
         border-color: #065f46;
+        box-shadow: 0 1px 3px rgba(6, 95, 70, 0.25);
+    }
+
+    .is-tab:focus-visible {
+        outline: 2px solid #065f46;
+        outline-offset: 2px;
     }
 
     .is-tab-icon {
         font-size: 14px;
         display: inline-flex;
         align-items: center;
+        justify-content: center;
+    }
+
+    .is-tab-icon svg {
+        display: block;
+        width: 18px;
+        height: 18px;
+        vertical-align: middle;
+        transition: fill 0.15s ease;
+    }
+
+    /* Requirement 2: Selected tab icon color becomes white matching the text */
+    .is-tab.active .is-tab-icon svg,
+    .is-tab.active .is-tab-icon svg path,
+    .is-tab.active .is-tab-icon svg rect,
+    .is-tab.active .is-tab-icon svg circle,
+    .is-tab.active .is-tab-icon svg polygon {
+        fill: #ffffff !important;
+    }
+
+    .is-tab.active .is-tab-monogram {
+        background: rgba(255, 255, 255, 0.25);
+        color: #ffffff;
+    }
+
+    /* Unselected tab icon preserves default green */
+    .is-tab:not(.active) .is-tab-icon svg path {
+        fill: #006139;
     }
 
     .is-tab-monogram {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        width: 18px;
-        height: 18px;
+        width: 20px;
+        height: 20px;
         border-radius: 50%;
-        background: rgba(255,255,255,.25);
+        background: rgba(6, 95, 70, 0.1);
+        color: #065f46;
         font-size: 11px;
         font-weight: 700;
     }
@@ -435,6 +681,13 @@
         box-shadow: 0 1px 2px rgba(0,0,0,.02);
     }
 
+    .is-summary-skeleton-card {
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        min-height: 98px;
+    }
+
     .is-summary-label {
         font-size: 12px;
         color: #111827;
@@ -451,7 +704,7 @@
 
     .is-summary-desc {
         font-size: 11px;
-        color: #111827;
+        color: #6b7280;
     }
 
     .is-summary-icon {
@@ -473,12 +726,16 @@
     .is-icon-red { background: #fef2f2; color: #ef4444; }
     .is-icon-green { background: #f0fdf4; color: #22c55e; }
 
-    /* Table */
+    /* Table Card */
+    .is-table-card {
+        overflow: hidden;
+    }
+
     .is-table-top-header {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        padding: 20px;
+        padding: 18px 20px;
     }
 
     .is-table-title-row h2 {
@@ -492,7 +749,7 @@
 
     .is-table-subtitle {
         font-size: 12px;
-        color: #111827;
+        color: #6b7280;
     }
 
     .is-table-actions {
@@ -512,10 +769,15 @@
         display: inline-flex;
         align-items: center;
         gap: 6px;
+        transition: all 0.15s ease;
+    }
+
+    .is-btn-outline:hover:not(:disabled) {
+        background: #f0fdf4;
     }
 
     .is-btn-outline:disabled {
-        opacity: .6;
+        opacity: .5;
         cursor: not-allowed;
     }
 
@@ -523,12 +785,104 @@
         font-size: 14px;
     }
 
+    /* DataTables Toolbar */
+    .is-dt-toolbar {
+        display: flex;
+        justify-content: flex-end;
+        align-items: center;
+        padding: 12px 20px;
+        background: #fafafa;
+        border-top: 1px solid #f3f4f6;
+        border-bottom: 1px solid #e5e7eb;
+        flex-wrap: wrap;
+        gap: 12px;
+    }
+
+    .is-dt-length label,
+    .is-dt-search label {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 13px;
+        color: #374151;
+        margin: 0;
+        font-weight: 500;
+    }
+
+    .is-dt-select {
+        padding: 5px 28px 5px 10px;
+        border: 1px solid #d1d5db;
+        border-radius: 6px;
+        font-size: 13px;
+        background-color: #fff;
+        color: #111827;
+        appearance: none;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 8px center;
+        cursor: pointer;
+    }
+
+    .is-dt-select:focus {
+        outline: none;
+        border-color: #065f46;
+    }
+
+    .is-dt-search-input-wrap {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+    }
+
+    .is-dt-search-icon {
+        position: absolute;
+        left: 10px;
+        color: #9ca3af;
+        font-size: 13px;
+        pointer-events: none;
+    }
+
+    .is-dt-input {
+        padding: 6px 30px 6px 30px;
+        border: 1px solid #d1d5db;
+        border-radius: 6px;
+        font-size: 13px;
+        color: #111827;
+        background: #fff;
+        width: 220px;
+        transition: all 0.15s ease;
+    }
+
+    .is-dt-input:focus {
+        outline: none;
+        border-color: #065f46;
+        box-shadow: 0 0 0 2px rgba(6, 95, 70, 0.15);
+    }
+
+    .is-dt-search-clear {
+        position: absolute;
+        right: 6px;
+        background: transparent;
+        border: none;
+        color: #9ca3af;
+        cursor: pointer;
+        padding: 2px 4px;
+        font-size: 14px;
+        display: flex;
+        align-items: center;
+    }
+
+    .is-dt-search-clear:hover {
+        color: #374151;
+    }
+
+    /* Table */
     .is-table-scroll {
         overflow-x: auto;
     }
 
-    .is-table-card {
-        overflow: hidden;
+    .is-skeleton-table-wrap {
+        padding: 20px;
     }
 
     .is-table {
@@ -538,22 +892,24 @@
     }
 
     .is-table th {
-        padding: 14px 16px;
+        padding: 13px 16px;
         background: #f3f4f6;
         font-size: 13px;
         font-weight: 700;
         color: #374151;
         border-bottom: 1px solid #e5e7eb;
+        white-space: nowrap;
     }
 
     .is-table td {
-        padding: 14px 16px;
+        padding: 13px 16px;
         font-size: 13px;
         color: #4b5563;
         border-bottom: 1px solid #e5e7eb;
     }
 
-    .is-table td:first-child, .is-table th:first-child {
+    .is-table td:first-child,
+    .is-table th:first-child {
         text-align: left;
     }
 
@@ -562,35 +918,48 @@
     }
 
     .is-table td:last-child {
-        background: #f0fdf4; /* Pale green for Closing Stock - header stays the
-                                 same gray as every other column (see .is-table th). */
+        background: #f0fdf4; /* Pale green for Closing Stock column */
+    }
+
+    .is-sortable {
+        cursor: pointer;
+        user-select: none;
+        transition: background-color 0.15s ease;
+    }
+
+    .is-sortable:hover {
+        background-color: #e5e7eb;
+    }
+
+    .is-th-content {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .is-sort-muted {
+        opacity: 0.35;
+        font-size: 11px;
+    }
+
+    .is-sort-active {
+        opacity: 1;
+        color: #065f46;
+        font-size: 12px;
     }
 
     .is-row-highlight {
         background: #fffbeb;
     }
 
-        /* A td's own background always paints over its row's background, so this
-           isn't strictly required for the colors to be correct - but it makes the
-           intent explicit: Closing Stock stays green even in the Draft (highlighted)
-           row, instead of being read as "inheriting" the row's amber tint. */
-        .is-row-highlight td:last-child {
-            background: #f0fdf4;
-        }
-
-        /* Belt-and-suspenders: the very last row (the upcoming/placeholder period,
-           all "-") gets the same green explicitly, at higher specificity than any
-           other rule here, so there's no ambiguity about it keeping the column's
-           background like every other row. */
-        .is-table tbody tr:last-child td:last-child {
-            background: #f0fdf4;
-        }
+    .is-row-highlight td:last-child {
+        background: #f0fdf4;
+    }
 
     .is-empty-td {
         text-align: center !important;
-        padding: 32px !important;
-        color: #9ca3af;
-        font-style: italic;
+        padding: 36px 20px !important;
+        color: #6b7280;
         background: #fff !important;
     }
 
@@ -615,32 +984,56 @@
         text-transform: none;
     }
 
-    /* Pagination */
-    .is-pagination {
+    /* DataTables Footer */
+    .is-dt-footer {
         display: flex;
         justify-content: space-between;
         align-items: center;
         padding: 16px 20px;
         border-top: 1px solid #e5e7eb;
+        background: #fff;
+        flex-wrap: wrap;
+        gap: 16px;
+    }
+
+    .is-dt-footer-left {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 16px;
     }
 
     .is-items-per-page {
         display: flex;
         align-items: center;
         gap: 8px;
-        font-size: 12px;
+        font-size: 13px;
         color: #111827;
+        font-weight: 500;
     }
 
-    .is-items-per-page select {
+    .is-items-per-page select,
+    .is-dt-footer .is-dt-select {
         padding: 6px 28px 6px 12px;
         border: 1px solid #e5e7eb;
         border-radius: 6px;
-        background: #fff;
-        appearance: none;
-        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
-        background-repeat: no-repeat;
-        background-position: right 8px center;
+        background-color: #fff;
+        font-size: 13px;
+        color: #374151;
+        cursor: pointer;
+    }
+
+    .is-items-per-page select:focus,
+    .is-dt-footer .is-dt-select:focus {
+        outline: none;
+        border-color: #065f46;
+        box-shadow: 0 0 0 3px rgba(6, 95, 70, 0.1);
+    }
+
+    .is-dt-info {
+        font-size: 13px;
+        color: #6b7280;
+        font-weight: 500;
     }
 
     .is-pagination-buttons {
@@ -652,6 +1045,7 @@
     .is-page-btn {
         min-width: 32px;
         height: 32px;
+        padding: 0 8px;
         display: inline-flex;
         align-items: center;
         justify-content: center;
@@ -661,37 +1055,110 @@
         font-size: 13px;
         color: #374151;
         cursor: pointer;
+        transition: all 0.15s ease;
     }
 
-    .is-page-btn:hover {
+    .is-page-btn:hover:not(:disabled):not(.is-page-active):not(.active) {
         background: #f3f4f6;
     }
 
-    .is-page-btn:disabled {
-        opacity: .5;
+    .is-page-btn:disabled,
+    .is-page-btn.disabled {
+        opacity: .45;
         cursor: not-allowed;
+        pointer-events: none;
     }
 
-    .is-page-active {
-        background: #065f46;
-        border-color: #065f46;
-        color: #fff;
+    .is-page-active,
+    .is-dt-footer .page-btn.active {
+        background: #065f46 !important;
+        border-color: #065f46 !important;
+        color: #fff !important;
+        font-weight: 600;
+    }
+
+    .is-page-active:hover,
+    .is-dt-footer .page-btn.active:hover {
+        background: #065f46 !important;
+        color: #fff !important;
     }
 
     .is-page-ellipsis {
-        color: #111827;
+        color: #6b7280;
         padding: 0 4px;
+        font-size: 13px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .is-error-card {
+        padding: 32px 20px;
+    }
+
+    /* Responsive Queries */
+    @@media (max-width: 1024px) {
+        .is-filters-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
+        .is-summary-grid {
+            grid-template-columns: repeat(3, 1fr);
+        }
+    }
+
+    @@media (max-width: 768px) {
+        .is-filters-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
+        .is-summary-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
+        .is-table-top-header {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 12px;
+        }
+        .is-dt-toolbar {
+            flex-direction: column;
+            align-items: stretch;
+        }
+        .is-dt-input {
+            width: 100%;
+        }
+        .is-dt-footer {
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+        }
+        .is-dt-footer-left {
+            justify-content: center;
+        }
+    }
+
+    @@media (max-width: 540px) {
+        .is-filters-grid {
+            grid-template-columns: 1fr;
+        }
+        .is-summary-grid {
+            grid-template-columns: 1fr;
+        }
+        .is-dt-footer {
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+        }
     }
 </style>
 
 @code {
     private bool filtersExpanded = true;
+    private bool isLoadingInitial = true;
     private bool isLoadingProducts = true;
     private bool isLoadingSummary = true;
+    private string? loadError;
     private bool _exporting;
 
-    // ---- Catalog (api/FarmProduct/products - the same live product master FifteenDaysEntry.razor
-    // itself reads from) ----
+    // ---- Catalog (api/FarmProduct/products) ----
     private List<CatalogProductDto> allProducts = new();
 
     private List<CatalogProductDto> TabProducts =>
@@ -700,38 +1167,97 @@
             : allProducts.Where(p => string.Equals(p.Group, categoryFilter, StringComparison.OrdinalIgnoreCase)).ToList();
 
     // ---- Filters ----
-    private string yearFilter = "";
-    private string monthFilter = "";
-    private string periodFilter = "";
+    private DateTime? fromDateFilter;
+    private DateTime? toDateFilter;
     private string categoryFilter = "";
     private string productFilter = "";
+    private string? dateValidationError;
 
     private string? activeProduct;
-
-    // ---- Options populated from the server alongside the data itself, so they can never drift out
-    // of sync with what's actually in the database (no hardcoded year/period lists). ----
-    private List<int> availableYears = new();
-    private List<string> reportingPeriods = new();
 
     // ---- Current product's data ----
     private InventorySummaryStatsDto summary = new();
     private List<InventoryMovementRowDto> allRows = new();
 
-    // ---- Pagination (client-side - one product's full history across every 15-day period in a
-    // year is at most a few dozen rows, not worth a second server round trip per page). ----
+    // ---- DataTables State ----
+    private string tableSearchText = "";
+    private string sortColumn = "Period";
+    private bool sortAscending = false; // Default: latest 15-day period first
     private int currentPage = 1;
-    private int pageSize = 16;
+    private int pageSize = 10;
 
-    private int TotalPages => allRows.Count == 0 ? 1 : (int)Math.Ceiling(allRows.Count / (double)pageSize);
+    private IEnumerable<InventoryMovementRowDto> FilteredRows
+    {
+        get
+        {
+            var rows = allRows.AsEnumerable();
+
+            if (!string.IsNullOrWhiteSpace(tableSearchText))
+            {
+                var q = tableSearchText.Trim();
+                rows = rows.Where(r =>
+                    FormatPeriod(r).Contains(q, StringComparison.OrdinalIgnoreCase) ||
+                    (r.ReportingPeriod ?? "").Contains(q, StringComparison.OrdinalIgnoreCase) ||
+                    (r.Status ?? "").Contains(q, StringComparison.OrdinalIgnoreCase) ||
+                    r.Opening.ToString().Contains(q) ||
+                    r.Purchase.ToString().Contains(q) ||
+                    r.Hatched.ToString().Contains(q) ||
+                    r.Sold.ToString().Contains(q) ||
+                    r.Mortality.ToString().Contains(q) ||
+                    r.Closing.ToString().Contains(q));
+            }
+
+            rows = sortColumn switch
+            {
+                "Period" => sortAscending ? rows.OrderBy(r => r.PeriodStartDate) : rows.OrderByDescending(r => r.PeriodStartDate),
+                "Opening" => sortAscending ? rows.OrderBy(r => r.Opening) : rows.OrderByDescending(r => r.Opening),
+                "Purchase" => sortAscending ? rows.OrderBy(r => r.Purchase) : rows.OrderByDescending(r => r.Purchase),
+                "Hatched" => sortAscending ? rows.OrderBy(r => r.Hatched) : rows.OrderByDescending(r => r.Hatched),
+                "Sold" => sortAscending ? rows.OrderBy(r => r.Sold) : rows.OrderByDescending(r => r.Sold),
+                "Mortality" => sortAscending ? rows.OrderBy(r => r.Mortality) : rows.OrderByDescending(r => r.Mortality),
+                "Closing" => sortAscending ? rows.OrderBy(r => r.Closing) : rows.OrderByDescending(r => r.Closing),
+                _ => sortAscending ? rows.OrderBy(r => r.PeriodStartDate) : rows.OrderByDescending(r => r.PeriodStartDate)
+            };
+
+            return rows;
+        }
+    }
+
+    private int TotalFilteredCount => FilteredRows.Count();
+    private int TotalPages => Math.Max(1, (int)Math.Ceiling(TotalFilteredCount / (double)pageSize));
 
     private List<InventoryMovementRowDto> PagedRows =>
-        allRows.Skip((currentPage - 1) * pageSize).Take(pageSize).ToList();
+        FilteredRows.Skip((currentPage - 1) * pageSize).Take(pageSize).ToList();
+
+    private string ShowingEntriesText
+    {
+        get
+        {
+            var total = TotalFilteredCount;
+            var grandTotal = allRows.Count;
+            if (total == 0)
+            {
+                return grandTotal == 0
+                    ? "Showing 0 to 0 of 0 entries"
+                    : $"Showing 0 to 0 of 0 entries (filtered from {grandTotal} total entries)";
+            }
+            var start = ((currentPage - 1) * pageSize) + 1;
+            var end = Math.Min(currentPage * pageSize, total);
+            if (total == grandTotal)
+            {
+                return $"Showing {start} to {end} of {total} entries";
+            }
+            return $"Showing {start} to {end} of {total} entries (filtered from {grandTotal} total entries)";
+        }
+    }
 
     private IEnumerable<int> VisiblePageNumbers
     {
         get
         {
             var total = TotalPages;
+            if (total <= 7) return Enumerable.Range(1, total);
+
             var set = new SortedSet<int> { 1, total };
             for (var i = Math.Max(1, currentPage - 1); i <= Math.Min(total, currentPage + 1); i++) set.Add(i);
             for (var i = 1; i <= Math.Min(3, total); i++) set.Add(i);
@@ -751,9 +1277,15 @@
 
     protected override async Task OnInitializedAsync()
     {
+        isLoadingInitial = true;
         await LoadProductsAsync();
         activeProduct = TabProducts.FirstOrDefault()?.Name;
+        if (!string.IsNullOrEmpty(activeProduct))
+        {
+            productFilter = activeProduct;
+        }
         await LoadSummaryAsync();
+        isLoadingInitial = false;
     }
 
     private async Task LoadProductsAsync()
@@ -778,14 +1310,14 @@
     private async Task LoadSummaryAsync()
     {
         isLoadingSummary = true;
+        loadError = null;
         StateHasChanged();
 
         try
         {
             var qp = new List<string>();
-            if (int.TryParse(yearFilter, out var y)) qp.Add($"year={y}");
-            if (int.TryParse(monthFilter, out var m)) qp.Add($"month={m}");
-            if (!string.IsNullOrWhiteSpace(periodFilter)) qp.Add($"reportingPeriod={Uri.EscapeDataString(periodFilter)}");
+            if (fromDateFilter.HasValue) qp.Add($"fromDate={fromDateFilter.Value:yyyy-MM-dd}");
+            if (toDateFilter.HasValue) qp.Add($"toDate={toDateFilter.Value:yyyy-MM-dd}");
             if (!string.IsNullOrWhiteSpace(activeProduct)) qp.Add($"product={Uri.EscapeDataString(activeProduct)}");
 
             var url = "api/FarmReport/inventory-summary" + (qp.Count > 0 ? "?" + string.Join("&", qp) : "");
@@ -793,12 +1325,11 @@
 
             summary = result?.Summary ?? new();
             allRows = result?.Rows ?? new();
-            reportingPeriods = result?.ReportingPeriods ?? new();
-            availableYears = result?.AvailableYears ?? new();
         }
         catch (Exception ex)
         {
             Console.WriteLine($"Loading inventory summary failed: {ex.Message}");
+            loadError = "Unable to load inventory data from the server. Please try again.";
             summary = new();
             allRows = new();
         }
@@ -815,28 +1346,95 @@
         if (activeProduct == name) return;
         activeProduct = name;
         productFilter = name;
+        tableSearchText = "";
         await LoadSummaryAsync();
+    }
+
+    private void OnDatesChanged()
+    {
+        if (fromDateFilter.HasValue && toDateFilter.HasValue && fromDateFilter.Value.Date > toDateFilter.Value.Date)
+        {
+            dateValidationError = "From Date cannot be later than To Date.";
+        }
+        else
+        {
+            dateValidationError = null;
+        }
+    }
+
+    private async Task OnCategoryChanged()
+    {
+        if (!TabProducts.Any(p => p.Name == activeProduct))
+        {
+            activeProduct = TabProducts.FirstOrDefault()?.Name;
+            productFilter = "";
+            tableSearchText = "";
+            await LoadSummaryAsync();
+        }
     }
 
     private async Task ApplyFiltersAsync()
     {
+        OnDatesChanged();
+        if (!string.IsNullOrEmpty(dateValidationError))
+        {
+            Toast.Warning(dateValidationError);
+            return;
+        }
+
         if (!string.IsNullOrWhiteSpace(productFilter))
             activeProduct = productFilter;
+        tableSearchText = "";
         await LoadSummaryAsync();
     }
 
     private async Task ClearFiltersAsync()
     {
-        yearFilter = "";
-        monthFilter = "";
-        periodFilter = "";
+        fromDateFilter = null;
+        toDateFilter = null;
         categoryFilter = "";
         productFilter = "";
+        dateValidationError = null;
+        tableSearchText = "";
         activeProduct = TabProducts.FirstOrDefault()?.Name;
         await LoadSummaryAsync();
     }
 
-    private static string MonthName(int m) => new DateTime(2000, m, 1).ToString("MMMM");
+    private void SortBy(string column)
+    {
+        if (sortColumn == column)
+        {
+            sortAscending = !sortAscending;
+        }
+        else
+        {
+            sortColumn = column;
+            sortAscending = true;
+        }
+        currentPage = 1;
+    }
+
+    private string GetSortIcon(string column)
+    {
+        if (sortColumn != column) return "bi-arrow-down-up is-sort-muted";
+        return sortAscending ? "bi-arrow-up is-sort-active" : "bi-arrow-down is-sort-active";
+    }
+
+    private void OnPageSizeChanged()
+    {
+        currentPage = 1;
+    }
+
+    private void OnSearchChanged()
+    {
+        currentPage = 1;
+    }
+
+    private void ClearSearch()
+    {
+        tableSearchText = "";
+        currentPage = 1;
+    }
 
     private static string FormatPeriod(InventoryMovementRowDto row) =>
         $"{row.PeriodStartDate:dd} - {row.PeriodEndDate:dd} {row.PeriodStartDate:MMM}";
@@ -854,9 +1452,8 @@
     private string CurrentQueryString()
     {
         var qp = new List<string>();
-        if (int.TryParse(yearFilter, out var y)) qp.Add($"year={y}");
-        if (int.TryParse(monthFilter, out var m)) qp.Add($"month={m}");
-        if (!string.IsNullOrWhiteSpace(periodFilter)) qp.Add($"reportingPeriod={Uri.EscapeDataString(periodFilter)}");
+        if (fromDateFilter.HasValue) qp.Add($"fromDate={fromDateFilter.Value:yyyy-MM-dd}");
+        if (toDateFilter.HasValue) qp.Add($"toDate={toDateFilter.Value:yyyy-MM-dd}");
         if (!string.IsNullOrWhiteSpace(activeProduct)) qp.Add($"product={Uri.EscapeDataString(activeProduct)}");
         return qp.Count > 0 ? "?" + string.Join("&", qp) : "";
     }
@@ -890,13 +1487,10 @@
         }
     }
 
-    // PDF: reuses the same print-to-PDF pattern already used elsewhere in this app
-    // (js/location.js's openPrintableHtml) - opens a plain HTML table in a new window and triggers
-    // the browser's print dialog, where "Save as PDF" is one of the destinations. No new
-    // server-side PDF dependency needed for a straightforward tabular report like this one.
     private async Task DownloadPdfAsync()
     {
-        var rowsHtml = string.Join("", allRows.Select(r => $"""
+        var rowsToExport = FilteredRows.ToList();
+        var rowsHtml = string.Join("", rowsToExport.Select(r => $"""
             <tr>
                 <td>{System.Net.WebUtility.HtmlEncode(FormatPeriod(r))}{(r.Status == "Draft" ? " (Draft)" : "")}</td>
                 <td>{r.Opening}</td><td>{r.Purchase}</td><td>{r.Hatched}</td>
@@ -913,7 +1507,7 @@
             td:first-child, th:first-child { text-align: left; }
             """;
 
-        var productLabel = System.Net.WebUtility.HtmlEncode(activeProduct);
+        var productLabel = System.Net.WebUtility.HtmlEncode(activeProduct ?? "Product");
         var html = $"""
             <html>
             <head>
@@ -978,7 +1572,6 @@
         public string? SelectedProduct { get; set; }
         public List<string> ReportingPeriods { get; set; } = new();
         public List<string> AvailableFinancialYears { get; set; } = new();
-        public List<int> AvailableYears { get; set; } = new();
         public InventorySummaryStatsDto Summary { get; set; } = new();
         public List<InventoryMovementRowDto> Rows { get; set; } = new();
     }

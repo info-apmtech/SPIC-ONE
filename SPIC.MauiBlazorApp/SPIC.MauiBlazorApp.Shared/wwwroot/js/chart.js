@@ -934,3 +934,115 @@ window.loadExpenseSummaryCharts = function (data) {
 window.destroyExpenseSummaryCharts = function () {
     if (window.expMonthlyTrendChartInstance) { window.expMonthlyTrendChartInstance.destroy(); window.expMonthlyTrendChartInstance = null; }
 };
+
+// Shared by FarmDashboard.razor and FinanceSummary.razor's "Income, Expense & Profit Trends" card -
+// both used to hand-roll their own <svg> bar+line chart (duplicated math, a Y-axis title that
+// overlapped the tick labels, and a tooltip that was pinned to whichever bar was last clicked
+// instead of appearing on hover). Replaced with one real Chart.js chart, keyed by canvasId so both
+// pages' canvases can coexist; data = { labels, income, expense, netProfit } (parallel arrays).
+window.financeTrendChartInstances = window.financeTrendChartInstances || {};
+
+window.loadFinanceTrendChart = function (canvasId, data) {
+    if (typeof Chart === 'undefined' || !data) return;
+    window.destroyFinanceTrendChart(canvasId);
+
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+
+    const shortRupee = v => {
+        v = Number(v);
+        const sign = v < 0 ? '-' : '';
+        v = Math.abs(v);
+        if (v >= 100000) return sign + '₹' + (v / 100000).toFixed(v % 100000 === 0 ? 0 : 1) + 'L';
+        if (v >= 1000) return sign + '₹' + (v / 1000).toFixed(v % 1000 === 0 ? 0 : 1) + 'K';
+        return sign + '₹' + v;
+    };
+
+    window.financeTrendChartInstances[canvasId] = new Chart(canvas.getContext('2d'), {
+        data: {
+            labels: data.labels,
+            datasets: [
+                {
+                    type: 'bar',
+                    label: 'Income',
+                    data: data.income,
+                    backgroundColor: '#6ee7b7',
+                    hoverBackgroundColor: '#34d399',
+                    borderRadius: 4,
+                    maxBarThickness: 28,
+                    order: 2
+                },
+                {
+                    type: 'bar',
+                    label: 'Expense',
+                    data: data.expense,
+                    backgroundColor: '#fca5a5',
+                    hoverBackgroundColor: '#f87171',
+                    borderRadius: 4,
+                    maxBarThickness: 28,
+                    order: 2
+                },
+                {
+                    type: 'line',
+                    label: 'Net Profit',
+                    data: data.netProfit,
+                    borderColor: '#3b82f6',
+                    backgroundColor: '#3b82f6',
+                    pointBackgroundColor: '#ffffff',
+                    pointBorderColor: '#3b82f6',
+                    pointBorderWidth: 2,
+                    pointRadius: 4,
+                    pointHoverRadius: 6,
+                    tension: 0.3,
+                    borderWidth: 2.5,
+                    order: 1
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            layout: { padding: { top: 10 } },
+            plugins: {
+                // Both pages already render their own HTML legend above the chart.
+                legend: { display: false },
+                // mode:'index' + intersect:false (above) means this appears on hover anywhere over
+                // a period's column, for all three series at once - never pinned/always-on.
+                tooltip: {
+                    backgroundColor: '#ffffff',
+                    titleColor: '#1e293b',
+                    bodyColor: '#475569',
+                    borderColor: '#e2e8f0',
+                    borderWidth: 1,
+                    padding: 10,
+                    boxPadding: 4,
+                    callbacks: {
+                        label: ctx => ` ${ctx.dataset.label}: ${shortRupee(ctx.raw)}`
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    border: { display: false },
+                    grid: { color: '#f1f5f9' },
+                    title: { display: true, text: 'Amount (₹)', color: '#94a3b8', font: { size: 11 } },
+                    ticks: { color: '#64748b', font: { size: 10 }, callback: v => shortRupee(v) }
+                },
+                x: {
+                    border: { display: false },
+                    grid: { display: false },
+                    ticks: { color: '#64748b', font: { size: 11 } }
+                }
+            }
+        }
+    });
+};
+
+window.destroyFinanceTrendChart = function (canvasId) {
+    if (window.financeTrendChartInstances[canvasId]) {
+        window.financeTrendChartInstances[canvasId].destroy();
+        window.financeTrendChartInstances[canvasId] = null;
+    }
+};
