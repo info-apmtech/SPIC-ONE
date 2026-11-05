@@ -71,19 +71,52 @@ window.updateTrackingRouteMap = function (elementId, points) {
 };
 
 // ---------------------------------------------------------------------------
-// Route playback: a thin renderer only - all timing/play-pause/speed state lives in C#
-// (MarkAttendance.razor's playback timer), this just draws how far the "playhead" has travelled
-// (an amber trail from the start up to the given index) and moves a marker to match, same division
-// of responsibility as the live elapsed-timer badge already uses elsewhere on this page.
+// Route playback: animated playhead with direction orientation & focused camera.
+// Draws the covered path (amber trail), moves a directional navigation arrow
+// facing the travel heading, and smoothly tracks the movement without jumping.
 // ---------------------------------------------------------------------------
 
-window.setPlaybackPosition = function (elementId, points, index) {
+function calculateBearing(lat1, lng1, lat2, lng2) {
+    var dLng = (lng2 - lng1) * Math.PI / 180;
+    var rLat1 = lat1 * Math.PI / 180;
+    var rLat2 = lat2 * Math.PI / 180;
+    var y = Math.sin(dLng) * Math.cos(rLat2);
+    var x = Math.cos(rLat1) * Math.sin(rLat2) - Math.sin(rLat1) * Math.cos(rLat2) * Math.cos(dLng);
+    var brng = (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+    return brng;
+}
+
+function getRouteBearing(points, index, map) {
+    var p1, p2;
+    if (index > 0 && index < points.length) {
+        p1 = points[index - 1];
+        p2 = points[index];
+    } else if (points.length > 1) {
+        p1 = points[0];
+        p2 = points[1];
+    }
+    if (!p1 || !p2) return map.lastBearing || 0;
+
+    var lat1 = p1.latitude, lng1 = p1.longitude;
+    var lat2 = p2.latitude, lng2 = p2.longitude;
+
+    if (Math.abs(lat1 - lat2) < 0.00001 && Math.abs(lng1 - lng2) < 0.00001) {
+        return map.lastBearing || 0;
+    }
+
+    var brng = calculateBearing(lat1, lng1, lat2, lng2);
+    map.lastBearing = brng;
+    return brng;
+}
+
+window.setPlaybackPosition = function (elementId, points, index, isPlaying, speed) {
     var map = window.mapInstances ? window.mapInstances[elementId] : null;
     if (!map || !points || points.length === 0) return;
 
     index = Math.max(0, Math.min(index, points.length - 1));
     var latLngs = points.slice(0, index + 1).map(function (p) { return [p.latitude, p.longitude]; });
     var current = latLngs[latLngs.length - 1];
+    var currentTarget = L.latLng(current[0], current[1]);
 
     if (map.playbackTrail) {
         map.playbackTrail.setLatLngs(latLngs);
@@ -91,20 +124,82 @@ window.setPlaybackPosition = function (elementId, points, index) {
         map.playbackTrail = L.polyline(latLngs, { color: '#f59e0b', weight: 5, opacity: 0.95 }).addTo(map);
     }
 
-    var icon = L.divIcon({
-        className: 'jt-map-pin-icon jt-map-pin-playback',
-        iconSize: [26, 26],
-        iconAnchor: [13, 13],
-        html: '<i class="bi bi-geo-fill"></i>'
-    });
+    var bearing = Math.round(getRouteBearing(points, index, map));
 
     if (map.playbackMarker) {
-        map.playbackMarker.setLatLng(current);
+        var el = map.playbackMarker.getElement();
+        var svg = el ? el.querySelector('svg') : null;
+        if (svg) {
+            svg.style.transform = 'rotate(' + bearing + 'deg)';
+        }
     } else {
-        map.playbackMarker = L.marker(current, { icon: icon, zIndexOffset: 1000 }).addTo(map);
+        var icon = L.divIcon({
+            className: 'jt-playback-marker-wrapper',
+            iconSize: [32, 32],
+            iconAnchor: [16, 16],
+            html: '<div class="jt-playback-disc">' +
+                '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" style="transform: rotate(' + bearing + 'deg); transition: transform 0.25s ease-out; display: block;" xmlns="http://www.w3.org/2000/svg">' +
+                '<path d="M12 2L4 21L12 17L20 21L12 2Z" fill="#ffffff" stroke="#c2410c" stroke-width="1.2" stroke-linejoin="round"/>' +
+                '</svg></div>'
+        });
+        map.playbackMarker = L.marker(currentTarget, { icon: icon, zIndexOffset: 1000 }).addTo(map);
     }
 
-    map.panTo(current, { animate: true, duration: 0.3 });
+    var playbackSpeed = speed && speed > 0 ? speed : 1;
+    var tickMs = 400 / playbackSpeed;
+    var durationSec = Math.max(0.08, (tickMs * 0.9) / 1000);
+
+    if (map._markerAnimId) {
+        cancelAnimationFrame(map._markerAnimId);
+        map._markerAnimId = null;
+    }
+
+    if (isPlaying) {
+        var prevPos = map.playbackMarker.getLatLng();
+        var startLat = prevPos.lat;
+        var startLng = prevPos.lng;
+        var destLat = currentTarget.lat;
+        var destLng = currentTarget.lng;
+
+        var distLat = Math.abs(destLat - startLat);
+        var distLng = Math.abs(destLng - startLng);
+
+        if (distLat > 0.000001 || distLng > 0.000001) {
+            var startTime = performance.now();
+            function animateStep(now) {
+                var elapsed = now - startTime;
+                var t = Math.min(1, elapsed / tickMs);
+                var curLat = startLat + (destLat - startLat) * t;
+                var curLng = startLng + (destLng - startLng) * t;
+                if (map.playbackMarker) {
+                    map.playbackMarker.setLatLng([curLat, curLng]);
+                }
+                if (t < 1) {
+                    map._markerAnimId = requestAnimationFrame(animateStep);
+                } else {
+                    map._markerAnimId = null;
+                }
+            }
+            map._markerAnimId = requestAnimationFrame(animateStep);
+        } else {
+            map.playbackMarker.setLatLng(currentTarget);
+        }
+
+        var currentZoom = map.getZoom();
+        var isZoomedOut = currentZoom < 16;
+        var justStarted = !map._wasPlaying;
+
+        if (justStarted || isZoomedOut) {
+            map.setView(currentTarget, Math.max(currentZoom, 16), { animate: true });
+        } else {
+            map.panTo(currentTarget, { animate: true, duration: durationSec, easeLinearity: 0.25, noMoveStart: true });
+        }
+        map._wasPlaying = true;
+    } else {
+        map.playbackMarker.setLatLng(currentTarget);
+        map.panTo(currentTarget, { animate: false });
+        map._wasPlaying = false;
+    }
 };
 
 // Called whenever playback is reset for a fresh/changed session (TrackPlayback.razor's own
@@ -113,6 +208,11 @@ window.setPlaybackPosition = function (elementId, points, index) {
 window.clearPlayback = function (elementId) {
     var map = window.mapInstances ? window.mapInstances[elementId] : null;
     if (!map) return;
+    if (map._markerAnimId) {
+        cancelAnimationFrame(map._markerAnimId);
+        map._markerAnimId = null;
+    }
+    map._wasPlaying = false;
     if (map.playbackMarker) { map.playbackMarker.remove(); map.playbackMarker = null; }
     if (map.playbackTrail) { map.removeLayer(map.playbackTrail); map.playbackTrail = null; }
 };
@@ -122,7 +222,12 @@ window.clearPlayback = function (elementId) {
 // torn-down DOM element.
 window.destroyTrackingRouteMap = function (elementId) {
     if (window.mapInstances && window.mapInstances[elementId]) {
-        window.mapInstances[elementId].remove();
+        var map = window.mapInstances[elementId];
+        if (map._markerAnimId) {
+            cancelAnimationFrame(map._markerAnimId);
+            map._markerAnimId = null;
+        }
+        map.remove();
         delete window.mapInstances[elementId];
     }
 };

@@ -8,6 +8,7 @@
 @inject SPIC.MauiBlazorApp.Shared.Services.JMDOTrackingApi TrackingApi
 @inject SPIC.MauiBlazorApp.Shared.Services.IFormFactor FormFactor
 @inject SPIC.MauiBlazorApp.Shared.Services.NavHistoryService NavHistory
+@inject SPIC.MauiBlazorApp.Shared.Services.JmdoTrackingClientLoop TrackingLoop
 @inject IJSRuntime JS
 
 @*
@@ -249,6 +250,7 @@
         if (_playbackPlaying)
         {
             PausePlayback();
+            _ = RenderPlaybackPositionAsync();
             return;
         }
 
@@ -256,6 +258,7 @@
         if (_playbackIndex >= _trackPoints.Count - 1) _playbackIndex = 0; // replay from the start
 
         _playbackPlaying = true;
+        _ = RenderPlaybackPositionAsync();
         _playbackTimer?.Dispose();
         _playbackTimer = new System.Threading.Timer(PlaybackTick, null,
             (int)(BasePlaybackTickMs / _playbackSpeed), (int)(BasePlaybackTickMs / _playbackSpeed));
@@ -310,7 +313,7 @@
     {
         if (_trackPoints.Count == 0) return;
         var points = _trackPoints.Select(p => new { latitude = p.Latitude, longitude = p.Longitude });
-        try { await JS.InvokeVoidAsync("setPlaybackPosition", "ma-tracking-map", points, _playbackIndex); }
+        try { await JS.InvokeVoidAsync("setPlaybackPosition", "ma-tracking-map", points, _playbackIndex, _playbackPlaying, _playbackSpeed); }
         catch (Exception) { /* map not ready yet - next render/tick will retry */ }
     }
 
@@ -546,15 +549,18 @@
             if (stopped is null) return; // TrackingApi already raised an error toast; session stays Active
 
             AttendanceState.IsOnDuty = false;
+            TrackingLoop.Stop();
+            try
+            {
+                await JS.InvokeAsync<bool>("stopBackgroundTracking");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Native background tracking could not be stopped: {ex.Message}");
+            }
 
-            // Mark Attendance (a separate page/component now) renders the stopped-confirmation
-            // banner; the server's own EndTime for the session just closed travels along in the
-            // query string since a navigation between two different page components never shares
-            // in-memory field state the way switching "view" on one shared component used to.
-            var stoppedAtQuery = stopped.EndTime is { } end
-                ? "&stoppedAt=" + Uri.EscapeDataString(end.ToString("o"))
-                : "";
-            Navigation.NavigateTo($"/MarkAttendance?view=stopped{stoppedAtQuery}");
+            Toast.Success("Location tracking stopped successfully.");
+            await LoadTrackingViewAsync();
         }
         finally
         {

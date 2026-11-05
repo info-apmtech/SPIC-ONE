@@ -30,6 +30,7 @@ namespace SPIC.MauiBlazorApp.Platforms.Android
     public sealed class JmdoTrackingForegroundService : Service, ILocationListener
     {
         public const string SessionIdExtra = "session_id";
+        public const string ActionStop = "ACTION_STOP";
 
         private const string ChannelId = "spic_jmdo_tracking_status";
         private const int NotificationId = 4301;
@@ -130,7 +131,17 @@ namespace SPIC.MauiBlazorApp.Platforms.Android
         public static void WatchdogCheck(Context context)
         {
             var sessionId = GetPersistedSessionId();
-            if (sessionId <= 0) return; // tracking was explicitly stopped - nothing to watch for
+            if (sessionId <= 0)
+            {
+                CancelWatchdog(context);
+                try
+                {
+                    var manager = (NotificationManager?)context.GetSystemService(NotificationService);
+                    manager?.Cancel(NotificationId);
+                }
+                catch { }
+                return; // tracking was explicitly stopped - nothing to watch for
+            }
 
             if (!IsRunning)
                 EnsureRunning(context, sessionId);
@@ -142,10 +153,49 @@ namespace SPIC.MauiBlazorApp.Platforms.Android
 
         public override StartCommandResult OnStartCommand(Intent? intent, StartCommandFlags flags, int startId)
         {
+            if (intent?.Action == ActionStop)
+            {
+                IsRunning = false;
+                try
+                {
+                    if (OperatingSystem.IsAndroidVersionAtLeast(24))
+                        StopForeground(StopForegroundFlags.Remove);
+                    else
+                        StopForeground(true);
+                }
+                catch { }
+
+                try
+                {
+                    var manager = (NotificationManager?)GetSystemService(NotificationService);
+                    manager?.Cancel(NotificationId);
+                }
+                catch { }
+
+                StopSelf();
+                return StartCommandResult.NotSticky;
+            }
+
             var incoming = intent?.GetIntExtra(SessionIdExtra, 0) ?? 0;
             _sessionId = incoming > 0 ? incoming : GetPersistedSessionId();
             if (_sessionId <= 0)
             {
+                try
+                {
+                    if (OperatingSystem.IsAndroidVersionAtLeast(24))
+                        StopForeground(StopForegroundFlags.Remove);
+                    else
+                        StopForeground(true);
+                }
+                catch { }
+
+                try
+                {
+                    var manager = (NotificationManager?)GetSystemService(NotificationService);
+                    manager?.Cancel(NotificationId);
+                }
+                catch { }
+
                 StopSelf();
                 return StartCommandResult.NotSticky;
             }
@@ -190,7 +240,7 @@ namespace SPIC.MauiBlazorApp.Platforms.Android
         {
             base.OnTaskRemoved(rootIntent);
 
-            if (_sessionId <= 0 || ApplicationContext is not { } appContext) return;
+            if (_sessionId <= 0 || GetPersistedSessionId() <= 0 || ApplicationContext is not { } appContext) return;
 
             try
             {
@@ -213,6 +263,22 @@ namespace SPIC.MauiBlazorApp.Platforms.Android
         public override void OnDestroy()
         {
             IsRunning = false;
+
+            try
+            {
+                if (OperatingSystem.IsAndroidVersionAtLeast(24))
+                    StopForeground(StopForegroundFlags.Remove);
+                else
+                    StopForeground(true);
+            }
+            catch { }
+
+            try
+            {
+                var manager = (NotificationManager?)GetSystemService(NotificationService);
+                manager?.Cancel(NotificationId);
+            }
+            catch { }
 
             try { _locationManager?.RemoveUpdates(this); } catch { }
 
@@ -371,6 +437,21 @@ namespace SPIC.MauiBlazorApp.Platforms.Android
         {
             ClearPersistedSessionId();
             CancelWatchdog(context);
+
+            try
+            {
+                var notificationManager = (NotificationManager?)context.GetSystemService(NotificationService);
+                notificationManager?.Cancel(NotificationId);
+            }
+            catch { }
+
+            try
+            {
+                var stopIntent = new Intent(context, typeof(JmdoTrackingForegroundService));
+                stopIntent.SetAction(ActionStop);
+                context.StartService(stopIntent);
+            }
+            catch { }
 
             try
             {
