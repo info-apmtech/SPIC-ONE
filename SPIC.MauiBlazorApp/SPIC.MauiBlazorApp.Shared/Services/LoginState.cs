@@ -74,9 +74,12 @@ namespace SPIC.MauiBlazorApp.Shared.Services
         public bool IsLoggedIn => !string.IsNullOrWhiteSpace(Token);
 
         public AppRole? UserRole { get; private set; }
+        public int ZoneId { get; private set; }
         public int StateId { get; private set; }
         public int RegionId { get; private set; }
         public int HQId { get; private set; }
+        public IReadOnlyList<int> RegionIds { get; private set; } = Array.Empty<int>();
+        public IReadOnlyList<int> HQIds { get; private set; } = Array.Empty<int>();
         public int EmployeeId { get; private set; }
 
         // SpecialAdmin-only multi-location scope. Populated from the
@@ -147,6 +150,12 @@ namespace SPIC.MauiBlazorApp.Shared.Services
         public bool IsRMGroup => UserRole is AppRole.RM or AppRole.RMD;
         public bool IsSMGroup => UserRole is AppRole.SMD or AppRole.SMM;
         public bool IsDirectorOrAVP => UserRole is AppRole.Director or AppRole.AVP;
+
+        // CommonRole + active "AVP Office" designation. Used only by Dealer Review /
+        // Dealer ID submission; IsAdmin is intentionally not widened for this.
+        public bool IsAvpOffice =>
+            UserRole is AppRole.CommonRole
+            && string.Equals(DesignationName?.Trim(), "AVP Office", StringComparison.OrdinalIgnoreCase);
         public bool IsReviewerRole => UserRole is AppRole.Admin or AppRole.CorporateAdmin or AppRole.Director or AppRole.AVP or AppRole.SMD or AppRole.SMM or AppRole.RM or AppRole.RMD;
 
         // ---------------- Page-level permissions (from Designation.RoleAccess) ----------------
@@ -271,9 +280,12 @@ namespace SPIC.MauiBlazorApp.Shared.Services
         private void ParseClaims(string? token)
         {
             UserRole = null;
+            ZoneId = 0;
             StateId = 0;
             RegionId = 0;
             HQId = 0;
+            RegionIds = Array.Empty<int>();
+            HQIds = Array.Empty<int>();
             AssignedStateIds = new List<int>();
             AssignedRegionIds = new List<int>();
             AssignedHeadquarterIds = new List<int>();
@@ -306,12 +318,24 @@ namespace SPIC.MauiBlazorApp.Shared.Services
                 if (roleClaim != null && Enum.TryParse<AppRole>(roleClaim, out var role))
                     UserRole = role;
 
+                if (root.TryGetProperty("spic:zone_id", out var zp) && int.TryParse(zp.GetString(), out var zid))
+                    ZoneId = zid;
                 if (root.TryGetProperty("spic:state_id", out var sp) && int.TryParse(sp.GetString(), out var sid))
                     StateId = sid;
                 if (root.TryGetProperty("spic:region_id", out var rip) && int.TryParse(rip.GetString(), out var rid))
                     RegionId = rid;
                 if (root.TryGetProperty("spic:hq_id", out var hp) && int.TryParse(hp.GetString(), out var hid))
                     HQId = hid;
+
+                if (root.TryGetProperty("spic:region_ids", out var ridsProp))
+                    RegionIds = ParseCsv(ridsProp.GetString());
+                else
+                    RegionIds = RegionId > 0 ? new[] { RegionId } : Array.Empty<int>();
+
+                if (root.TryGetProperty("spic:hq_ids", out var hqidsProp))
+                    HQIds = ParseCsv(hqidsProp.GetString());
+                else
+                    HQIds = HQId > 0 ? new[] { HQId } : Array.Empty<int>();
 
                 // SpecialAdmin multi-location scope (comma-separated claim values)
                 if (root.TryGetProperty("spic:assigned_state_ids", out var sasp))

@@ -189,12 +189,30 @@ namespace SpicAPI.Controllers
 				return Ok(await query.ToListAsync());
 			if (SpecialAdminScope.IsSpecialAdmin(User))
 				query = query.Where(x => SpecialAdminScope.AssignedStateIds(User).Contains(x.StateId));
-			else if (role == "RM" && int.TryParse(regionClaim, out var regionId))
-				query = query.Where(x => x.Region == regionId);
-			else if ((role == "SM") && int.TryParse(stateClaim, out var stateId))
+			else if (role == "RM" || role == "RMD")
+			{
+				var regionIds = ClaimIntList("spic:region_ids");
+				if (regionIds != null)
+					query = regionIds.Count > 0 ? query.Where(x => regionIds.Contains(x.Region)) : query.Where(x => false);
+				else if (int.TryParse(regionClaim, out var regionId) && regionId > 0)
+					query = query.Where(x => x.Region == regionId);
+				else
+					query = query.Where(x => false);
+			}
+			else if ((role == "SM" || role == "SMD" || role == "SMM") && int.TryParse(stateClaim, out var stateId))
 				query = query.Where(x => x.StateId == stateId);
-			else if ((role == "MDO" || role == "JMDO" || role == "MO") && int.TryParse(stateClaim, out var moStateId))
-				query = query.Where(x => x.StateId == moStateId);
+			else if ((role == "MDO" || role == "JMDO" || role == "MO"))
+			{
+				var hqIds = ClaimIntList("spic:hq_ids");
+				if (hqIds != null)
+					query = hqIds.Count > 0 ? query.Where(x => hqIds.Contains(x.HQ)) : query.Where(x => false);
+				else if (int.TryParse(hqClaim, out var hqId) && hqId > 0)
+					query = query.Where(x => x.HQ == hqId);
+				else if (int.TryParse(stateClaim, out var moStateId) && moStateId > 0)
+					query = query.Where(x => x.StateId == moStateId);
+				else
+					query = query.Where(x => false);
+			}
 			else
 				query = query.Where(x => x.CreatedBy == userId);
 			return Ok(await query.ToListAsync());
@@ -214,12 +232,30 @@ namespace SpicAPI.Controllers
 			{
 				if (SpecialAdminScope.IsSpecialAdmin(User))
 					query = query.Where(x => SpecialAdminScope.AssignedStateIds(User).Contains(x.StateId));
-				else if (role == "RM" && int.TryParse(regionClaim, out var regionId))
-					query = query.Where(x => x.Region == regionId);
-				else if (role == "SM" && int.TryParse(stateClaim, out var stateId))
+				else if (role == "RM" || role == "RMD")
+				{
+					var regionIds = ClaimIntList("spic:region_ids");
+					if (regionIds != null)
+						query = regionIds.Count > 0 ? query.Where(x => regionIds.Contains(x.Region)) : query.Where(x => false);
+					else if (int.TryParse(regionClaim, out var regionId) && regionId > 0)
+						query = query.Where(x => x.Region == regionId);
+					else
+						query = query.Where(x => false);
+				}
+				else if ((role == "SM" || role == "SMD" || role == "SMM") && int.TryParse(stateClaim, out var stateId))
 					query = query.Where(x => x.StateId == stateId);
-				else if ((role == "MDO" || role == "JMDO" || role == "MO") && int.TryParse(stateClaim, out var moStateId))
-					query = query.Where(x => x.StateId == moStateId);
+				else if (role == "MDO" || role == "JMDO" || role == "MO")
+				{
+					var hqIds = ClaimIntList("spic:hq_ids");
+					if (hqIds != null)
+						query = hqIds.Count > 0 ? query.Where(x => hqIds.Contains(x.HQ)) : query.Where(x => false);
+					else if (int.TryParse(hqClaim, out var claimHqId) && claimHqId > 0)
+						query = query.Where(x => x.HQ == claimHqId);
+					else if (int.TryParse(stateClaim, out var moStateId) && moStateId > 0)
+						query = query.Where(x => x.StateId == moStateId);
+					else
+						query = query.Where(x => false);
+				}
 				else
 					query = query.Where(x => x.CreatedBy == userId);
 			}
@@ -262,17 +298,36 @@ namespace SpicAPI.Controllers
 			var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
 			var regionClaim = User.FindFirst("spic:region_id")?.Value;
 			var stateClaim = User.FindFirst("spic:state_id")?.Value;
+			var hqClaim = User.FindFirst("spic:hq_id")?.Value;
 
 			if (role != "Admin" && role != "CorporateAdmin")
 			{
 				if (SpecialAdminScope.IsSpecialAdmin(User))
 					query = query.Where(x => SpecialAdminScope.AssignedStateIds(User).Contains(x.StateId));
-				else if (role == "RM" && int.TryParse(regionClaim, out var claimRegionId))
-					query = query.Where(x => x.Region == claimRegionId);
-				else if (role == "SM" && int.TryParse(stateClaim, out var claimStateId))
+				else if (role == "RM" || role == "RMD")
+				{
+					var regionIds = ClaimIntList("spic:region_ids");
+					if (regionIds != null)
+						query = regionIds.Count > 0 ? query.Where(x => regionIds.Contains(x.Region)) : query.Where(x => false);
+					else if (int.TryParse(regionClaim, out var claimRegionId) && claimRegionId > 0)
+						query = query.Where(x => x.Region == claimRegionId);
+					else
+						query = query.Where(x => false);
+				}
+				else if ((role == "SM" || role == "SMD" || role == "SMM") && int.TryParse(stateClaim, out var claimStateId))
 					query = query.Where(x => x.StateId == claimStateId);
-				else if ((role == "MDO" || role == "JMDO" || role == "MO") && int.TryParse(stateClaim, out var moStateId))
-					query = query.Where(x => x.StateId == moStateId);
+				else if (role == "MDO" || role == "JMDO" || role == "MO")
+				{
+					var hqIds = ClaimIntList("spic:hq_ids");
+					if (hqIds != null)
+						query = hqIds.Count > 0 ? query.Where(x => hqIds.Contains(x.HQ)) : query.Where(x => false);
+					else if (int.TryParse(hqClaim, out var claimHqId) && claimHqId > 0)
+						query = query.Where(x => x.HQ == claimHqId);
+					else if (int.TryParse(stateClaim, out var moStateId) && moStateId > 0)
+						query = query.Where(x => x.StateId == moStateId);
+					else
+						query = query.Where(x => false);
+				}
 				else if (!string.IsNullOrWhiteSpace(role))
 					query = query.Where(x => x.CreatedBy == userId);
 			}
@@ -1059,6 +1114,7 @@ namespace SpicAPI.Controllers
 					return NotFound(new { message = "Dealer registration was not found." });
 				}
 
+
 				if (fresh.AVPApproved == true && !string.IsNullOrWhiteSpace(fresh.DealerCode))
 				{
 					await transaction.RollbackAsync();
@@ -1356,6 +1412,7 @@ namespace SpicAPI.Controllers
 			var role = User.FindFirst(ClaimTypes.Role)?.Value ?? string.Empty;
 			var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? string.Empty;
 
+
 			// Record history entry
 			var remarks = new System.Text.StringBuilder();
 			remarks.AppendLine($"Reason: {request.Reason}");
@@ -1422,7 +1479,13 @@ namespace SpicAPI.Controllers
 			var stateClaim = User.FindFirst("spic:state_id")?.Value;
 			var hqClaim = User.FindFirst("spic:hq_id")?.Value;
 
-			if (role == "AVP")
+			var isAvpOffice = await IsAvpOfficeAsync();
+			if (isAvpOffice)
+			{
+				var zoneStateIds = await GetAvpOfficeZoneStateIdsAsync();
+				query = query.Where(x => x.IsNewDealerRegistration && zoneStateIds.Contains(x.StateId));
+			}
+			else if (role == "AVP")
 			{
 				var zoneStateIds = await GetZoneStateIdsAsync();
 				query = query.Where(x => zoneStateIds.Contains(x.StateId));
@@ -1436,10 +1499,26 @@ namespace SpicAPI.Controllers
 			{
 				if ((role == "SMD" || role == "SMM") && int.TryParse(stateClaim, out var stateId) && stateId > 0)
 					query = query.Where(x => x.StateId == stateId);
-				else if ((role == "RM" || role == "RMD") && int.TryParse(regionClaim, out var regionId) && regionId > 0)
-					query = query.Where(x => x.Region == regionId);
-				else if ((role == "MDO" || role == "JMDO" || role == "MO") && int.TryParse(hqClaim, out var hqId) && hqId > 0)
-					query = query.Where(x => x.HQ == hqId);
+				else if (role == "RM" || role == "RMD")
+				{
+					var regionIds = ClaimIntList("spic:region_ids");
+					if (regionIds != null)
+						query = regionIds.Count > 0 ? query.Where(x => regionIds.Contains(x.Region)) : query.Where(x => false);
+					else if (int.TryParse(regionClaim, out var regionId) && regionId > 0)
+						query = query.Where(x => x.Region == regionId);
+					else
+						query = query.Where(x => false);
+				}
+				else if (role == "MDO" || role == "JMDO" || role == "MO")
+				{
+					var hqIds = ClaimIntList("spic:hq_ids");
+					if (hqIds != null)
+						query = hqIds.Count > 0 ? query.Where(x => hqIds.Contains(x.HQ)) : query.Where(x => false);
+					else if (int.TryParse(hqClaim, out var hqId) && hqId > 0)
+						query = query.Where(x => x.HQ == hqId);
+					else
+						query = query.Where(x => false);
+				}
 				else
 					query = query.Where(x => x.CreatedBy == userId);
 			}
@@ -1476,7 +1555,13 @@ namespace SpicAPI.Controllers
 			var stateClaim = User.FindFirst("spic:state_id")?.Value;
 			var hqClaim = User.FindFirst("spic:hq_id")?.Value;
 
-			if (role == "AVP")
+			var isAvpOffice = await IsAvpOfficeAsync();
+			if (isAvpOffice)
+			{
+				var zoneStateIds = await GetAvpOfficeZoneStateIdsAsync();
+				query = query.Where(x => x.IsNewDealerRegistration && zoneStateIds.Contains(x.StateId));
+			}
+			else if (role == "AVP")
 			{
 				var zoneStateIds = await GetZoneStateIdsAsync();
 				query = query.Where(x => zoneStateIds.Contains(x.StateId));
@@ -1490,10 +1575,26 @@ namespace SpicAPI.Controllers
 			{
 				if ((role == "SMD" || role == "SMM") && int.TryParse(stateClaim, out var stateId) && stateId > 0)
 					query = query.Where(x => x.StateId == stateId);
-				else if ((role == "RM" || role == "RMD") && int.TryParse(regionClaim, out var regionId) && regionId > 0)
-					query = query.Where(x => x.Region == regionId);
-				else if ((role == "MDO" || role == "JMDO" || role == "MO") && int.TryParse(hqClaim, out var hqId) && hqId > 0)
-					query = query.Where(x => x.HQ == hqId);
+				else if (role == "RM" || role == "RMD")
+				{
+					var regionIds = ClaimIntList("spic:region_ids");
+					if (regionIds != null)
+						query = regionIds.Count > 0 ? query.Where(x => regionIds.Contains(x.Region)) : query.Where(x => false);
+					else if (int.TryParse(regionClaim, out var regionId) && regionId > 0)
+						query = query.Where(x => x.Region == regionId);
+					else
+						query = query.Where(x => false);
+				}
+				else if (role == "MDO" || role == "JMDO" || role == "MO")
+				{
+					var hqIds = ClaimIntList("spic:hq_ids");
+					if (hqIds != null)
+						query = hqIds.Count > 0 ? query.Where(x => hqIds.Contains(x.HQ)) : query.Where(x => false);
+					else if (int.TryParse(hqClaim, out var hqId) && hqId > 0)
+						query = query.Where(x => x.HQ == hqId);
+					else
+						query = query.Where(x => false);
+				}
 				else
 					query = query.Where(x => x.CreatedBy == userId);
 			}
@@ -1679,6 +1780,68 @@ namespace SpicAPI.Controllers
 				.ToListAsync();
 		}
 
+		/// <summary>
+		/// AVP Office fail-closed zone scope: the assigned zone must still exist and
+		/// be active, and the result is the set of states it contains. An invalid,
+		/// inactive, missing, or empty zone returns an empty list (no access).
+		/// </summary>
+		private async Task<List<int>> GetAvpOfficeZoneStateIdsAsync()
+		{
+			var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+			if (string.IsNullOrWhiteSpace(userId))
+				return new List<int>();
+
+			var login = await _db.Employeelogins
+				.AsNoTracking()
+				.FirstOrDefaultAsync(l => l.UserId == userId && l.Role == AppRole.CommonRole && l.IsActive);
+
+			if (login == null || login.ZoneId <= 0)
+				return new List<int>();
+
+			var zoneIsActive = await _db.Zones
+				.AsNoTracking()
+				.AnyAsync(z => z.Id == login.ZoneId && z.IsActive);
+			if (!zoneIsActive)
+				return new List<int>();
+
+			return await _db.States
+				.AsNoTracking()
+				.Where(s => s.ZoneId == login.ZoneId)
+				.Select(s => s.Id)
+				.ToListAsync();
+		}
+
+		/// <summary>
+		/// CommonRole users only act as AVP in Dealer Review when their currently
+		/// assigned designation is the active "AVP Office" designation. The JWT
+		/// carries the role but not the designation, so this is resolved from the DB.
+		/// </summary>
+		private async Task<bool> IsAvpOfficeAsync()
+		{
+			var role = User.FindFirst(ClaimTypes.Role)?.Value;
+			if (!string.Equals(role, nameof(AppRole.CommonRole), StringComparison.OrdinalIgnoreCase))
+				return false;
+
+			var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+			if (string.IsNullOrWhiteSpace(userId))
+				return false;
+
+			var user = await _userManager.FindByIdAsync(userId);
+			if (user == null || !user.IsActive || user.DesignationId is null or <= 0)
+				return false;
+
+			var designation = _designationRepo != null
+				? await _designationRepo
+					.GetWhere(d => d.Id == user.DesignationId.Value)
+					.FirstOrDefaultAsync()
+				: await _db.Designations
+					.AsNoTracking()
+					.FirstOrDefaultAsync(d => d.Id == user.DesignationId.Value);
+
+			return designation is { IsActive: true }
+				&& string.Equals(designation.Name?.Trim(), "AVP Office", StringComparison.OrdinalIgnoreCase);
+		}
+
 		#region Dashboard server-side paging
 
 		// ─────────────────────────────────────────────────────────────────────────────
@@ -1758,7 +1921,14 @@ namespace SpicAPI.Controllers
 				role == "Admin" || role == "CorporateAdmin" ||
 				role == "Director";
 
-			if (role == "AVP")
+			var isAvpOffice = await IsAvpOfficeAsync();
+
+			if (isAvpOffice)
+			{
+				var zoneStateIds = await GetAvpOfficeZoneStateIdsAsync();
+				query = query.Where(x => x.IsNewDealerRegistration && zoneStateIds.Contains(x.StateId));
+			}
+			else if (role == "AVP")
 			{
 				var zoneStateIds = await GetZoneStateIdsAsync();
 				query = query.Where(x => zoneStateIds.Contains(x.StateId));
@@ -1772,10 +1942,26 @@ namespace SpicAPI.Controllers
 			{
 				if ((role == "SMD" || role == "SMM") && int.TryParse(stateClaim, out var stateId) && stateId > 0)
 					query = query.Where(x => x.StateId == stateId);
-				else if ((role == "RM" || role == "RMD") && int.TryParse(regionClaim, out var regionId) && regionId > 0)
-					query = query.Where(x => x.Region == regionId);
-				else if ((role == "MDO" || role == "JMDO" || role == "MO") && int.TryParse(hqClaim, out var hqId) && hqId > 0)
-					query = query.Where(x => x.HQ == hqId);
+				else if (role == "RM" || role == "RMD")
+				{
+					var regionIds = ClaimIntList("spic:region_ids");
+					if (regionIds != null)
+						query = regionIds.Count > 0 ? query.Where(x => regionIds.Contains(x.Region)) : query.Where(x => false);
+					else if (int.TryParse(regionClaim, out var regionId) && regionId > 0)
+						query = query.Where(x => x.Region == regionId);
+					else
+						query = query.Where(x => false);
+				}
+				else if (role == "MDO" || role == "JMDO" || role == "MO")
+				{
+					var hqIds = ClaimIntList("spic:hq_ids");
+					if (hqIds != null)
+						query = hqIds.Count > 0 ? query.Where(x => hqIds.Contains(x.HQ)) : query.Where(x => false);
+					else if (int.TryParse(hqClaim, out var hqId) && hqId > 0)
+						query = query.Where(x => x.HQ == hqId);
+					else
+						query = query.Where(x => false);
+				}
 				else
 					query = query.Where(x => x.CreatedBy == userId);
 			}
@@ -1812,11 +1998,33 @@ namespace SpicAPI.Controllers
 			if (role == "SMD" || role == "SMM")
 				return query.Where(x => x.StateId == stateId);
 			if (role == "RM" || role == "RMD")
-				return query.Where(x => x.Region == regionId);
+			{
+				var regionIds = ClaimIntList("spic:region_ids");
+				if (regionIds != null)
+					return regionIds.Count > 0 ? query.Where(x => regionIds.Contains(x.Region)) : query.Where(x => false);
+				return regionId > 0 ? query.Where(x => x.Region == regionId) : query.Where(x => false);
+			}
 			if (role == "MO" || role == "MDO" || role == "JMDO")
-				return query.Where(x => x.HQ == hqId);
+			{
+				var hqIds = ClaimIntList("spic:hq_ids");
+				if (hqIds != null)
+					return hqIds.Count > 0 ? query.Where(x => hqIds.Contains(x.HQ)) : query.Where(x => false);
+				return hqId > 0 ? query.Where(x => x.HQ == hqId) : query.Where(x => false);
+			}
 
 			return query;
+		}
+
+		private List<int>? ClaimIntList(string claimType)
+		{
+			var claim = User.FindFirst(claimType);
+			if (claim == null) return null;
+			if (string.IsNullOrWhiteSpace(claim.Value)) return new List<int>();
+			return claim.Value.Split(',', StringSplitOptions.RemoveEmptyEntries)
+				.Select(s => int.TryParse(s.Trim(), out var id) ? id : 0)
+				.Where(id => id > 0)
+				.Distinct()
+				.ToList();
 		}
 
 		private int ClaimInt(string claimType) =>

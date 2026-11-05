@@ -1,5 +1,6 @@
 @page "/EmployeeRegistration"
 @using System.Net.Http.Json
+@using System.Text.RegularExpressions
 @using Microsoft.AspNetCore.Components.Forms
 @using Microsoft.AspNetCore.Components
 @using SPIC.Core.Entities
@@ -35,7 +36,7 @@
         <div class="row g-4">
             <div class="col-md-4">
                 <label class="form-lbl">Role</label>
-                <select class="form-inp" @bind="vm.Login.Role">
+                <select class="form-inp" @bind="vm.Login.Role" @bind:after="OnRoleChanged">
                     @* AppRole.Admin (enum value 0) is Login.Role's default and isn't itself a
                        pickable option below - using it as this placeholder's value (rather than
                        "") keeps the bound value always matching a real <option>, so a fresh form
@@ -46,19 +47,27 @@
                         <option value="@role">@role</option>
                     }
                 </select>
+                @if (FieldError("Role") is { Length: > 0 } roleError)
+                {
+                    <div class="text-danger small mt-1">@roleError</div>
+                }
             </div>
             <div class="col-md-4">
                 <label class="form-lbl">
                     Designation
-                    <small class="text-muted fw-normal" style="font-size:0.72rem;">(optional — controls page access)</small>
+                    <small class="text-muted fw-normal" style="font-size:0.72rem;">(controls page access)</small>
                 </label>
-                <select class="form-inp" @bind="vm.SelectedDesignationId">
+                <select class="form-inp" @bind="vm.SelectedDesignationId" @bind:after="OnDesignationChanged">
                     <option value="0">-- No Designation --  @* (No access) *@ </option>
                     @foreach (var d in Designations)
                     {
                         <option value="@d.Id">@d.Name</option>
                     }
                 </select>
+                @if (FieldError("DesignationId") is { Length: > 0 } designationError)
+                {
+                    <div class="text-danger small mt-1">@designationError</div>
+                }
             </div>
         </div>
     </div>
@@ -81,6 +90,10 @@
                             <option value="@z.Id">@z.Name</option>
                         }
                     </select>
+                    @if (FieldError("ZoneId") is { Length: > 0 } zoneError)
+                    {
+                        <div class="text-danger small mt-1">@zoneError</div>
+                    }
                 </div>
             }
 
@@ -96,85 +109,354 @@
                             <option value="@s.Id">@s.Name</option>
                         }
                     </select>
+                    @if (FieldError("StateId") is { Length: > 0 } stateError)
+                    {
+                        <div class="text-danger small mt-1">@stateError</div>
+                    }
                 </div>
             }
 
-            @* RM, RMD → State + Region *@
-            @if (SelectedRole == "RM" || SelectedRole == "RMD" || SelectedRole == "MO" || SelectedRole == "MDO" || SelectedRole == "JMDO")
+            @* RM, RMD → State (single) + Regions (multi-select) *@
+            @if (SelectedRole == "RM" || SelectedRole == "RMD")
             {
                 <div class="col-md-3">
                     <label class="form-lbl">State</label>
-                    <select class="form-inp" @bind="vm.Login.StateId">
+                    <select class="form-inp" value="@vm.Login.StateId" @onchange="OnStateChanged">
                         <option value="0">Select State</option>
                         @foreach (var s in States)
                         {
                             <option value="@s.Id">@s.Name</option>
                         }
                     </select>
+                    @if (FieldError("StateId") is { Length: > 0 } stateError)
+                    {
+                        <div class="text-danger small mt-1">@stateError</div>
+                    }
+                </div>
+                <div class="col-md-5">
+                    <label class="form-lbl">Regions</label>
+                    <div class="samulti">
+                        <div class="samulti-box @(IsMultiRegionOpen ? "open" : "")" @onclick="ToggleMultiRegionDropdown">
+                            <div class="samulti-selected">
+                                @if (SelectedMultiRegions.Count == 0)
+                                {
+                                    <span class="samulti-placeholder">Select Regions</span>
+                                }
+                                else
+                                {
+                                    @foreach (var r in Regions.Where(x => SelectedMultiRegions.Contains(x.Id)))
+                                    {
+                                        <span class="samulti-tag">
+                                            @r.Name
+                                            <i class="bi bi-x" @onclick="() => ToggleMultiRegion(r.Id, false)" @onclick:stopPropagation="true"></i>
+                                        </span>
+                                    }
+                                }
+                            </div>
+                            <div class="samulti-actions">
+                                @if (SelectedMultiRegions.Count > 0)
+                                {
+                                    <i class="bi bi-x-circle-fill samulti-clear" title="Clear all regions"
+                                       @onclick="ClearMultiRegions" @onclick:stopPropagation="true"></i>
+                                }
+                                <i class="bi @(IsMultiRegionOpen ? "bi-chevron-up" : "bi-chevron-down") samulti-chevron"></i>
+                            </div>
+                        </div>
+                        @if (IsMultiRegionOpen)
+                        {
+                            <div class="samulti-overlay" @onclick="CloseMultiDropdowns"></div>
+                            <div class="samulti-panel" @onclick:stopPropagation="true">
+                                <div class="samulti-search">
+                                    <i class="bi bi-search samulti-search-icon"></i>
+                                    <input type="text" class="samulti-search-input" placeholder="Search regions..."
+                                           @bind="MultiRegionSearch" @bind:event="oninput" />
+                                </div>
+                                <div class="samulti-select-all" @onclick="SelectAllMultiRegions">Select All Regions</div>
+                                <div class="samulti-list">
+                                    @if (!FilteredMultiRegions.Any())
+                                    {
+                                        <div class="samulti-empty">No regions found</div>
+                                    }
+                                    else
+                                    {
+                                        @foreach (var r in FilteredMultiRegions)
+                                        {
+                                            var isSel = SelectedMultiRegions.Contains(r.Id);
+                                            <div class="samulti-option @(isSel ? "selected" : "")"
+                                                 @onclick="() => ToggleMultiRegion(r.Id, !isSel)">
+                                                <span>@r.Name</span>
+                                            </div>
+                                        }
+                                    }
+                                </div>
+                            </div>
+                        }
+                    </div>
+                    @if (FieldError("RegionId") is { Length: > 0 } regionError)
+                    {
+                        <div class="text-danger small mt-1">@regionError</div>
+                    }
+                </div>
+            }
+
+            @* MO, MDO, JMDO → State (single) + Region (single) + Headquarters (multi-select) *@
+            @if (SelectedRole == "MO" || SelectedRole == "MDO" || SelectedRole == "JMDO")
+            {
+                <div class="col-md-3">
+                    <label class="form-lbl">State</label>
+                    <select class="form-inp" value="@vm.Login.StateId" @onchange="OnStateChanged">
+                        <option value="0">Select State</option>
+                        @foreach (var s in States)
+                        {
+                            <option value="@s.Id">@s.Name</option>
+                        }
+                    </select>
+                    @if (FieldError("StateId") is { Length: > 0 } stateError)
+                    {
+                        <div class="text-danger small mt-1">@stateError</div>
+                    }
                 </div>
                 <div class="col-md-3">
                     <label class="form-lbl">Region</label>
-                    <select class="form-inp" @bind="vm.Login.RegionId">
+                    <select class="form-inp" value="@vm.Login.RegionId" @onchange="OnRegionChanged">
                         <option value="0">Select Region</option>
-                        @foreach (var r in Regions)
+                        @foreach (var r in (vm.Login.StateId > 0 ? Regions.Where(x => x.StateId == vm.Login.StateId) : Regions))
                         {
                             <option value="@r.Id">@r.Name</option>
                         }
                     </select>
+                    @if (FieldError("RegionId") is { Length: > 0 } regionError)
+                    {
+                        <div class="text-danger small mt-1">@regionError</div>
+                    }
                 </div>
-            }
-
-            @* MDO, MO, JMDO → HQ only *@
-            @if (SelectedRole == "MDO" || SelectedRole == "MO" || SelectedRole == "JMDO")
-            {
-                <div class="col-md-3">
+                <div class="col-md-4">
                     <label class="form-lbl">Headquarters</label>
-                    <select class="form-inp" @bind="vm.Login.HeadquartersId">
-                        <option value="0">Select Headquarters</option>
-                        @foreach (var h in Headquarters)
+                    <div class="samulti">
+                        <div class="samulti-box @(IsMultiHqOpen ? "open" : "")" @onclick="ToggleMultiHqDropdown">
+                            <div class="samulti-selected">
+                                @if (SelectedMultiHeadquarters.Count == 0)
+                                {
+                                    <span class="samulti-placeholder">Select Headquarters</span>
+                                }
+                                else
+                                {
+                                    @foreach (var h in Headquarters.Where(x => SelectedMultiHeadquarters.Contains(x.Id)))
+                                    {
+                                        <span class="samulti-tag">
+                                            @h.Name
+                                            <i class="bi bi-x" @onclick="() => ToggleMultiHq(h.Id, false)" @onclick:stopPropagation="true"></i>
+                                        </span>
+                                    }
+                                }
+                            </div>
+                            <div class="samulti-actions">
+                                @if (SelectedMultiHeadquarters.Count > 0)
+                                {
+                                    <i class="bi bi-x-circle-fill samulti-clear" title="Clear all headquarters"
+                                       @onclick="ClearMultiHqs" @onclick:stopPropagation="true"></i>
+                                }
+                                <i class="bi @(IsMultiHqOpen ? "bi-chevron-up" : "bi-chevron-down") samulti-chevron"></i>
+                            </div>
+                        </div>
+                        @if (IsMultiHqOpen)
                         {
-                            <option value="@h.Id">@h.Name</option>
+                            <div class="samulti-overlay" @onclick="CloseMultiDropdowns"></div>
+                            <div class="samulti-panel" @onclick:stopPropagation="true">
+                                <div class="samulti-search">
+                                    <i class="bi bi-search samulti-search-icon"></i>
+                                    <input type="text" class="samulti-search-input" placeholder="Search headquarters..."
+                                           @bind="MultiHqSearch" @bind:event="oninput" />
+                                </div>
+                                <div class="samulti-select-all" @onclick="SelectAllMultiHqs">Select All Headquarters</div>
+                                <div class="samulti-list">
+                                    @if (!FilteredMultiHeadquarters.Any())
+                                    {
+                                        <div class="samulti-empty">No headquarters found</div>
+                                    }
+                                    else
+                                    {
+                                        @foreach (var h in FilteredMultiHeadquarters)
+                                        {
+                                            var isSel = SelectedMultiHeadquarters.Contains(h.Id);
+                                            <div class="samulti-option @(isSel ? "selected" : "")"
+                                                 @onclick="() => ToggleMultiHq(h.Id, !isSel)">
+                                                <span>@h.Name</span>
+                                            </div>
+                                        }
+                                    }
+                                </div>
+                            </div>
                         }
-                    </select>
+                    </div>
+                    @if (FieldError("HeadquartersId") is { Length: > 0 } hqError)
+                    {
+                        <div class="text-danger small mt-1">@hqError</div>
+                    }
                 </div>
             }
 
-            @* CommonRole → optional State + Region + HQ. Each dropdown keeps 0 as
-               "not provided", so an unassigned CommonRole saves exactly as before. *@
+            @* CommonRole → optional Zone + State + Region (multi) + HQ (multi) *@
             @if (SelectedRole == "CommonRole")
             {
-                <div class="col-md-3">
+                <div class="col-md-2">
+                    <label class="form-lbl">Zone</label>
+                    <select class="form-inp" value="@vm.Login.ZoneId" @onchange="OnZoneChanged">
+                        <option value="0">Select Zone</option>
+                        @foreach (var z in Zones)
+                        {
+                            <option value="@z.Id">@z.Name</option>
+                        }
+                    </select>
+                    @if (FieldError("ZoneId") is { Length: > 0 } zoneError)
+                    {
+                        <div class="text-danger small mt-1">@zoneError</div>
+                    }
+                </div>
+                <div class="col-md-2">
                     <label class="form-lbl">State</label>
-                    <select class="form-inp" @bind="vm.Login.StateId">
+                    <select class="form-inp" value="@vm.Login.StateId" @onchange="OnStateChanged">
                         <option value="0">Select State</option>
-                        @foreach (var s in States)
+                        @foreach (var s in (vm.Login.ZoneId > 0 ? States.Where(x => x.ZoneId == vm.Login.ZoneId) : States))
                         {
                             <option value="@s.Id">@s.Name</option>
                         }
                     </select>
+                    @if (FieldError("StateId") is { Length: > 0 } stateError)
+                    {
+                        <div class="text-danger small mt-1">@stateError</div>
+                    }
                 </div>
-                <div class="col-md-3">
-                    <label class="form-lbl">Region</label>
-                    <select class="form-inp" @bind="vm.Login.RegionId">
-                        <option value="0">Select Region</option>
-                        @foreach (var r in Regions)
+                <div class="col-md-4">
+                    <label class="form-lbl">Regions</label>
+                    <div class="samulti">
+                        <div class="samulti-box @(IsMultiRegionOpen ? "open" : "")" @onclick="ToggleMultiRegionDropdown">
+                            <div class="samulti-selected">
+                                @if (SelectedMultiRegions.Count == 0)
+                                {
+                                    <span class="samulti-placeholder">Select Regions (Optional)</span>
+                                }
+                                else
+                                {
+                                    @foreach (var r in Regions.Where(x => SelectedMultiRegions.Contains(x.Id)))
+                                    {
+                                        <span class="samulti-tag">
+                                            @r.Name
+                                            <i class="bi bi-x" @onclick="() => ToggleMultiRegion(r.Id, false)" @onclick:stopPropagation="true"></i>
+                                        </span>
+                                    }
+                                }
+                            </div>
+                            <div class="samulti-actions">
+                                @if (SelectedMultiRegions.Count > 0)
+                                {
+                                    <i class="bi bi-x-circle-fill samulti-clear" title="Clear all regions"
+                                       @onclick="ClearMultiRegions" @onclick:stopPropagation="true"></i>
+                                }
+                                <i class="bi @(IsMultiRegionOpen ? "bi-chevron-up" : "bi-chevron-down") samulti-chevron"></i>
+                            </div>
+                        </div>
+                        @if (IsMultiRegionOpen)
                         {
-                            <option value="@r.Id">@r.Name</option>
+                            <div class="samulti-overlay" @onclick="CloseMultiDropdowns"></div>
+                            <div class="samulti-panel" @onclick:stopPropagation="true">
+                                <div class="samulti-search">
+                                    <i class="bi bi-search samulti-search-icon"></i>
+                                    <input type="text" class="samulti-search-input" placeholder="Search regions..."
+                                           @bind="MultiRegionSearch" @bind:event="oninput" />
+                                </div>
+                                <div class="samulti-select-all" @onclick="SelectAllMultiRegions">Select All Regions</div>
+                                <div class="samulti-list">
+                                    @if (!FilteredMultiRegions.Any())
+                                    {
+                                        <div class="samulti-empty">No regions found</div>
+                                    }
+                                    else
+                                    {
+                                        @foreach (var r in FilteredMultiRegions)
+                                        {
+                                            var isSel = SelectedMultiRegions.Contains(r.Id);
+                                            <div class="samulti-option @(isSel ? "selected" : "")"
+                                                 @onclick="() => ToggleMultiRegion(r.Id, !isSel)">
+                                                <span>@r.Name</span>
+                                            </div>
+                                        }
+                                    }
+                                </div>
+                            </div>
                         }
-                    </select>
+                    </div>
+                    @if (FieldError("RegionId") is { Length: > 0 } regionError)
+                    {
+                        <div class="text-danger small mt-1">@regionError</div>
+                    }
                 </div>
-                <div class="col-md-3">
+                <div class="col-md-4">
                     <label class="form-lbl">Headquarters</label>
-                    <select class="form-inp" @bind="vm.Login.HeadquartersId">
-                        <option value="0">Select Headquarters</option>
-                        @foreach (var h in Headquarters)
+                    <div class="samulti">
+                        <div class="samulti-box @(IsMultiHqOpen ? "open" : "")" @onclick="ToggleMultiHqDropdown">
+                            <div class="samulti-selected">
+                                @if (SelectedMultiHeadquarters.Count == 0)
+                                {
+                                    <span class="samulti-placeholder">Select Headquarters (Optional)</span>
+                                }
+                                else
+                                {
+                                    @foreach (var h in Headquarters.Where(x => SelectedMultiHeadquarters.Contains(x.Id)))
+                                    {
+                                        <span class="samulti-tag">
+                                            @h.Name
+                                            <i class="bi bi-x" @onclick="() => ToggleMultiHq(h.Id, false)" @onclick:stopPropagation="true"></i>
+                                        </span>
+                                    }
+                                }
+                            </div>
+                            <div class="samulti-actions">
+                                @if (SelectedMultiHeadquarters.Count > 0)
+                                {
+                                    <i class="bi bi-x-circle-fill samulti-clear" title="Clear all headquarters"
+                                       @onclick="ClearMultiHqs" @onclick:stopPropagation="true"></i>
+                                }
+                                <i class="bi @(IsMultiHqOpen ? "bi-chevron-up" : "bi-chevron-down") samulti-chevron"></i>
+                            </div>
+                        </div>
+                        @if (IsMultiHqOpen)
                         {
-                            <option value="@h.Id">@h.Name</option>
+                            <div class="samulti-overlay" @onclick="CloseMultiDropdowns"></div>
+                            <div class="samulti-panel" @onclick:stopPropagation="true">
+                                <div class="samulti-search">
+                                    <i class="bi bi-search samulti-search-icon"></i>
+                                    <input type="text" class="samulti-search-input" placeholder="Search headquarters..."
+                                           @bind="MultiHqSearch" @bind:event="oninput" />
+                                </div>
+                                <div class="samulti-select-all" @onclick="SelectAllMultiHqs">Select All Headquarters</div>
+                                <div class="samulti-list">
+                                    @if (!FilteredMultiHeadquarters.Any())
+                                    {
+                                        <div class="samulti-empty">No headquarters found</div>
+                                    }
+                                    else
+                                    {
+                                        @foreach (var h in FilteredMultiHeadquarters)
+                                        {
+                                            var isSel = SelectedMultiHeadquarters.Contains(h.Id);
+                                            <div class="samulti-option @(isSel ? "selected" : "")"
+                                                 @onclick="() => ToggleMultiHq(h.Id, !isSel)">
+                                                <span>@h.Name</span>
+                                            </div>
+                                        }
+                                    }
+                                </div>
+                            </div>
                         }
-                    </select>
+                    </div>
+                    @if (FieldError("HeadquartersId") is { Length: > 0 } hqError)
+                    {
+                        <div class="text-danger small mt-1">@hqError</div>
+                    }
                 </div>
                 <div class="col-12">
-                    <p class="text-muted small"><i class="bi bi-info-circle me-1"></i>Optional. Leave a dropdown unselected when no location applies.</p>
+                    <p class="text-muted small"><i class="bi bi-info-circle me-1"></i>All location fields are optional. Leave any dropdown unselected when no location applies.</p>
                 </div>
             }
 
@@ -407,7 +689,12 @@
             </div>
             <div class="col-md-4">
                 <label class="form-lbl">Password</label>
-                <input type="text" class="form-inp" @bind="vm.Account.Password" placeholder="Enter Password">
+                <input type="text" class="form-inp @(FieldError("Password").Length > 0 ? "border-danger" : "")"
+                       @bind="vm.Account.Password" placeholder="Enter Password">
+                @if (FieldError("Password") is { Length: > 0 } passwordError)
+                {
+                    <div class="text-danger small mt-1">@passwordError</div>
+                }
             </div>
             <div class="col-md-4">
                 <div class="status-toggle-box">
@@ -431,18 +718,33 @@
         <div class="row g-4">
             <div class="col-md-6">
                 <label class="form-lbl">Employee Name</label>
-                <input type="text" class="form-inp" placeholder="Enter Employee Name" @bind="vm.Employee.Name">
+                <input type="text" class="form-inp @(FieldError("Name").Length > 0 ? "border-danger" : "")"
+                       placeholder="Enter Employee Name" @bind="vm.Employee.Name">
+                @if (FieldError("Name") is { Length: > 0 } nameError)
+                {
+                    <div class="text-danger small mt-1">@nameError</div>
+                }
             </div>
             <div class="col-md-6">
                 <label class="form-lbl">Employee ID</label>
-                <input type="text" class="form-inp" placeholder="Enter Employee ID" @bind="vm.Employee.EmployeeCode">
+                <input type="text" class="form-inp @(FieldError("EmployeeCode").Length > 0 ? "border-danger" : "")"
+                       placeholder="Enter Employee ID" @bind="vm.Employee.EmployeeCode">
+                @if (FieldError("EmployeeCode") is { Length: > 0 } codeError)
+                {
+                    <div class="text-danger small mt-1">@codeError</div>
+                }
             </div>
             <div class="col-md-6">
                 <label class="form-lbl">Personal Phone Number</label>
-                <input type="text" class="form-inp" placeholder="Enter Personal Phone Number"
+                <input type="text" class="form-inp @(FieldError("PersonalPhoneNumber").Length > 0 ? "border-danger" : "")"
+                       placeholder="Enter Personal Phone Number"
                        @bind="vm.Employee.PersonalPhoneNumber"
                        maxlength="10"
                        oninput="this.value = this.value.replace(/[^0-9]/g, '')">
+                @if (FieldError("PersonalPhoneNumber") is { Length: > 0 } phoneError)
+                {
+                    <div class="text-danger small mt-1">@phoneError</div>
+                }
             </div>
             <div class="col-md-6">
                 <label class="form-lbl">Official Phone Number</label>
@@ -453,7 +755,12 @@
             </div>
             <div class="col-md-6">
                 <label class="form-lbl">Email ID</label>
-                <input type="email" class="form-inp" placeholder="Enter Email ID" @bind="vm.Employee.Email">
+                <input type="email" class="form-inp @(FieldError("Email").Length > 0 ? "border-danger" : "")"
+                       placeholder="Enter Email ID" @bind="vm.Employee.Email">
+                @if (FieldError("Email") is { Length: > 0 } emailError)
+                {
+                    <div class="text-danger small mt-1">@emailError</div>
+                }
             </div>
         </div>
     </div>
@@ -478,6 +785,13 @@
 @code {
     private string ErrorMessage { get; set; } = string.Empty;
     private string SelectedRole => vm.Login.Role.ToString();
+    private readonly Dictionary<string, string> _fieldErrors = new(StringComparer.OrdinalIgnoreCase);
+
+    private string FieldError(string key) =>
+        _fieldErrors.TryGetValue(key, out var message) ? message : string.Empty;
+
+    private SPIC.Core.Entities.Designation? SelectedDesignation =>
+        Designations.FirstOrDefault(d => d.Id == vm.SelectedDesignationId);
 
     private EmployeeRegistrationVM vm = new();
     private List<LocationItemDto> Zones = new();
@@ -512,6 +826,447 @@
             return false;
         }
         return true;
+    }
+
+    private void OnRoleChanged()
+    {
+        _fieldErrors.Clear();
+        SanitizeGeographyForRole();
+    }
+
+    private void OnDesignationChanged()
+    {
+        _fieldErrors.Clear();
+        SanitizeGeographyForRole();
+    }
+
+    // Keeps geography values aligned with the selected role. Hidden dropdown values
+    // from a previous role must never be saved and accidentally widen data scope.
+    private void SanitizeGeographyForRole()
+    {
+        switch (vm.Login.Role)
+        {
+            case AppRole.AVP:
+                vm.Login.StateId = 0;
+                vm.Login.RegionId = 0;
+                vm.Login.HeadquartersId = 0;
+                SelectedMultiRegions.Clear();
+                SelectedMultiHeadquarters.Clear();
+                break;
+
+            case AppRole.SMD:
+            case AppRole.SMM:
+            case AppRole.MDAdmin:
+            case AppRole.MDHOD:
+                vm.Login.ZoneId = 0;
+                vm.Login.RegionId = 0;
+                vm.Login.HeadquartersId = 0;
+                SelectedMultiRegions.Clear();
+                SelectedMultiHeadquarters.Clear();
+                break;
+
+            case AppRole.RM:
+            case AppRole.RMD:
+                vm.Login.ZoneId = 0;
+                vm.Login.HeadquartersId = 0;
+                SelectedMultiHeadquarters.Clear();
+                break;
+
+            case AppRole.MO:
+            case AppRole.MDO:
+            case AppRole.JMDO:
+                vm.Login.ZoneId = 0;
+                SelectedMultiRegions.Clear();
+                break;
+
+            case AppRole.CommonRole:
+                break;
+
+            case AppRole.SpecialAdmin:
+                SelectedMultiRegions.Clear();
+                SelectedMultiHeadquarters.Clear();
+                break;
+
+            default:
+                vm.Login.ZoneId = 0;
+                vm.Login.StateId = 0;
+                vm.Login.RegionId = 0;
+                vm.Login.HeadquartersId = 0;
+                SelectedMultiRegions.Clear();
+                SelectedMultiHeadquarters.Clear();
+                break;
+        }
+    }
+
+    private bool ValidateEmployeeForm()
+    {
+        _fieldErrors.Clear();
+        UserNameError = string.Empty;
+
+        if (!AllowedRoles.Contains(vm.Login.Role))
+            _fieldErrors["Role"] = "Select a role.";
+
+        if (vm.Login.Role == AppRole.CommonRole)
+        {
+            if (vm.SelectedDesignationId <= 0)
+                _fieldErrors["DesignationId"] = "Select a designation for CommonRole.";
+            else if (SelectedDesignation == null)
+                _fieldErrors["DesignationId"] = "The selected designation is not active.";
+        }
+
+        if (!ValidateUserName())
+            _fieldErrors["UserName"] = UserNameError;
+
+        if (!IsEditMode && string.IsNullOrWhiteSpace(vm.Account.Password))
+            _fieldErrors["Password"] = "Password is required.";
+
+        if (string.IsNullOrWhiteSpace(vm.Employee.Name))
+            _fieldErrors["Name"] = "Employee Name is required.";
+
+        if (string.IsNullOrWhiteSpace(vm.Employee.EmployeeCode))
+            _fieldErrors["EmployeeCode"] = "Employee ID is required.";
+
+        var personalPhone = (vm.Employee.PersonalPhoneNumber ?? string.Empty).Trim();
+        if (personalPhone.Length == 0)
+            _fieldErrors["PersonalPhoneNumber"] = "Personal Phone Number is required.";
+        else if (!Regex.IsMatch(personalPhone, @"^\d{10}$"))
+            _fieldErrors["PersonalPhoneNumber"] = "Personal Phone Number must be 10 digits.";
+
+        var email = (vm.Employee.Email ?? string.Empty).Trim();
+        if (email.Length == 0)
+            _fieldErrors["Email"] = "Email ID is required.";
+        else if (!Regex.IsMatch(email, @"^[^@\s]+@[^@\s]+\.[^@\s]+$"))
+            _fieldErrors["Email"] = "Enter a valid Email ID.";
+
+        switch (vm.Login.Role)
+        {
+            case AppRole.AVP:
+                if (vm.Login.ZoneId <= 0)
+                    _fieldErrors["ZoneId"] = "Zone is required.";
+                break;
+
+            case AppRole.SMD:
+            case AppRole.SMM:
+            case AppRole.MDAdmin:
+            case AppRole.MDHOD:
+                if (vm.Login.StateId <= 0)
+                    _fieldErrors["StateId"] = "State is required.";
+                break;
+
+            case AppRole.RM:
+            case AppRole.RMD:
+                if (vm.Login.StateId <= 0)
+                    _fieldErrors["StateId"] = "State is required.";
+                if (SelectedMultiRegions.Count == 0 && vm.Login.RegionId <= 0)
+                    _fieldErrors["RegionId"] = "Region is required.";
+                break;
+
+            case AppRole.MO:
+            case AppRole.MDO:
+            case AppRole.JMDO:
+                if (vm.Login.StateId <= 0)
+                    _fieldErrors["StateId"] = "State is required.";
+                if (vm.Login.RegionId <= 0)
+                    _fieldErrors["RegionId"] = "Region is required.";
+                if (SelectedMultiHeadquarters.Count == 0 && vm.Login.HeadquartersId <= 0)
+                    _fieldErrors["HeadquartersId"] = "Headquarters is required.";
+                break;
+
+            case AppRole.CommonRole:
+                ValidateCommonRoleGeographySelection();
+                break;
+        }
+
+        if (_fieldErrors.Count == 0)
+            return true;
+
+        ErrorMessage = "Please correct the highlighted fields and try again.";
+        return false;
+    }
+
+    // CommonRole geography is optional, but any supplied combination must be
+    // internally consistent. Lower-level selections do not require a parent.
+    private void ValidateCommonRoleGeographySelection()
+    {
+        var state = vm.Login.StateId > 0
+            ? States.FirstOrDefault(s => s.Id == vm.Login.StateId)
+            : null;
+
+        var checkRegionIds = SelectedMultiRegions.Count > 0
+            ? SelectedMultiRegions
+            : (vm.Login.RegionId > 0 ? new HashSet<int> { vm.Login.RegionId } : new HashSet<int>());
+
+        var checkHqIds = SelectedMultiHeadquarters.Count > 0
+            ? SelectedMultiHeadquarters
+            : (vm.Login.HeadquartersId > 0 ? new HashSet<int> { vm.Login.HeadquartersId } : new HashSet<int>());
+
+        if (state != null && checkRegionIds.Count > 0)
+        {
+            foreach (var rId in checkRegionIds)
+            {
+                var r = Regions.FirstOrDefault(x => x.Id == rId);
+                if (r != null && r.StateId != state.Id)
+                {
+                    _fieldErrors["RegionId"] = "Selected Region does not belong to the selected State.";
+                    break;
+                }
+            }
+        }
+
+        if (checkRegionIds.Count > 0 && checkHqIds.Count > 0)
+        {
+            foreach (var hId in checkHqIds)
+            {
+                var h = Headquarters.FirstOrDefault(x => x.Id == hId);
+                if (h != null && !checkRegionIds.Contains(h.RegionId))
+                {
+                    _fieldErrors["HeadquartersId"] = "Selected Headquarters does not belong to the selected Region.";
+                    break;
+                }
+            }
+        }
+        else if (state != null && checkHqIds.Count > 0)
+        {
+            foreach (var hId in checkHqIds)
+            {
+                var h = Headquarters.FirstOrDefault(x => x.Id == hId);
+                var hr = h != null ? Regions.FirstOrDefault(x => x.Id == h.RegionId) : null;
+                if (hr != null && hr.StateId != state.Id)
+                {
+                    _fieldErrors["HeadquartersId"] = "Selected Headquarters does not belong to the selected State.";
+                    break;
+                }
+            }
+        }
+
+        if (vm.Login.ZoneId > 0)
+        {
+            var selectedZoneId = vm.Login.ZoneId;
+            if (state != null && state.ZoneId > 0 && state.ZoneId != selectedZoneId)
+                _fieldErrors["StateId"] = "Selected State does not belong to the selected Zone.";
+
+            if (state == null && checkRegionIds.Count > 0)
+            {
+                foreach (var rId in checkRegionIds)
+                {
+                    var r = Regions.FirstOrDefault(x => x.Id == rId);
+                    var rs = r != null ? States.FirstOrDefault(x => x.Id == r.StateId) : null;
+                    if (rs != null && rs.ZoneId > 0 && rs.ZoneId != selectedZoneId)
+                    {
+                        _fieldErrors["RegionId"] = "Selected Region does not belong to the selected Zone.";
+                        break;
+                    }
+                }
+            }
+
+            if (state == null && checkRegionIds.Count == 0 && checkHqIds.Count > 0)
+            {
+                foreach (var hId in checkHqIds)
+                {
+                    var h = Headquarters.FirstOrDefault(x => x.Id == hId);
+                    var hr = h != null ? Regions.FirstOrDefault(x => x.Id == h.RegionId) : null;
+                    var hs = hr != null ? States.FirstOrDefault(x => x.Id == hr.StateId) : null;
+                    if (hs != null && hs.ZoneId > 0 && hs.ZoneId != selectedZoneId)
+                    {
+                        _fieldErrors["HeadquartersId"] = "Selected Headquarters does not belong to the selected Zone.";
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    // Multi-Region & Multi-HQ selection state for standard roles and CommonRole
+    private HashSet<int> SelectedMultiRegions = new();
+    private HashSet<int> SelectedMultiHeadquarters = new();
+    private bool IsMultiRegionOpen = false;
+    private bool IsMultiHqOpen = false;
+    private string MultiRegionSearch = "";
+    private string MultiHqSearch = "";
+
+    private void ToggleMultiRegionDropdown()
+    {
+        IsMultiRegionOpen = !IsMultiRegionOpen;
+        if (!IsMultiRegionOpen) MultiRegionSearch = "";
+    }
+
+    private void ToggleMultiHqDropdown()
+    {
+        IsMultiHqOpen = !IsMultiHqOpen;
+        if (!IsMultiHqOpen) MultiHqSearch = "";
+    }
+
+    private void CloseMultiDropdowns()
+    {
+        IsMultiRegionOpen = false;
+        IsMultiHqOpen = false;
+        MultiRegionSearch = "";
+        MultiHqSearch = "";
+    }
+
+    private IEnumerable<LocationItemDto> AvailableMultiRegions
+    {
+        get
+        {
+            if (SelectedRole is "RM" or "RMD")
+                return vm.Login.StateId > 0 ? Regions.Where(r => r.StateId == vm.Login.StateId) : Regions;
+            if (SelectedRole == "CommonRole")
+            {
+                if (vm.Login.StateId > 0)
+                    return Regions.Where(r => r.StateId == vm.Login.StateId);
+                if (vm.Login.ZoneId > 0)
+                {
+                    var zoneStateIds = States.Where(s => s.ZoneId == vm.Login.ZoneId).Select(s => s.Id).ToHashSet();
+                    return Regions.Where(r => zoneStateIds.Contains(r.StateId));
+                }
+                return Regions;
+            }
+            return Regions;
+        }
+    }
+
+    private IEnumerable<LocationItemDto> FilteredMultiRegions =>
+        string.IsNullOrWhiteSpace(MultiRegionSearch)
+            ? AvailableMultiRegions
+            : AvailableMultiRegions.Where(r => r.Name.Contains(MultiRegionSearch, StringComparison.OrdinalIgnoreCase));
+
+    private IEnumerable<LocationItemDto> AvailableMultiHeadquarters
+    {
+        get
+        {
+            if (SelectedRole is "MO" or "MDO" or "JMDO")
+                return vm.Login.RegionId > 0 ? Headquarters.Where(h => h.RegionId == vm.Login.RegionId) : Headquarters;
+            if (SelectedRole == "CommonRole")
+            {
+                if (SelectedMultiRegions.Count > 0)
+                    return Headquarters.Where(h => SelectedMultiRegions.Contains(h.RegionId));
+                if (vm.Login.StateId > 0)
+                {
+                    var stateRegionIds = Regions.Where(r => r.StateId == vm.Login.StateId).Select(r => r.Id).ToHashSet();
+                    return Headquarters.Where(h => stateRegionIds.Contains(h.RegionId));
+                }
+                if (vm.Login.ZoneId > 0)
+                {
+                    var zoneStateIds = States.Where(s => s.ZoneId == vm.Login.ZoneId).Select(s => s.Id).ToHashSet();
+                    var zoneRegionIds = Regions.Where(r => zoneStateIds.Contains(r.StateId)).Select(r => r.Id).ToHashSet();
+                    return Headquarters.Where(h => zoneRegionIds.Contains(h.RegionId));
+                }
+                return Headquarters;
+            }
+            return Headquarters;
+        }
+    }
+
+    private IEnumerable<LocationItemDto> FilteredMultiHeadquarters =>
+        string.IsNullOrWhiteSpace(MultiHqSearch)
+            ? AvailableMultiHeadquarters
+            : AvailableMultiHeadquarters.Where(h => h.Name.Contains(MultiHqSearch, StringComparison.OrdinalIgnoreCase));
+
+    private void ClearMultiRegions()
+    {
+        SelectedMultiRegions.Clear();
+        if (SelectedRole == "CommonRole")
+            PurgeOrphanedMultiHqs();
+    }
+
+    private void ClearMultiHqs()
+    {
+        SelectedMultiHeadquarters.Clear();
+    }
+
+    private void SelectAllMultiRegions()
+    {
+        foreach (var r in AvailableMultiRegions)
+            SelectedMultiRegions.Add(r.Id);
+    }
+
+    private void SelectAllMultiHqs()
+    {
+        foreach (var h in AvailableMultiHeadquarters)
+            SelectedMultiHeadquarters.Add(h.Id);
+    }
+
+    private void ToggleMultiRegion(int regionId, bool isSelected)
+    {
+        if (isSelected)
+            SelectedMultiRegions.Add(regionId);
+        else
+        {
+            SelectedMultiRegions.Remove(regionId);
+            if (SelectedRole == "CommonRole")
+                PurgeOrphanedMultiHqs();
+        }
+    }
+
+    private void ToggleMultiHq(int hqId, bool isSelected)
+    {
+        if (isSelected)
+            SelectedMultiHeadquarters.Add(hqId);
+        else
+            SelectedMultiHeadquarters.Remove(hqId);
+    }
+
+    private void PurgeOrphanedMultiHqs()
+    {
+        if (SelectedMultiRegions.Count > 0)
+        {
+            var validHqIds = Headquarters.Where(h => SelectedMultiRegions.Contains(h.RegionId)).Select(h => h.Id).ToHashSet();
+            SelectedMultiHeadquarters.RemoveWhere(h => !validHqIds.Contains(h));
+        }
+    }
+
+    private void OnStateChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var sid))
+        {
+            vm.Login.StateId = sid;
+            if (sid > 0)
+            {
+                var validRegionIds = Regions.Where(r => r.StateId == sid).Select(r => r.Id).ToHashSet();
+                SelectedMultiRegions.RemoveWhere(r => !validRegionIds.Contains(r));
+                if (vm.Login.RegionId > 0 && !validRegionIds.Contains(vm.Login.RegionId))
+                {
+                    vm.Login.RegionId = 0;
+                    SelectedMultiHeadquarters.Clear();
+                }
+            }
+            PurgeOrphanedMultiHqs();
+        }
+    }
+
+    private void OnRegionChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var rid))
+        {
+            vm.Login.RegionId = rid;
+            if (rid > 0)
+            {
+                var validHqIds = Headquarters.Where(h => h.RegionId == rid).Select(h => h.Id).ToHashSet();
+                SelectedMultiHeadquarters.RemoveWhere(h => !validHqIds.Contains(h));
+            }
+            else
+            {
+                SelectedMultiHeadquarters.Clear();
+            }
+        }
+    }
+
+    private void OnZoneChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var zid))
+        {
+            vm.Login.ZoneId = zid;
+            if (zid > 0 && vm.Login.StateId > 0)
+            {
+                var state = States.FirstOrDefault(s => s.Id == vm.Login.StateId);
+                if (state != null && state.ZoneId != zid)
+                {
+                    vm.Login.StateId = 0;
+                    SelectedMultiRegions.Clear();
+                    SelectedMultiHeadquarters.Clear();
+                }
+            }
+        }
     }
 
     // SpecialAdmin multi-location selection state
@@ -587,17 +1342,19 @@
     private async Task SaveEmployee()
     {
         ErrorMessage = string.Empty;
-        
-        if (!ValidateUserName())
+
+        if (!ValidateEmployeeForm())
         {
-            ErrorMessage = UserNameError;
             await ScrollToErrorAsync();
             return;
         }
-        
+
         try
         {
             Loading.Show();
+
+            // Never persist values belonging to a role/designation the user moved away from.
+            SanitizeGeographyForRole();
 
             var currentUser = LoginState.UserId ?? "System";
             vm.Employee.CreatedBy ??= currentUser;
@@ -638,6 +1395,7 @@
                 if (!empResponse.IsSuccessStatusCode)
                 {
                     var error = await empResponse.Content.ReadAsStringAsync();
+                    PopulateFieldErrorsFromJson(error);
                     throw new ApiCallFailedException(ExtractErrorMessage(error, "Employee save failed."));
                 }
 
@@ -645,6 +1403,31 @@
 
                 if (empResult?.data == null)
                     throw new ApiCallFailedException("Employee save failed: the server returned an unexpected response.");
+
+                var regionIdsArray = SelectedRole switch
+                {
+                    "RM" or "RMD" or "CommonRole" => SelectedMultiRegions.ToArray(),
+                    "MO" or "MDO" or "JMDO" => vm.Login.RegionId > 0 ? new[] { vm.Login.RegionId } : Array.Empty<int>(),
+                    _ => Array.Empty<int>()
+                };
+
+                var hqIdsArray = SelectedRole switch
+                {
+                    "MO" or "MDO" or "JMDO" or "CommonRole" => SelectedMultiHeadquarters.ToArray(),
+                    _ => Array.Empty<int>()
+                };
+
+                var primaryRegionId = SelectedRole switch
+                {
+                    "RM" or "RMD" or "CommonRole" => SelectedMultiRegions.FirstOrDefault(),
+                    _ => vm.Login.RegionId
+                };
+
+                var primaryHqId = SelectedRole switch
+                {
+                    "MO" or "MDO" or "JMDO" or "CommonRole" => SelectedMultiHeadquarters.FirstOrDefault(),
+                    _ => vm.Login.HeadquartersId
+                };
 
                 var loginRequest = new EmployeeLoginCreateRequest
                 {
@@ -657,8 +1440,10 @@
                     Role = vm.Login.Role,
                     ZoneId = vm.Login.ZoneId,
                     StateId = vm.Login.StateId,
-                    RegionId = vm.Login.RegionId,
-                    HeadquartersId = vm.Login.HeadquartersId,
+                    RegionId = primaryRegionId,
+                    HeadquartersId = primaryHqId,
+                    RegionIds = regionIdsArray,
+                    HeadquartersIds = hqIdsArray,
                     IsActive = vm.Login.IsActive,
                     CreatedBy = currentUser,
                     UpdatedBy = currentUser,
@@ -669,7 +1454,15 @@
 
                 if (!loginResponse.IsSuccessStatusCode)
                 {
+                    // Clean up partial EmployeeInformation record when login creation fails
+                    try
+                    {
+                        await Http.DeleteAsync($"api/EmployeeRegistration/{empResult.data.Id}");
+                    }
+                    catch { }
+
                     var error = await loginResponse.Content.ReadAsStringAsync();
+                    PopulateFieldErrorsFromJson(error);
                     throw new ApiCallFailedException(ExtractErrorMessage(error, "Login save failed."));
                 }
             }
@@ -680,8 +1473,34 @@
                 if (!employeeUpdateResponse.IsSuccessStatusCode)
                 {
                     var error = await employeeUpdateResponse.Content.ReadAsStringAsync();
+                    PopulateFieldErrorsFromJson(error);
                     throw new ApiCallFailedException(ExtractErrorMessage(error, "Employee update failed."));
                 }
+
+                var regionIdsArray = SelectedRole switch
+                {
+                    "RM" or "RMD" or "CommonRole" => SelectedMultiRegions.ToArray(),
+                    "MO" or "MDO" or "JMDO" => vm.Login.RegionId > 0 ? new[] { vm.Login.RegionId } : Array.Empty<int>(),
+                    _ => Array.Empty<int>()
+                };
+
+                var hqIdsArray = SelectedRole switch
+                {
+                    "MO" or "MDO" or "JMDO" or "CommonRole" => SelectedMultiHeadquarters.ToArray(),
+                    _ => Array.Empty<int>()
+                };
+
+                var primaryRegionId = SelectedRole switch
+                {
+                    "RM" or "RMD" or "CommonRole" => SelectedMultiRegions.FirstOrDefault(),
+                    _ => vm.Login.RegionId
+                };
+
+                var primaryHqId = SelectedRole switch
+                {
+                    "MO" or "MDO" or "JMDO" or "CommonRole" => SelectedMultiHeadquarters.FirstOrDefault(),
+                    _ => vm.Login.HeadquartersId
+                };
 
                 var loginRequest = new EmployeeLoginCreateRequest
                 {
@@ -694,8 +1513,10 @@
                     Role = vm.Login.Role,
                     ZoneId = vm.Login.ZoneId,
                     StateId = vm.Login.StateId,
-                    RegionId = vm.Login.RegionId,
-                    HeadquartersId = vm.Login.HeadquartersId,
+                    RegionId = primaryRegionId,
+                    HeadquartersId = primaryHqId,
+                    RegionIds = regionIdsArray,
+                    HeadquartersIds = hqIdsArray,
                     IsActive = vm.Login.IsActive,
                     UpdatedBy = currentUser,
                     SpecialAdminLocations = specialLocations
@@ -705,6 +1526,7 @@
                 if (!loginUpdateResponse.IsSuccessStatusCode)
                 {
                     var error = await loginUpdateResponse.Content.ReadAsStringAsync();
+                    PopulateFieldErrorsFromJson(error);
                     throw new ApiCallFailedException(ExtractErrorMessage(error, "Login update failed."));
                 }
             }
@@ -824,6 +1646,36 @@
         return fallbackContext;
     }
 
+    private void PopulateFieldErrorsFromJson(string rawBody)
+    {
+        if (string.IsNullOrWhiteSpace(rawBody)) return;
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(rawBody);
+            var root = doc.RootElement;
+            if (root.ValueKind == System.Text.Json.JsonValueKind.Object && root.TryGetProperty("errors", out var errorsEl)
+                && errorsEl.ValueKind == System.Text.Json.JsonValueKind.Object)
+            {
+                foreach (var prop in errorsEl.EnumerateObject())
+                {
+                    if (prop.Value.ValueKind == System.Text.Json.JsonValueKind.Array)
+                    {
+                        var first = prop.Value.EnumerateArray().FirstOrDefault().GetString();
+                        if (!string.IsNullOrWhiteSpace(first))
+                            _fieldErrors[prop.Name] = first;
+                    }
+                    else if (prop.Value.ValueKind == System.Text.Json.JsonValueKind.String)
+                    {
+                        var msg = prop.Value.GetString();
+                        if (!string.IsNullOrWhiteSpace(msg))
+                            _fieldErrors[prop.Name] = msg;
+                    }
+                }
+            }
+        }
+        catch { }
+    }
+
     private async Task LoadForEdit(int loginId)
     {
         try
@@ -849,8 +1701,32 @@
                 StateId = loginData.StateId,
                 RegionId = loginData.RegionId,
                 HeadquartersId = loginData.HeadquartersId,
+                RegionIds = loginData.RegionIds,
+                HeadquartersIds = loginData.HeadquartersIds,
                 IsActive = loginData.IsActive
             };
+
+            SelectedMultiRegions.Clear();
+            if (loginData.RegionIds != null && loginData.RegionIds.Length > 0)
+            {
+                foreach (var rId in loginData.RegionIds)
+                    SelectedMultiRegions.Add(rId);
+            }
+            else if (loginData.RegionId > 0)
+            {
+                SelectedMultiRegions.Add(loginData.RegionId);
+            }
+
+            SelectedMultiHeadquarters.Clear();
+            if (loginData.HeadquartersIds != null && loginData.HeadquartersIds.Length > 0)
+            {
+                foreach (var hId in loginData.HeadquartersIds)
+                    SelectedMultiHeadquarters.Add(hId);
+            }
+            else if (loginData.HeadquartersId > 0)
+            {
+                SelectedMultiHeadquarters.Add(loginData.HeadquartersId);
+            }
 
             vm.Account = new UserAccountVM
             {
@@ -888,6 +1764,12 @@
         IsEditMode = false;
         OriginalUserName = string.Empty;
         UserNameError = string.Empty;
+        SelectedMultiRegions.Clear();
+        SelectedMultiHeadquarters.Clear();
+        IsMultiRegionOpen = false;
+        IsMultiHqOpen = false;
+        MultiRegionSearch = "";
+        MultiHqSearch = "";
         SelectedSpecialStates.Clear();
         SelectedSpecialRegions.Clear();
         SelectedSpecialHQs.Clear();

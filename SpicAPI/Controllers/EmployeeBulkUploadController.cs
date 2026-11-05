@@ -465,6 +465,8 @@ namespace SpicAPI.Controllers
                             StateId = stateId,
                             RegionId = regionId,
                             HeadquartersId = hqId,
+                            RegionIds = regionId > 0 ? new[] { regionId } : Array.Empty<int>(),
+                            HeadquartersIds = hqId > 0 ? new[] { hqId } : Array.Empty<int>(),
                             ZoneId = zoneId,
                             IsActive = true
                         };

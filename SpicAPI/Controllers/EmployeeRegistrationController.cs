@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using SPIC.Core.Entities;
 using SPIC.Core.Interfaces;
 using SpicAPI.Services;
+using System.Text.RegularExpressions;
 using static SPIC.Core.Entities.EmployeeRegistration;
 
 namespace SpicAPI.Controllers
@@ -26,6 +27,21 @@ namespace SpicAPI.Controllers
         {
             if (!ModelState.IsValid)
                 return BadRequest(ModelState);
+
+            var errors = ValidateEmployeeInformationFields(model);
+            if (errors.Count > 0)
+                return BadRequest(new { errors });
+
+            if (!string.IsNullOrWhiteSpace(model.EmployeeCode))
+            {
+                var trimmedCode = model.EmployeeCode.Trim();
+                var exists = await _employeeRepo.GetWhere(e => e.EmployeeCode == trimmedCode).AnyAsync();
+                if (exists)
+                {
+                    errors["EmployeeCode"] = new[] { "Employee ID already exists." };
+                    return BadRequest(new { errors });
+                }
+            }
 
             model.CreatedAt = DateTime.Now;
             model.UpdatedAt = DateTime.Now;
@@ -64,6 +80,24 @@ namespace SpicAPI.Controllers
         [HttpPut("{id}")]
         public async Task<IActionResult> Update(int id, [FromBody] EmployeeInformation entity)
         {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            var errors = ValidateEmployeeInformationFields(entity);
+            if (errors.Count > 0)
+                return BadRequest(new { errors });
+
+            if (!string.IsNullOrWhiteSpace(entity.EmployeeCode))
+            {
+                var trimmedCode = entity.EmployeeCode.Trim();
+                var exists = await _employeeRepo.GetWhere(e => e.Id != id && e.EmployeeCode == trimmedCode).AnyAsync();
+                if (exists)
+                {
+                    errors["EmployeeCode"] = new[] { "Employee ID already exists." };
+                    return BadRequest(new { errors });
+                }
+            }
+
             entity.UpdatedAt = DateTime.Now;
             var updated = await _employeeRepo.PatchAsync(id, entity);
 
@@ -87,6 +121,34 @@ namespace SpicAPI.Controllers
                 message = "EmployeeInformation deleted successfully"
             });
         }
+
+        private static Dictionary<string, string[]> ValidateEmployeeInformationFields(EmployeeInformation employee)
+        {
+            var errors = new Dictionary<string, string[]>();
+
+            void Add(string field, string message) =>
+                errors[field] = new[] { message };
+
+            if (string.IsNullOrWhiteSpace(employee.Name))
+                Add("Name", "Employee Name is required.");
+
+            if (string.IsNullOrWhiteSpace(employee.EmployeeCode))
+                Add("EmployeeCode", "Employee ID is required.");
+
+            var personalPhone = (employee.PersonalPhoneNumber ?? string.Empty).Trim();
+            if (personalPhone.Length == 0)
+                Add("PersonalPhoneNumber", "Personal Phone Number is required.");
+            else if (!Regex.IsMatch(personalPhone, @"^\d{10}$"))
+                Add("PersonalPhoneNumber", "Personal Phone Number must be 10 digits.");
+
+            var email = (employee.Email ?? string.Empty).Trim();
+            if (email.Length == 0)
+                Add("Email", "Email ID is required.");
+            else if (!Regex.IsMatch(email, @"^[^@\s]+@[^@\s]+\.[^@\s]+$"))
+                Add("Email", "Enter a valid Email ID.");
+
+            return errors;
+        }
     }
 
     [Route("api/[controller]")]
@@ -98,21 +160,54 @@ namespace SpicAPI.Controllers
     [Route("api/[controller]")]
     public class EmployeeLoginSetupController : ControllerBase
     {
+        private static readonly AppRole[] EmployeeManagementRoles =
+        {
+            AppRole.CorporateAdmin,
+            AppRole.Director,
+            AppRole.AVP,
+            AppRole.SMD,
+            AppRole.SMM,
+            AppRole.RM,
+            AppRole.RMD,
+            AppRole.MDO,
+            AppRole.MO,
+            AppRole.JMDO,
+            AppRole.SpecialAdmin,
+            AppRole.CommonRole,
+            AppRole.MDAdmin,
+            AppRole.MDHOD
+        };
+
         private readonly UserManager<UserInfo> _userManager;
         private readonly IGenericRepository<Employeelogin> _employeeLoginRepo;
         private readonly IGenericRepository<EmployeeInformation> _employeeInfoRepo;
         private readonly IGenericRepository<SpecialAdminLocations> _specialAdminLocationsRepo;
+        private readonly IGenericRepository<Designation> _designationRepo;
+        private readonly IGenericRepository<Zone> _zoneRepo;
+        private readonly IGenericRepository<State> _stateRepo;
+        private readonly IGenericRepository<Region> _regionRepo;
+        private readonly IGenericRepository<Headquarter> _headquarterRepo;
 
         public EmployeeLoginSetupController(
             UserManager<UserInfo> userManager,
             IGenericRepository<Employeelogin> employeeLoginRepo,
             IGenericRepository<EmployeeInformation> employeeInfoRepo,
-            IGenericRepository<SpecialAdminLocations> specialAdminLocationsRepo)
+            IGenericRepository<SpecialAdminLocations> specialAdminLocationsRepo,
+            IGenericRepository<Designation> designationRepo,
+            IGenericRepository<Zone> zoneRepo,
+            IGenericRepository<State> stateRepo,
+            IGenericRepository<Region> regionRepo,
+            IGenericRepository<Headquarter> headquarterRepo)
         {
             _userManager = userManager;
             _employeeLoginRepo = employeeLoginRepo;
             _employeeInfoRepo = employeeInfoRepo;
             _specialAdminLocationsRepo = specialAdminLocationsRepo;
+            _designationRepo = designationRepo;
+            _zoneRepo = zoneRepo;
+            _stateRepo = stateRepo;
+            _regionRepo = regionRepo;
+            _headquarterRepo = headquarterRepo;
         }
 
         [HttpPost]
@@ -131,9 +226,39 @@ namespace SpicAPI.Controllers
             if (employee == null)
                 return BadRequest("EmployeeInformation not found");
 
+            if (request.RegionIds != null)
+            {
+                request.RegionIds = request.RegionIds.Where(id => id > 0).Distinct().ToArray();
+                request.RegionId = request.RegionIds.FirstOrDefault();
+            }
+            else
+            {
+                request.RegionIds = request.RegionId > 0 ? new[] { request.RegionId } : Array.Empty<int>();
+            }
+
+            if (request.HeadquartersIds != null)
+            {
+                request.HeadquartersIds = request.HeadquartersIds.Where(id => id > 0).Distinct().ToArray();
+                request.HeadquartersId = request.HeadquartersIds.FirstOrDefault();
+            }
+            else
+            {
+                request.HeadquartersIds = request.HeadquartersId > 0 ? new[] { request.HeadquartersId } : Array.Empty<int>();
+            }
+
+            var designation = await ResolveDesignationAsync(request.DesignationId);
+            var errors = ValidateEmployeeLoginRequest(request, employee, designation, isCreate: true);
+            if (errors.Count == 0)
+                await ValidateGeographyHierarchyAsync(request, errors);
+
+            if (errors.Count > 0)
+                return BadRequest(new { errors });
+
+            NormalizeGeographyForRole(request);
+
             var existingUser = await _userManager.FindByNameAsync(request.UserName);
             if (existingUser != null)
-                return BadRequest("Username already exists");
+                return BadRequest(new { errors = new Dictionary<string, string[]> { ["UserName"] = new[] { "Username already exists." } } });
 
             //if (!string.IsNullOrWhiteSpace(request.Email))
             //{
@@ -171,6 +296,8 @@ namespace SpicAPI.Controllers
                 StateId = request.StateId,
                 RegionId = request.RegionId,
                 HeadquartersId = request.HeadquartersId,
+                RegionIds = request.RegionIds,
+                HeadquartersIds = request.HeadquartersIds,
                 IsActive = request.IsActive
             };
 
@@ -195,6 +322,8 @@ namespace SpicAPI.Controllers
                     createdLogin.StateId,
                     createdLogin.RegionId,
                     createdLogin.HeadquartersId,
+                    createdLogin.RegionIds,
+                    createdLogin.HeadquartersIds,
                     createdLogin.IsActive,
                     UserName = user.UserName,
                     user.Email
@@ -237,6 +366,8 @@ namespace SpicAPI.Controllers
                 StateId = login.StateId,
                 RegionId = login.RegionId,
                 HeadquartersId = login.HeadquartersId,
+                RegionIds = login.RegionIds ?? (login.RegionId > 0 ? new[] { login.RegionId } : Array.Empty<int>()),
+                HeadquartersIds = login.HeadquartersIds ?? (login.HeadquartersId > 0 ? new[] { login.HeadquartersId } : Array.Empty<int>()),
                 IsActive = login.IsActive,
                 CreatedBy = employee.CreatedBy,
                 UpdatedBy = employee.UpdatedBy,
@@ -269,12 +400,42 @@ namespace SpicAPI.Controllers
             if (user == null)
                 return NotFound("UserInfo not found");
 
+            if (request.RegionIds != null)
+            {
+                request.RegionIds = request.RegionIds.Where(id => id > 0).Distinct().ToArray();
+                request.RegionId = request.RegionIds.FirstOrDefault();
+            }
+            else
+            {
+                request.RegionIds = request.RegionId > 0 ? new[] { request.RegionId } : Array.Empty<int>();
+            }
+
+            if (request.HeadquartersIds != null)
+            {
+                request.HeadquartersIds = request.HeadquartersIds.Where(id => id > 0).Distinct().ToArray();
+                request.HeadquartersId = request.HeadquartersIds.FirstOrDefault();
+            }
+            else
+            {
+                request.HeadquartersIds = request.HeadquartersId > 0 ? new[] { request.HeadquartersId } : Array.Empty<int>();
+            }
+
+            var designation = await ResolveDesignationAsync(request.DesignationId);
+            var errors = ValidateEmployeeLoginRequest(request, employee, designation, isCreate: false);
+            if (errors.Count == 0)
+                await ValidateGeographyHierarchyAsync(request, errors);
+
+            if (errors.Count > 0)
+                return BadRequest(new { errors });
+
+            NormalizeGeographyForRole(request);
+
             if (user.UserName != request.UserName && !IsValidUserName(request.UserName))
                 return BadRequest("Username must not contain spaces or invisible characters.");
 
             var existingUserWithSameName = await _userManager.FindByNameAsync(request.UserName);
             if (existingUserWithSameName != null && existingUserWithSameName.Id != user.Id)
-                return BadRequest("Username already exists");
+                return BadRequest(new { errors = new Dictionary<string, string[]> { ["UserName"] = new[] { "Username already exists." } } });
 
             //if (!string.IsNullOrWhiteSpace(request.Email))
             //{
@@ -300,10 +461,10 @@ namespace SpicAPI.Controllers
             user.IsActive = request.IsActive;
             user.UpdatedAt = DateTime.Now;
             user.UpdatedBy = request.UpdatedBy ?? "System";
-            user.Password = request.Password;
 
             if (!string.IsNullOrWhiteSpace(request.Password))
             {
+                user.Password = request.Password;
                 // Setting PasswordHash directly bypasses UserManager entirely, so the configured
                 // password policy (Program.cs's options.Password.RequiredLength, etc.) was never
                 // being enforced here - only on initial creation via CreateAsync. Running it
@@ -329,6 +490,8 @@ namespace SpicAPI.Controllers
             login.StateId = request.StateId;
             login.RegionId = request.RegionId;
             login.HeadquartersId = request.HeadquartersId;
+            login.RegionIds = request.RegionIds;
+            login.HeadquartersIds = request.HeadquartersIds;
             login.IsActive = request.IsActive;
 
             await _employeeLoginRepo.PatchAsync(login.Id, login);
@@ -423,6 +586,9 @@ namespace SpicAPI.Controllers
                 return NotFound("Employeelogin not found");
 
             var employee = await _employeeInfoRepo.GetByIdAsync(login.EmployeeInformationID);
+            if (employee == null)
+                return NotFound("EmployeeInformation not found");
+
             var user = await _userManager.FindByIdAsync(login.UserId);
 
             return Ok(new EmployeeLoginCreateRequest
@@ -438,6 +604,8 @@ namespace SpicAPI.Controllers
                 StateId = login.StateId,
                 RegionId = login.RegionId,
                 HeadquartersId = login.HeadquartersId,
+                RegionIds = login.RegionIds ?? (login.RegionId > 0 ? new[] { login.RegionId } : Array.Empty<int>()),
+                HeadquartersIds = login.HeadquartersIds ?? (login.HeadquartersId > 0 ? new[] { login.HeadquartersId } : Array.Empty<int>()),
                 IsActive = login.IsActive,
                 CreatedBy = employee.CreatedBy,
                 UpdatedBy = employee.UpdatedBy,
@@ -454,14 +622,49 @@ namespace SpicAPI.Controllers
             if (login == null) return NotFound("Employeelogin not found");
 
             var employee = await _employeeInfoRepo.GetByIdAsync(login.EmployeeInformationID);
-            var user = await _userManager.FindByIdAsync(login.UserId);
+            if (employee == null)
+                return NotFound("EmployeeInformation not found");
 
-            if (user != null && user.UserName != request.UserName && !IsValidUserName(request.UserName))
+            var user = await _userManager.FindByIdAsync(login.UserId);
+            if (user == null)
+                return NotFound("UserInfo not found");
+
+            if (request.RegionIds != null)
+            {
+                request.RegionIds = request.RegionIds.Where(id => id > 0).Distinct().ToArray();
+                request.RegionId = request.RegionIds.FirstOrDefault();
+            }
+            else
+            {
+                request.RegionIds = request.RegionId > 0 ? new[] { request.RegionId } : Array.Empty<int>();
+            }
+
+            if (request.HeadquartersIds != null)
+            {
+                request.HeadquartersIds = request.HeadquartersIds.Where(id => id > 0).Distinct().ToArray();
+                request.HeadquartersId = request.HeadquartersIds.FirstOrDefault();
+            }
+            else
+            {
+                request.HeadquartersIds = request.HeadquartersId > 0 ? new[] { request.HeadquartersId } : Array.Empty<int>();
+            }
+
+            var designation = await ResolveDesignationAsync(request.DesignationId);
+            var errors = ValidateEmployeeLoginRequest(request, employee, designation, isCreate: false);
+            if (errors.Count == 0)
+                await ValidateGeographyHierarchyAsync(request, errors);
+
+            if (errors.Count > 0)
+                return BadRequest(new { errors });
+
+            NormalizeGeographyForRole(request);
+
+            if (user.UserName != request.UserName && !IsValidUserName(request.UserName))
                 return BadRequest("Username must not contain spaces or invisible characters.");
 
             var existingUserWithSameName = await _userManager.FindByNameAsync(request.UserName);
             if (existingUserWithSameName != null && existingUserWithSameName.Id != user.Id)
-                return BadRequest("Username already exists");
+                return BadRequest(new { errors = new Dictionary<string, string[]> { ["UserName"] = new[] { "Username already exists." } } });
 
             // Update Identity User
             user.UserName = request.UserName;
@@ -474,10 +677,10 @@ namespace SpicAPI.Controllers
             user.IsActive = request.IsActive;
             user.UpdatedAt = DateTime.Now;
             user.UpdatedBy = User?.Identity?.Name ?? "System";
-            user.Password = request.Password;
 
             if (!string.IsNullOrWhiteSpace(request.Password))
             {
+                user.Password = request.Password;
                 // See the identical comment in UpdateEmployeeLogin above - setting PasswordHash
                 // directly bypasses UserManager's password policy validators entirely.
                 foreach (var validator in _userManager.PasswordValidators)
@@ -499,6 +702,8 @@ namespace SpicAPI.Controllers
             login.StateId = request.StateId;
             login.RegionId = request.RegionId;
             login.HeadquartersId = request.HeadquartersId;
+            login.RegionIds = request.RegionIds;
+            login.HeadquartersIds = request.HeadquartersIds;
             login.IsActive = request.IsActive;
 
             await _employeeLoginRepo.PatchAsync(login.Id, login);
@@ -512,10 +717,337 @@ namespace SpicAPI.Controllers
             return Ok(new { message = "Employee role details updated successfully" });
         }
 
-        private bool IsValidUserName(string userName)
+        private static bool IsValidUserName(string userName)
         {
             if (string.IsNullOrWhiteSpace(userName)) return false;
-            return System.Text.RegularExpressions.Regex.IsMatch(userName, @"\A[\x21-\x7E]+\z");
+            return Regex.IsMatch(userName, @"\A[\x21-\x7E]+\z");
+        }
+
+        private async Task<Designation?> ResolveDesignationAsync(int? designationId)
+        {
+            if (designationId is null or <= 0)
+                return null;
+
+            // Deliberately does not filter on IsActive: a deactivated designation on an
+            // existing employee must not block an unrelated edit. Active status is
+            // enforced only where it changes access (CommonRole / AVP Office).
+            return await _designationRepo
+                .GetWhere(d => d.Id == designationId.Value)
+                .FirstOrDefaultAsync();
+        }
+
+        private static Dictionary<string, string[]> ValidateEmployeeLoginRequest(
+            EmployeeLoginCreateRequest request,
+            EmployeeInformation employee,
+            Designation? designation,
+            bool isCreate)
+        {
+            var errors = new Dictionary<string, string[]>();
+
+            void Add(string field, string message)
+            {
+                errors[field] = errors.TryGetValue(field, out var existing)
+                    ? existing.Append(message).ToArray()
+                    : new[] { message };
+            }
+
+            if (!EmployeeManagementRoles.Contains(request.Role))
+                Add("Role", "Select a valid role.");
+
+            if (string.IsNullOrWhiteSpace(request.UserName))
+                Add("UserName", "Username is required.");
+            else if (!IsValidUserName(request.UserName))
+                Add("UserName", "Username must not contain spaces or invisible characters.");
+
+            if (isCreate && string.IsNullOrWhiteSpace(request.Password))
+                Add("Password", "Password is required.");
+
+            var name = (request.Name ?? employee.Name ?? string.Empty).Trim();
+            if (name.Length == 0)
+                Add("Name", "Employee Name is required.");
+
+            if (string.IsNullOrWhiteSpace(employee.EmployeeCode))
+                Add("EmployeeCode", "Employee ID is required.");
+
+            var personalPhone = (employee.PersonalPhoneNumber ?? string.Empty).Trim();
+            if (personalPhone.Length == 0)
+                Add("PersonalPhoneNumber", "Personal Phone Number is required.");
+            else if (!Regex.IsMatch(personalPhone, @"^\d{10}$"))
+                Add("PersonalPhoneNumber", "Personal Phone Number must be 10 digits.");
+
+            var email = (request.Email ?? employee.Email ?? string.Empty).Trim();
+            if (email.Length == 0)
+                Add("Email", "Email ID is required.");
+            else if (!Regex.IsMatch(email, @"^[^@\s]+@[^@\s]+\.[^@\s]+$"))
+                Add("Email", "Enter a valid Email ID.");
+
+            if (request.DesignationId is > 0 && designation == null)
+                Add("DesignationId", "Select a valid designation.");
+
+            if (request.Role == AppRole.CommonRole)
+            {
+                if (request.DesignationId is null or <= 0)
+                    Add("DesignationId", "Select a designation for CommonRole.");
+                else if (designation != null && !designation.IsActive)
+                    Add("DesignationId", "Select an active designation.");
+            }
+
+            switch (request.Role)
+            {
+                case AppRole.AVP:
+                    if (request.ZoneId <= 0)
+                        Add("ZoneId", "Zone is required.");
+                    break;
+
+                case AppRole.SMD:
+                case AppRole.SMM:
+                case AppRole.MDAdmin:
+                case AppRole.MDHOD:
+                    if (request.StateId <= 0)
+                        Add("StateId", "State is required.");
+                    break;
+
+                case AppRole.RM:
+                case AppRole.RMD:
+                    if (request.StateId <= 0)
+                        Add("StateId", "State is required.");
+                    if (request.RegionId <= 0 && (request.RegionIds == null || request.RegionIds.Length == 0))
+                        Add("RegionId", "Region is required.");
+                    break;
+
+                case AppRole.MO:
+                case AppRole.MDO:
+                case AppRole.JMDO:
+                    if (request.StateId <= 0)
+                        Add("StateId", "State is required.");
+                    if (request.RegionId <= 0 && (request.RegionIds == null || request.RegionIds.Length == 0))
+                        Add("RegionId", "Region is required.");
+                    if (request.HeadquartersId <= 0 && (request.HeadquartersIds == null || request.HeadquartersIds.Length == 0))
+                        Add("HeadquartersId", "Headquarters is required.");
+                    break;
+
+                // CommonRole geography is optional for every designation, including
+                // AVP Office. Supplied IDs are checked for existence/consistency by
+                // ValidateCommonRoleGeographyAsync instead of requiring parents here.
+                case AppRole.CommonRole:
+                    break;
+
+                case AppRole.SpecialAdmin:
+                    if (request.SpecialAdminLocations == null ||
+                        !request.SpecialAdminLocations.Any(l => l.StateId > 0))
+                        Add("SpecialAdminLocations", "At least one State is required for SpecialAdmin.");
+                    break;
+            }
+
+            return errors;
+        }
+
+        private async Task ValidateGeographyHierarchyAsync(
+            EmployeeLoginCreateRequest request,
+            Dictionary<string, string[]> errors)
+        {
+            if (request.Role == AppRole.CommonRole)
+            {
+                await ValidateCommonRoleGeographyAsync(request, errors);
+                return;
+            }
+
+            void Add(string field, string message)
+            {
+                errors[field] = errors.TryGetValue(field, out var existing)
+                    ? (existing.Contains(message) ? existing : existing.Append(message).ToArray())
+                    : new[] { message };
+            }
+
+            if (request.Role is AppRole.RM or AppRole.RMD)
+            {
+                var checkRegionIds = (request.RegionIds != null && request.RegionIds.Length > 0)
+                    ? request.RegionIds
+                    : (request.RegionId > 0 ? new[] { request.RegionId } : Array.Empty<int>());
+
+                foreach (var rId in checkRegionIds)
+                {
+                    var region = await _regionRepo.GetWhere(r => r.Id == rId).FirstOrDefaultAsync();
+                    if (region == null)
+                        Add("RegionId", "Select a valid Region.");
+                    else if (request.StateId > 0 && region.StateId != request.StateId)
+                        Add("RegionId", "Selected Region does not belong to the selected State.");
+                }
+            }
+            else if (request.Role is AppRole.MO or AppRole.MDO or AppRole.JMDO)
+            {
+                if (request.RegionId > 0)
+                {
+                    var region = await _regionRepo.GetWhere(r => r.Id == request.RegionId).FirstOrDefaultAsync();
+                    if (region == null)
+                        Add("RegionId", "Select a valid Region.");
+                    else if (request.StateId > 0 && region.StateId != request.StateId)
+                        Add("RegionId", "Selected Region does not belong to the selected State.");
+                }
+
+                var checkHqIds = (request.HeadquartersIds != null && request.HeadquartersIds.Length > 0)
+                    ? request.HeadquartersIds
+                    : (request.HeadquartersId > 0 ? new[] { request.HeadquartersId } : Array.Empty<int>());
+
+                foreach (var hqId in checkHqIds)
+                {
+                    var headquarter = await _headquarterRepo.GetWhere(h => h.Id == hqId).FirstOrDefaultAsync();
+                    if (headquarter == null)
+                        Add("HeadquartersId", "Select a valid Headquarters.");
+                    else if (request.RegionId > 0 && headquarter.RegionId != request.RegionId)
+                        Add("HeadquartersId", "Selected Headquarters does not belong to the selected Region.");
+                }
+            }
+        }
+
+        private async Task ValidateCommonRoleGeographyAsync(
+            EmployeeLoginCreateRequest request,
+            Dictionary<string, string[]> errors)
+        {
+            void Add(string field, string message)
+            {
+                errors[field] = errors.TryGetValue(field, out var existing)
+                    ? (existing.Contains(message) ? existing : existing.Append(message).ToArray())
+                    : new[] { message };
+            }
+
+            var zone = request.ZoneId > 0
+                ? await _zoneRepo.GetWhere(z => z.Id == request.ZoneId).FirstOrDefaultAsync()
+                : null;
+            if (request.ZoneId > 0 && zone == null)
+                Add("ZoneId", "Select a valid Zone.");
+
+            var state = request.StateId > 0
+                ? await _stateRepo.GetWhere(s => s.Id == request.StateId).FirstOrDefaultAsync()
+                : null;
+            if (request.StateId > 0 && state == null)
+                Add("StateId", "Select a valid State.");
+            if (zone != null && state != null && state.ZoneId != zone.Id)
+                Add("StateId", "Selected State does not belong to the selected Zone.");
+
+            var checkRegionIds = (request.RegionIds != null && request.RegionIds.Length > 0)
+                ? request.RegionIds
+                : (request.RegionId > 0 ? new[] { request.RegionId } : Array.Empty<int>());
+
+            var validatedRegions = new List<Region>();
+            foreach (var rId in checkRegionIds)
+            {
+                var region = await _regionRepo.GetWhere(r => r.Id == rId).FirstOrDefaultAsync();
+                if (region == null)
+                {
+                    Add("RegionId", "Select a valid Region.");
+                    continue;
+                }
+                validatedRegions.Add(region);
+
+                if (state != null && region.StateId != state.Id)
+                    Add("RegionId", "Selected Region does not belong to the selected State.");
+
+                if (state == null && zone != null)
+                {
+                    var regionState = await _stateRepo.GetWhere(s => s.Id == region.StateId).FirstOrDefaultAsync();
+                    if (regionState == null)
+                        Add("RegionId", "Selected Region is not linked to a valid State.");
+                    else if (regionState.ZoneId != zone.Id)
+                        Add("RegionId", "Selected Region does not belong to the selected Zone.");
+                }
+            }
+
+            var checkHqIds = (request.HeadquartersIds != null && request.HeadquartersIds.Length > 0)
+                ? request.HeadquartersIds
+                : (request.HeadquartersId > 0 ? new[] { request.HeadquartersId } : Array.Empty<int>());
+
+            foreach (var hqId in checkHqIds)
+            {
+                var headquarter = await _headquarterRepo.GetWhere(h => h.Id == hqId).FirstOrDefaultAsync();
+                if (headquarter == null)
+                {
+                    Add("HeadquartersId", "Select a valid Headquarters.");
+                    continue;
+                }
+
+                if (validatedRegions.Count > 0)
+                {
+                    if (!validatedRegions.Any(r => r.Id == headquarter.RegionId))
+                        Add("HeadquartersId", "Selected Headquarters does not belong to the selected Region.");
+                }
+                else
+                {
+                    var hqRegion = await _regionRepo.GetWhere(r => r.Id == headquarter.RegionId).FirstOrDefaultAsync();
+                    if (hqRegion == null)
+                    {
+                        Add("HeadquartersId", "Selected Headquarters is not linked to a valid Region.");
+                    }
+                    else if (state != null && hqRegion.StateId != state.Id)
+                    {
+                        Add("HeadquartersId", "Selected Headquarters does not belong to the selected State.");
+                    }
+                    else if (state == null && zone != null)
+                    {
+                        var hqState = await _stateRepo.GetWhere(s => s.Id == hqRegion.StateId).FirstOrDefaultAsync();
+                        if (hqState == null)
+                            Add("HeadquartersId", "Selected Headquarters is not linked to a valid State.");
+                        else if (hqState.ZoneId != zone.Id)
+                            Add("HeadquartersId", "Selected Headquarters does not belong to the selected Zone.");
+                    }
+                }
+            }
+        }
+
+        private static void NormalizeGeographyForRole(EmployeeLoginCreateRequest request)
+        {
+            switch (request.Role)
+            {
+                case AppRole.AVP:
+                    request.StateId = 0;
+                    request.RegionId = 0;
+                    request.HeadquartersId = 0;
+                    request.RegionIds = Array.Empty<int>();
+                    request.HeadquartersIds = Array.Empty<int>();
+                    break;
+
+                case AppRole.SMD:
+                case AppRole.SMM:
+                case AppRole.MDAdmin:
+                case AppRole.MDHOD:
+                    request.ZoneId = 0;
+                    request.RegionId = 0;
+                    request.HeadquartersId = 0;
+                    request.RegionIds = Array.Empty<int>();
+                    request.HeadquartersIds = Array.Empty<int>();
+                    break;
+
+                case AppRole.RM:
+                case AppRole.RMD:
+                    request.ZoneId = 0;
+                    request.HeadquartersId = 0;
+                    request.HeadquartersIds = Array.Empty<int>();
+                    break;
+
+                case AppRole.MO:
+                case AppRole.MDO:
+                case AppRole.JMDO:
+                    request.ZoneId = 0;
+                    request.RegionIds = request.RegionId > 0 ? new[] { request.RegionId } : Array.Empty<int>();
+                    break;
+
+                case AppRole.CommonRole:
+                    // Preserve every supplied CommonRole location field, regardless
+                    // of the selected designation (including AVP Office).
+                    break;
+
+                case AppRole.SpecialAdmin:
+                    break;
+
+                default:
+                    request.ZoneId = 0;
+                    request.StateId = 0;
+                    request.RegionId = 0;
+                    request.HeadquartersId = 0;
+                    request.RegionIds = Array.Empty<int>();
+                    request.HeadquartersIds = Array.Empty<int>();
+                    break;
+            }
         }
 
         private async Task<List<SpecialAdminLocationItem>?> LoadSpecialAdminLocationsAsync(int employeeInfoId, AppRole role)
