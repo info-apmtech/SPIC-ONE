@@ -45,7 +45,7 @@
 	  <WindowsPackageType>MSIX</WindowsPackageType>
 
     <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">15.0</SupportedOSPlatformVersion>
-    <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'maccatalyst'">15.0</SupportedOSPlatformVersion>
+    <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'maccatalyst'">17.0</SupportedOSPlatformVersion>
     <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">24.0</SupportedOSPlatformVersion>
     <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</SupportedOSPlatformVersion>
     <TargetPlatformMinVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</TargetPlatformMinVersion>
@@ -83,6 +83,20 @@
   <ItemGroup>
     <ProjectReference Include="..\SPIC.MauiBlazorApp.Shared\SPIC.MauiBlazorApp.Shared.csproj" />
   </ItemGroup>
+
+  <!-- Platform-specific app versions -->
+  <PropertyGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">
+    <ApplicationDisplayVersion>1.2</ApplicationDisplayVersion>
+    <ApplicationVersion>2</ApplicationVersion>
+    <EmbedAssembliesIntoApk>true</EmbedAssembliesIntoApk>
+    <AndroidPackageFormat>apk</AndroidPackageFormat>
+    <AndroidUseAapt2>true</AndroidUseAapt2>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">
+    <ApplicationDisplayVersion>1.2.1</ApplicationDisplayVersion>
+    <ApplicationVersion>3</ApplicationVersion>
+  </PropertyGroup>
+
   <!-- API address. Override per environment at build time:
          dotnet publish ... -p:SpicApiBaseUrl=https://previewspicapi.apmiot.com/
        MauiProgram reads it back from the AssemblyMetadata attribute below. -->
@@ -125,7 +139,8 @@
   <!-- iOS: SecureStorage uses the Keychain, which needs the keychain-access-groups entitlement. -->
   <PropertyGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">
     <CodesignEntitlements>Platforms/iOS/Entitlements.plist</CodesignEntitlements>
-    <CodesignRequireProvisioningProfile>false</CodesignRequireProvisioningProfile>
+    <CodesignRequireProvisioningProfile Condition="'$(Configuration)' == 'Release'">true</CodesignRequireProvisioningProfile>
+    <CodesignRequireProvisioningProfile Condition="'$(Configuration)' != 'Release'">false</CodesignRequireProvisioningProfile>
     <_MlaunchWaitForExit Condition="'$(_MlaunchWaitForExit)' == ''">false</_MlaunchWaitForExit>
   </PropertyGroup>
 
