@@ -34,7 +34,7 @@ namespace SpicAPI.Controllers
                 return Forbid403("Only JMDO users mark attendance here.");
 
             var userId = CurrentUserId();
-            var today = DateTime.Today;
+            var today = IndiaNow().Date;
 
             var attendance = await _db.JMDOAttendances.AsNoTracking()
                 .FirstOrDefaultAsync(a => a.UserId == userId && a.Date == today);
@@ -70,7 +70,7 @@ namespace SpicAPI.Controllers
             var userId = CurrentUserId();
             var date = dto.Date.Date;
             var actor = User.Identity?.Name;
-            var now = DateTime.Now;
+            var now = IndiaNow();
 
             var attendance = await _db.JMDOAttendances
                 .FirstOrDefaultAsync(a => a.UserId == userId && a.Date == date);
@@ -114,7 +114,7 @@ namespace SpicAPI.Controllers
                 return Forbid403("Only JMDO users mark attendance here.");
 
             var userId = CurrentUserId();
-            var now = DateTime.Now;
+            var now = IndiaNow();
             var weekStart = WeekStartSunday(now.Date);
             var weekEndExclusive = weekStart.AddDays(7);
 
@@ -280,6 +280,30 @@ namespace SpicAPI.Controllers
         }
 
         private bool IsJmdo() => CurrentRole() == AppRole.JMDO;
+
+        // The API container runs on UTC (no TZ is set in the Docker image), but "today" here must
+        // mean the JMDO's own India day - otherwise, between 00:00 and 05:30 IST, DateTime.Today
+        // (UTC) is still yesterday, so a row saved with the device's IST date never matches GetToday's
+        // lookup even though the save itself succeeded. Mirrors StockReconciliationController's
+        // GetIndiaBusinessDate fallback chain for environments missing the IANA/Windows tz database.
+        private static DateTime IndiaNow()
+        {
+            try
+            {
+                return TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, TimeZoneInfo.FindSystemTimeZoneById("Asia/Kolkata"));
+            }
+            catch
+            {
+                try
+                {
+                    return TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, TimeZoneInfo.FindSystemTimeZoneById("India Standard Time"));
+                }
+                catch
+                {
+                    return DateTime.UtcNow.AddHours(5.5);
+                }
+            }
+        }
 
         private static bool IsValidCoordinate(double? latitude, double? longitude)
         {
