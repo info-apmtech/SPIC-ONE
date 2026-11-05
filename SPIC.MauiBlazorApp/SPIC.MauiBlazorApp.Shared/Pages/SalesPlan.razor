@@ -1,5 +1,9 @@
 @page "/SalesPlan"
 @inject NavigationManager Nav
+@inject HttpClient Http
+@using System.Net.Http.Json
+@using System.Globalization
+@using Microsoft.AspNetCore.Components
 
 <PageTitle>Sales Plan · SPIC ONE</PageTitle>
 
@@ -14,276 +18,585 @@
 
         <SalesAuditStepper CurrentStep="2" />
 
-        <!-- Scheme Period -->
-        <div class="spl-card">
-            <h3 class="spl-card-title">Scheme Period</h3>
+        @if (IsLoading)
+        {
+            <div class="alert alert-info">Loading Sales Plan from the approved CSR-2 programme...</div>
+        }
+        @if (!string.IsNullOrWhiteSpace(Error))
+        {
+            <div class="alert alert-danger" role="alert">@Error</div>
+        }
+        @if (!string.IsNullOrWhiteSpace(Success))
+        {
+            <div class="alert alert-success" role="status">@Success</div>
+        }
 
-            <div class="spl-period-grid">
-                <div class="spl-form-group">
-                    <label class="spl-form-label">From Date</label>
-                    <div class="spl-date-wrap">
-                        <span class="spl-date-display">@FromDate.ToString("dd - MM - yyyy")</span>
-                        <SalesAuditIcon Name="calendar" Size="16" CssClass="spl-date-icon" />
-                        <input type="date" class="spl-date-native" aria-label="From date"
-                               value="@FromDate.ToString("yyyy-MM-dd")" @onchange="e => SetDate(e, isFrom: true)" />
+        @if (!IsLoading && Details is not null)
+        {
+            <!-- Scheme Period -->
+            <div class="spl-card">
+                <h3 class="spl-card-title">Scheme Period</h3>
+
+                <div class="spl-period-grid">
+                    <div class="spl-form-group">
+                        <label class="spl-form-label">From Date</label>
+                        <div class="spl-date-wrap">
+                            <span class="spl-date-display">@(FromDate?.ToString("dd - MM - yyyy") ?? "Select start date")</span>
+                            <SalesAuditIcon Name="calendar" Size="16" CssClass="spl-date-icon" />
+                            <input type="date" class="spl-date-native" aria-label="From date" disabled="@IsReadOnly"
+                                   value="@(FromDate?.ToString("yyyy-MM-dd") ?? "")" @onchange="e => SetDate(e, isFrom: true)" />
+                        </div>
                     </div>
-                </div>
 
-                <div class="spl-form-group">
-                    <label class="spl-form-label">To Date</label>
-                    <div class="spl-date-wrap">
-                        <span class="spl-date-display">@ToDate.ToString("dd - MM - yyyy")</span>
-                        <SalesAuditIcon Name="calendar" Size="16" CssClass="spl-date-icon" />
-                        <input type="date" class="spl-date-native" aria-label="To date"
-                               value="@ToDate.ToString("yyyy-MM-dd")" min="@FromDate.ToString("yyyy-MM-dd")" @onchange="e => SetDate(e, isFrom: false)" />
+                    <div class="spl-form-group">
+                        <label class="spl-form-label">To Date</label>
+                        <div class="spl-date-wrap">
+                            <span class="spl-date-display">@(ToDate?.ToString("dd - MM - yyyy") ?? "Select end date")</span>
+                            <SalesAuditIcon Name="calendar" Size="16" CssClass="spl-date-icon" />
+                            <input type="date" class="spl-date-native" aria-label="To date" disabled="@IsReadOnly"
+                                   value="@(ToDate?.ToString("yyyy-MM-dd") ?? "")" min="@(FromDate?.ToString("yyyy-MM-dd") ?? "")" @onchange="e => SetDate(e, isFrom: false)" />
+                        </div>
                     </div>
-                </div>
 
-                <div class="spl-form-group">
-                    <label class="spl-form-label">Duration</label>
-                    <div class="spl-duration">
-                        Scheme period duration:
-                        <strong>@DurationText</strong>
+                    <div class="spl-form-group">
+                        <label class="spl-form-label">Duration</label>
+                        <div class="spl-duration">
+                            Scheme period duration:
+                            <strong>@DurationText</strong>
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
 
-        <!-- Product-wise Sales Plan -->
-        <div class="spl-card">
-            <div class="spl-card-top">
-                <h3 class="spl-card-title">Product - Wise Sales Plan</h3>
-                <button type="button" class="spl-add-btn" @onclick="AddRow">+ Add Product</button>
-            </div>
+            <!-- Product-wise Sales Plan -->
+            <div class="spl-card">
+                <div class="spl-card-top">
+                    <h3 class="spl-card-title">Product - Wise Sales Plan</h3>
+                    <button type="button" class="spl-add-btn" disabled="@IsReadOnly" @onclick="AddRow">+ Add Product</button>
+                </div>
 
-            <div class="spl-table-wrapper">
-                <table class="spl-table">
-                    <thead>
-                        <tr>
-                            <th class="spl-col-no">S:NO</th>
-                            <th>Product</th>
-                            <th>Unit</th>
-                            <th>Planned Quantity</th>
-                            <th>Planned Value (₹)</th>
-                            <th class="spl-col-action">Action</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var (row, index) in Rows.Select((r, i) => (r, i)))
-                        {
+                <div class="spl-table-wrapper">
+                    <table class="spl-table">
+                        <thead>
                             <tr>
-                                <td class="spl-col-no">@(index + 1)</td>
-                                <td>
-                                    <select class="spl-select" @bind="row.Product">
-                                        @foreach (var product in Products)
-                                        {
-                                            <option value="@product">@product</option>
-                                        }
-                                    </select>
-                                </td>
-                                <td>
-                                    <select class="spl-select" @bind="row.Unit">
-                                        @foreach (var unit in Units)
-                                        {
-                                            <option value="@unit">@unit</option>
-                                        }
-                                    </select>
-                                </td>
-                                <td>
-                                    <div class="spl-number">
-                                        <input type="text" inputmode="numeric" class="spl-number-input"
-                                               value="@SalesAuditFormat.Indian(row.Quantity)"
-                                               @onchange="e => row.Quantity = SalesAuditFormat.ParseAmount(e.Value, row.Quantity)" />
-                                        <div class="spl-spin">
-                                            <button type="button" aria-label="Increase quantity" @onclick="() => row.Quantity += QuantityStep">
-                                                <svg width="10" height="6" viewBox="0 0 10 6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 5l4-4 4 4" /></svg>
+                                <th class="spl-col-no">S:NO</th>
+                                <th>Product Group</th>
+                                <th>Product</th>
+                                <th>Unit</th>
+                                <th>Planned Quantity</th>
+                                <th>Planned Value (₹)</th>
+                                <th class="spl-col-action">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var (row, index) in Rows.Select((r, i) => (r, i)))
+                            {
+                                <tr>
+                                    <td class="spl-col-no">@(index + 1)</td>
+                                    <td>
+                                        <select class="spl-select" value="@row.ProductGroupId"
+                                                disabled="@IsReadOnly" aria-label="Product group"
+                                                @onchange="e => ChangeProductGroup(row, e)">
+                                            <option value="0">Select product group</option>
+                                            @foreach (var group in ProductGroups)
+                                            {
+                                                <option value="@group.Id">@group.DisplayName</option>
+                                            }
+                                        </select>
+                                    </td>
+                                    <td>
+                                        <select class="spl-select" @bind="row.ProductId"
+                                                disabled="@(IsReadOnly || row.ProductGroupId == 0)" aria-label="Product name">
+                                            <option value="0">Select product</option>
+                                            @foreach (var product in Products.Where(p => p.ProductGroupId == row.ProductGroupId))
+                                            {
+                                                <option value="@product.Id">@product.Name</option>
+                                            }
+                                        </select>
+                                    </td>
+                                    <td>
+                                        <select class="spl-select" disabled title="The Sales Audit API stores quantities in MT only">
+                                            <option value="MT">MT</option>
+                                        </select>
+                                    </td>
+                                    <td>
+                                        <div class="spl-number">
+                                            <input type="text" inputmode="numeric" class="spl-number-input"
+                                                   value="@SalesAuditFormat.Indian(row.Quantity)" disabled="@IsReadOnly"
+                                                   @onchange="e => row.Quantity = SalesAuditFormat.ParseAmount(e.Value, row.Quantity)" />
+                                            <div class="spl-spin">
+                                                <button type="button" disabled="@IsReadOnly" aria-label="Increase quantity" @onclick="() => row.Quantity += QuantityStep">
+                                                    <svg width="10" height="6" viewBox="0 0 10 6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 5l4-4 4 4" /></svg>
+                                                </button>
+                                                <button type="button" disabled="@IsReadOnly" aria-label="Decrease quantity" @onclick="() => row.Quantity = Math.Max(0, row.Quantity - QuantityStep)">
+                                                    <svg width="10" height="6" viewBox="0 0 10 6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 1l4 4 4-4" /></svg>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <div class="spl-number">
+                                            <input type="text" inputmode="numeric" class="spl-number-input"
+                                                   value="@("₹ " + SalesAuditFormat.Indian(row.Value))" disabled="@IsReadOnly"
+                                                   @onchange="e => row.Value = SalesAuditFormat.ParseAmount(e.Value, row.Value)" />
+                                            <div class="spl-spin">
+                                                <button type="button" disabled="@IsReadOnly" aria-label="Increase value" @onclick="() => row.Value += ValueStep">
+                                                    <svg width="10" height="6" viewBox="0 0 10 6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 5l4-4 4 4" /></svg>
+                                                </button>
+                                                <button type="button" disabled="@IsReadOnly" aria-label="Decrease value" @onclick="() => row.Value = Math.Max(0, row.Value - ValueStep)">
+                                                    <svg width="10" height="6" viewBox="0 0 10 6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 1l4 4 4-4" /></svg>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td class="spl-col-action">
+                                        <div class="spl-actions">
+                                            <button type="button" class="spl-icon-btn spl-icon-edit" disabled="@IsReadOnly" title="Edit the fields directly" aria-label="Edit row">
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.376 3.622a1 1 0 0 1 3.002 3.002L7.368 18.635a2 2 0 0 1-.855.506l-2.872.838a.5.5 0 0 1-.62-.62l.838-2.872a2 2 0 0 1 .506-.854z"></path></svg>
                                             </button>
-                                            <button type="button" aria-label="Decrease quantity" @onclick="() => row.Quantity = Math.Max(0, row.Quantity - QuantityStep)">
-                                                <svg width="10" height="6" viewBox="0 0 10 6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 1l4 4 4-4" /></svg>
+                                            <button type="button" class="spl-icon-btn spl-icon-delete" aria-label="Delete row" disabled="@IsReadOnly" @onclick="() => Rows.Remove(row)">
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path><line x1="10" x2="10" y1="11" y2="17"></line><line x1="14" x2="14" y1="11" y2="17"></line></svg>
                                             </button>
                                         </div>
-                                    </div>
-                                </td>
-                                <td>
-                                    <div class="spl-number">
-                                        <input type="text" inputmode="numeric" class="spl-number-input"
-                                               value="@("₹ " + SalesAuditFormat.Indian(row.Value))"
-                                               @onchange="e => row.Value = SalesAuditFormat.ParseAmount(e.Value, row.Value)" />
-                                        <div class="spl-spin">
-                                            <button type="button" aria-label="Increase value" @onclick="() => row.Value += ValueStep">
-                                                <svg width="10" height="6" viewBox="0 0 10 6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 5l4-4 4 4" /></svg>
-                                            </button>
-                                            <button type="button" aria-label="Decrease value" @onclick="() => row.Value = Math.Max(0, row.Value - ValueStep)">
-                                                <svg width="10" height="6" viewBox="0 0 10 6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 1l4 4 4-4" /></svg>
-                                            </button>
-                                        </div>
-                                    </div>
-                                </td>
-                                <td class="spl-col-action">
-                                    <div class="spl-actions">
-                                        <button type="button" class="spl-icon-btn spl-icon-edit" aria-label="Edit row">
-                                            <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.376 3.622a1 1 0 0 1 3.002 3.002L7.368 18.635a2 2 0 0 1-.855.506l-2.872.838a.5.5 0 0 1-.62-.62l.838-2.872a2 2 0 0 1 .506-.854z"></path></svg>
-                                        </button>
-                                        <button type="button" class="spl-icon-btn spl-icon-delete" aria-label="Delete row" @onclick="() => Rows.Remove(row)">
-                                            <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path><line x1="10" x2="10" y1="11" y2="17"></line><line x1="14" x2="14" y1="11" y2="17"></line></svg>
-                                        </button>
-                                    </div>
-                                </td>
-                            </tr>
-                        }
+                                    </td>
+                                </tr>
+                            }
 
-                        @if (!Rows.Any())
-                        {
+                            @if (!Rows.Any())
+                            {
+                                <tr>
+                                    <td colspan="7" class="spl-empty">No products added yet. Use “+ Add Product” to start the plan.</td>
+                                </tr>
+                            }
+                        </tbody>
+                        <tfoot>
                             <tr>
-                                <td colspan="6" class="spl-empty">No products added yet. Use “+ Add Product” to start the plan.</td>
+                                <td colspan="4" class="spl-total-label">TOTAL PLANNED COMMITMENT (sum)</td>
+                                <td class="spl-total-value">@TotalQuantityText</td>
+                                <td class="spl-total-value">₹ @SalesAuditFormat.Indian(TotalValue)</td>
+                                <td></td>
                             </tr>
-                        }
-                    </tbody>
-                    <tfoot>
-                        <tr>
-                            <td colspan="3" class="spl-total-label">TOTAL PLANNED COMMITMENT (sum)</td>
-                            <td class="spl-total-value">@TotalQuantityText</td>
-                            <td class="spl-total-value">₹ @SalesAuditFormat.Indian(TotalValue)</td>
-                            <td></td>
-                        </tr>
-                    </tfoot>
-                </table>
+                        </tfoot>
+                    </table>
+                </div>
             </div>
-        </div>
 
-        <!-- Plan Summary & Comparison -->
-        <div class="spl-card">
-            <h3 class="spl-card-title">Plan Summary &amp; Comparison</h3>
+            <!-- Plan Summary & Comparison -->
+            <div class="spl-card">
+                <h3 class="spl-card-title">Plan Summary &amp; Comparison</h3>
 
-            <div class="spl-summary-grid">
-                <div class="spl-summary-tile spl-tile-purple">
-                    <div class="spl-tile-top">
-                        <span class="spl-tile-label">Required Turnover</span>
-                        <span class="spl-auto-badge">Auto Calculated</span>
+                <div class="spl-summary-grid">
+                    <div class="spl-summary-tile spl-tile-purple">
+                        <div class="spl-tile-top">
+                            <span class="spl-tile-label">Required Turnover</span>
+                            <span class="spl-auto-badge">Auto Calculated</span>
+                        </div>
+                        <span class="spl-tile-value">₹ @SalesAuditFormat.Crore(RequiredTurnover) Cr</span>
+                        <span class="spl-tile-sub">Minimum Target you must achieve</span>
                     </div>
-                    <span class="spl-tile-value">₹ @SalesAuditFormat.Crore(RequiredTurnover) Cr</span>
-                    <span class="spl-tile-sub">Minimum Target you must achieve</span>
-                </div>
 
-                <div class="spl-summary-tile spl-tile-green">
-                    <span class="spl-tile-label">Total Planned Commitment</span>
-                    <span class="spl-tile-value">₹ @SalesAuditFormat.Crore(TotalValue) Cr</span>
-                    <span class="spl-tile-sub">Sum of all product-wise planned values</span>
-                </div>
+                    <div class="spl-summary-tile spl-tile-green">
+                        <span class="spl-tile-label">Total Planned Commitment</span>
+                        <span class="spl-tile-value"> ₹ @( (TotalValue / OneCroreRs).ToString("0.000") ) Cr</span>
+                        <span class="spl-tile-sub">Sum of all product-wise planned values</span>
+                    </div>
 
-                <div class="spl-summary-tile @(Difference >= 0 ? "spl-tile-blue" : "spl-tile-red")">
-                    <span class="spl-tile-label">Difference</span>
-                    <span class="spl-tile-value">@(Difference >= 0 ? "+" : "-") ₹ @SalesAuditFormat.Crore(Math.Abs(Difference)) Cr</span>
-                    <span class="spl-tile-sub">@(Difference >= 0 ? "Above the required TO" : "Below the required TO")</span>
-                </div>
+                    <div class="spl-summary-tile @(Difference >= 0 ? "spl-tile-blue" : "spl-tile-red")">
+                        <span class="spl-tile-label">Difference</span>
+                        <span class="spl-tile-value"> @(Difference >= 0 ? "+" : "-") ₹ @(Math.Abs(Difference / OneCroreRs).ToString("0.000")) Cr </span>
+                        <span class="spl-tile-sub"> @(Difference >= 0 ? "Above the required TO" : "Below the required TO") </span>
+                    </div>
 
-                <div class="spl-summary-tile @(IsMet ? "spl-tile-green" : "spl-tile-red")">
-                    <span class="spl-tile-label">Requirement Status</span>
-                    <span class="spl-tile-value spl-status-value">@(IsMet ? "Met" : "Not Met")</span>
-                    <span class="spl-tile-sub">@(IsMet ? "Planned Commitment meets the Required TO" : "Planned Commitment is below the Required TO")</span>
+                    <div class="spl-summary-tile @(IsMet ? "spl-tile-green" : "spl-tile-red")">
+                        <span class="spl-tile-label">Requirement Status</span>
+                        <span class="spl-tile-value spl-status-value">@(IsMet ? "Met" : "Not Met")</span>
+                        <span class="spl-tile-sub">@(IsMet ? "Planned Commitment meets the Required TO" : "Planned Commitment is below the Required TO")</span>
+                    </div>
                 </div>
             </div>
-        </div>
 
-        <!-- Footer actions -->
-        <div class="spl-footer">
-            <button type="button" class="spl-btn spl-btn-back" @onclick="@(() => Nav.NavigateTo("/SalesAudit"))">
-                <SalesAuditIcon Name="chevrons-left" Size="16" />
-                Back to List
-            </button>
+            <!-- Footer actions -->
+            <div class="spl-footer">
+                <button type="button" class="spl-btn spl-btn-back" @onclick="@(() => Nav.NavigateTo("/SalesAudit"))">
+                    <SalesAuditIcon Name="chevrons-left" Size="16" />
+                    Back to List
+                </button>
 
-            <div class="spl-footer-right">
-                <button type="button" class="spl-btn spl-btn-draft">
-                    <SalesAuditIcon Name="file-pen" Size="16" />
-                    Save Draft
-                </button>
-                <button type="button" class="spl-btn spl-btn-primary" @onclick="@(() => Nav.NavigateTo("/DealerMapping"))">
-                    Save &amp; Continue
-                    <SalesAuditIcon Name="chevrons-right" Size="16" />
-                </button>
+                
+                <div class="spl-footer-right">
+
+                    <!-- Save Draft: Save without navigation -->
+                    <button type="button"
+                            class="spl-btn spl-btn-draft"
+                            disabled="@(IsSaving || IsReadOnly)"
+                            @onclick="() => SaveAsync(false)">
+
+                        <SalesAuditIcon Name="file-pen" Size="16" />
+                        @(IsSaving ? "Saving..." : "Save Draft")
+
+                    </button>
+
+                    <!-- Save & Continue: Save and navigate to Tab 3 -->
+                    <button type="button"
+                            class="spl-btn spl-btn-primary"
+                            disabled="@(IsSaving || IsLoading || Details is null)"
+                            @onclick="() => SaveAsync(true)">
+
+                        @(IsReadOnly ? "Continue to Dealer Mapping" : IsSaving ? "Saving..." : "Save & Continue")
+                        <SalesAuditIcon Name="chevrons-right" Size="16" />
+
+                    </button>
+
+                </div>
+
             </div>
-        </div>
+        }
 
     </div>
 </div>
 
 @code {
+    [SupplyParameterFromQuery(Name = "csr2Id")]
+    public int? CSR2Id { get; set; }
+
     private const decimal QuantityStep = 10m;
     private const decimal ValueStep = 10000m;
+    private const decimal OneCroreRs = 10_000_000m;
 
-    private static readonly string[] Products =
+    private bool IsLoading;
+    private bool IsSaving;
+    private string Error = "";
+    private string Success = "";
+    private SalesAuditDetailsDto? Details;
+    private List<ProductDto> Products = new();
+    private List<ProductGroupDto> ProductGroups = new();
+    private List<PlanRow> Rows = new();
+    private DateTime? FromDate;
+    private DateTime? ToDate;
+
+    private bool IsReadOnly => Details?.IsFinalSubmitted == true || Details?.IsPlanConfirmed == true;
+    private decimal RequiredTurnover => Details?.RequiredTurnoverRs ?? 0m;
+
+    private sealed class ProductDto
     {
-        "SPIC Super Urea 45kg",
-        "SPIC DAP 50kg",
-        "SPIC Potash 50kg",
-        "SPIC Zinc Sulphate 10kg",
-    };
+        public int Id { get; set; }
+        public string Name { get; set; } = "";
+        public int ProductGroupId { get; set; }
+    }
 
-    private static readonly string[] Units = { "MT", "Bags", "Kg" };
-
-    private DateTime FromDate = new(2026, 8, 1);
-    private DateTime ToDate = new(2026, 10, 31);
-
-    // Required turnover comes from the Audit Overview step; sample value for now.
-    private const decimal RequiredTurnover = 2_00_00_000m;
-
-    private class PlanRow
+    private sealed class ProductGroupDto
     {
-        public string Product { get; set; } = Products[0];
-        public string Unit { get; set; } = "MT";
+        public int Id { get; set; }
+        public string Name { get; set; } = "";
+        public string ProductGroupName { get; set; } = "";
+        public string DisplayName => string.IsNullOrWhiteSpace(Name) ? ProductGroupName : Name;
+    }
+
+    private sealed class AuditLineDto
+    {
+        public int ProductId { get; set; }
+        public decimal QuantityMT { get; set; }
+        public decimal ValueRs { get; set; }
+    }
+
+    private sealed class SalesAuditDetailsDto
+    {
+        public int CSR2Id { get; set; }
+        public DateTime? SchemeFrom { get; set; }
+        public DateTime? SchemeTo { get; set; }
+        public decimal? AdditionalApprovedBudgetRs { get; set; }
+        public decimal RequiredTurnoverRs { get; set; }
+        public bool IsFinalSubmitted { get; set; }
+        public bool IsPlanConfirmed { get; set; }
+        public List<AuditLineDto> Plan { get; set; } = new();
+        public List<AuditLineDto> Achievement { get; set; } = new();
+        public List<ProductDto> Products { get; set; } = new();
+    }
+
+    private sealed class SaveAuditDto
+    {
+        public int CSR2Id { get; set; }
+        public DateTime? SchemeFrom { get; set; }
+        public DateTime? SchemeTo { get; set; }
+        public decimal? AdditionalApprovedBudgetRs { get; set; }
+        public List<AuditLineDto> Plan { get; set; } = new();
+        public List<AuditLineDto> Achievement { get; set; } = new();
+    }
+
+    private sealed class PlanRow
+    {
+        public int ProductGroupId { get; set; }
+        public int ProductId { get; set; }
+        public string Unit => "MT";
         public decimal Quantity { get; set; }
         public decimal Value { get; set; }
     }
 
-    private readonly List<PlanRow> Rows = new()
+    protected override async Task OnParametersSetAsync()
     {
-        new() { Quantity = 1000, Value = 80_00_000 },
-        new() { Quantity = 1000, Value = 50_00_000 },
-        new() { Quantity = 500, Value = 50_00_000 },
-        new() { Quantity = 500, Value = 50_00_000 },
-    };
+        Details = null;
+        Rows.Clear();
+        Products.Clear();
+        ProductGroups.Clear();
+        FromDate = ToDate = null;
+        Error = Success = "";
+        if (CSR2Id is null or <= 0)
+        {
+            Error = "Missing csr2Id. Open Sales Plan from Audit Overview.";
+            return;
+        }
+
+        IsLoading = true;
+        try
+        {
+            using var response = await Http.GetAsync($"api/SalesAudit/details?csr2Id={CSR2Id.Value}");
+            if (!response.IsSuccessStatusCode)
+            {
+                Error = $"Unable to load Sales Plan (HTTP {(int)response.StatusCode}).";
+                return;
+            }
+
+            Details = await response.Content.ReadFromJsonAsync<SalesAuditDetailsDto>();
+            if (Details is null || Details.CSR2Id != CSR2Id.Value)
+            {
+                Details = null;
+                Error = "Invalid Sales Audit details response.";
+                return;
+            }
+
+            // Product names and ProductGroupId must come from the Products master,
+            // not the Sales Audit details projection (which may omit ProductGroupId).
+            // Confirm these GenericCrud routes against your API setup if they differ.
+            using var productsResponse = await Http.GetAsync("api/Product/all");
+            if (!productsResponse.IsSuccessStatusCode)
+            {
+                Error = $"Unable to load Products master (HTTP {(int)productsResponse.StatusCode}). Verify api/Product/all.";
+                Details = null;
+                return;
+            }
+            Products = await productsResponse.Content.ReadFromJsonAsync<List<ProductDto>>() ?? new();
+
+            using var groupsResponse = await Http.GetAsync("api/ProductGroup/all");
+            if (!groupsResponse.IsSuccessStatusCode)
+            {
+                Error = $"Unable to load Product Group master (HTTP {(int)groupsResponse.StatusCode}). Verify api/ProductGroup/all.";
+                Details = null;
+                return;
+            }
+            ProductGroups = await groupsResponse.Content.ReadFromJsonAsync<List<ProductGroupDto>>() ?? new();
+            Rows = (Details.Plan ?? new()).Select(x => new PlanRow
+            {
+                ProductGroupId = Products.FirstOrDefault(p => p.Id == x.ProductId)?.ProductGroupId ?? 0,
+                ProductId = x.ProductId,
+                Quantity = x.QuantityMT,
+                Value = x.ValueRs
+            }).ToList();
+            FromDate = Details.SchemeFrom;
+            ToDate = Details.SchemeTo;
+            if (Rows.Any(r => r.ProductGroupId == 0 || !ProductGroups.Any(g => g.Id == r.ProductGroupId)))
+            {
+                Error = "One or more saved products have no valid Product Group in the Products master. Correct the master before saving.";
+            }
+        }
+        catch (Exception ex)
+        {
+            Details = null;
+            Error = $"Unable to load Sales Plan: {ex.Message}";
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
 
     private decimal TotalValue => Rows.Sum(r => r.Value);
     private decimal Difference => TotalValue - RequiredTurnover;
     private bool IsMet => TotalValue >= RequiredTurnover;
-
-    // Quantities only add up when every row uses the same unit.
-    private string TotalQuantityText
-    {
-        get
-        {
-            var units = Rows.Select(r => r.Unit).Distinct().ToList();
-            var total = SalesAuditFormat.Indian(Rows.Sum(r => r.Quantity));
-            return units.Count == 1 ? $"{total} {units[0]}" : total;
-        }
-    }
+    private string TotalQuantityText => $"{SalesAuditFormat.Indian(Rows.Sum(r => r.Quantity))} MT";
 
     private string DurationText
     {
         get
         {
-            var days = (ToDate - FromDate).Days + 1;
-            var months = (ToDate.Year - FromDate.Year) * 12 + ToDate.Month - FromDate.Month + 1;
+            if (!FromDate.HasValue || !ToDate.HasValue) return "Not selected";
+            if (ToDate.Value.Date < FromDate.Value.Date) return "Invalid date range";
+            var days = (ToDate.Value.Date - FromDate.Value.Date).Days + 1;
+            var months = (ToDate.Value.Year - FromDate.Value.Year) * 12 + ToDate.Value.Month - FromDate.Value.Month + 1;
             return $"{months} {(months == 1 ? "Month" : "Months")} ( {days} {(days == 1 ? "Day" : "Days")})";
         }
     }
 
     private void SetDate(ChangeEventArgs e, bool isFrom)
     {
-        if (!DateTime.TryParse(e.Value?.ToString(), System.Globalization.CultureInfo.InvariantCulture,
-                System.Globalization.DateTimeStyles.None, out var date))
-            return;
-
+        if (IsReadOnly) return;
+        DateTime? value = DateTime.TryParseExact(e.Value?.ToString(), "yyyy-MM-dd",
+            CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed) ? parsed : null;
         if (isFrom)
         {
-            FromDate = date;
-            if (ToDate < FromDate) ToDate = FromDate;
+            FromDate = value;
+            if (FromDate.HasValue && ToDate.HasValue && ToDate < FromDate) ToDate = FromDate;
         }
         else
         {
-            ToDate = date < FromDate ? FromDate : date;
+            ToDate = value;
         }
     }
 
-    private void AddRow() => Rows.Add(new PlanRow());
+    private void AddRow()
+    {
+        if (!IsReadOnly) Rows.Add(new PlanRow());
+    }
+
+    private void ChangeProductGroup(PlanRow row, ChangeEventArgs e)
+    {
+        if (IsReadOnly) return;
+        var selectedGroupId = int.TryParse(e.Value?.ToString(), out var id) ? id : 0;
+        if (selectedGroupId != 0 && !ProductGroups.Any(g => g.Id == selectedGroupId)) return;
+        if (row.ProductGroupId == selectedGroupId) return;
+        row.ProductGroupId = selectedGroupId;
+        // Prevent accidentally saving the ProductId belonging to the previous group.
+        row.ProductId = 0;
+    }
+
+    // The existing /save API saves Plan AND Achievement together.
+    // Preserve achievements and the additional budget returned from /details.
+
+    private async Task SaveAsync(bool continueAfterSave)
+    {
+        if (Details is null ||
+            CSR2Id is null or <= 0 ||
+            IsSaving || IsLoading)
+            return;
+
+        Error = "";
+        Success = "";
+
+        // Confirmed/final-submitted Sales Plans are locked. Do not POST /save.
+        // The user may still navigate to the next read-only workflow step.
+        if (IsReadOnly)
+        {
+            if (continueAfterSave)
+                Nav.NavigateTo($"/DealerMapping?csr2Id={CSR2Id.Value}");
+            else
+                Error = "Sales Plan is confirmed and locked. Editing is unavailable.";
+            return;
+        }
+
+        // Validate scheme period
+        if (FromDate.HasValue &&
+            ToDate.HasValue &&
+            FromDate.Value.Date > ToDate.Value.Date)
+        {
+            Error = "Scheme end date must not precede the start date.";
+            return;
+        }
+
+        // Validate product rows
+        if (Rows.Any(x =>
+            x.ProductGroupId <= 0 ||
+            x.ProductId <= 0 ||
+            !Products.Any(p => p.Id == x.ProductId && p.ProductGroupId == x.ProductGroupId) ||
+            x.Quantity < 0 ||
+            x.Value < 0))
+        {
+            Error = "Select a product and enter non-negative quantities and values for every row.";
+            return;
+        }
+
+        // Prevent duplicate products
+        if (Rows.GroupBy(x => x.ProductId)
+                .Any(g => g.Count() > 1))
+        {
+            Error = "The same product cannot appear more than once.";
+            return;
+        }
+
+        if (Rows.Count > 200)
+        {
+            Error = "Maximum 200 planned product rows are supported.";
+            return;
+        }
+
+        // Validate products against database-loaded catalogue
+        if (Rows.Any(r =>
+            !Products.Any(p => p.Id == r.ProductId)))
+        {
+            Error = "One or more products are no longer available.";
+            return;
+        }
+
+        IsSaving = true;
+
+        try
+        {
+            // Prepare Sales Audit payload
+            var payload = new SaveAuditDto
+            {
+                CSR2Id = CSR2Id.Value,
+
+                SchemeFrom = FromDate,
+                SchemeTo = ToDate,
+
+                AdditionalApprovedBudgetRs =
+                    Details.AdditionalApprovedBudgetRs,
+
+                Plan = Rows.Select(x => new AuditLineDto
+                {
+                    ProductId = x.ProductId,
+                    QuantityMT = x.Quantity,
+                    ValueRs = x.Value
+                }).ToList(),
+
+                // Preserve existing achievement records
+                Achievement = Details.Achievement ?? new()
+            };
+
+            // Save draft only.
+            // Final submission happens later in the workflow.
+            using var response = await Http.PostAsJsonAsync(
+                "api/SalesAudit/save?finalSubmit=false",
+                payload
+            );
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var serverMessage =
+                    await response.Content.ReadAsStringAsync();
+
+                Error = $"Unable to save Sales Plan " +
+                        $"(HTTP {(int)response.StatusCode}): " +
+                        serverMessage;
+
+                return;
+            }
+
+            // Update page state after successful save
+            Details.SchemeFrom = FromDate;
+            Details.SchemeTo = ToDate;
+            Details.Plan = payload.Plan;
+
+            // Save Draft: remain on Tab 2
+            if (!continueAfterSave)
+            {
+                Success = "Sales Plan draft saved successfully.";
+                return;
+            }
+
+            // Save & Continue: navigate to Tab 3
+            // Preserve the same CSR2Id
+            var nextPage =
+                $"/DealerMapping?csr2Id={CSR2Id.Value}";
+
+            Nav.NavigateTo(nextPage);
+        }
+        catch (Exception ex)
+        {
+            Error = $"Unable to save Sales Plan: {ex.Message}";
+        }
+        finally
+        {
+            IsSaving = false;
+        }
+    }
+
 }

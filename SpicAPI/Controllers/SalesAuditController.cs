@@ -11,7 +11,6 @@ namespace SpicAPI.Controllers;
 
 public sealed class SalesAuditEligibilityOptions
 {
-    // ProgramMaster IDs explicitly approved for Sales Audit by SPIC business owners.
     public int[] EligibleProgramIds { get; set; } = Array.Empty<int>();
 }
 
@@ -29,7 +28,6 @@ public sealed class SalesAuditController : ControllerBase
         _options = options.Value;
     }
 
-    // Read-only list: never fabricate turnover values, scheme dates, statuses or records.
     [HttpGet("eligible")]
     public async Task<IActionResult> GetEligible()
     {
@@ -38,8 +36,6 @@ public sealed class SalesAuditController : ControllerBase
         var programIds = (_options.EligibleProgramIds ?? Array.Empty<int>())
             .Where(x => x > 0).Distinct().ToArray();
 
-        // Restrict both visibility and downstream actions to the CSR-1 assigned person.
-        // This is an authorization check, not a user-supplied filter.
         var activeUser = await _db.Set<Employeelogin>().AsNoTracking()
             .AnyAsync(x => x.IsActive && x.UserId == userId, HttpContext.RequestAborted);
         if (!activeUser) return Forbid();
@@ -52,8 +48,6 @@ public sealed class SalesAuditController : ControllerBase
                           && c1.ResponsiblePersonId == userId
                     select new { c2, c1, pm };
 
-        // Optional business-managed eligibility filter. Empty configuration means
-        // all finally approved, assigned CSR-2 programs are listed.
         if (programIds.Length > 0)
             query = query.Where(x => programIds.Contains(x.c1.ProgramId));
 
@@ -78,10 +72,14 @@ public sealed class SalesAuditController : ControllerBase
                 x.ActualTurnover,
                 x.DocumentStatus
             }).ToListAsync(HttpContext.RequestAborted);
-        var byCsr2 = savedRecords.GroupBy(x => x.CSR2Id).ToDictionary(x => x.Key, x => x.First());
+        var byCsr2 = savedRecords.GroupBy(x => x.CSR2Id)
+            .ToDictionary(x => x.Key, x => x.First());
 
         return Ok(rows.Select(x => {
             byCsr2.TryGetValue(x.CSR2Id, out var record);
+            var requiredCr = record?.RequiredTurnover ?? 0m;
+            var actualCr = record?.ActualTurnover ?? 0m;
+            var status = record?.DocumentStatus ?? "Not Started";
             return new
             {
                 x.CSR2Id,
@@ -92,7 +90,11 @@ public sealed class SalesAuditController : ControllerBase
                 SchemeTo = record?.SchemeTo,
                 RequiredTurnover = record?.RequiredTurnover,
                 ActualTurnover = record?.ActualTurnover,
-                DocumentStatus = record?.DocumentStatus ?? "Not Started"
+                DocumentStatus = status,
+                ProgressPercent = requiredCr > 0m ? actualCr / requiredCr * 100m : 0m,
+                RemainingTurnover = Math.Max(0m, requiredCr - actualCr),
+                IsAuditCompleted = status == "Completed",
+                CanSaveAchievement = status is "Plan Confirmed" or "In Progress"
             };
         }).ToList());
     }
