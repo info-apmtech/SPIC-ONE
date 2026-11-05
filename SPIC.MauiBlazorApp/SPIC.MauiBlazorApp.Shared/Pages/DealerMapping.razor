@@ -1,15 +1,191 @@
 @page "/DealerMapping"
 @inject NavigationManager Nav
+@inject HttpClient Http
+@using System.Net.Http.Json
+@using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.Components.Forms
+@using System.Net.Http.Headers
 
 <PageTitle>Dealer Mapping · SPIC ONE</PageTitle>
+
+<style>
+    /* Scoped animated summary: does not alter upload, table or API logic. */
+    .dm-wrapper .dm-summary-animated {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 14px;
+    }
+
+        .dm-wrapper .dm-summary-animated > .dm-tile {
+            min-width: 0;
+            position: relative;
+            overflow: hidden;
+            isolation: isolate;
+            border-radius: 12px;
+            border: 1px solid rgba(115, 136, 166, .13);
+            box-shadow: 0 3px 9px rgba(18, 42, 74, .05);
+            transition: transform .24s ease, box-shadow .24s ease, border-color .24s ease;
+            animation: dmSummaryReveal .48s cubic-bezier(.2,.8,.2,1) both;
+            animation-delay: calc(var(--dm-card-index, 0) * 75ms);
+        }
+
+            .dm-wrapper .dm-summary-animated > .dm-tile::before {
+                content: "";
+                position: absolute;
+                top: 0;
+                left: 0;
+                right: 0;
+                height: 3px;
+                background: var(--dm-accent, #3979d5);
+                opacity: .85;
+            }
+
+            .dm-wrapper .dm-summary-animated > .dm-tile:hover {
+                transform: translateY(-4px);
+                box-shadow: 0 12px 24px rgba(18, 42, 74, .12);
+                border-color: rgba(115, 136, 166, .3);
+            }
+
+            .dm-wrapper .dm-summary-animated > .dm-tile:nth-child(1) {
+                --dm-card-index: 0;
+                --dm-accent: #7951e5;
+            }
+
+            .dm-wrapper .dm-summary-animated > .dm-tile:nth-child(2) {
+                --dm-card-index: 1;
+                --dm-accent: #13815b;
+            }
+
+            .dm-wrapper .dm-summary-animated > .dm-tile:nth-child(3) {
+                --dm-card-index: 2;
+                --dm-accent: #286be3;
+            }
+
+            .dm-wrapper .dm-summary-animated > .dm-tile:nth-child(4) {
+                --dm-card-index: 3;
+                --dm-accent: #e16c45;
+            }
+
+            .dm-wrapper .dm-summary-animated > .dm-tile:nth-child(5) {
+                --dm-card-index: 4;
+                --dm-accent: #286be3;
+            }
+
+            .dm-wrapper .dm-summary-animated > .dm-tile:nth-child(6) {
+                --dm-card-index: 5;
+                --dm-accent: #286be3;
+            }
+
+            .dm-wrapper .dm-summary-animated > .dm-tile:nth-child(7) {
+                --dm-card-index: 6;
+                --dm-accent: #13815b;
+            }
+
+        .dm-wrapper .dm-summary-animated .dm-tile-value {
+            display: block;
+            font-variant-numeric: tabular-nums;
+            letter-spacing: -.025em;
+        }
+
+        .dm-wrapper .dm-summary-animated .dm-summary-progress-track {
+            height: 7px;
+            width: 100%;
+            margin-top: 12px;
+            border-radius: 999px;
+            background: rgba(40, 107, 227, .13);
+            overflow: hidden;
+        }
+
+        .dm-wrapper .dm-summary-animated .dm-summary-progress-fill {
+            display: block;
+            height: 100%;
+            border-radius: inherit;
+            background: linear-gradient(90deg, #316fe8, #32b4d6);
+            transform-origin: left center;
+            animation: dmProgressGrow 1.05s cubic-bezier(.2,.8,.2,1) .5s both;
+            transition: width .65s ease;
+        }
+
+            .dm-wrapper .dm-summary-animated .dm-summary-progress-fill.is-met {
+                background: linear-gradient(90deg, #128454, #33bb88);
+            }
+
+        .dm-wrapper .dm-summary-animated .dm-summary-status-dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 6px;
+            background: #b8b8b8;
+            vertical-align: 1px;
+        }
+
+            .dm-wrapper .dm-summary-animated .dm-summary-status-dot.is-ready {
+                background: #1b9c6a;
+                box-shadow: 0 0 0 3px rgba(27,156,106,.13);
+            }
+
+    @@keyframes dmSummaryReveal {
+        from {
+            opacity: 0;
+            transform: translateY(15px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    @@keyframes dmProgressGrow {
+        from {
+            transform: scaleX(0);
+        }
+
+        to {
+            transform: scaleX(1);
+        }
+    }
+
+    @@media (max-width: 1200px) {
+        .dm-wrapper .dm-summary-animated {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+    }
+
+    @@media (max-width: 768px) {
+        .dm-wrapper .dm-summary-animated {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+    }
+
+    @@media (max-width: 480px) {
+        .dm-wrapper .dm-summary-animated {
+            grid-template-columns: minmax(0, 1fr);
+        }
+    }
+
+    @@media (prefers-reduced-motion: reduce) {
+        .dm-wrapper .dm-summary-animated > .dm-tile,
+        .dm-wrapper .dm-summary-animated .dm-summary-progress-fill {
+            animation: none !important;
+            transition: none !important;
+        }
+
+            .dm-wrapper .dm-summary-animated > .dm-tile:hover {
+                transform: none;
+            }
+    }
+</style>
+
 
 <div class="container-fluid py-4 px-0">
     <div class="dm-wrapper">
 
         <!-- Header -->
         <div class="dm-header">
-            <h1>Dealer Mapping <span class="dm-header-sub">(Upload &amp; Map Commitment)</span></h1>
-            <p>Upload dealer list and map planned commitment (₹) for this program.</p>
+            <h1>Dealer Mapping <span class="dm-header-sub">(Upload Dealer List)</span></h1>
+            <p>Upload a Dealer Code Excel list. Dealer details are fetched from DealerRegistrations. Only CSR-2 and Dealer Registration IDs are saved. Sales from the standalone SAP register are displayed read-only.</p>
         </div>
 
         <SalesAuditStepper CurrentStep="3" />
@@ -25,12 +201,20 @@
                     <SalesAuditIcon Name="folder-open" Size="15" />
                     Upload File
                 </span>
-                <p class="dm-drop-hint">.xlsx or .xls format, max 5MB</p>
+                <p class="dm-drop-hint">.xlsx or .xls format, max 5MB. Required Excel column: Dealer Code</p>
 
                 @* Invisible file input covering the whole zone: handles both click and drag & drop. *@
                 <InputFile OnChange="OnFileSelected" accept=".xlsx,.xls" class="dm-file-input" title="Upload dealer list" />
             </div>
 
+            @if (IsLoading || IsUploading)
+            {
+                <div class="alert alert-info">@(IsUploading ? "Importing dealer codes..." : "Loading dealer mappings...")</div>
+            }
+            @if (!string.IsNullOrWhiteSpace(Success))
+            {
+                <div class="alert alert-success">@Success</div>
+            }
             @if (UploadError is not null)
             {
                 <div class="dm-alert">
@@ -45,7 +229,7 @@
                         <SalesAuditIcon Name="file-spreadsheet" Size="26" StrokeWidth="1.5" CssClass="dm-file-icon" />
                         <div>
                             <span class="dm-file-name">@UploadedFile.Name</span>
-                            <span class="dm-file-meta">@FormatSize(UploadedFile.Size) . Uploaded on @UploadedFile.UploadedOn.ToString("dd MMM yyyy, hh:mm tt")</span>
+                            <span class="dm-file-meta">@FormatSize(UploadedFile.Size) · Uploaded on @UploadedFile.UploadedOn.ToString("dd MMM yyyy, hh:mm tt")</span>
                         </div>
                     </div>
                     <span class="dm-replace-btn">
@@ -58,7 +242,7 @@
                 @if (ValidationErrors.Count > 0)
                 {
                     <div class="dm-alert">
-                        <span>@ValidationErrors.Count rows have validation errors and will not be imported.</span>
+                        <span>@ValidationErrors.Count Excel rows have validation errors and were skipped.</span>
                         <button type="button" class="dm-view-errors" @onclick="() => ShowErrors = !ShowErrors">
                             <SalesAuditIcon Name="@(ShowErrors ? "eye-off" : "eye")" Size="16" />
                             @(ShowErrors ? "Hide Errors" : "View Errors")
@@ -68,64 +252,45 @@
             }
         </div>
 
-        <!-- Dealer Commitment Mapping -->
+        <!-- Dealer List -->
         <div class="dm-card">
-            <h3 class="dm-card-title">Dealer Commitment Mapping</h3>
+            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+                <h3 class="dm-card-title mb-0">Dealer List</h3>
+                <input type="search" class="form-control" style="max-width:300px" aria-label="Search dealers"
+                       placeholder="Search dealer code or name" @bind="SearchText" @bind:event="oninput" />
+            </div>
 
             <div class="dm-table-wrapper">
                 <table class="dm-table">
                     <thead>
                         <tr>
                             <th class="dm-col-no">S:NO</th>
+                            <th>Dealer Code</th>
                             <th>Dealer Name</th>
-                            <th>Location</th>
-                            <th>Mapped By</th>
-                            <th>Planned Commitment ₹</th>
                             <th class="dm-col-action">Action</th>
                         </tr>
                     </thead>
                     <tbody>
-                        @foreach (var (row, index) in Dealers.Select((r, i) => (r, i)))
+                        @foreach (var (row, index) in FilteredDealers.Select((r, i) => (r, i)))
                         {
                             <tr>
                                 <td class="dm-col-no">@(index + 1)</td>
+                                <td class="dm-center">@row.DealerCode</td>
                                 <td class="dm-center">@row.DealerName</td>
-                                <td class="dm-center">@row.Location</td>
-                                <td>
-                                    <select class="dm-select" @bind="row.MappedBy">
-                                        @foreach (var option in MappedByOptions)
-                                        {
-                                            <option value="@option">@option</option>
-                                        }
-                                    </select>
-                                </td>
-                                <td>
-                                    <div class="dm-number">
-                                        <input type="text" inputmode="numeric" class="dm-number-input"
-                                               value="@SalesAuditFormat.Rupees(row.Commitment)"
-                                               @onchange="e => row.Commitment = SalesAuditFormat.ParseAmount(e.Value, row.Commitment)" />
-                                        <div class="dm-spin">
-                                            <button type="button" aria-label="Increase commitment" @onclick="() => row.Commitment += CommitmentStep">
-                                                <svg width="10" height="6" viewBox="0 0 10 6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 5l4-4 4 4" /></svg>
-                                            </button>
-                                            <button type="button" aria-label="Decrease commitment" @onclick="() => row.Commitment = Math.Max(0, row.Commitment - CommitmentStep)">
-                                                <svg width="10" height="6" viewBox="0 0 10 6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 1l4 4 4-4" /></svg>
-                                            </button>
-                                        </div>
-                                    </div>
-                                </td>
                                 <td class="dm-col-action">
-                                    <button type="button" class="dm-icon-btn" aria-label="Remove dealer" @onclick="() => Dealers.Remove(row)">
+                                    <button type="button" class="dm-icon-btn" title="Delete this dealer mapping"
+                                            aria-label="Delete dealer" disabled="@(IsReadOnly || IsUploading || DeletingId != 0)"
+                                            @onclick="() => DeleteRowAsync(row)">
                                         <SalesAuditIcon Name="trash" Size="17" />
                                     </button>
                                 </td>
                             </tr>
                         }
 
-                        @if (!Dealers.Any())
+                        @if (!FilteredDealers.Any())
                         {
                             <tr>
-                                <td colspan="6" class="dm-empty">No dealers mapped. Upload a dealer list to start.</td>
+                                <td colspan="4" class="dm-empty">@(Dealers.Any() ? "No dealers match the search." : "No dealers mapped. Upload a Dealer Code Excel file to start.")</td>
                             </tr>
                         }
                     </tbody>
@@ -133,15 +298,15 @@
 
                 <div class="dm-table-foot">
                     <span class="dm-showing">
-                        Showing @(Dealers.Any() ? 1 : 0) to @Dealers.Count Dealers
+                        Showing @FilteredDealers.Count of @Dealers.Count dealers
                         @if (ValidationErrors.Count > 0)
                         {
                             <span class="dm-invalid">(@ValidationErrors.Count invalid rows not imported)</span>
                         }
                     </span>
                     <span class="dm-total">
-                        Total Planned Commitment
-                        <strong>@SalesAuditFormat.Rupees(AllocatedTotal)</strong>
+                        Total Dealers
+                        <strong>@Dealers.Count</strong>
                     </span>
                 </div>
             </div>
@@ -154,7 +319,7 @@
                         <thead>
                             <tr>
                                 <th class="dm-col-no">Row No.</th>
-                                <th>Dealer Name</th>
+                                <th>Dealer Code</th>
                                 <th>Reason</th>
                             </tr>
                         </thead>
@@ -163,7 +328,7 @@
                             {
                                 <tr>
                                     <td class="dm-col-no">@error.RowNo</td>
-                                    <td>@error.DealerName</td>
+                                    <td>@error.DealerCode</td>
                                     <td>@error.Reason</td>
                                 </tr>
                             }
@@ -173,61 +338,197 @@
             }
         </div>
 
+        <!-- Read-only SAP invoice matches for mapped dealers and planned products -->
+        <div class="dm-card">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+                <h3 class="dm-card-title mb-0">Dealer Sales Achievement - SAP Invoice Matches</h3>
+                <button type="button" class="btn btn-outline-primary btn-sm"
+                        disabled="@IsLoadingSales" @onclick="LoadMatchedSalesAsync">
+                    Refresh Matches
+                </button>
+            </div>
+            @if (IsLoadingSales)
+            {
+                <div class="alert alert-info">Matching sales invoices with mapped dealers, products and scheme dates...</div>
+            }
+            @if (!string.IsNullOrWhiteSpace(SalesMatchError))
+            {
+                <div class="alert alert-warning">@SalesMatchError</div>
+            }
+            @if (MatchedSales is not null)
+            {
+                <p class="text-muted small mb-2">
+                    Scheme: @MatchedSales.SchemeFrom.ToString("dd MMM yyyy") to @MatchedSales.SchemeTo.ToString("dd MMM yyyy")
+                    &nbsp;|&nbsp; Mapped dealers: <strong>@MatchedSales.MappedDealers</strong>
+                    &nbsp;|&nbsp; Matching invoice lines: <strong>@MatchedSales.MatchedInvoiceLines</strong>
+                </p>
+                <div class="dm-table-wrapper mb-3">
+                    <table class="dm-table">
+                        <thead>
+                            <tr>
+                                <th>Product</th>
+                                <th>Planned Qty (MT)</th>
+                                <th>Actual Qty (MT)</th>
+                                <th>Planned Value (₹)</th>
+                                <th>Actual Gross (₹)</th>
+                                <th>Balance (₹)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var product in MatchedSales.Products)
+                            {
+                                <tr>
+                                    <td>@product.ProductName</td>
+                                    <td>@product.PlannedQuantityMT.ToString("N3")</td>
+                                    <td>@product.ActualQuantityMT.ToString("N3")</td>
+                                    <td>@product.PlannedValueRs.ToString("N2")</td>
+                                    <td>@product.ActualGrossAmountRs.ToString("N2")</td>
+                                    <td>@product.BalanceValueRs.ToString("N2")</td>
+                                </tr>
+                            }
+                            @if (MatchedSales.Products.Count == 0)
+                            {
+                                <tr><td colspan="6" class="dm-empty">No product plan has been saved yet.</td></tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                <h4 class="dm-card-title mb-2">Matched Dealer Invoice Details</h4>
+                <div class="dm-table-wrapper">
+                    <table class="dm-table">
+                        <thead>
+                            <tr>
+                                <th>S:NO</th>
+                                <th>Dealer Code</th>
+                                <th>Dealer Name</th>
+                                <th>Billing Date</th>
+                                <th>Billing Document</th>
+                                <th>Product Code</th>
+                                <th>Product</th>
+                                <th>Qty (MT)</th>
+                                <th>Gross Amount (₹)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var (sale, index) in MatchedSales.Rows.Select((r, i) => (r, i)))
+                            {
+                                <tr>
+                                    <td>@(index + 1)</td>
+                                    <td>@sale.DealerCode</td>
+                                    <td>@sale.DealerName</td>
+                                    <td>@sale.BillingDate.ToString("dd MMM yyyy")</td>
+                                    <td>@sale.BillingDocument</td>
+                                    <td>@sale.ProductCode</td>
+                                    <td>@sale.ProductName</td>
+                                    <td>@sale.QuantityMT.ToString("N3")</td>
+                                    <td>@sale.GrossAmountRs.ToString("N2")</td>
+                                </tr>
+                            }
+                            @if (MatchedSales.Rows.Count == 0)
+                            {
+                                <tr><td colspan="9" class="dm-empty">No exact matches found for mapped dealer codes, planned product names, MT units and the scheme date range.</td></tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                @if (MatchedSales.UnmatchedSapProductNames.Count > 0)
+                {
+                    <div class="alert alert-warning mt-2 small">
+                        Excluded SAP products without an unambiguous exact planned-product name match:
+                        @string.Join(", ", MatchedSales.UnmatchedSapProductNames)
+                    </div>
+                }
+                <p class="text-muted small mt-2 mb-0">
+                    Read-only comparison. Does not save data to the Sales Audit achievement table.
+                    @MatchedSales.ExcludedOutsideDates invoices excluded by scheme dates;
+                    @MatchedSales.ExcludedDifferentUnits lines excluded because the unit is not MT.
+                </p>
+            }
+        </div>
+
         <!-- Plan Summary & Comparison -->
         <div class="dm-card">
             <h3 class="dm-card-title">Plan Summary &amp; Comparison</h3>
 
-            <div class="dm-summary-grid">
+            <div class="dm-summary-grid dm-summary-animated">
+                <!-- 1. Required Turnover -->
                 <div class="dm-tile dm-tile-purple">
                     <div class="dm-tile-top">
                         <span class="dm-tile-label">Required Turnover</span>
                         <span class="dm-auto-badge">Auto Calculated</span>
                     </div>
-                    <span class="dm-tile-value">₹ @SalesAuditFormat.Crore(RequiredTurnover) Cr</span>
+                    <span class="dm-tile-value">₹ @((RequiredTurnover / OneCroreRs).ToString("0.000")) Cr</span>
                     <span class="dm-tile-sub">Minimum Target you must achieve</span>
                 </div>
 
+                <!-- 2. Product Plan Total -->
                 <div class="dm-tile dm-tile-green">
-                    <span class="dm-tile-label">Total Planned Commitment</span>
-                    <span class="dm-tile-value">₹ @SalesAuditFormat.Crore(ProductPlanTotal) Cr</span>
+                    <span class="dm-tile-label">Product Plan Total (Tab 2)</span>
+                    <span class="dm-tile-value">₹ @((ProductPlanTotal / OneCroreRs).ToString("0.000")) Cr</span>
                     <span class="dm-tile-sub">Sum of all product-wise planned values</span>
                 </div>
 
-                <div class="dm-tile @(Remaining < 0 ? "dm-tile-red" : "dm-tile-blue")">
-                    <span class="dm-tile-label">Difference</span>
-                    <span class="dm-tile-value">@(Remaining > 0 ? "+ " : Remaining < 0 ? "- " : "")₹ @SalesAuditFormat.Crore(Math.Abs(Remaining)) Cr</span>
-                    <span class="dm-tile-sub">
-                        @(Remaining > 0 ? "Allocate remaining amount to complete the target"
-                          : Remaining < 0 ? "Dealer allocation exceeds the product plan"
-                          : "Dealer allocation matches the product plan")
+                <!-- 3. Achievement Amount: matched invoice detail gross amount sum -->
+                <div class="dm-tile dm-tile-blue">
+                    <span class="dm-tile-label">Achievement Amount</span>
+                    <span class="dm-tile-value">
+                        @(MatchedSales is null ? "--" : $"₹ {(AchievementAmount / OneCroreRs):0.000} Cr")
                     </span>
+                    <span class="dm-tile-sub">Total gross amount from matched dealer invoices</span>
                 </div>
 
-                <div class="dm-tile @(Remaining == 0 ? "dm-tile-green" : Remaining > 0 ? "dm-tile-orange" : "dm-tile-red")">
-                    <span class="dm-tile-label">Allocation Status</span>
-                    <span class="dm-tile-value">@(Remaining == 0 ? "Complete" : Remaining > 0 ? "Incomplete" : "Over Allocated")</span>
-                    <span class="dm-tile-sub">
-                        @(Remaining == 0 ? "Dealer allocation matches the product plan"
-                          : Remaining > 0 ? "Dealer allocation is below the product plan"
-                          : "Dealer allocation is above the product plan")
+                <!-- 4. Achievement difference against required turnover -->
+                <div class="dm-tile @(Difference >= 0 ? "dm-tile-green" : "dm-tile-orange")">
+                    <span class="dm-tile-label">Difference</span>
+                    <span class="dm-tile-value">
+                        @(MatchedSales is null ? "--" : $"{(Difference >= 0 ? "+" : "-")} ₹ {(Math.Abs(Difference) / OneCroreRs):0.000} Cr")
                     </span>
+                    <span class="dm-tile-sub">@(Difference >= 0 ? "Above the required turnover" : "Below the required turnover")</span>
+                </div>
+
+                <!-- 5. Achievement percentage against required turnover -->
+                <div class="dm-tile @(ProgressPercent >= 100 ? "dm-tile-green" : "dm-tile-blue")">
+                    <span class="dm-tile-label">Progress %</span>
+                    <span class="dm-tile-value">
+                        @(MatchedSales is null || RequiredTurnover <= 0 ? "--" : $"{ProgressPercent:0.00}%")
+                    </span>
+                    <span class="dm-tile-sub">Achievement against required turnover</span>
+                    <div class="dm-summary-progress-track" role="progressbar"
+                         aria-label="Achievement against required turnover"
+                         aria-valuemin="0" aria-valuemax="100"
+                         aria-valuenow="@ClampedProgressText">
+                        <span class="dm-summary-progress-fill @(ProgressPercent >= 100 ? "is-met" : "")"
+                              style="@($"width: {ClampedProgressText}%")"></span>
+                    </div>
+                </div>
+
+                <!-- 6. Mapped Dealers (existing card retained) -->
+                <div class="dm-tile dm-tile-blue">
+                    <span class="dm-tile-label">Mapped Dealers</span>
+                    <span class="dm-tile-value">@Dealers.Count</span>
+                    <span class="dm-tile-sub">Selected dealer registrations for this CSR-2</span>
+                </div>
+
+                <!-- 7. Dealer List Status (existing card retained) -->
+                <div class="dm-tile @(Dealers.Count > 0 ? "dm-tile-green" : "dm-tile-orange")">
+                    <span class="dm-tile-label">Dealer List Status</span>
+                    <span class="dm-tile-value"><span class="dm-summary-status-dot @(Dealers.Count > 0 ? "is-ready" : "")" aria-hidden="true"></span>@(Dealers.Count > 0 ? "Ready" : "Not Uploaded")</span>
+                    <span class="dm-tile-sub">Dealer-level amounts are not stored in the mapping entity.</span>
                 </div>
             </div>
         </div>
 
         <!-- Footer actions -->
         <div class="dm-footer">
-            <button type="button" class="dm-btn dm-btn-back" @onclick="@(() => Nav.NavigateTo("/SalesAudit"))">
+            <button type="button" class="dm-btn dm-btn-back" @onclick="@(() => Nav.NavigateTo($"/SalesPlan?csr2Id={CSR2Id}"))">
                 <SalesAuditIcon Name="chevrons-left" Size="16" />
-                Back to List
+                Back to Sales Plan
             </button>
 
             <div class="dm-footer-right">
-                <button type="button" class="dm-btn dm-btn-draft">
-                    <SalesAuditIcon Name="file-pen" Size="16" />
-                    Save Draft
-                </button>
-                <button type="button" class="dm-btn dm-btn-primary" @onclick="@(() => Nav.NavigateTo("/PlanReview"))">
+                <button type="button" class="dm-btn dm-btn-primary"
+                        disabled="@(IsLoading || IsUploading || Dealers.Count == 0)"
+                        @onclick="ContinueToReview">
                     Continue to Plan Review
                     <SalesAuditIcon Name="chevrons-right" Size="16" />
                 </button>
@@ -238,69 +539,234 @@
 </div>
 
 @code {
+    [SupplyParameterFromQuery(Name = "csr2Id")]
+    public int? CSR2Id { get; set; }
+
     private const long MaxFileBytes = 5 * 1024 * 1024;
-    private const decimal CommitmentStep = 10000m;
+    private bool IsLoading, IsUploading, IsReadOnly, ShowErrors;
+    private int DeletingId;
+    private string SearchText = "";
+    private string? UploadError;
+    private string Success = "";
+    private UploadInfo? UploadedFile;
+    private List<DealerRow> Dealers = new();
+    private List<ValidationError> ValidationErrors = new();
+    private decimal RequiredTurnover;
+    private decimal ProductPlanTotal;
+    private const decimal OneCroreRs = 10_000_000m;
+    // The same matched invoice rows displayed in the read-only details table.
+    // A failed/not-yet-completed load is rendered as "--", not a zero achievement.
+    private decimal AchievementAmount => MatchedSales?.Rows?.Sum(x => x.GrossAmountRs) ?? 0m;
+    private decimal Difference => AchievementAmount - RequiredTurnover;
+    private decimal ProgressPercent => RequiredTurnover > 0m
+        ? AchievementAmount / RequiredTurnover * 100m : 0m;
+    // Visual bar stays within 0–100%; the displayed progress can exceed 100%.
+    private string ClampedProgressText =>
+        (MatchedSales is null || RequiredTurnover <= 0m ? 0m : Math.Clamp(ProgressPercent, 0m, 100m))
+        .ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+    private bool IsLoadingSales;
+    private string SalesMatchError = "";
+    private MatchedSalesDto? MatchedSales;
 
-    private static readonly string[] MappedByOptions = { "MO", "RM", "ZM" };
-
-    // Both come from the earlier steps (Audit Overview / Sales Plan); sample values for now.
-    private const decimal RequiredTurnover = 2_00_00_000m;
-    private const decimal ProductPlanTotal = 2_30_00_000m;
+    private sealed class MatchedSalesDto
+    {
+        public int CSR2Id { get; set; }
+        public DateTime SchemeFrom { get; set; }
+        public DateTime SchemeTo { get; set; }
+        public int MappedDealers { get; set; }
+        public int MatchedInvoiceLines { get; set; }
+        public int ExcludedOutsideDates { get; set; }
+        public int ExcludedDifferentUnits { get; set; }
+        public List<string> UnmatchedSapProductNames { get; set; } = new();
+        public List<MatchedProductDto> Products { get; set; } = new();
+        public List<MatchedSaleDto> Rows { get; set; } = new();
+    }
+    private sealed class MatchedProductDto
+    {
+        public int ProductId { get; set; }
+        public string ProductName { get; set; } = "";
+        public decimal PlannedQuantityMT { get; set; }
+        public decimal ActualQuantityMT { get; set; }
+        public decimal PlannedValueRs { get; set; }
+        public decimal ActualGrossAmountRs { get; set; }
+        public decimal BalanceValueRs { get; set; }
+    }
+    private sealed class MatchedSaleDto
+    {
+        public long SaleId { get; set; }
+        public string DealerCode { get; set; } = "";
+        public string DealerName { get; set; } = "";
+        public DateTime BillingDate { get; set; }
+        public string BillingDocument { get; set; } = "";
+        public string ProductCode { get; set; } = "";
+        public string ProductName { get; set; } = "";
+        public decimal QuantityMT { get; set; }
+        public decimal GrossAmountRs { get; set; }
+    }
 
     private record UploadInfo(string Name, long Size, DateTime UploadedOn);
-    private record ValidationError(int RowNo, string DealerName, string Reason);
+    private record ValidationError(int RowNo, string DealerCode, string Reason);
 
-    private class DealerRow
+    private sealed class DealerMappingDto
     {
+        public int CSR2Id { get; set; }
+        public decimal RequiredTurnoverRs { get; set; }
+        public decimal ProductPlanTotalRs { get; set; }
+        public bool IsReadOnly { get; set; }
+        public List<DealerRow> Rows { get; set; } = new();
+    }
+    private sealed class DealerRow
+    {
+        public int Id { get; set; }
+        public int DealerRegistrationId { get; set; }
+        public string DealerCode { get; set; } = "";
         public string DealerName { get; set; } = "";
-        public string Location { get; set; } = "";
-        public string MappedBy { get; set; } = "MO";
-        public decimal Commitment { get; set; }
+        public string StateName { get; set; } = "";
+        public string RegionName { get; set; } = "";
+        public string HeadquartersName { get; set; } = "";
     }
-
-    private UploadInfo? UploadedFile = new("Punjab Dealers List.xlsx", 12_698, new DateTime(2026, 5, 11, 11, 45, 0));
-    private string? UploadError;
-    private bool ShowErrors = true;
-
-    private readonly List<DealerRow> Dealers = Enumerable.Range(0, 5)
-        .Select(_ => new DealerRow { DealerName = "Green Field Agri Traders", Location = "Ludhiana", Commitment = 40_00_000 })
-        .ToList();
-
-    private readonly List<ValidationError> ValidationErrors = new()
+    private sealed class UploadResult
     {
-        new(6, "ABC Traders", "Dealer not found in master"),
-        new(7, "ABC Traders", "Duplicate dealer name found"),
-    };
+        public int ImportedRows { get; set; }
+        public int AddedRows { get; set; }
+        public int AlreadyMappedRows { get; set; }
+        public int InvalidRows { get; set; }
+        public List<ValidationError> ValidationErrors { get; set; } = new();
+    }
+    private List<DealerRow> FilteredDealers => Dealers.Where(x =>
+        string.IsNullOrWhiteSpace(SearchText) ||
+        (x.DealerCode?.Contains(SearchText, StringComparison.OrdinalIgnoreCase) ?? false) ||
+        (x.DealerName?.Contains(SearchText, StringComparison.OrdinalIgnoreCase) ?? false)).ToList();
 
-    private decimal AllocatedTotal => Dealers.Sum(d => d.Commitment);
 
-    /// <summary>Product plan still to be allocated to dealers (negative when over-allocated).</summary>
-    private decimal Remaining => ProductPlanTotal - AllocatedTotal;
+    protected override async Task OnParametersSetAsync() => await LoadAsync();
 
-    // Only the file's details are recorded for now; reading the rows is wired with the API.
-    private void OnFileSelected(InputFileChangeEventArgs e)
+    private async Task LoadAsync()
     {
-        var file = e.File;
-        var extension = Path.GetExtension(file.Name).ToLowerInvariant();
-
-        if (extension is not (".xlsx" or ".xls"))
-        {
-            UploadError = "Only .xlsx or .xls files can be uploaded.";
-            return;
-        }
-
-        if (file.Size > MaxFileBytes)
-        {
-            UploadError = "The file is larger than 5MB.";
-            return;
-        }
-
         UploadError = null;
-        UploadedFile = new UploadInfo(file.Name, file.Size, DateTime.Now);
+        Success = "";
+        if (CSR2Id is null or <= 0)
+        {
+            UploadError = "Missing CSR-2 ID. Open this page from Sales Plan.";
+            return;
+        }
+        IsLoading = true;
+        try
+        {
+            using var response = await Http.GetAsync($"api/SalesAudit/dealer-mapping?csr2Id={CSR2Id.Value}");
+            if (!response.IsSuccessStatusCode)
+            {
+                UploadError = $"Unable to load dealer mapping (HTTP {(int)response.StatusCode}).";
+                return;
+            }
+            var data = await response.Content.ReadFromJsonAsync<DealerMappingDto>();
+            if (data is null) { UploadError = "Empty dealer mapping response."; return; }
+            RequiredTurnover = data.RequiredTurnoverRs;
+            ProductPlanTotal = data.ProductPlanTotalRs;
+            IsReadOnly = data.IsReadOnly;
+            Dealers = data.Rows ?? new();
+            await LoadMatchedSalesAsync();
+            // Keep the current-session upload name; the new entity does not persist file metadata.
+        }
+        catch (Exception ex) { UploadError = $"Unable to load dealer mapping: {ex.Message}"; }
+        finally { IsLoading = false; }
     }
 
-    private static string FormatSize(long bytes) =>
-        bytes >= 1024 * 1024
-            ? (bytes / 1024d / 1024d).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + " MB"
-            : (bytes / 1024d).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + " kB";
+    private async Task OnFileSelected(InputFileChangeEventArgs e)
+    {
+        if (CSR2Id is null or <= 0 || IsUploading || IsLoading || IsReadOnly) return;
+        var file = e.File;
+        var ext = Path.GetExtension(file.Name).ToLowerInvariant();
+        if (ext is not (".xlsx" or ".xls") || file.Size == 0 || file.Size > MaxFileBytes)
+        {
+            UploadError = "Upload an .xlsx or .xls file up to 5 MB.";
+            return;
+        }
+        UploadError = null;
+        Success = "";
+        ValidationErrors.Clear();
+        IsUploading = true;
+        try
+        {
+            using var form = new MultipartFormDataContent();
+            using var stream = file.OpenReadStream(MaxFileBytes);
+            using var fileContent = new StreamContent(stream);
+            fileContent.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+            form.Add(fileContent, "file", file.Name);
+            using var response = await Http.PostAsync($"api/SalesAudit/dealer-mapping/upload?csr2Id={CSR2Id.Value}", form);
+            if (!response.IsSuccessStatusCode)
+            {
+                UploadError = $"Upload failed (HTTP {(int)response.StatusCode}): {await response.Content.ReadAsStringAsync()}";
+                return;
+            }
+            var result = await response.Content.ReadFromJsonAsync<UploadResult>();
+            await LoadAsync();
+            if (UploadError != null) return;
+            UploadedFile = new UploadInfo(file.Name, file.Size, DateTime.Now);
+            ValidationErrors = result?.ValidationErrors ?? new();
+            ShowErrors = ValidationErrors.Count > 0;
+            Success = $"Matched {result?.ImportedRows ?? 0} dealers; added {result?.AddedRows ?? 0} new mappings; {result?.AlreadyMappedRows ?? 0} already mapped; {result?.InvalidRows ?? 0} invalid or unmatched rows skipped. Existing mappings preserved.";
+        }
+        catch (Exception ex) { UploadError = $"Unable to upload Excel: {ex.Message}"; }
+        finally { IsUploading = false; }
+    }
+
+    
+    private void ContinueToReview()
+    {
+        if (CSR2Id is null or <= 0 || IsLoading || IsUploading || Dealers.Count == 0) return;
+        Nav.NavigateTo($"/PlanReview?csr2Id={CSR2Id.Value}");
+    }
+
+    private async Task DeleteRowAsync(DealerRow row)
+    {
+        if (CSR2Id is null or <= 0 || row.Id <= 0 || IsReadOnly ||
+            IsUploading || DeletingId != 0) return;
+        UploadError = null;
+        Success = "";
+        DeletingId = row.Id;
+        try
+        {
+            using var response = await Http.DeleteAsync(
+                $"api/SalesAudit/dealer-mapping/{row.Id}?csr2Id={CSR2Id.Value}");
+            if (!response.IsSuccessStatusCode)
+            {
+                UploadError = $"Delete failed (HTTP {(int)response.StatusCode}): " +
+                    await response.Content.ReadAsStringAsync();
+                return;
+            }
+            Dealers.Remove(row);
+            await LoadMatchedSalesAsync();
+            Success = "Dealer mapping deleted successfully.";
+        }
+        catch (Exception ex) { UploadError = $"Unable to delete dealer mapping: {ex.Message}"; }
+        finally { DeletingId = 0; }
+    }
+
+    private async Task LoadMatchedSalesAsync()
+    {
+        if (CSR2Id is null or <= 0) return;
+        IsLoadingSales = true;
+        SalesMatchError = "";
+        MatchedSales = null;
+        try
+        {
+            using var response = await Http.GetAsync($"api/SalesAudit/dealer-mapping/sap-sales?csr2Id={CSR2Id.Value}");
+            if (!response.IsSuccessStatusCode)
+            {
+                SalesMatchError = $"Unable to match SAP sales (HTTP {(int)response.StatusCode}): " +
+                                  await response.Content.ReadAsStringAsync();
+                return;
+            }
+            MatchedSales = await response.Content.ReadFromJsonAsync<MatchedSalesDto>();
+        }
+        catch (Exception ex)
+        {
+            SalesMatchError = "Unable to load matched SAP sales: " + ex.Message;
+        }
+        finally { IsLoadingSales = false; }
+    }
+
+    private static string FormatSize(long bytes) => bytes == 0 ? "Saved on server" :
+        bytes >= 1024 * 1024 ? $"{bytes / 1024d / 1024d:0.0} MB" : $"{bytes / 1024d:0.0} kB";
 }
