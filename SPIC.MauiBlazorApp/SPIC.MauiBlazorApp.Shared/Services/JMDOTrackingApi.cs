@@ -114,15 +114,16 @@ public sealed class JMDOTrackingApi
     }
 
     /// <summary>
-    /// Every one of the caller's own sessions that started today, oldest first - a JMDO can
-    /// Start/Stop Live Tracking more than once a day (separate site visits), and each one is its own
-    /// session/route. Silent on failure (empty list), same reasoning as <see cref="GetMineActiveAsync"/>.
+    /// Every one of the caller's own sessions that started in the last <paramref name="days"/>
+    /// calendar days (today inclusive), most recent first - a JMDO can Start/Stop Live Tracking more
+    /// than once a day (separate site visits), and each one is its own session/route. Silent on
+    /// failure (empty list), same reasoning as <see cref="GetMineActiveAsync"/>.
     /// </summary>
-    public async Task<List<JMDOTrackingSessionDto>> GetMineTodayAsync(CancellationToken ct = default)
+    public async Task<List<JMDOTrackingSessionDto>> GetMineHistoryAsync(int days = 7, CancellationToken ct = default)
     {
         try
         {
-            var result = await _http.GetFromJsonAsync<List<JMDOTrackingSessionDto>>($"{Root}/mine/today", Json, ct);
+            var result = await _http.GetFromJsonAsync<List<JMDOTrackingSessionDto>>($"{Root}/mine/history?days={days}", Json, ct);
             return result ?? new();
         }
         catch (Exception)

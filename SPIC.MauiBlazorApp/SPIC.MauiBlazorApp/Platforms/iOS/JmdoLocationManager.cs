@@ -31,7 +31,13 @@ namespace SPIC.MauiBlazorApp.Platforms.iOS
             _manager = new CLLocationManager
             {
                 DesiredAccuracy = CLLocation.AccuracyBest,
-                DistanceFilter = 10, // 10 meters for responsive field updates
+                // 0, not a positive meter value - CoreLocation withholds EVERY update until the
+                // device moves that far since the last one, which silently stops a stationary JMDO's
+                // updates entirely (the Android equivalent of this exact bug: see
+                // JmdoTrackingForegroundService.MinDistanceMeters). LocationsUpdated below already
+                // does its own time-OR-distance throttle, so the hardware-level filter only needs to
+                // not actively block delivery.
+                DistanceFilter = 0,
                 AllowsBackgroundLocationUpdates = true,
                 PausesLocationUpdatesAutomatically = false,
                 ShowsBackgroundLocationIndicator = true,
@@ -114,12 +120,12 @@ namespace SPIC.MauiBlazorApp.Platforms.iOS
         {
             try
             {
-                var s = Microsoft.Maui.Storage.Preferences.Default.Get("GpsTrackingIntervalSeconds", 20);
-                return s is >= 1 and <= 100 ? s : 20;
+                var s = Microsoft.Maui.Storage.Preferences.Default.Get("GpsTrackingIntervalSeconds", 10);
+                return s is >= 1 and <= 100 ? s : 10;
             }
             catch
             {
-                return 20;
+                return 10;
             }
         }
 
