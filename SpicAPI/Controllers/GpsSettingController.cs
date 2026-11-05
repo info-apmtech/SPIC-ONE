@@ -16,7 +16,7 @@ namespace SpicAPI.Controllers
     [Route("api/[controller]")]
     public class GpsSettingController : ControllerBase
     {
-        private const int DefaultIntervalSeconds = 20;
+        private const int DefaultIntervalSeconds = 10;
         private const int MinIntervalSeconds = 1;
         private const int MaxIntervalSeconds = 100;
 

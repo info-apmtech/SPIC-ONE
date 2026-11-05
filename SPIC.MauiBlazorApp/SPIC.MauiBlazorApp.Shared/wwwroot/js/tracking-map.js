@@ -107,7 +107,7 @@ window.setPlaybackPosition = function (elementId, points, index) {
     map.panTo(current, { animate: true, duration: 0.3 });
 };
 
-// Called whenever playback is reset for a fresh/changed session (MarkAttendance.razor's own
+// Called whenever playback is reset for a fresh/changed session (TrackPlayback.razor's own
 // session-id guard) - drops the old amber trail/marker so the next setPlaybackPosition call starts
 // clean instead of carrying over a previous session's playhead.
 window.clearPlayback = function (elementId) {
@@ -117,10 +117,9 @@ window.clearPlayback = function (elementId) {
     if (map.playbackTrail) { map.removeLayer(map.playbackTrail); map.playbackTrail = null; }
 };
 
-// Called when the view navigates away from the tracking map (Blazor reuses the component instance
-// across /MarkAttendance?view=... changes - see MarkAttendance.razor's own OnParametersSetAsync
-// comment - so without this, a stale Leaflet instance + its markers/polyline would leak and a later
-// re-visit would silently attach to a torn-down DOM element).
+// Called when TrackPlayback.razor is torn down (DisposeAsync) - without this, a stale Leaflet
+// instance + its markers/polyline would leak and a later re-visit would silently attach to a
+// torn-down DOM element.
 window.destroyTrackingRouteMap = function (elementId) {
     if (window.mapInstances && window.mapInstances[elementId]) {
         window.mapInstances[elementId].remove();
