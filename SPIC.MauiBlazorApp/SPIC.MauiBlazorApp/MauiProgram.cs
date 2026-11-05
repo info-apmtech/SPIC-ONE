@@ -6,7 +6,6 @@ using SPIC.MauiBlazorApp.Shared.Services;
 using SPIC.MauiBlazorApp.Shared.Services.Telemetry;
 #if MAUI_DEVFLOW
 using Microsoft.Maui.DevFlow.Agent;
-using Microsoft.Maui.DevFlow.Blazor;
 #endif
 
 namespace SPIC.MauiBlazorApp
@@ -62,9 +61,6 @@ namespace SPIC.MauiBlazorApp
 
             Log("MauiProgram.CreateMauiApp: AddMauiBlazorWebView()");
             builder.Services.AddMauiBlazorWebView();
-#if MAUI_DEVFLOW
-            builder.AddMauiBlazorDevFlowTools();
-#endif
 			builder.Services.AddScoped<LoginState>();
 			builder.Services.AddScoped<NavHistoryService>();
 			builder.Services.AddScoped<FieldAttendanceState>();
