@@ -76,6 +76,14 @@ $env:SPICONE_ANDROID_STORE_PASS = "<store password>"
 
 ### 1.3 Every release: build and upload
 
+Release Android builds are configured to run R8 + ProGuard obfuscation in
+`SPIC.MauiBlazorApp.csproj` (`AndroidLinkTool=r8`, `AndroidEnableProguard=true`)
+to satisfy the Play Console DEX optimization checks.
+
+The Android head also opts into edge-to-edge window insets handling from
+`MainActivity` (`WindowCompat.SetDecorFitsSystemWindows(Window, false)`), so Android 15+
+edge-to-edge behavior is explicitly enabled and can be validated during release testing.
+
 ```bash
 dotnet publish SPIC.MauiBlazorApp/SPIC.MauiBlazorApp/SPIC.MauiBlazorApp.csproj -f net10.0-android -c Release
 ```

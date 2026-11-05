@@ -2,6 +2,7 @@ using Android.App;
 using Android.Content;
 using Android.Content.PM;
 using Android.OS;
+using AndroidX.Core.View;
 using Microsoft.AspNetCore.Components.WebView.Maui;
 using SPIC.MauiBlazorApp.Shared.Services;
 
@@ -26,6 +27,7 @@ namespace SPIC.MauiBlazorApp
         /// </summary>
         protected override void OnCreate(Bundle? savedInstanceState)
         {
+            WindowCompat.SetDecorFitsSystemWindows(Window, false);
             base.OnCreate(savedInstanceState);
             if (Intent?.GetStringExtra("route") is { Length: > 0 } route)
             {
