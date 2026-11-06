@@ -7,6 +7,28 @@
 <PageTitle>Review &amp; Confirm Plan · SPIC ONE</PageTitle>
 
 <style>
+    /* Saved invoice statuses; visual styles do not affect the matching logic. */
+    .pr-invoice-state {
+        display: inline-block;
+        padding: 3px 9px;
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 700;
+        line-height: 1.5;
+        white-space: nowrap;
+    }
+
+    .pr-invoice-state-old {
+        color: #526175;
+        background: #ecf0f5;
+        border: 1px solid #d6dfea;
+    }
+
+    .pr-invoice-state-new {
+        color: #096d43;
+        background: #e9f7ef;
+        border: 1px solid #b9e8cb;
+    }
     /* Plan Review animated cards: scoped to the new comparison grid. */
     .pr-wrapper .pr-compare-grid {
         display: grid;
@@ -448,8 +470,8 @@
                             @(IsLoadingSapSales ? "Loading..." : "Refresh Sales")
                         </button>
                         <button type="button" class="pr-edit-btn"
-                                disabled="@(IsLoading || IsLoadingSapSales || IsSavingInvoices || MatchedSapSales is null || MatchedSapSales.Rows.Count == 0 || !IsConfirmed || IsAuditClosedInDatabase)"
-                                @onclick="SaveMatchedInvoicesAsync"
+                                disabled="@(!CanSaveDailySales)"
+                                @onclick="() => OpenDialog(DialogState.DailyConfirm)"
                                 title="Persist currently matched SAP invoices to Sales Audit using the server-side matching rules">
                             <SalesAuditIcon Name="save" Size="15" />
                             @(IsSavingInvoices ? "Saving Invoices..." : "Save Sales Progress")
@@ -459,6 +481,20 @@
                 @if (IsLoadingSapSales)
                 {
                     <div class="alert alert-info">Loading SAP invoice records matched in Dealer Mapping...</div>
+                }
+                @if (IsLoaded && IsConfirmed && !IsAuditCompleted && !IsLoadingSapSales && MatchedSapSales is not null)
+                {
+                    <div class="alert alert-info py-2" role="status">
+                        <strong>Sales Plan already confirmed.</strong> Confirmation is required only once.
+                        @if (NewInvoiceCount > 0)
+                        {
+                            <span> @NewInvoiceCount new invoice line(s) are ready. Click <strong>Save Daily Sales</strong> or <strong>Save Sales Progress</strong> to add them to the cumulative achievement.</span>
+                        }
+                        else
+                        {
+                            <span> No new invoices are available. Upload the next day's SAP sales and click <strong>Refresh Sales</strong>; already saved invoices will remain visible as Old.</span>
+                        }
+                    </div>
                 }
                 @if (!string.IsNullOrWhiteSpace(SapSalesError))
                 {
@@ -477,8 +513,10 @@
                     <p class="text-muted small mb-3">
                         Scheme: @MatchedSapSales.SchemeFrom.ToString("dd MMM yyyy") to @MatchedSapSales.SchemeTo.ToString("dd MMM yyyy")
                         &nbsp; | &nbsp; Mapped dealers: <strong>@MatchedSapSales.MappedDealers</strong>
-                        &nbsp; | &nbsp; Matched invoice lines: <strong>@MatchedSapSales.MatchedInvoiceLines</strong>
-                        &nbsp; | &nbsp; Actual gross: <strong>@SalesAuditFormat.Rupees(MatchedSapSales.TotalMatchedGrossRs)</strong>
+                        &nbsp; | &nbsp; Matched lines: <strong>@MatchedSapSales.MatchedInvoiceLines</strong>
+                        &nbsp; | &nbsp; Old: <strong>@MatchedSapSales.OldInvoiceLines</strong>
+                        &nbsp; | &nbsp; New: <strong>@MatchedSapSales.NewInvoiceLines</strong>
+                        &nbsp; | &nbsp; New gross: <strong>@SalesAuditFormat.Rupees(MatchedSapSales.NewInvoiceGrossRs)</strong>
                     </p>
                     <div class="pr-table-wrapper">
                         <table class="pr-table">
@@ -493,6 +531,7 @@
                                     <th>Product</th>
                                     <th>Qty (MT)</th>
                                     <th>Gross Amount (₹)</th>
+                                    <th>Status</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -508,11 +547,12 @@
                                         <td>@sale.ProductName</td>
                                         <td>@SalesAuditFormat.Indian(sale.QuantityMT)</td>
                                         <td>@SalesAuditFormat.Rupees(sale.GrossAmountRs)</td>
+                                        <td><span class="pr-invoice-state @(sale.IsSaved ? "pr-invoice-state-old" : "pr-invoice-state-new")">@(sale.IsSaved ? "Old" : "New")</span></td>
                                     </tr>
                                 }
                                 @if (MatchedSapSales.Rows.Count == 0)
                                 {
-                                    <tr><td colspan="9" class="text-center text-muted py-3">No SAP invoice lines matched the mapped dealers, planned products, MT units and scheme dates.</td></tr>
+                                    <tr><td colspan="10" class="text-center text-muted py-3">No eligible SAP invoice lines were found for these dealers, products and scheme dates.</td></tr>
                                 }
                             </tbody>
                         </table>
@@ -522,7 +562,7 @@
                         <p class="text-muted small mt-2 mb-0">SAP products excluded because no unambiguous planned-product name matched: @string.Join(", ", MatchedSapSales.UnmatchedSapProductNames)</p>
                     }
                     <p class="text-muted small mt-2 mb-0">
-                        SAP invoice matches are previewed here. Click Save Sales Progress to persist eligible invoice rows and update product achievements.
+                        Old = already linked to this CSR-2 and included in cumulative saved achievement. New = not yet saved. Click Save Sales Progress to save New invoice IDs; their status changes to Old after saving. Old invoices are never counted twice.
                         @MatchedSapSales.ExcludedOutsideDates invoice lines were outside the scheme period;
                         @MatchedSapSales.ExcludedDifferentUnits had a unit other than MT.
                     </p>
@@ -558,22 +598,22 @@
                     <!-- 3. Achievement Amount: matched invoice detail gross totals -->
                     <div class="pr-tile pr-tile-blue">
                         <span class="pr-label">Achievement Amount</span>
-                        <span class="pr-tile-value">@(MatchedSapSales is null ? "--" : $"₹ {AchievementAmount / 10_000_000m:0.000} Cr")</span>
-                        <span class="pr-tile-sub">@(MatchedSapSales is null ? "Gross amount from matched dealer invoices" : $"Exact: {SalesAuditFormat.Rupees(AchievementAmount)} from matched invoices")</span>
+                        <span class="pr-tile-value">@(Overview is null ? "--" : $"₹ {AchievementAmount / 10_000_000m:0.000} Cr")</span>
+                        <span class="pr-tile-sub">@(Overview is null ? "Saved achievement unavailable" : $"Saved exact: {SalesAuditFormat.Rupees(AchievementAmount)} · New pending: {SalesAuditFormat.Rupees(NewInvoiceAmount)}")</span>
                     </div>
                     <!-- 4. Difference: achieved sales minus required turnover -->
-                    <div class="pr-tile @(MatchedSapSales is not null && AchievementDifference >= 0 ? "pr-tile-green" : "pr-tile-red")">
+                    <div class="pr-tile @(Overview is not null && AchievementDifference >= 0 ? "pr-tile-green" : "pr-tile-red")">
                         <span class="pr-label">Difference</span>
-                        <span class="pr-tile-value">@(MatchedSapSales is null ? "--" : $"{(AchievementDifference >= 0 ? "+" : "-")} ₹ {Math.Abs(AchievementDifference) / 10_000_000m:0.000} Cr")</span>
-                        <span class="pr-tile-sub">@(MatchedSapSales is null ? "Matched invoice data unavailable" : AchievementDifference >= 0 ? "Above required turnover" : "Below required turnover")</span>
+                        <span class="pr-tile-value">@(Overview is null ? "--" : $"{(AchievementDifference >= 0 ? "+" : "-")} ₹ {Math.Abs(AchievementDifference) / 10_000_000m:0.000} Cr")</span>
+                        <span class="pr-tile-sub">@(Overview is null ? "Saved achievement unavailable" : AchievementDifference >= 0 ? "Above required turnover" : "Below required turnover")</span>
                     </div>
                     <!-- 5. Progress %: achieved sales against required turnover -->
                     <div class="pr-tile @(AchievementProgress >= 100m ? "pr-tile-green" : "pr-tile-blue")">
                         <span class="pr-label">Progress %</span>
-                        <span class="pr-tile-value">@(MatchedSapSales is null || RequiredTurnover <= 0 ? "--" : $"{AchievementProgress:0.00}%")</span>
+                        <span class="pr-tile-value">@(Overview is null || RequiredTurnover <= 0 ? "--" : $"{AchievementProgress:0.00}%")</span>
                         <span class="pr-tile-sub">Achievement against required turnover</span>
                         <div class="pr-compare-progress" role="progressbar" aria-label="Achievement progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@Math.Clamp(AchievementProgress, 0m, 100m).ToString(System.Globalization.CultureInfo.InvariantCulture)">
-                            <span class="pr-compare-progress-fill" style="width:@(MatchedSapSales is null ? "0" : Math.Clamp(AchievementProgress, 0m, 100m).ToString(System.Globalization.CultureInfo.InvariantCulture))%"></span>
+                            <span class="pr-compare-progress-fill" style="width:@(Overview is null ? "0" : Math.Clamp(AchievementProgress, 0m, 100m).ToString(System.Globalization.CultureInfo.InvariantCulture))%"></span>
                         </div>
                     </div>
                     <!-- 6. Mapped Dealers -->
@@ -616,10 +656,22 @@
                 </button>
                 @if (IsConfirmed)
                 {
-                    <button type="button" class="pr-btn pr-btn-primary" disabled>
-                        <SalesAuditIcon Name="check-circle" Size="16" />
-                        Sales Plan Confirmed
-                    </button>
+                    @if (IsAuditCompleted)
+                    {
+                        <button type="button" class="pr-btn pr-btn-primary" disabled title="The saved achievement reached the required turnover; audit is closed.">
+                            <SalesAuditIcon Name="check-circle" Size="16" />
+                            Audit Completed
+                        </button>
+                    }
+                    else
+                    {
+                        <button type="button" class="pr-btn pr-btn-primary" disabled="@(!CanSaveDailySales)"
+                                @onclick="() => OpenDialog(DialogState.DailyConfirm)"
+                                title="@(CanSaveDailySales ? "Save new daily SAP invoice lines" : "Upload daily SAP sales and use Refresh Sales to check for New invoice lines")">
+                            <SalesAuditIcon Name="save" Size="16" />
+                            @(IsSavingInvoices ? "Saving Daily Sales..." : $"Save Daily Sales ({NewInvoiceCount} New)")
+                        </button>
+                    }
                 }
                 else
                 {
@@ -636,7 +688,7 @@
         @if (Dialog != DialogState.None)
         {
             <div class="pr-overlay" @onclick="CloseDialog">
-                <div class="pr-modal @(Dialog == DialogState.Confirmed ? "pr-modal-success" : "")"
+                <div class="pr-modal @((Dialog == DialogState.Confirmed || Dialog == DialogState.DailySaved) ? "pr-modal-success" : "")"
                      role="dialog" aria-modal="true" aria-labelledby="pr-dialog-title" tabindex="-1"
                      @ref="DialogRef" @onclick:stopPropagation="true" @onkeydown="OnDialogKeyDown">
 
@@ -667,6 +719,56 @@
                             <button type="button" class="pr-modal-btn pr-modal-btn-primary" disabled="@IsSaving" @onclick="ConfirmPlan">
                                 @(IsSaving ? "Confirming..." : "Yes, Confirm & Save")
                             </button>
+                        </div>
+                    }
+                    else if (Dialog == DialogState.DailyConfirm)
+                    {
+                        <div class="pr-modal-body pr-confirm-body">
+                            <svg class="pr-confirm-art" width="64" height="64" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <rect x="14" y="12" width="36" height="40" rx="5"></rect>
+                                <path d="M22 23h20M22 31h20M22 39h10M36 39l4 4 8-9"></path>
+                            </svg>
+                            <h2 id="pr-dialog-title" class="pr-modal-title">Save Daily Sales?</h2>
+                            <p class="pr-modal-text">
+                                Save <strong>@NewInvoiceCount new invoice line(s)</strong> for this Sales Audit.
+                                Old invoice records will not be duplicated. Your cumulative achievement and audit status will be updated in the database.
+                            </p>
+                            <p class="pr-modal-text">New sales: <strong>@SalesAuditFormat.Rupees(NewInvoiceAmount)</strong></p>
+                        </div>
+                        @if (!string.IsNullOrWhiteSpace(InvoiceSaveError))
+                        {
+                            <div class="alert alert-danger mx-3" role="alert">@InvoiceSaveError</div>
+                        }
+                        <div class="pr-modal-actions">
+                            <button type="button" class="pr-modal-btn pr-modal-btn-cancel" disabled="@IsSavingInvoices" @onclick="CloseDialog">Cancel</button>
+                            <button type="button" class="pr-modal-btn pr-modal-btn-primary" disabled="@(!CanSaveDailySales)" @onclick="() => SaveMatchedInvoicesAsync()">
+                                @(IsSavingInvoices ? "Saving..." : "Yes, Save Daily Sales")
+                            </button>
+                        </div>
+                    }
+                    else if (Dialog == DialogState.DailySaved)
+                    {
+                        <div class="pr-modal-body pr-success-body">
+                            <span class="pr-success-icon">
+                                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>
+                            </span>
+                            <h2 id="pr-dialog-title" class="pr-modal-title">Daily Sales Saved Successfully</h2>
+                            <p class="pr-modal-text">New SAP invoice links have been saved, and the cumulative achievement has been updated in the Sales Audit database.</p>
+                        </div>
+                        <div class="pr-success-summary">
+                            <dl>
+                                <div><dt>Program</dt><dd>@ProgramName</dd></div>
+                                <div><dt>Scheme Period</dt><dd>@DateText(SchemeFrom) – @DateText(SchemeTo)</dd></div>
+                                <div><dt>New Invoices Saved</dt><dd>@DailySavedNewCount</dd></div>
+                                <div><dt>Total Saved Invoices</dt><dd>@DailySavedTotalCount</dd></div>
+                                <div><dt>Cumulative Achievement</dt><dd>@SalesAuditFormat.Rupees(DailySavedAmountRs)</dd></div>
+                                <div><dt>Required Turnover</dt><dd>@SalesAuditFormat.Rupees(RequiredTurnover)</dd></div>
+                                <div class="pr-summary-status"><dt>Audit Status</dt><dd><span class="pr-tracking-pill"><span class="pr-dot"></span>@DailySavedStatus</span></dd></div>
+                            </dl>
+                        </div>
+                        <div class="pr-modal-actions pr-success-actions">
+                            <button type="button" class="pr-modal-btn pr-modal-btn-primary" @onclick="CloseDialog">Continue</button>
+                            <button type="button" class="pr-modal-btn pr-modal-btn-soft" @onclick="BackToList">Back to Sales Audit</button>
                         </div>
                     }
                     else
@@ -740,6 +842,7 @@
         // Must be returned by GET /api/SalesAudit/overview after plan confirmation.
         public bool? IsPlanConfirmed { get; set; }
         public string? DocumentStatus { get; set; }
+        public decimal ActualTurnoverCr { get; set; }
     }
     private sealed class ProductDto
     {
@@ -768,6 +871,9 @@
         public DateTime SchemeTo { get; set; }
         public int MappedDealers { get; set; }
         public int MatchedInvoiceLines { get; set; }
+        public int NewInvoiceLines { get; set; }
+        public int OldInvoiceLines { get; set; }
+        public decimal NewInvoiceGrossRs { get; set; }
         public int ExcludedOutsideDates { get; set; }
         public int ExcludedDifferentUnits { get; set; }
         public decimal TotalMatchedGrossRs { get; set; }
@@ -778,6 +884,8 @@
     private sealed class MatchedSapSaleRow
     {
         public long SaleId { get; set; }
+        public bool IsSaved { get; set; }
+        public string Status { get; set; } = "New";
         public string DealerCode { get; set; } = "";
         public string DealerName { get; set; } = "";
         public DateTime BillingDate { get; set; }
@@ -822,15 +930,17 @@
     private string ProgramName => Display(Overview?.ProgramName);
     private decimal PlanTotal => PlanRows.Sum(r => r.Value);
     private decimal PlanDifference => PlanTotal - RequiredTurnover;
-    // The same matched SAP invoice rows already displayed in the read-only details table.
-    private decimal AchievementAmount => MatchedSapSales?.Rows?.Sum(x => x.GrossAmountRs) ?? 0m;
+    // Persisted cumulative sales, not the unsaved invoice preview.
+    // ActualTurnoverCr is stored with sufficient precision for exact rupee/paise totals.
+    private decimal AchievementAmount => (Overview?.ActualTurnoverCr ?? 0m) * 10_000_000m;
+    private decimal NewInvoiceAmount => MatchedSapSales?.Rows?.Where(x => !x.IsSaved).Sum(x => x.GrossAmountRs) ?? 0m;
     private decimal AchievementDifference => AchievementAmount - RequiredTurnover;
     private decimal AchievementProgress => RequiredTurnover > 0m
         ? AchievementAmount / RequiredTurnover * 100m : 0m;
     private decimal Remaining => PlanTotal - DealerAllocation;
     // Display-only sales achievement status. Do not overwrite the API workflow status.
     // Wait for matched invoice data before deciding whether the target is achieved.
-    private bool HasAchievementData => MatchedSapSales is not null;
+    private bool HasAchievementData => Overview is not null;
     private bool IsAuditCompleted => IsAuditClosedInDatabase ||
         string.Equals(Overview?.DocumentStatus, "Completed", StringComparison.OrdinalIgnoreCase);
     private string AuditStatusText => IsAuditCompleted ? "Completed" :
@@ -843,6 +953,12 @@
         : !IsConfirmed ? "Confirm Sales Plan to begin saving achievements"
         : !HasAchievementData ? "Matched invoice data unavailable"
         : "Save daily progress; completion is verified by the database";
+    // Plan confirmation happens only once. Every later day uses the independent
+    // invoice-saving endpoint while the persisted audit status is still open.
+    private int NewInvoiceCount => MatchedSapSales?.Rows?.Count(x => !x.IsSaved) ?? 0;
+    private bool CanSaveDailySales => IsLoaded && !IsLoading && !IsSaving &&
+        !IsLoadingSapSales && !IsSavingInvoices && IsConfirmed &&
+        !IsAuditClosedInDatabase && !IsAuditCompleted && NewInvoiceCount > 0;
     private bool CanConfirm => IsLoaded && !IsSaving && !IsConfirmed && SchemeFrom.HasValue &&
         SchemeTo.HasValue && PlanRows.Count > 0 && TotalDealers > 0 &&
         PlanDifference >= 0;
@@ -931,7 +1047,9 @@
             HasDealerAllocationData = mappedRows.Count > 0 && mappedRows.All(r => r.PlannedCommitmentRs.HasValue);
             DealerAllocation = mappedRows.Sum(r => r.PlannedCommitmentRs ?? 0m);
             // Plan confirmation must be separate from final achievement submission.
-            IsConfirmed = overview.IsPlanConfirmed == true;
+            IsConfirmed = overview.IsPlanConfirmed == true ||
+                overview.IsFinalSubmitted ||
+                overview.DocumentStatus is "Plan Confirmed" or "In Progress" or "Completed";
             IsAuditClosedInDatabase = string.Equals(overview.DocumentStatus, "Completed", StringComparison.OrdinalIgnoreCase);
             IsLoaded = true;
             await LoadMatchedSapSalesAsync();
@@ -951,16 +1069,20 @@
     private sealed class InvoiceSaveResult
     {
         public int SavedInvoiceLines { get; set; }
+        public int AddedInvoiceLines { get; set; }
         public decimal AchievementAmountRs { get; set; }
         public bool IsAuditCompleted { get; set; }
         public string DocumentStatus { get; set; } = "";
     }
 
-    private async Task SaveMatchedInvoicesAsync()
+    private async Task SaveMatchedInvoicesAsync(bool fromPlanConfirmation = false)
     {
-        if (CSR2Id is null or <= 0 || IsSavingInvoices || IsLoadingSapSales ||
-            MatchedSapSales is null || MatchedSapSales.Rows.Count == 0 || !IsConfirmed || IsAuditClosedInDatabase)
-            return;
+        // The one-time Plan Confirm action is already busy while performing its initial save.
+        // Daily saves use the normal button guard and always present a confirmation dialog.
+        if (CSR2Id is null or <= 0 ||
+            (fromPlanConfirmation
+                ? (!IsConfirmed || IsAuditClosedInDatabase || NewInvoiceCount == 0 || IsSavingInvoices)
+                : !CanSaveDailySales)) return;
 
         InvoiceSaveError = "";
         InvoiceSaveSuccess = "";
@@ -987,9 +1109,23 @@
                 return;
             }
             IsAuditClosedInDatabase = saveResult.IsAuditCompleted;
-            if (Overview is not null) Overview.DocumentStatus = saveResult.DocumentStatus;
-            InvoiceSaveSuccess = $"Linked {saveResult.SavedInvoiceLines} SAP sales records; " +
+            if (Overview is not null)
+            {
+                Overview.DocumentStatus = saveResult.DocumentStatus;
+                Overview.ActualTurnoverCr = saveResult.AchievementAmountRs / 10_000_000m;
+            }
+            // Reload all eligible rows: saved New invoices become Old without disappearing.
+            await LoadMatchedSapSalesAsync();
+            InvoiceSaveSuccess = $"Saved cumulative {saveResult.SavedInvoiceLines} SAP invoice links; " +
                 $"achievement ₹{saveResult.AchievementAmountRs:N2}. Audit: {saveResult.DocumentStatus}.";
+            if (!fromPlanConfirmation)
+            {
+                DailySavedNewCount = saveResult.AddedInvoiceLines;
+                DailySavedTotalCount = saveResult.SavedInvoiceLines;
+                DailySavedAmountRs = saveResult.AchievementAmountRs;
+                DailySavedStatus = saveResult.DocumentStatus;
+                OpenDialog(DialogState.DailySaved);
+            }
         }
         catch (Exception ex)
         {
@@ -1007,7 +1143,7 @@
         MatchedSapSales = null;
         try
         {
-            using var response = await Http.GetAsync($"api/SalesAudit/dealer-mapping/sap-sales?csr2Id={CSR2Id.Value}");
+            using var response = await Http.GetAsync($"api/SalesAudit/dealer-mapping/sap-sales?csr2Id={CSR2Id.Value}&excludeSaved=false");
             if (!response.IsSuccessStatusCode)
             {
                 SapSalesError = $"Unable to load matched SAP invoice details (HTTP {(int)response.StatusCode}): " +
@@ -1050,19 +1186,23 @@
         finally { IsSaving = false; }
     }
 
-    private enum DialogState { None, Confirm, Confirmed }
+    private enum DialogState { None, Confirm, Confirmed, DailyConfirm, DailySaved }
     private DialogState Dialog = DialogState.None;
+    private int DailySavedNewCount, DailySavedTotalCount;
+    private decimal DailySavedAmountRs;
+    private string DailySavedStatus = "";
     private ElementReference DialogRef;
     private bool FocusDialog;
     private void OpenDialog(DialogState state)
     {
         ConfirmationError = "";
+        if (state == DialogState.DailyConfirm) InvoiceSaveError = "";
         Dialog = state;
         FocusDialog = true;
     }
     private void CloseDialog()
     {
-        if (!IsSaving) Dialog = DialogState.None;
+        if (!IsSaving && !IsSavingInvoices) Dialog = DialogState.None;
     }
 
     private async Task ConfirmPlan()
@@ -1121,9 +1261,9 @@
             // Plan confirmation and achievement saving are separate server writes.
             // On initial confirmation, automatically persist currently matched SAP sales.
             // Future daily uploads still use the independent Save Sales Progress button.
-            if (MatchedSapSales is not null && MatchedSapSales.Rows.Count > 0)
+            if (MatchedSapSales is not null && MatchedSapSales.Rows.Any(x => !x.IsSaved))
             {
-                await SaveMatchedInvoicesAsync();
+                await SaveMatchedInvoicesAsync(fromPlanConfirmation: true);
             }
             else
             {
