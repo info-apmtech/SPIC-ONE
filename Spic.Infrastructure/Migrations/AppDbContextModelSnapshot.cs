@@ -3900,11 +3900,17 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<int>("HeadquartersId")
                         .HasColumnType("integer");
 
+                    b.PrimitiveCollection<int[]>("HeadquartersIds")
+                        .HasColumnType("integer[]");
+
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
                     b.Property<int>("RegionId")
                         .HasColumnType("integer");
+
+                    b.PrimitiveCollection<int[]>("RegionIds")
+                        .HasColumnType("integer[]");
 
                     b.Property<int>("Role")
                         .HasColumnType("integer");
