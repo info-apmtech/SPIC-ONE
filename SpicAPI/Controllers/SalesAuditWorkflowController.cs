@@ -84,7 +84,7 @@ public sealed class SalesAuditWorkflowController : ControllerBase
 
         var record = await _db.Set<SalesAuditRecord>().AsNoTracking()
             .Where(x => x.CSR2Id == csr2Id)
-            .Select(x => new { x.AdditionalApprovedBudgetRs, x.SchemeFrom, x.SchemeTo, x.DocumentStatus, x.IsFinalSubmitted })
+            .Select(x => new { x.AdditionalApprovedBudgetRs, x.SchemeFrom, x.SchemeTo, x.DocumentStatus, x.IsFinalSubmitted, x.ActualTurnover })
             .SingleOrDefaultAsync(HttpContext.RequestAborted);
         // Additional MD budget is a saved value; no MD approval source has been connected yet.
         var additional = record?.AdditionalApprovedBudgetRs ?? 0m;
@@ -109,6 +109,7 @@ public sealed class SalesAuditWorkflowController : ControllerBase
             SchemeFrom = record?.SchemeFrom,
             SchemeTo = record?.SchemeTo,
             DocumentStatus = record?.DocumentStatus ?? "Not Started",
+            ActualTurnoverCr = record?.ActualTurnover ?? 0m,
             IsFinalSubmitted = record?.IsFinalSubmitted ?? false,
             IsPlanConfirmed = record?.DocumentStatus is "Plan Confirmed" or "In Progress" or "Completed" || record?.IsFinalSubmitted == true,
             State = geography.State,
@@ -991,7 +992,7 @@ public sealed class SalesAuditWorkflowController : ControllerBase
     // Read-only comparison: existing dealer mappings + planned products + standalone SAP sales.
     // No CSR ID is stored on SalesAuditDealerSales. No achievement is written here.
     [HttpGet("dealer-mapping/sap-sales")]
-    public async Task<IActionResult> GetMappedSapSales([FromQuery] int csr2Id)
+    public async Task<IActionResult> GetMappedSapSales([FromQuery] int csr2Id, [FromQuery] bool excludeSaved = false)
     {
         if (csr2Id <= 0) return BadRequest(new { message = "Valid csr2Id required." });
         if (!await CanEditAsync(csr2Id)) return Forbid();
@@ -1038,7 +1039,15 @@ public sealed class SalesAuditWorkflowController : ControllerBase
             .ToDictionary(x => x.Key, x => x.First().DealerName);
         var dateFrom = audit.SchemeFrom.Value.Date;
         var dateTo = audit.SchemeTo.Value.Date;
+        // A link is scoped to this CSR-2; the same dealer can have both Old and New invoices.
+        // Keep old records visible but never count them as new inserts.
+        var savedSaleIds = (await _db.Set<SalesAuditMatchedInvoice>().AsNoTracking()
+            .Where(x => x.CSR2Id == csr2Id)
+            .Select(x => x.SourceSaleId)
+            .ToListAsync(ct)).ToHashSet();
         var matches = new List<object>();
+        int newInvoiceLines = 0, oldInvoiceLines = 0;
+        decimal newInvoiceGrossRs = 0m;
         var amountsByProduct = new Dictionary<int, (decimal Quantity, decimal Gross, int Lines)>();
         var unmatchedProducts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         int excludedOutsideDates = 0, excludedUnits = 0, invalidDates = 0, candidateRows = 0;
@@ -1051,14 +1060,27 @@ public sealed class SalesAuditWorkflowController : ControllerBase
             {
                 using var command = connection.CreateCommand();
                 command.CommandText = @"
-                    SELECT ""Id"", ""SourceRowJson""::text
-                    FROM ""SalesAuditDealerSales""
+                    SELECT s.""Id"", s.""SourceRowJson""::text
+                    FROM ""SalesAuditDealerSales"" AS s
                     WHERE (CASE
                         WHEN UPPER(BTRIM(COALESCE(""SourceRowJson""->>'Customer Number', ''))) ~ '^[A-Z]'
                           THEN SUBSTRING(UPPER(BTRIM(""SourceRowJson""->>'Customer Number')) FROM 2)
                         ELSE UPPER(BTRIM(COALESCE(""SourceRowJson""->>'Customer Number', '')))
                     END) = ANY(@codes)
-                    ORDER BY ""Id""";
+                    " + (excludeSaved ? @"
+                      AND NOT EXISTS (
+                          SELECT 1 FROM ""SalesAuditMatchedInvoices"" AS linked
+                          WHERE linked.""CSR2Id"" = @auditId
+                            AND linked.""SourceSaleId"" = s.""Id""
+                      )" : "") + @"
+                    ORDER BY s.""Id""";
+                if (excludeSaved)
+                {
+                    var auditParameter = command.CreateParameter();
+                    auditParameter.ParameterName = "@auditId";
+                    auditParameter.Value = csr2Id;
+                    command.Parameters.Add(auditParameter);
+                }
                 var parameter = command.CreateParameter();
                 parameter.ParameterName = "@codes";
                 parameter.Value = dealerCodes;
@@ -1104,9 +1126,15 @@ public sealed class SalesAuditWorkflowController : ControllerBase
                     var code = DealerKey(sourceCustomerNumber);
                     var previous = amountsByProduct.TryGetValue(line.ProductId, out var sum) ? sum : default;
                     amountsByProduct[line.ProductId] = (previous.Quantity + qty, previous.Gross + gross, previous.Lines + 1);
+                    var saleId = reader.GetInt64(0);
+                    var isSaved = savedSaleIds.Contains(saleId);
+                    if (isSaved) oldInvoiceLines++;
+                    else { newInvoiceLines++; newInvoiceGrossRs += gross; }
                     matches.Add(new
                     {
-                        SaleId = reader.GetInt64(0),
+                        SaleId = saleId,
+                        IsSaved = isSaved,
+                        Status = isSaved ? "Old" : "New",
                         DealerCode = code,
                         SapCustomerNumber = sourceCustomerNumber,
                         DealerName = dealerNames.TryGetValue(code, out var dealerName) ? dealerName : Field("Customer Name"),
@@ -1147,6 +1175,11 @@ public sealed class SalesAuditWorkflowController : ControllerBase
             MappedDealers = mapped.Count,
             PlannedProducts = plan.Count,
             MatchedInvoiceLines = matches.Count,
+            // Total matched amounts are preview amounts, NOT persisted achievement.
+            NewInvoiceLines = newInvoiceLines,
+            OldInvoiceLines = oldInvoiceLines,
+            NewInvoiceGrossRs = newInvoiceGrossRs,
+            ExcludesSavedInvoices = excludeSaved,
             CandidateInvoiceLines = candidateRows,
             ExcludedOutsideDates = excludedOutsideDates,
             ExcludedDifferentUnits = excludedUnits,
@@ -1160,6 +1193,9 @@ public sealed class SalesAuditWorkflowController : ControllerBase
     }
 
 
+    // Sales Plan is confirmed once. On each subsequent day, this same endpoint
+    // accepts "Plan Confirmed" or "In Progress" and saves only unseen SourceSaleIds.
+    // The caller must NOT attempt to confirm the plan again.
     // Daily matched-invoice progress is independent from plan confirmation.
     // Incremental, idempotent upsert by (CSR2Id, SourceSaleId); never replace historical days.
     // The UI sends CSR2Id only; invoice amounts and identities are always reconstructed on server.
@@ -1193,7 +1229,9 @@ public sealed class SalesAuditWorkflowController : ControllerBase
 
         // Same matching function as the read-only invoice table: mapped dealer,
         // planned product name, scheme date and MT unit.
-        var matchingAction = await GetMappedSapSales(csr2Id);
+        // Save always loads the complete eligible set; filtered GET is preview-only.
+        // Existing IDs remain available for the cumulative achievement calculation.
+        var matchingAction = await GetMappedSapSales(csr2Id, excludeSaved: false);
         if (matchingAction is not OkObjectResult matchedResult || matchedResult.Value is null)
             return matchingAction;
         var json = System.Text.Json.JsonSerializer.Serialize(matchedResult.Value);

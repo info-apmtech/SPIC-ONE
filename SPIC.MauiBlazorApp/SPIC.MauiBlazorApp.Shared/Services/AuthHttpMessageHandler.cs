@@ -35,7 +35,7 @@ namespace SPIC.MauiBlazorApp.Shared.Services
 
             // A 401 means "session expired" only for a call that carried a token. The sign-in
             // endpoint answers 401 for a wrong password, and other anonymous calls never had a
-            // session to lose; reloading /login there would wipe the form and its error message.
+            // session to lose; reloading /login there would wipe the form and its error message.s
             if (response.StatusCode == HttpStatusCode.Unauthorized
                 && request.Headers.Authorization is not null
                 && !IsAnonymousEndpoint(request.RequestUri))
