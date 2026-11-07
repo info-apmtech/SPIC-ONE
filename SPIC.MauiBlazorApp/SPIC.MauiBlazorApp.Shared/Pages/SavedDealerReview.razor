@@ -185,6 +185,8 @@
                _dealer = await Http.GetFromJsonAsync<DR.DealerRegistration>($"api/DealerRegistration/{dealerId}");
                 if (_dealer != null)
                 {
+                    _avpOfficeSpicDealerId = _dealer.SPICCode ?? string.Empty;
+                    _avpOfficeGflDealerId = _dealer.GreenStarCode ?? _dealer.NCode ?? _dealer.TnCode ?? string.Empty;
                     await FetchRelatedData(_dealer.Id);
                     await LoadLookups();
                     await LoadCreditLimitSalesData(_dealer.Id);
@@ -593,32 +595,45 @@
     private decimal? _previousRmCreditLimit;
     private decimal? _previousSmCreditLimit;
 
-    // New Dealer final AVP approval: the AVP chooses the code prefix and reviews
-    // the server-generated Dealer Code before approving. RM/SM and existing-dealer
-    // approval flows do not use these fields.
-    private static readonly string[] _dealerCodePrefixes = { "D", "N", "Z", "T" };
-    private string _selectedDealerCodePrefix = "D";
-    private string _avpDealerCode = string.Empty;
-    private bool _isDealerCodePreviewLoading;
-    private string? _dealerCodePreviewError;
-
+    // New Dealer final AVP approval only records the AVP decision. The company
+    // Dealer IDs are entered afterwards by AVP Office, so no Dealer Code is
+    // previewed or generated here.
     private bool IsNewDealerFinalApproval =>
         _isNewDealer && (LoginState.IsDirectorOrAVP || LoginState.IsAdmin);
 
-    private sealed class DealerCodePreviewDto
-    {
-        public int DealerId { get; set; }
-        public string Prefix { get; set; } = string.Empty;
-        public string DealerCode { get; set; } = string.Empty;
-        public string TargetField { get; set; } = string.Empty;
-        public string? LegacyField { get; set; }
-    }
+    // AVP Office manual Dealer ID entry (SPIC and/or GFL), saved to the existing
+    // SPICCode / GreenStarCode fields by the server.
+    private string _avpOfficeSpicDealerId = string.Empty;
+    private string _avpOfficeGflDealerId = string.Empty;
+    private string _avpOfficeRemarks = string.Empty;
+    private string? _avpOfficeError;
+    private bool _isSubmittingAvpOffice;
+
+    private bool IsAvpOfficeSubmitted =>
+        _dealer != null &&
+        (_approvalHistory.Any(h => h.IsApproved == true &&
+             string.Equals(h.Role, "AVP Office", StringComparison.OrdinalIgnoreCase))
+         || !string.IsNullOrWhiteSpace(_dealer.DealerCode));
+
+    private bool IsAwaitingAvpOffice =>
+        _dealer != null
+        && _dealer.IsNewDealerRegistration
+        && _dealer.AVPApproved == true
+        && !IsAvpOfficeSubmitted;
+
+    private bool CanShowAvpOfficeSubmit =>
+        LoginState.IsAvpOffice
+        && _dealer != null
+        && (_dealer.IsNewDealerRegistration || DealerReviewFormat.HasNewDealerRegistrationEvidence(_dealer))
+        && _dealer.RMApproved == true
+        && _dealer.SMApproved == true
+        && _dealer.AVPApproved == true
+        && !IsAvpOfficeSubmitted;
 
 private async Task ShowConfirmProceedPopup()
 {
     ConfirmRemarks = "";
     _approvalError = null;
-    _dealerCodePreviewError = null;
     _rmCreditLimitSpic = null;
     _rmCreditLimitGfl = null;
     _smCreditLimitSpic = null;
@@ -652,111 +667,72 @@ private async Task ShowConfirmProceedPopup()
         .FirstOrDefault(h => h.SmCreditLimitGfl.HasValue && h.SmCreditLimitGfl > 0);
     _previousSmCreditLimitGfl = smGflApproval?.SmCreditLimitGfl;
 
-    if (IsNewDealerFinalApproval)
-    {
-        _selectedDealerCodePrefix = GetDefaultDealerCodePrefix();
-        _avpDealerCode = string.Empty;
-    }
-
     IsConfirmProceedPopupVisible = true;
     StateHasChanged();
-
-    // Only the final New Dealer AVP/Admin popup needs a Dealer Code preview.
-    // Existing Dealer, RM and SM approval popup behaviour stays unchanged.
-    if (IsNewDealerFinalApproval)
-        await LoadDealerCodePreviewAsync();
+    await Task.CompletedTask;
 }
 
-private string GetDefaultDealerCodePrefix()
+private async Task SubmitAvpOfficeIds()
 {
-    if (_dealer == null)
-        return "D";
+    if (_dealer == null || _isSubmittingAvpOffice)
+        return;
 
-    // If an earlier migration/manual record already contains a company code,
-    // prefer its prefix. New Dealer records normally reach AVP with these empty.
-    foreach (var code in new[]
+    _avpOfficeError = null;
+
+    var spicDealerId = _avpOfficeSpicDealerId?.Trim();
+    var gflDealerId = _avpOfficeGflDealerId?.Trim();
+
+    if (_dealer.InSpic && string.IsNullOrWhiteSpace(spicDealerId))
     {
-        _dealer.SPICCode,
-        _dealer.GreenStarCode,
-        _dealer.NCode,
-        _dealer.TnCode
-    })
-    {
-        if (string.IsNullOrWhiteSpace(code))
-            continue;
-
-        var prefix = code.Trim().Substring(0, 1).ToUpperInvariant();
-        if (_dealerCodePrefixes.Contains(prefix, StringComparer.OrdinalIgnoreCase))
-            return prefix;
-    }
-
-    // Preserve the applicant's company selection as the default suggestion.
-    // AVP can still choose any allowed prefix in the dropdown.
-    if (_dealer.InSpic)
-        return "D";
-
-    if (_dealer.InGreenStar)
-        return "N";
-
-    return "D";
-}
-
-private async Task OnDealerCodePrefixChanged(ChangeEventArgs args)
-{
-    var prefix = args.Value?.ToString()?.Trim().ToUpperInvariant();
-    if (string.IsNullOrWhiteSpace(prefix) ||
-        !_dealerCodePrefixes.Contains(prefix, StringComparer.OrdinalIgnoreCase))
-    {
+        _avpOfficeError = "SPIC Dealer ID is required for this application.";
         return;
     }
 
-    _selectedDealerCodePrefix = prefix;
-    await LoadDealerCodePreviewAsync();
-}
-
-private async Task LoadDealerCodePreviewAsync()
-{
-    if (_dealer == null || !IsNewDealerFinalApproval)
+    if (_dealer.InGreenStar && string.IsNullOrWhiteSpace(gflDealerId))
+    {
+        _avpOfficeError = "GFL Dealer ID is required for this application.";
         return;
+    }
 
-    _isDealerCodePreviewLoading = true;
-    _dealerCodePreviewError = null;
-    _avpDealerCode = string.Empty;
+    _isSubmittingAvpOffice = true;
     StateHasChanged();
 
     try
     {
-        var prefix = Uri.EscapeDataString(_selectedDealerCodePrefix);
-        using var response = await Http.GetAsync(
-            $"api/DealerRegistration/{_dealer.Id}/dealer-code-preview?prefix={prefix}");
+        var response = await Http.PostAsJsonAsync(
+            $"api/DealerRegistration/{_dealer.Id}/avp-office-submit",
+            new
+            {
+                SpicDealerId = _dealer.InSpic ? spicDealerId : null,
+                GflDealerId = _dealer.InGreenStar ? gflDealerId : null,
+                Remarks = _avpOfficeRemarks
+            });
 
         if (!response.IsSuccessStatusCode)
         {
-            _dealerCodePreviewError = await ReadErrorAsync(response);
+            _avpOfficeError = await ReadErrorAsync(response);
             return;
         }
 
-        var preview = await response.Content.ReadFromJsonAsync<DealerCodePreviewDto>();
-        if (preview == null || string.IsNullOrWhiteSpace(preview.DealerCode))
-        {
-            _dealerCodePreviewError = "Dealer Code preview was empty. Please select the prefix again.";
-            return;
-        }
+        _dealer = await Http.GetFromJsonAsync<DR.DealerRegistration>($"api/DealerRegistration/{_dealer.Id}");
+        if (_dealer != null)
+            await FetchRelatedData(_dealer.Id);
 
-        _selectedDealerCodePrefix = string.IsNullOrWhiteSpace(preview.Prefix)
-            ? _selectedDealerCodePrefix
-            : preview.Prefix.Trim().ToUpperInvariant();
-
-        _avpDealerCode = preview.DealerCode.Trim().ToUpperInvariant();
+        MarkDataChanged();
+        _showSuccessNotification = true;
+        StateHasChanged();
+        await Task.Delay(3000);
+        _showSuccessNotification = false;
+        Nav.NavigateTo("/Dashboard");
     }
     catch (Exception ex)
     {
-        _dealerCodePreviewError = "Could not generate Dealer Code preview. Please try again.";
-        Console.WriteLine($"[SavedDealerReview] dealer-code-preview: {ex}");
+        _avpOfficeError = "Could not submit the Dealer IDs. Please try again.";
+        Console.WriteLine($"[SavedDealerReview] avp-office-submit: {ex}");
     }
     finally
     {
-        _isDealerCodePreviewLoading = false;
+        _isSubmittingAvpOffice = false;
         StateHasChanged();
     }
 }
@@ -784,6 +760,7 @@ private void HideConfirmProceedPopup()
         if (LoginState == null) return "Review";
         if (LoginState.IsRMGroup) return "RM Review";
         if (LoginState.IsSMGroup) return "SM Review";
+        if (IsNewDealerFinalApproval) return "AVP Review";
         if (LoginState.IsDirectorOrAVP || LoginState.IsAdmin) return "AVP Review";
         return "Review";
     }
@@ -793,6 +770,7 @@ private void HideConfirmProceedPopup()
         if (LoginState == null) return "Next Stage";
         if (LoginState.IsRMGroup) return "State Manager (SM) Review";
         if (LoginState.IsSMGroup) return "AVP Review";
+        if (IsNewDealerFinalApproval) return "AVP Office";
         if (LoginState.IsDirectorOrAVP || LoginState.IsAdmin) return "Final Approval";
         return "Next Stage";
     }
@@ -813,43 +791,18 @@ private async Task ApproveDealer()
             return;
         }
 
-        // New Dealer final (AVP) approval: AVP must review the generated code
-        // shown in this popup. The server validates the selected prefix, confirms
-        // that the reviewed code is still the next available code, then saves the
-        // approval + DealerCode + company code fields in one final-approval step.
+        // New Dealer final (AVP) approval records the AVP decision only. The
+        // company Dealer IDs and internal Dealer Code are entered later by AVP
+        // Office, so nothing is generated or previewed here.
         if (IsNewDealerFinalApproval)
         {
-            if (_isDealerCodePreviewLoading)
-            {
-                _approvalError = "Please wait until the Dealer Code preview is generated.";
-                return;
-            }
-
-            if (string.IsNullOrWhiteSpace(_avpDealerCode))
-            {
-                _approvalError = "Select a Dealer Code prefix and review the generated Dealer Code before approval.";
-                return;
-            }
-
             var approveResp = await Http.PostAsJsonAsync(
                 $"api/DealerRegistration/{_dealer.Id}/final-approve",
-                new
-                {
-                    Remarks = ConfirmRemarks,
-                    Prefix = _selectedDealerCodePrefix,
-                    DealerCode = _avpDealerCode
-                });
+                new { Remarks = ConfirmRemarks });
 
             if (!approveResp.IsSuccessStatusCode)
             {
                 _approvalError = await ReadErrorAsync(approveResp);
-
-                // A preview can become stale if another New Dealer is approved in
-                // parallel. Refresh only the preview; do not close the popup or
-                // change any of the previous approval flow.
-                if (approveResp.StatusCode == System.Net.HttpStatusCode.Conflict)
-                    await LoadDealerCodePreviewAsync();
-
                 return;
             }
 
@@ -1379,7 +1332,7 @@ private async Task ApproveDealer()
         </div>
     }
 
-    @if (_dealer?.AVPApproved == true)
+    @if (_dealer?.AVPApproved == true && !IsAwaitingAvpOffice)
     {
         <div class="banner">
             <div class="banner-left">
@@ -1399,7 +1352,7 @@ private async Task ApproveDealer()
                     <div class="title">
                         Application Successfully Approved ! 🎉
                     </div>
-                    <div class="subtitle">@(_dealer?.IsNewDealerRegistration == true ? "Dealer Registration approved. Dealer Code generated and activated." : "The Credit Limit has been approved and activated")</div>
+                    <div class="subtitle">@(_dealer?.IsNewDealerRegistration == true ? "Dealer Registration approved. Dealer IDs captured and activated." : "The Credit Limit has been approved and activated")</div>
                 </div>
             </div>
 
@@ -1417,8 +1370,8 @@ private async Task ApproveDealer()
         <div class="banner mb-3">
             <div class="banner-left">
                 <div class="text-block">
-                    <div class="title">Application Successfully Approved!</div>
-                    <div class="subtitle">Redirecting to Dashboard...</div>
+                    <div class="title">@(IsNewDealerFinalApproval ? "Forwarded to AVP Office!" : "Application Successfully Approved!")</div>
+                    <div class="subtitle">@(IsNewDealerFinalApproval ? "AVP approval recorded. AVP Office will enter the Dealer IDs." : "Redirecting to Dashboard...")</div>
                 </div>
             </div>
         </div>
@@ -1449,14 +1402,9 @@ private async Task ApproveDealer()
                              CurrentStageTarget="@GetCurrentStageTarget()"
                              NextStageTarget="@GetNextStageTarget()"
                              IsApproving="_isApproving"
-                             IsDealerCodePreviewLoading="_isDealerCodePreviewLoading"
-                             DealerCodePreviewError="@_dealerCodePreviewError"
                              ApprovalError="@_approvalError"
-                             SelectedDealerCodePrefix="@_selectedDealerCodePrefix"
-                             AvpDealerCode="@_avpDealerCode"
                              OnClose="HideConfirmProceedPopup"
                              OnConfirm="ApproveDealer"
-                             OnDealerCodePrefixChanged="OnDealerCodePrefixChanged"
                              @bind-ConfirmRemarks="ConfirmRemarks"
                              @bind-RmCreditLimitSpic="_rmCreditLimitSpic"
                              @bind-RmCreditLimitGfl="_rmCreditLimitGfl"
@@ -1620,6 +1568,70 @@ private async Task ApproveDealer()
 
 
 
+@if (CanShowAvpOfficeSubmit)
+{
+    <div class="avp-office-card">
+        <div class="avp-office-header">
+            <div>
+                <h5 class="avp-office-title">AVP Office - Dealer ID Submission</h5>
+                <p class="avp-office-subtitle">
+                    Enter the company Dealer IDs issued for this approved New Dealer.
+                    Both are saved to the existing dealer registration.
+                </p>
+            </div>
+        </div>
+
+        <div class="avp-office-grid">
+            @if (_dealer?.InSpic == true)
+            {
+                <div class="avp-office-field">
+                    <label for="avpOfficeSpicId">SPIC Dealer ID <span class="text-danger">*</span></label>
+                    <input id="avpOfficeSpicId"
+                           class="form-control"
+                           maxlength="50"
+                           @bind="_avpOfficeSpicDealerId"
+                           @bind:event="oninput"
+                           placeholder="Enter SPIC Dealer ID" />
+                </div>
+            }
+            @if (_dealer?.InGreenStar == true)
+            {
+                <div class="avp-office-field">
+                    <label for="avpOfficeGflId">GFL Dealer ID <span class="text-danger">*</span></label>
+                    <input id="avpOfficeGflId"
+                           class="form-control"
+                           maxlength="50"
+                           @bind="_avpOfficeGflDealerId"
+                           @bind:event="oninput"
+                           placeholder="Enter GFL Dealer ID" />
+                </div>
+            }
+            <div class="avp-office-field avp-office-remarks">
+                <label for="avpOfficeRemarks">Remarks (optional)</label>
+                <textarea id="avpOfficeRemarks"
+                          class="form-control"
+                          rows="2"
+                          @bind="_avpOfficeRemarks"
+                          placeholder="Enter remarks"></textarea>
+            </div>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(_avpOfficeError))
+        {
+            <div class="avp-office-error">@_avpOfficeError</div>
+        }
+
+        <div class="avp-office-actions">
+            <button type="button"
+                    class="btn-submit px-3"
+                    @onclick="SubmitAvpOfficeIds"
+                    disabled="@_isSubmittingAvpOffice">
+                @(_isSubmittingAvpOffice ? "Submitting..." : "Submit Dealer IDs")
+            </button>
+        </div>
+    </div>
+}
+
 @if (CanShowApprovalButton())
 {
     <ActionBar CssClass="sdr-review-actions" AriaLabel="Review actions">
@@ -1704,4 +1716,14 @@ private async Task ApproveDealer()
 .credit-box { background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; padding: 14px 16px; height: 100%; }
 .credit-box-label { color: #c9e8d2; font-size: 0.72rem; margin-bottom: 6px; }
 .credit-box-val { color: #fff; font-weight: 700; font-size: 1.1rem; }
+
+.avp-office-card { background: #F0FDFA; border: 1px solid #99F6E4; border-radius: 12px; padding: 18px 20px; margin: 16px 0; }
+.avp-office-title { color: #115E59; font-weight: 700; font-size: 1rem; margin: 0 0 4px; }
+.avp-office-subtitle { color: #374151; font-size: 0.82rem; margin: 0 0 14px; }
+.avp-office-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
+.avp-office-field { display: flex; flex-direction: column; gap: 5px; }
+.avp-office-field label { font-size: 0.78rem; font-weight: 600; color: #374151; }
+.avp-office-remarks { grid-column: 1 / -1; }
+.avp-office-actions { display: flex; justify-content: flex-end; margin-top: 14px; }
+.avp-office-error { background: #FEF2F2; border: 1px solid #FECACA; color: #B91C1C; border-radius: 8px; padding: 10px 12px; font-size: 0.82rem; margin-top: 12px; }
 </style>

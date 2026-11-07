@@ -10,6 +10,102 @@
 
 <PageTitle>Sales Tracking · SPIC ONE</PageTitle>
 
+<style>
+    /* Monthly progress line chart - self-contained SVG, no extra JS library. */
+    .trk-month-chart {
+        padding: 9px 10px 6px;
+    }
+
+        .trk-month-chart svg {
+            width: 100%;
+            height: auto;
+            display: block;
+            overflow: visible;
+        }
+
+        .trk-month-chart .trk-actual-area {
+            fill: #15915b;
+            fill-opacity: .065;
+        }
+
+        .trk-month-chart .trk-actual-line {
+            stroke: #198c50;
+            stroke-width: 2.4;
+            fill: none;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        .trk-month-chart .trk-target-line {
+            stroke: #3475ff;
+            stroke-width: 2;
+            fill: none;
+            stroke-dasharray: 5 5;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        .trk-month-chart .trk-chart-gridline {
+            stroke: #dfe6e7;
+            stroke-width: 1;
+            stroke-dasharray: 2 3;
+        }
+
+        .trk-month-chart .trk-chart-axis {
+            fill: #87918e;
+            font-size: 12px;
+        }
+
+        .trk-month-chart .trk-actual-point {
+            fill: #16894b;
+            stroke: white;
+            stroke-width: 2;
+        }
+
+        .trk-month-chart .trk-target-point {
+            fill: #fff;
+            stroke: #3475ff;
+            stroke-width: 2;
+        }
+
+        .trk-month-chart .trk-actual-label {
+            fill: #16894b;
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .trk-month-chart .trk-target-label {
+            fill: #2d60d8;
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+    .trk-month-chart-note {
+        font-size: 11px;
+        line-height: 1.5;
+        color: #69788b;
+        margin: 0 14px 12px;
+    }
+
+    .trk-single-month-note {
+        font-size: 11px;
+        color: #69788b;
+        text-align: center;
+        margin-bottom: 7px;
+    }
+
+    @@media(max-width:650px) {
+        .trk-month-chart {
+            overflow-x: auto;
+        }
+
+            .trk-month-chart svg {
+                min-width: 460px;
+            }
+    }
+</style>
+
+
 <div class="container-fluid py-4 px-0">
     <div class="trk-wrapper">
 
@@ -81,27 +177,27 @@
             <div class="trk-kpi-grid">
                 <div class="trk-kpi trk-kpi-purple">
                     <span class="trk-kpi-label">Required Turnover (TO)</span>
-                    <span class="trk-kpi-value">₹ @SalesAuditFormat.Crore(RequiredTurnover) Cr</span>
+                    <span class="trk-kpi-value">₹ @Crore3(RequiredTurnover) Cr</span>
                     <span class="trk-kpi-sub">Minimum target to achieve</span>
                 </div>
                 <div class="trk-kpi trk-kpi-blue">
                     <span class="trk-kpi-label">Actual Turnover</span>
-                    <span class="trk-kpi-value">@(HasData ? $"₹ {SalesAuditFormat.Crore(ActualTurnover)} Cr" : "-")</span>
-                    <span class="trk-kpi-sub">From saved product achievement records</span>
+                    <span class="trk-kpi-value">@(HasKpiData ? $"₹ {Crore3(ActualTurnover)} Cr" : "-")</span>
+                    <span class="trk-kpi-sub">From saved cumulative invoice achievements</span>
                 </div>
                 <div class="trk-kpi trk-kpi-peach">
                     <span class="trk-kpi-label">Achievement %</span>
-                    <span class="trk-kpi-value trk-orange">@(HasData ? $"{Pct(AchievementPct)}%" : "-")</span>
+                    <span class="trk-kpi-value trk-orange">@(HasKpiData ? $"{Pct(AchievementPct)}%" : "-")</span>
                     <span class="trk-kpi-sub">Against required TO</span>
                 </div>
                 <div class="trk-kpi trk-kpi-peach">
                     <span class="trk-kpi-label">Remaining to Achieve</span>
-                    <span class="trk-kpi-value trk-red">@(HasData ? $"₹ {SalesAuditFormat.Crore(Remaining)}" : "-")</span>
+                    <span class="trk-kpi-value trk-red">@(HasKpiData ? $"₹ {RemainingCrore3(Remaining)} Cr" : "-")</span>
                     <span class="trk-kpi-sub">To reach required TO</span>
                 </div>
                 <div class="trk-kpi trk-kpi-peach">
                     <span class="trk-kpi-label">Tracking Status</span>
-                    <span class="trk-kpi-value trk-red">@(HasData ? (IsFinalSubmitted ? "Submitted" : "In Progress") : "Awaiting Data")</span>
+                    <span class="trk-kpi-value trk-red">@(HasKpiData ? (IsFinalSubmitted ? "Submitted" : "In Progress") : "Awaiting Data")</span>
                     <span class="trk-kpi-sub">Loaded from the saved database records</span>
                 </div>
             </div>
@@ -151,7 +247,7 @@
                 </div>
             </div>
 
-            @if (!HasData)
+            @if (!HasKpiData)
             {
                 <!-- Awaiting sales data -->
                 <div class="trk-card trk-awaiting">
@@ -161,7 +257,7 @@
                         <path d="M32 22h14l5 5h21a3 3 0 0 1 3 3" stroke="#166534" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
                         <path d="M26 42h54" stroke="#166534" stroke-width="2" />
                         <circle cx="78" cy="64" r="13" fill="#ffffff" stroke="#166534" stroke-width="2" />
-                        <path d="M78 57v8" stroke="#166534" stroke-width="2.4" stroke-linecap="round" />
+                        <path d="M78 57v8" stroke="#166534" stroke-width="2" stroke-linecap="round" />
                         <circle cx="78" cy="70" r="1.4" fill="#166534" />
                     </svg>
                     <h3 class="trk-awaiting-title">Awaiting Sales Data</h3>
@@ -208,15 +304,15 @@
                             <ul class="trk-gauge-legend">
                                 <li>
                                     <span class="trk-legend-dot trk-bg-green"></span>
-                                    <div><span>Actual Turnover</span><strong class="trk-green">₹ @SalesAuditFormat.Crore(ActualTurnover) Cr</strong></div>
+                                    <div><span>Actual Turnover</span><strong class="trk-green">₹ @Crore3(ActualTurnover) Cr</strong></div>
                                 </li>
                                 <li>
                                     <span class="trk-legend-dot trk-bg-blue"></span>
-                                    <div><span>Required Turnover</span><strong class="trk-green">₹ @SalesAuditFormat.Crore(RequiredTurnover) Cr</strong></div>
+                                    <div><span>Required Turnover</span><strong class="trk-green">₹ @Crore3(RequiredTurnover) Cr</strong></div>
                                 </li>
                                 <li>
                                     <span class="trk-legend-dot trk-bg-grey"></span>
-                                    <div><span>Remaining</span><strong>₹ @SalesAuditFormat.Crore(Remaining) Cr</strong></div>
+                                    <div><span>Remaining</span><strong>₹ @RemainingCrore3(Remaining) Cr</strong></div>
                                 </li>
                             </ul>
                         </div>
@@ -231,10 +327,55 @@
                             </div>
                         </div>
 
-                        <div class="trk-trend" role="status">
-                            Monthly invoice-date data is not exposed by the current Sales Audit API.
-                            A trend cannot be calculated accurately from product-level totals alone.
-                        </div>
+                        @if (MonthlyInvoiceSales.Count > 0)
+                        {
+                            <div class="trk-month-chart trk-month-chart-line-v2" role="img"
+                                 aria-label="@MonthlyChartAccessibleLabel">
+                                <svg viewBox="0 0 680 310" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                                    @foreach (var tick in MonthlyChartTicks)
+                                    {
+                                        <line x1="76" x2="654" y1="@ChartN(tick.Y)" y2="@ChartN(tick.Y)" class="trk-chart-gridline" />
+                                        @SvgLabel("65", ChartN(tick.Y + 4), "end", "trk-chart-axis", tick.Label)
+                                    }
+                                    <path d="@MonthlyActualAreaPath" class="trk-actual-area" />
+                                    <path d="@MonthlyActualLinePath" class="trk-actual-line" />
+                                    <path d="@MonthlyTargetLinePath" class="trk-target-line" />
+                                    @foreach (var (point, pointIndex) in MonthlyChartPoints.Select((p, i) => (p, i)))
+                                    {
+                                        <circle cx="@ChartN(point.X)" cy="@ChartN(point.ActualY)" r="5.5" class="trk-actual-point" />
+                                        @if (pointIndex == MonthlyChartPoints.Count - 1 || MonthlyInvoiceSales.Count > 1)
+                                        {
+                                            @SvgLabel(ChartN(point.X), ChartN(Math.Max(12, point.ActualY - 13)), "middle", "trk-actual-label", $"₹ {Crore3(point.Actual)} Cr")
+                                        }
+                                        @if (pointIndex == 0 || pointIndex == MonthlyChartPoints.Count - 1 || MonthlyInvoiceSales.Count > 1)
+                                        {
+                                            @SvgLabel(ChartN(point.X), "292", "middle", "trk-chart-axis", point.MonthLabel)
+                                        }
+                                    }
+                                    @* One month: draw a horizontal required-target benchmark; multiple months: the same scheme target on each month. *@
+                                    @foreach (var point in MonthlyChartPoints)
+                                    {
+                                        <circle cx="@ChartN(point.X)" cy="@ChartN(point.TargetY)" r="3.5" class="trk-target-point" />
+                                    }
+                                    @SvgLabel("649", ChartN(Math.Max(12, MonthlyTargetY - 12)), "end", "trk-target-label", $"₹ {Crore3(RequiredTurnover)} Cr")
+                                </svg>
+                                @if (MonthlyInvoiceSales.Count == 1)
+                                {
+                                    <div class="trk-single-month-note">@SelectedMonthLabel — cumulative turnover on saved invoice dates (starting from zero at month opening)</div>
+                                }
+                                <div class="trk-month-chart-note">
+                                    Green: saved SAP invoice turnover (cumulative within a single month). Blue dashed: required turnover for the entire scheme (benchmark, not a monthly target).
+                                </div>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="trk-trend" role="status">
+                                @(string.IsNullOrEmpty(MonthlyTrendError)
+                                    ? "No dated, saved SAP invoice records are available to plot a monthly trend. The overall turnover above can still include saved achievements without invoice dates."
+                                    : MonthlyTrendError)
+                            </div>
+                        }
                     </div>
                 </div>
             }
@@ -368,6 +509,7 @@
         public string? ProgramType { get; set; }
         public bool IsPlanConfirmed { get; set; }
         public bool IsFinalSubmitted { get; set; }
+        public decimal ActualTurnoverCr { get; set; }
     }
     private sealed class ProductDto
     {
@@ -402,6 +544,137 @@
         public string CustomerDistrict { get; set; } = "";
         public decimal PlannedCommitmentRs { get; set; }
         public decimal ActualSalesRs { get; set; }
+    }
+
+    // Same read-only endpoint and saved-status semantics used in Plan Review.
+    private sealed class MonthlySapResponse
+    {
+        public List<MonthlySapRow> Rows { get; set; } = new();
+    }
+    private sealed class MonthlySapRow
+    {
+        public bool IsSaved { get; set; }
+        public DateTime BillingDate { get; set; }
+        public decimal GrossAmountRs { get; set; }
+    }
+    private record MonthSales(DateTime Month, decimal Amount);
+    private List<MonthSales> MonthlyInvoiceSales = new();
+    private record DailySale(DateTime Date, decimal Amount);
+    private List<DailySale> SelectedMonthDailySales = new();
+    private string MonthlyTrendError = "";
+    private MonthSales? SelectedMonth => MonthlyInvoiceSales.LastOrDefault();
+    private string SelectedMonthLabel => SelectedMonth?.Month.ToString("MMMM yyyy", System.Globalization.CultureInfo.InvariantCulture) ?? "--";
+    private decimal SelectedMonthActual => SelectedMonth?.Amount ?? 0m;
+    // Plot only months present in saved invoice data. Never interpolate missing months.
+    private record MonthlyChartPoint(string MonthLabel, decimal Actual, double X, double ActualY, double TargetY);
+    private record MonthlyChartTick(double Y, string Label);
+    private const double ChartTop = 40d;
+    private const double ChartBottom = 270d;
+    private double MonthlyChartMax => Math.Max(0.01d,
+        Math.Max((double)RequiredTurnover,
+                 MonthlyInvoiceSales.Count == 0 ? 0d : (double)MonthlyInvoiceSales.Max(m => m.Amount)) / 10_000_000d) * 1.2d;
+    private double ChartY(decimal rupees) => ChartBottom - Math.Clamp((double)(rupees / 10_000_000m) / MonthlyChartMax, 0d, 1d) * (ChartBottom - ChartTop);
+    private double MonthlyTargetY => ChartY(RequiredTurnover);
+    private static string ChartN(double n) => n.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+    // Razor reserves the <text> tag for text templates; emit SVG text through RenderTreeBuilder.
+    private static RenderFragment SvgLabel(string x, string y, string anchor, string cssClass, string label) => builder =>
+    {
+        builder.OpenElement(0, "text");
+        builder.AddAttribute(1, "x", x);
+        builder.AddAttribute(2, "y", y);
+        builder.AddAttribute(3, "text-anchor", anchor);
+        builder.AddAttribute(4, "class", cssClass);
+        builder.AddContent(5, label);
+        builder.CloseElement();
+    };
+
+    // A single month is shown as a real within-month cumulative trend, not a horizontal-bar chart.
+    // The first point is the beginning-of-month zero baseline (not a fabricated invoice).
+    // Subsequent points are derived exclusively from saved, dated SAP invoices.
+    private List<MonthlyChartPoint> MonthlyChartPoints
+    {
+        get
+        {
+            if (MonthlyInvoiceSales.Count == 1 && SelectedMonthDailySales.Count > 0)
+            {
+                var month = MonthlyInvoiceSales[0].Month;
+                var daysInMonth = DateTime.DaysInMonth(month.Year, month.Month);
+                var points = new List<MonthlyChartPoint>
+                {
+                    new MonthlyChartPoint($"01 {month:MMM}", 0m, 86d, ChartY(0m), MonthlyTargetY)
+                };
+                decimal running = 0m;
+                foreach (var day in SelectedMonthDailySales)
+                {
+                    running += day.Amount;
+                    var x = 86d + 558d * Math.Max(1, day.Date.Day - 1) / Math.Max(1, daysInMonth - 1);
+                    points.Add(new MonthlyChartPoint(day.Date.ToString("dd MMM"), running, x,
+                        ChartY(running), MonthlyTargetY));
+                }
+                return points;
+            }
+            return MonthlyInvoiceSales.Select((m, i) => new MonthlyChartPoint(
+                m.Month.ToString("MMM yyyy", System.Globalization.CultureInfo.InvariantCulture),
+                m.Amount, MonthlyInvoiceSales.Count == 1 ? 365d : 86d + 558d * i / (MonthlyInvoiceSales.Count - 1),
+                ChartY(m.Amount), MonthlyTargetY)).ToList();
+        }
+    }
+    private IEnumerable<MonthlyChartTick> MonthlyChartTicks => Enumerable.Range(0, 5).Select(i =>
+        new MonthlyChartTick(ChartBottom - (ChartBottom - ChartTop) * i / 4d,
+            i == 0 ? "₹ 0" : $"₹ {(MonthlyChartMax * i / 4d):0.00} Cr"));
+    private string MonthlyActualLinePath => string.Join(" ", MonthlyChartPoints.Select((p, i) =>
+        $"{(i == 0 ? "M" : "L")}{ChartN(p.X)} {ChartN(p.ActualY)}"));
+    private string MonthlyActualAreaPath => MonthlyChartPoints.Count == 0 ? "" :
+        $"M{ChartN(MonthlyChartPoints[0].X)} {ChartN(ChartBottom)} " +
+        string.Join(" ", MonthlyChartPoints.Select(p => $"L{ChartN(p.X)} {ChartN(p.ActualY)}")) +
+        $" L{ChartN(MonthlyChartPoints[^1].X)} {ChartN(ChartBottom)} Z";
+    private string MonthlyTargetLinePath => MonthlyChartPoints.Count == 0 ? "" :
+        MonthlyInvoiceSales.Count == 1
+            ? $"M76 {ChartN(MonthlyTargetY)} L654 {ChartN(MonthlyTargetY)}"
+            : string.Join(" ", MonthlyChartPoints.Select((p, i) =>
+                $"{(i == 0 ? "M" : "L")}{ChartN(p.X)} {ChartN(p.TargetY)}"));
+    private string MonthlyChartAccessibleLabel =>
+        "Monthly saved SAP invoice turnover: " + string.Join(", ", MonthlyInvoiceSales.Select(m =>
+            $"{m.Month:MMM yyyy} {SalesAuditFormat.Rupees(m.Amount)}")) +
+        $". Full scheme required turnover benchmark: {SalesAuditFormat.Rupees(RequiredTurnover)}.";
+
+    private async Task LoadMonthlyInvoiceSalesAsync(int csr2Id)
+    {
+        MonthlyInvoiceSales = new();
+        SelectedMonthDailySales = new();
+        MonthlyTrendError = "";
+        try
+        {
+            using var response = await Http.GetAsync($"api/SalesAudit/dealer-mapping/sap-sales?csr2Id={csr2Id}&excludeSaved=false");
+            if (!response.IsSuccessStatusCode)
+            {
+                MonthlyTrendError = $"Monthly graph unavailable: saved invoice API returned HTTP {(int)response.StatusCode}.";
+                return;
+            }
+            var result = await response.Content.ReadFromJsonAsync<MonthlySapResponse>();
+            var savedInvoices = (result?.Rows ?? new())
+                .Where(r => r.IsSaved && r.BillingDate != default)
+                .ToList();
+            MonthlyInvoiceSales = savedInvoices
+                .GroupBy(r => new DateTime(r.BillingDate.Year, r.BillingDate.Month, 1))
+                .Select(g => new MonthSales(g.Key, g.Sum(r => r.GrossAmountRs)))
+                .OrderBy(x => x.Month)
+                .ToList();
+            if (MonthlyInvoiceSales.Count == 1)
+            {
+                var month = MonthlyInvoiceSales[0].Month;
+                SelectedMonthDailySales = savedInvoices
+                    .Where(r => r.BillingDate.Year == month.Year && r.BillingDate.Month == month.Month)
+                    .GroupBy(r => r.BillingDate.Date)
+                    .Select(g => new DailySale(g.Key, g.Sum(r => r.GrossAmountRs)))
+                    .OrderBy(x => x.Date)
+                    .ToList();
+            }
+        }
+        catch (Exception ex)
+        {
+            MonthlyTrendError = $"Monthly graph unavailable: {ex.Message}";
+        }
     }
 
     private OverviewDto? Overview;
@@ -464,6 +737,7 @@
     // HasData only indicates actual, persisted product achievement records.
     // A query string or SAP dealer commitment must not fabricate achievements.
     private bool HasData { get; set; }
+    private bool HasKpiData => HasData || (Overview?.ActualTurnoverCr ?? 0m) > 0m;
     private bool IsExtended => false; // No extension backend is connected.
     private decimal Remaining => Math.Max(0m, RequiredTurnover - ActualTurnover);
     private decimal AchievementPct => Percent(ActualTurnover, RequiredTurnover);
@@ -473,7 +747,14 @@
     private static string Display(string? value) => string.IsNullOrWhiteSpace(value) ? "--" : value;
     private static string DateText(DateTime? date) => date?.ToString("dd MMM yyyy") ?? "--";
     private static decimal Percent(decimal part, decimal whole) => whole == 0 ? 0 : part / whole * 100;
-    private static string Pct(decimal value) => value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+    private static string Pct(decimal value) => value.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
+    private static string Crore3(decimal value) =>
+        (value / 10_000_000m).ToString("0.000", System.Globalization.CultureInfo.InvariantCulture);
+    // Display requirement: truncate the remaining value at 3 crore decimals.
+    // Keep full precision for the underlying arithmetic and percentage.
+    private static string RemainingCrore3(decimal value) =>
+        (decimal.Truncate(value / 10_000_000m * 1000m) / 1000m)
+        .ToString("0.000", System.Globalization.CultureInfo.InvariantCulture);
     private static string F(decimal value) => value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
 
     private string DurationText
@@ -495,8 +776,12 @@
         IsLoading = true;
         Error = "";
         HasData = false;
+        Overview = null;
+        ActualTurnover = 0m;
         ProductSales = new();
         TopDealers = new();
+        MonthlyInvoiceSales = new();
+        MonthlyTrendError = "";
         if (CSR2Id is null or <= 0)
         {
             Error = "Missing csr2Id. Open Sales Tracking from Plan Review.";
@@ -544,7 +829,9 @@
             var plans = details.Plan ?? new();
             var achievements = details.Achievement ?? new();
             HasData = achievements.Count > 0;
-            ActualTurnover = achievements.Sum(x => x.ValueRs);
+            // Same persisted cumulative value used by PlanReview.razor.
+            // Product achievement lines remain for the product-wise breakdown only.
+            ActualTurnover = overview.ActualTurnoverCr * 10_000_000m;
             var names = (details.Products ?? new())
                 .GroupBy(x => x.Id).ToDictionary(g => g.Key, g => g.First().Name);
             var achievementsByProduct = achievements
@@ -571,6 +858,7 @@
                 .OrderByDescending(x => x.Actual)
                 .Take(5)
                 .ToList();
+            await LoadMonthlyInvoiceSalesAsync(id);
             IsLoaded = true;
         }
         catch (Exception ex)
@@ -614,7 +902,7 @@
     private bool _chartsDrawn;
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (HasData && IsLoaded && !_chartsDrawn)
+        if (HasKpiData && IsLoaded && !_chartsDrawn)
         {
             _chartsDrawn = true;
             try
@@ -630,7 +918,7 @@
             }
             catch (JSException) { }
         }
-        else if ((!HasData || !IsLoaded) && _chartsDrawn)
+        else if ((!HasKpiData || !IsLoaded) && _chartsDrawn)
         {
             _chartsDrawn = false;
             await DestroyChartsAsync();

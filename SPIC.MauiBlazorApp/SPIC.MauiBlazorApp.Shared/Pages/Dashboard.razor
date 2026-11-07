@@ -20,6 +20,7 @@
     .badge-status-inrm { background:#DBEAFE; color:#1D4ED8; }
     .badge-status-insmm { background:#EDE9FE; color:#7C3AED; }
     .badge-status-inavp { background:#E0E7FF; color:#4338CA; }
+    .badge-status-inavpoffice { background:#CFFAFE; color:#0E7490; }
 
     /* Dealer identity badges - visual distinction only */
     .dealer-kind-new {
@@ -277,6 +278,18 @@
                 <div class="kpi-label">In AVP</div>
             </div>
         </div>
+        @if (LoginState.IsAvpOffice || _summary.InAvpOffice > 0)
+        {
+            <div class="col-6 col-md-4 col-lg-3">
+                <div class="kpi-card">
+                    <div class="kpi-header">
+                        <div class="kpi-icon bg-light-yellow"><i class="bi bi-hourglass-split"></i></div>
+                        <div class="kpi-number">@_summary.InAvpOffice</div>
+                    </div>
+                    <div class="kpi-label">In AVP Office</div>
+                </div>
+            </div>
+        }
         <div class="col-6 col-md-4 col-lg-3">
             <div class="kpi-card">
                 <div class="kpi-header">
@@ -361,6 +374,7 @@
                     <option value="Pending RM">Pending RM</option>
                     <option value="Pending SMM">Pending SMM</option>
                     <option value="Pending AVP">Pending AVP</option>
+                    <option value="Pending AVP Office">Pending AVP Office</option>
                     <option value="Approved">Approved</option>
                     <option value="Rejected/Returned">Rejected/Returned</option>
                 </select>
@@ -418,7 +432,7 @@
                                     </div>
                                 }
                             }
-                            else if (approvalStatus == "In RM" || approvalStatus == "In SMM" || approvalStatus == "In AVP")
+                            else if (approvalStatus == "In RM" || approvalStatus == "In SMM" || approvalStatus == "In AVP" || approvalStatus == "In AVP Office")
                             {
                                 <div class="progress-circle p-60">
                                     <div class="progress-inner">
@@ -491,6 +505,10 @@
                                     else if (approvalStatus == "In AVP")
                                     {
                                         <span class="badge-custom badge-status-inavp">In AVP</span>
+                                    }
+                                    else if (approvalStatus == "In AVP Office")
+                                    {
+                                        <span class="badge-custom badge-status-inavpoffice">In AVP Office</span>
                                     }
                                     else
                                     {
@@ -1403,7 +1421,13 @@
         if (d.RMApproved == false) return "Rejected by RM";
         if (d.SMApproved == false) return "Rejected by SMM";
         if (d.AVPApproved == false) return "Rejected by AVP";
-        if (d.AVPApproved == true) return "Approved";
+        if (d.AVPApproved == true)
+        {
+            // Initial New Dealers get their company Dealer IDs from AVP Office.
+            // They are not fully Approved until that stage is submitted.
+            if (d.IsNewDealerRegistration && !d.IsAvpOfficeSubmitted) return "In AVP Office";
+            return "Approved";
+        }
         if (d.RMApproved == null) return "In RM";
         if (d.RMApproved == true && d.SMApproved == null) return "In SMM";
         if (d.RMApproved == true && d.SMApproved == true && d.AVPApproved == null) return "In AVP";
@@ -1422,7 +1446,7 @@
     //  In AVP               → AVP
     //  Approved             → None
     // ─────────────────────────────────────────────────────────────────────────
-    private enum OwnerLevel { None, MO, RM, SMM, AVP }
+    private enum OwnerLevel { None, MO, RM, SMM, AVP, AvpOffice }
 
     private OwnerLevel GetCurrentOwnerLevel(DealerDto d)
     {
@@ -1431,8 +1455,12 @@
         // Never submitted → still a draft owned by the MO/creator.
         if (d.IsSubmittedForReview != true) return OwnerLevel.MO;
 
-        // Fully approved → nobody needs to act.
-        if (d.AVPApproved == true) return OwnerLevel.None;
+        // Fully approved → nobody needs to act. An initial New Dealer sits with
+        // AVP Office until the manual company Dealer IDs are saved.
+        if (d.AVPApproved == true)
+            return d.IsNewDealerRegistration && !d.IsAvpOfficeSubmitted
+                ? OwnerLevel.AvpOffice
+                : OwnerLevel.None;
 
         // Rejections route BACK DOWN one level (order matters: match GetApprovalStatus).
         if (d.RMApproved == false) return OwnerLevel.MO;   // Rejected by RM  → MO
@@ -1496,6 +1524,7 @@
             OwnerLevel.RM  => LoginState.IsRegionRole,
             OwnerLevel.SMM => LoginState.IsStateRole,
             OwnerLevel.AVP => LoginState.IsAdmin,
+            OwnerLevel.AvpOffice => LoginState.IsAvpOffice,
             _              => false
         };
     }
@@ -1536,6 +1565,7 @@
                 "Pending RM" => query.Where(d => GetApprovalStatus(d) == "In RM"),
                 "Pending SMM" => query.Where(d => GetApprovalStatus(d) == "In SMM"),
                 "Pending AVP" => query.Where(d => GetApprovalStatus(d) == "In AVP"),
+                "Pending AVP Office" => query.Where(d => GetApprovalStatus(d) == "In AVP Office"),
                 "Approved" => query.Where(d => GetApprovalStatus(d) == "Approved"),
                 "Rejected/Returned" => query.Where(d => GetApprovalStatus(d).StartsWith("Rejected")),
                 _ => query
@@ -1820,6 +1850,7 @@ private string GetStatusName(int status) => status switch
             OwnerLevel.RM  => LoginState.IsRegionRole,
             OwnerLevel.SMM => LoginState.IsStateRole,
             OwnerLevel.AVP => LoginState.IsAdmin,
+            OwnerLevel.AvpOffice => LoginState.IsAvpOffice,
             _              => false   // MO / None → no Review button
         };
     }
@@ -1965,6 +1996,7 @@ private string GetStatusName(int status) => status switch
         public int InRM { get; set; }
         public int InSMM { get; set; }
         public int InAVP { get; set; }
+        public int InAvpOffice { get; set; }
         public int Approved { get; set; }
         public int Rejected { get; set; }
         public int RejectedByRM { get; set; }
@@ -1997,6 +2029,8 @@ private string GetStatusName(int status) => status switch
         public bool InSpic { get; set; }
         public bool InGreenStar { get; set; }
         public bool IsNewDealerRegistration { get; set; }
+        // True once AVP Office saved the manual company Dealer IDs for an initial New Dealer.
+        public bool IsAvpOfficeSubmitted { get; set; }
         // True only after an originally New Dealer completed the Existing Dealer
         // maintenance cycle and received the second final-level approval.
         public bool HasCompletedExistingMaintenance { get; set; }
