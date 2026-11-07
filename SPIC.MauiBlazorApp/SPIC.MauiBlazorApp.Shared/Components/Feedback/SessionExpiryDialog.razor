@@ -162,7 +162,7 @@
         }
 
         var expUtc = expiration.Kind == DateTimeKind.Utc ? expiration : expiration.ToUniversalTime();
-        var remaining = expUtc - DateTime.UtcNow;
+        var remaining = expUtc - LoginState.Clock.UtcNow;
 
         if (remaining <= TimeSpan.Zero)
         {
@@ -269,9 +269,11 @@
             await SessionStore.SetAsync(SessionKeys.Token, rawToken);
             await SessionStore.SetAsync(SessionKeys.Expiration, result.Expiration.ToString("O"));
             await SessionStore.SetAsync(SessionKeys.RefreshToken, result.RefreshToken);
+            await SessionStore.SetAsync(SessionKeys.ServerClockOffset, LoginState.Clock.SavedOffset);
             await SessionStore.SetPersistentAsync(SessionKeys.Token, rawToken);
             await SessionStore.SetPersistentAsync(SessionKeys.Expiration, result.Expiration.ToString("O"));
             await SessionStore.SetPersistentAsync(SessionKeys.RefreshToken, result.RefreshToken);
+            await SessionStore.SetPersistentAsync(SessionKeys.ServerClockOffset, LoginState.Clock.SavedOffset);
 
             return true;
         }

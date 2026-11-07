@@ -34,6 +34,7 @@ internal static class Program
 		GpsSettingsTests.Run();
 		Console.WriteLine();
 		MultiRegionHqTests.Run();
+		SessionClockTests.Run();
 
 		return Check.Report("Total");
 	}

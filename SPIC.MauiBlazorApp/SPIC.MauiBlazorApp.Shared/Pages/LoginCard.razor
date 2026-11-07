@@ -104,6 +104,7 @@
 
 	private async Task HandleLogin()
 	{
+		if (_isLoading) return;
 		LogToFile($"HandleLogin initiated. BaseAddress={Http.BaseAddress}, UserName={_model.UserName}");
 		try
 		{
@@ -117,7 +118,8 @@
 			};
 
 			LogToFile("Posting to api/Authentication/login...");
-			var response = await Http.PostAsJsonAsync("api/Authentication/login", request);
+			using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+			using var response = await Http.PostAsJsonAsync("api/Authentication/login", request, timeout.Token);
 			LogToFile($"Response status: {(int)response.StatusCode} {response.StatusCode}");
 
 			if (!response.IsSuccessStatusCode)
@@ -159,6 +161,7 @@
 			await SessionStore.SetAsync(SessionKeys.RoleAccess, result.RoleAccess ?? "");
 			await SessionStore.SetAsync(SessionKeys.DesignationName, result.DesignationName ?? "");
 			await SessionStore.SetAsync(SessionKeys.RefreshToken, result.RefreshToken ?? "");
+			await SessionStore.SetAsync(SessionKeys.ServerClockOffset, LoginState.Clock.SavedOffset);
 
 			if (_model.RememberMe)
 			{
@@ -167,6 +170,7 @@
 				await SessionStore.SetPersistentAsync(SessionKeys.RoleAccess, result.RoleAccess ?? "");
 				await SessionStore.SetPersistentAsync(SessionKeys.DesignationName, result.DesignationName ?? "");
 				await SessionStore.SetPersistentAsync(SessionKeys.RefreshToken, result.RefreshToken ?? "");
+				await SessionStore.SetPersistentAsync(SessionKeys.ServerClockOffset, LoginState.Clock.SavedOffset);
 			}
 			else
 			{
@@ -175,6 +179,7 @@
 				await SessionStore.RemovePersistentAsync(SessionKeys.RoleAccess);
 				await SessionStore.RemovePersistentAsync(SessionKeys.DesignationName);
 				await SessionStore.RemovePersistentAsync(SessionKeys.RefreshToken);
+				await SessionStore.RemovePersistentAsync(SessionKeys.ServerClockOffset);
 			}
 
 			// Persist token + page permissions for refreshes and other pages

@@ -108,13 +108,13 @@
   <!-- API address. Override per environment at build time:
          dotnet publish ... -p:SpicApiBaseUrl=https://previewspicapi.apmiot.com/
        MauiProgram reads it back from the AssemblyMetadata attribute below. -->
-  <!--<PropertyGroup>
+  <PropertyGroup>
     <SpicApiBaseUrl Condition="'$(SpicApiBaseUrl)' == ''">https://api.spicone.in/</SpicApiBaseUrl>
-  </PropertyGroup>-->
+  </PropertyGroup>
 	<!-- Preview / Testing API -->
-	<PropertyGroup>
+	<!-- <PropertyGroup>
 		<SpicApiBaseUrl Condition="'$(SpicApiBaseUrl)' == ''">https://previewspicapi.apmiot.com/</SpicApiBaseUrl>
-	</PropertyGroup>
+	</PropertyGroup> -->
 	 <!--Local testing (uncomment when debugging against local SpicAPI):-->
 	<!--<PropertyGroup>
 		<SpicApiBaseUrl Condition="'$(SpicApiBaseUrl)' == ''">http://localhost:7032/</SpicApiBaseUrl>
@@ -149,8 +149,10 @@
   <!-- iOS: SecureStorage uses the Keychain, which needs the keychain-access-groups entitlement. -->
   <PropertyGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">
     <CodesignEntitlements>Platforms/iOS/Entitlements.plist</CodesignEntitlements>
-    <CodesignRequireProvisioningProfile Condition="'$(Configuration)' == 'Release'">true</CodesignRequireProvisioningProfile>
-    <CodesignRequireProvisioningProfile Condition="'$(Configuration)' != 'Release'">false</CodesignRequireProvisioningProfile>
+    <CodesignKey Condition="'$(RuntimeIdentifier)' == 'ios-arm64'">Apple Development</CodesignKey>
+    <CodesignProvision Condition="'$(RuntimeIdentifier)' == 'ios-arm64'">SPICONE</CodesignProvision>
+    <CodesignRequireProvisioningProfile Condition="'$(RuntimeIdentifier)' == 'ios-arm64' Or '$(Configuration)' == 'Release'">true</CodesignRequireProvisioningProfile>
+    <CodesignRequireProvisioningProfile Condition="'$(RuntimeIdentifier)' != 'ios-arm64' And '$(Configuration)' != 'Release'">false</CodesignRequireProvisioningProfile>
     <_MlaunchWaitForExit Condition="'$(_MlaunchWaitForExit)' == ''">false</_MlaunchWaitForExit>
   </PropertyGroup>
 

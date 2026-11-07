@@ -25,7 +25,8 @@ namespace SPIC.MauiBlazorApp.Shared.Services
 
         private string? _token;
         public DateTime Expiration { get; set; }
-        public bool IsTokenExpired => Expiration != default && DateTime.UtcNow >= Expiration.ToUniversalTime();
+        public SessionClock Clock { get; } = new();
+        public bool IsTokenExpired => Expiration != default && Clock.UtcNow >= Expiration.ToUniversalTime();
 
         // The opaque refresh token issued alongside the JWT (see RefreshTokenDtos.cs) - kept here
         // purely as an in-memory mirror of what's in ISessionStore, same reasoning as Token/
