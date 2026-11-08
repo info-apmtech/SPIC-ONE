@@ -1,4 +1,4 @@
-using System.Reflection;
+﻿using System.Reflection;
 using Microsoft.Extensions.Logging;
 using SPIC.MauiBlazorApp.Services;
 using SPIC.Core.Entities;
@@ -67,6 +67,7 @@ namespace SPIC.MauiBlazorApp
 			builder.Services.AddScoped<DigitalLibraryApi>();
 			builder.Services.AddScoped<CommunityApi>();
 			builder.Services.AddScoped<SasApi>();
+			builder.Services.AddScoped<PublicityApi>();
 			builder.Services.AddScoped<SasPaymentApi>();
 			builder.Services.AddScoped<LabApi>();
 			builder.Services.AddScoped<MetricsApi>();

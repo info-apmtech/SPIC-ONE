@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Authentication.JwtBearer;
+﻿using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -223,6 +223,7 @@ builder.Services.AddAuthentication(options =>
                  path.StartsWithSegments("/api/Library/file") ||
                  path.StartsWithSegments("/api/Community/file") ||
                  path.StartsWithSegments("/api/Sas/file") ||
+                 path.StartsWithSegments("/api/Publicity/file") ||
                  // SAS lab reports: api/Lab/reports/{id}/pdf|xlsx and api/Lab/batches/{id}/report/download
                  (path.StartsWithSegments("/api/Lab") && path.Value is string labPath &&
                   (labPath.EndsWith("/pdf", StringComparison.OrdinalIgnoreCase) ||
