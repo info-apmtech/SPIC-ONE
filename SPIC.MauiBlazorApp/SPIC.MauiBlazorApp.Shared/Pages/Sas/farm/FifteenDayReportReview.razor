@@ -123,7 +123,7 @@
 
         <!-- 1. Inventory Summary Accordion -->
         <div class="fdr-card fdr-accordion-card">
-            <div class="fdr-accordion-head" @onclick="() => inventoryExpanded = !inventoryExpanded">
+            <div class="fdr-accordion-head fdr-accordion-head-inv" @onclick="() => inventoryExpanded = !inventoryExpanded">
                 <div>
                     <h2 class="fdr-card-title">Inventory Summary</h2>
                     <p class="fdr-card-subtitle">Stock position for this 15 - day period</p>
@@ -143,24 +143,23 @@
                                 <tr>
                                     <th>Product</th>
                                     <th>Opening Stock</th>
-                                    <th>Purchase / Old Quantity</th>
-                                    <th>Hatched / New Breed</th>
+                                    <th>Purchase</th>
+                                    <th>Hatched</th>
                                     <th>Sold <span class="fdr-th-badge">Auto from Income</span></th>
                                     <th>Mortality</th>
-                                    <th>Others</th>
                                     <th>Closing Stock</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                @if (inventoryRows.Count == 0)
+                                @if (liveStockInventoryRows.Count == 0)
                                 {
                                     <tr>
-                                        <td colspan="8" class="fdr-empty-td">No inventory records found for this period.</td>
+                                        <td colspan="7" class="fdr-empty-td">No inventory records found for this period.</td>
                                     </tr>
                                 }
                                 else
                                 {
-                                    @foreach (var row in inventoryRows)
+                                    @foreach (var row in liveStockInventoryRows)
                                     {
                                         <tr>
                                             <td data-label="Product">
@@ -170,11 +169,10 @@
                                                 </span>
                                             </td>
                                             <td data-label="Opening Stock">@row.Opening</td>
-                                            <td data-label="Purchase / Old Quantity">@row.Purchase</td>
-                                            <td data-label="Hatched / New Breed">@row.Hatched</td>
+                                            <td data-label="Purchase">@row.Purchase</td>
+                                            <td data-label="Hatched">@row.Hatched</td>
                                             <td data-label="Sold">@row.Sold</td>
                                             <td data-label="Mortality">@row.Mortality</td>
-                                            <td data-label="Others">@row.Others</td>
                                             <td data-label="Closing Stock" class="fdr-col-closing">@row.Closing</td>
                                         </tr>
                                     }
@@ -188,14 +186,19 @@
 
         <!-- 2. Income Summary Accordion -->
         <div class="fdr-card fdr-accordion-card">
-            <div class="fdr-accordion-head" @onclick="() => incomeExpanded = !incomeExpanded">
+            <div class="fdr-accordion-head fdr-accordion-head-income" @onclick="() => incomeExpanded = !incomeExpanded">
                 <div>
                     <h2 class="fdr-card-title">Income Summary</h2>
                     <p class="fdr-card-subtitle">Sales income for this 15-day period</p>
                 </div>
-                <button type="button" class="fdr-chevron-btn" aria-label="Toggle income">
-                    <i class="bi @(incomeExpanded ? "bi-chevron-up" : "bi-chevron-down")"></i>
-                </button>
+                <div class="fdr-head-actions">
+                    <span class="fdr-head-summary fdr-head-summary-green">
+                        Over All Total Summary : ₹ @IncomeGrandTotal.ToString("N0", IndianCulture)
+                    </span>
+                    <button type="button" class="fdr-chevron-btn" aria-label="Toggle income">
+                        <i class="bi @(incomeExpanded ? "bi-chevron-up" : "bi-chevron-down")"></i>
+                    </button>
+                </div>
             </div>
 
             @if (incomeExpanded)
@@ -203,14 +206,19 @@
                 <div class="fdr-accordion-body">
                     <!-- Live Stock Table -->
                     <h3 class="fdr-section-subhead">Live Stock</h3>
+                    <div class="fdr-table-head-note-wrap">
+                        <div class="fdr-table-head-note">Total @LiveStockIncomeProductCount Product : ₹ @LiveStockIncomeTotal.ToString("N0", IndianCulture)</div>
+                    </div>
                     <div class="fdr-table-scroll">
                         <table class="fdr-table">
                             <thead>
                                 <tr>
                                     <th>Product</th>
+                                    <th>Sales Period</th>
                                     <th>Sold Quantity</th>
-                                    <th>UOM</th>
+                                    <th>Total Unit</th>
                                     <th>Rate per unit</th>
+                                    <th>Remarks</th>
                                     <th>Total Amount</th>
                                 </tr>
                             </thead>
@@ -218,7 +226,7 @@
                                 @if (liveStockIncomeRows.Count == 0)
                                 {
                                     <tr>
-                                        <td colspan="5" class="fdr-empty-td">No livestock sales recorded for this period.</td>
+                                        <td colspan="7" class="fdr-empty-td">No livestock sales recorded for this period.</td>
                                     </tr>
                                 }
                                 else
@@ -232,10 +240,12 @@
                                                     <span class="fdr-product-name">@row.ProductName</span>
                                                 </span>
                                             </td>
+                                            <td data-label="Sales Period">@CompactPeriodDisplay</td>
                                             <td data-label="Sold Quantity">@row.SoldQuantity</td>
-                                            <td data-label="UOM">@row.Uom</td>
+                                            <td data-label="Total Unit">@row.Uom</td>
                                             <td data-label="Rate per unit">₹@row.Rate.ToString("N0", IndianCulture)</td>
-                                            <td data-label="Total Amount" class="fdr-col-amount">₹@row.TotalAmount.ToString("N0", IndianCulture)</td>
+                                            <td data-label="Remarks">Remarks</td>
+                                            <td data-label="Total Amount" class="fdr-col-amount fdr-col-income-amount">₹@IncomeAmount(row).ToString("N0", IndianCulture)</td>
                                         </tr>
                                     }
                                 }
@@ -247,13 +257,19 @@
                     @if (orchardIncomeRows.Count > 0)
                     {
                         <h3 class="fdr-section-subhead" style="margin-top: 24px;">Orchard Income</h3>
+                        <div class="fdr-table-head-note-wrap">
+                            <div class="fdr-table-head-note">Total @OrchardIncomeProductCount Product : ₹ @OrchardIncomeTotal.ToString("N0", IndianCulture)</div>
+                        </div>
                         <div class="fdr-table-scroll">
                             <table class="fdr-table">
                                 <thead>
                                     <tr>
                                         <th>Product</th>
-                                        <th>UOM</th>
+                                        <th>Sales Period</th>
+                                        <th>Sold Quantity</th>
+                                        <th>Total Unit</th>
                                         <th>Rate per unit</th>
+                                        <th>Remarks</th>
                                         <th>Total Amount</th>
                                     </tr>
                                 </thead>
@@ -267,27 +283,18 @@
                                                     <span class="fdr-product-name">@row.ProductName</span>
                                                 </span>
                                             </td>
-                                            <td data-label="UOM">@row.Uom</td>
+                                            <td data-label="Sales Period">@CompactPeriodDisplay</td>
+                                            <td data-label="Sold Quantity">@row.SoldQuantity</td>
+                                            <td data-label="Total Unit">@row.Uom</td>
                                             <td data-label="Rate per unit">₹@row.Rate.ToString("N0", IndianCulture)</td>
-                                            <td data-label="Total Amount" class="fdr-col-amount">₹@row.TotalAmount.ToString("N0", IndianCulture)</td>
+                                            <td data-label="Remarks">Remarks</td>
+                                            <td data-label="Total Amount" class="fdr-col-amount fdr-col-income-amount">₹@IncomeAmount(row).ToString("N0", IndianCulture)</td>
                                         </tr>
                                     }
                                 </tbody>
                             </table>
                         </div>
                     }
-
-                    <!-- Total Income Row -->
-                    <div class="fdr-subtotal-row">
-                        <span>Total Income :</span>
-                        <strong>₹ @IncomeGrandTotal.ToString("N0", IndianCulture)</strong>
-                    </div>
-
-                    <!-- Over All Total Income Summary Banner matching Image 3 -->
-                    <div class="fdr-banner-bar fdr-banner-emerald">
-                        <span>Over All Total Income Summary :</span>
-                        <strong>₹ @IncomeGrandTotal.ToString("N0", IndianCulture)</strong>
-                    </div>
 
                     <!-- Remarks -->
                     <div class="fdr-remarks-box">
@@ -302,14 +309,20 @@
 
         <!-- 3. Expense Summary Accordion -->
         <div class="fdr-card fdr-accordion-card">
-            <div class="fdr-accordion-head" @onclick="() => expenseExpanded = !expenseExpanded">
+            <div class="fdr-accordion-head fdr-accordion-head-expense" @onclick="() => expenseExpanded = !expenseExpanded">
                 <div>
                     <h2 class="fdr-card-title">Expense Summary</h2>
                     <p class="fdr-card-subtitle">All Expenses for this 15 - Period</p>
                 </div>
-                <button type="button" class="fdr-chevron-btn" aria-label="Toggle expense">
-                    <i class="bi @(expenseExpanded ? "bi-chevron-up" : "bi-chevron-down")"></i>
-                </button>
+                <div class="fdr-head-actions">
+                    <span class="fdr-head-summary fdr-head-summary-rose">
+                        Over All Total Summary : ₹ @MainCategoriesTotal.ToString("N0", IndianCulture)
+                    </span>
+                    <button type="button" class="fdr-btn fdr-btn-inline" @onclick:stopPropagation="true" @onclick="GoToExpenseEntry">Edit Inventory</button>
+                    <button type="button" class="fdr-chevron-btn" aria-label="Toggle expense">
+                        <i class="bi @(expenseExpanded ? "bi-chevron-up" : "bi-chevron-down")"></i>
+                    </button>
+                </div>
             </div>
 
             @if (expenseExpanded)
@@ -326,6 +339,7 @@
                                         <tr>
                                             <th>Expense Category</th>
                                             <th style="text-align: right;">Amount (₹)</th>
+                                            <th>Remarks</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -333,7 +347,8 @@
                                         {
                                             <tr>
                                                 <td>@row.Category</td>
-                                                <td style="text-align: right; font-weight: 500;">₹ @row.Amount.ToString("N0", IndianCulture)</td>
+                                                <td class="fdr-expense-amt">₹ @row.Amount.ToString("N0", IndianCulture)</td>
+                                                <td>Remarks</td>
                                             </tr>
                                         }
                                     </tbody>
@@ -354,6 +369,7 @@
                                         <tr>
                                             <th>Expense Category</th>
                                             <th style="text-align: right;">Amount (₹)</th>
+                                            <th>Remarks</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -361,7 +377,8 @@
                                         {
                                             <tr>
                                                 <td>@row.Category</td>
-                                                <td style="text-align: right; font-weight: 500;">₹ @row.Amount.ToString("N0", IndianCulture)</td>
+                                                <td class="fdr-expense-amt">₹ @row.Amount.ToString("N0", IndianCulture)</td>
+                                                <td>Remarks</td>
                                             </tr>
                                         }
                                     </tbody>
@@ -372,12 +389,6 @@
                                 <strong>₹ @SubCategoriesTotal.ToString("N0", IndianCulture)</strong>
                             </div>
                         </div>
-                    </div>
-
-                    <!-- Over All Total Expense Summary Banner matching Image 3 -->
-                    <div class="fdr-banner-bar fdr-banner-rose">
-                        <span>Over All Total Expense Summary :</span>
-                        <strong>₹ @MainCategoriesTotal.ToString("N0", IndianCulture)</strong>
                     </div>
 
                     <!-- Remarks -->
@@ -396,7 +407,6 @@
             <div class="fdr-card-head-row">
                 <div>
                     <h2 class="fdr-card-title">Financial Summary</h2>
-                    <p class="fdr-card-subtitle">Overall financial performance for this 15 - day period</p>
                 </div>
                 <div class="fdr-period-tag">
                     @ReportingPeriodDisplay
@@ -404,77 +414,32 @@
             </div>
 
             <div class="fdr-fin-grid">
-                <!-- 1. Annual Budget -->
-                <div class="fdr-fin-box">
-                    <div class="fdr-fin-info">
-                        <span class="fdr-fin-label">Annual Budget</span>
-                        <div class="fdr-fin-val">₹ @((AnnualBudgetDisplay > 0 ? AnnualBudgetDisplay : 0m).ToString("N0", IndianCulture))</div>
-                        <span class="fdr-fin-sub">For FY @FinancialYearDisplay</span>
-                    </div>
-                    <div class="fdr-fin-icon fdr-icon-green">
-                        <i class="bi bi-file-earmark-check"></i>
-                    </div>
-                </div>
-
-                <!-- 2. Total Income -->
-                <div class="fdr-fin-box">
+                <div class="fdr-fin-box fdr-fin-box-income">
                     <div class="fdr-fin-info">
                         <span class="fdr-fin-label">Total Income</span>
                         <div class="fdr-fin-val">₹ @(TotalIncomeDisplay.ToString("N0", IndianCulture))</div>
-                        @if (hasPrevious)
-                        {
-                            <span class="fdr-fin-sub @(IncomeChangePct >= 0 ? "fdr-text-emerald" : "fdr-text-rose")">
-                                <span>@(IncomeChangePct >= 0 ? "▲" : "▼")</span> @Math.Abs(IncomeChangePct).ToString("0.0")%
-                            </span>
-                        }
                     </div>
                     <div class="fdr-fin-icon fdr-icon-green">
                         <i class="bi bi-file-earmark-arrow-up"></i>
                     </div>
                 </div>
 
-                <!-- 3. Total Expense -->
-                <div class="fdr-fin-box">
+                <div class="fdr-fin-box fdr-fin-box-expense">
                     <div class="fdr-fin-info">
                         <span class="fdr-fin-label">Total Expense</span>
                         <div class="fdr-fin-val">₹ @(TotalExpenseDisplay.ToString("N0", IndianCulture))</div>
-                        @if (hasPrevious)
-                        {
-                            <span class="fdr-fin-sub @(ExpenseChangePct <= 0 ? "fdr-text-emerald" : "fdr-text-rose")">
-                                <span>@(ExpenseChangePct <= 0 ? "▼" : "▲")</span> @Math.Abs(ExpenseChangePct).ToString("0.0")%
-                            </span>
-                        }
                     </div>
                     <div class="fdr-fin-icon fdr-icon-red">
                         <i class="bi bi-clock-history"></i>
                     </div>
                 </div>
 
-                <!-- 4. Net Profit (Till Date) -->
-                <div class="fdr-fin-box">
+                <div class="fdr-fin-box fdr-fin-box-profit">
                     <div class="fdr-fin-info">
-                        <span class="fdr-fin-label">Net Profit <span class="fdr-till-date">( Till Date )</span></span>
+                        <span class="fdr-fin-label">Net Profit</span>
                         <div class="fdr-fin-val">₹ @(NetProfitDisplay.ToString("N0", IndianCulture))</div>
-                        @if (hasPrevious)
-                        {
-                            <span class="fdr-fin-sub @(NetChangePct >= 0 ? "fdr-text-emerald" : "fdr-text-rose")">
-                                <span>@(NetChangePct >= 0 ? "▲" : "▼")</span> @Math.Abs(NetChangePct).ToString("0.0")%
-                            </span>
-                        }
                     </div>
                     <div class="fdr-fin-icon fdr-icon-blue">
-                        <i class="bi bi-file-earmark-text"></i>
-                    </div>
-                </div>
-
-                <!-- 5. ROI (Till Date) -->
-                <div class="fdr-fin-box">
-                    <div class="fdr-fin-info">
-                        <span class="fdr-fin-label">ROI <span class="fdr-till-date">( Till Date )</span></span>
-                        <div class="fdr-fin-val">@RoiDisplay.ToString("0.00")%</div>
-                        <span class="fdr-fin-sub" style="visibility: hidden;">-</span>
-                    </div>
-                    <div class="fdr-fin-icon fdr-icon-purple">
                         <i class="bi bi-file-earmark-text"></i>
                     </div>
                 </div>
@@ -558,8 +523,9 @@
 <style>
     .fdr-page {
         max-width: 1400px;
+        min-width: 1200px;
         margin: 0 auto;
-        padding: 24px 28px 60px;
+        padding: 20px 18px 40px;
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
         color: #1e293b;
     }
@@ -581,11 +547,12 @@
     }
 
     .fdr-main-title {
-        font-size: 22px;
+        font-size: 32px;
         font-weight: 700;
         color: #0f172a;
         margin: 0;
         letter-spacing: -0.01em;
+        line-height: 1.1;
     }
 
     .fdr-badge-completed {
@@ -599,7 +566,7 @@
     }
 
     .fdr-period-subtitle {
-        font-size: 13px;
+        font-size: 14px;
         color: #64748b;
         margin: 4px 0 0;
         font-weight: 500;
@@ -632,19 +599,27 @@
         color: #0f172a;
     }
 
+    .fdr-btn-inline {
+        padding: 6px 10px;
+        font-size: 12px;
+        border-color: #86efac;
+        color: #166534;
+        background: #f0fdf4;
+    }
+
     /* KPI Cards */
     .fdr-kpi-grid {
         display: grid;
         grid-template-columns: repeat(4, 1fr);
-        gap: 20px;
-        margin-bottom: 24px;
+        gap: 12px;
+        margin-bottom: 14px;
     }
 
     .fdr-kpi-card {
         background: #ffffff;
         border: 1px solid #e2e8f0;
-        border-radius: 12px;
-        padding: 18px 20px;
+        border-radius: 10px;
+        padding: 14px 14px;
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
         display: flex;
         flex-direction: column;
@@ -658,7 +633,7 @@
     }
 
     .fdr-kpi-label {
-        font-size: 13px;
+        font-size: 12px;
         font-weight: 600;
         color: #64748b;
     }
@@ -694,10 +669,11 @@
     }
 
     .fdr-kpi-value {
-        font-size: 22px;
+        font-size: 38px;
         font-weight: 700;
         color: #0f172a;
-        margin-bottom: 8px;
+        margin-bottom: 6px;
+        line-height: 1.1;
     }
 
     .fdr-kpi-bottom {
@@ -730,9 +706,9 @@
     .fdr-card {
         background: #ffffff;
         border: 1px solid #e2e8f0;
-        border-radius: 12px;
-        padding: 20px 24px;
-        margin-bottom: 24px;
+        border-radius: 10px;
+        padding: 14px 14px 14px;
+        margin-bottom: 12px;
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
     }
 
@@ -742,17 +718,59 @@
         align-items: center;
         cursor: pointer;
         user-select: none;
+        margin: -14px -14px 0;
+        padding: 10px 12px;
+        border-bottom: 1px solid #e2e8f0;
+        border-top-left-radius: 12px;
+        border-top-right-radius: 12px;
+    }
+
+    .fdr-accordion-head-inv {
+        background: #f3faf7;
+    }
+
+    .fdr-accordion-head-income {
+        background: #f2fbf7;
+    }
+
+    .fdr-accordion-head-expense {
+        background: #fff6f7;
+    }
+
+    .fdr-head-actions {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .fdr-head-summary {
+        padding: 10px 14px;
+        border-radius: 7px;
+        font-size: 12px;
+        font-weight: 700;
+        line-height: 1;
+    }
+
+    .fdr-head-summary-green {
+        background: #d1fae5;
+        color: #166534;
+    }
+
+    .fdr-head-summary-rose {
+        background: #ffe4e6;
+        color: #be123c;
     }
 
     .fdr-card-title {
-        font-size: 16px;
+        font-size: 24px;
         font-weight: 700;
         color: #1e293b;
         margin: 0;
+        line-height: 1.1;
     }
 
     .fdr-card-subtitle {
-        font-size: 12px;
+        font-size: 11px;
         color: #64748b;
         margin: 3px 0 0;
     }
@@ -770,11 +788,29 @@
         margin-top: 18px;
     }
 
+    .fdr-table-head-note-wrap {
+        display: flex;
+        justify-content: flex-end;
+        margin: 0 0 8px;
+    }
+
+    .fdr-table-head-note {
+        display: inline-flex;
+        align-items: center;
+        margin: 0;
+        padding: 8px 14px;
+        border-radius: 6px;
+        background: #d9f3e6;
+        color: #166534;
+        font-size: 12px;
+        font-weight: 700;
+    }
+
     .fdr-section-subhead {
-        font-size: 14px;
+        font-size: 22px;
         font-weight: 700;
         color: #334155;
-        margin: 0 0 12px;
+        margin: 0;
     }
 
     .fdr-sub-note {
@@ -803,14 +839,14 @@
         color: #475569;
         font-weight: 600;
         font-size: 12px;
-        text-transform: uppercase;
-        letter-spacing: 0.03em;
-        padding: 12px 14px;
+        text-transform: none;
+        letter-spacing: normal;
+        padding: 11px 14px;
         border-bottom: 1px solid #e2e8f0;
     }
 
     .fdr-table td {
-        padding: 12px 14px;
+        padding: 11px 14px;
         border-bottom: 1px solid #f1f5f9;
         color: #334155;
     }
@@ -851,11 +887,23 @@
     .fdr-col-closing {
         font-weight: 700;
         color: #0f172a;
+        background: #edf9f3;
     }
 
     .fdr-col-amount {
         font-weight: 600;
         color: #0f172a;
+    }
+
+    .fdr-col-income-amount {
+        background: #edf9f3;
+        color: #48615a;
+    }
+
+    .fdr-expense-amt {
+        text-align: right;
+        font-weight: 700;
+        color: #ef4444;
     }
 
     .fdr-empty-td {
@@ -973,18 +1021,33 @@
 
     .fdr-fin-grid {
         display: grid;
-        grid-template-columns: repeat(5, 1fr);
-        gap: 16px;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 10px;
     }
 
     .fdr-fin-box {
         background: #ffffff;
-        border: 1px solid #f1f5f9;
+        border: 1px solid #e5e7eb;
         border-radius: 10px;
         padding: 14px 16px;
         display: flex;
         justify-content: space-between;
         align-items: flex-start;
+    }
+
+    .fdr-fin-box-income {
+        background: #f3fdf7;
+        border-color: #c8f3da;
+    }
+
+    .fdr-fin-box-expense {
+        background: #fff6f8;
+        border-color: #ffd4de;
+    }
+
+    .fdr-fin-box-profit {
+        background: #f3f7ff;
+        border-color: #d6e3ff;
     }
 
     .fdr-fin-label {
@@ -1001,10 +1064,11 @@
     }
 
     .fdr-fin-val {
-        font-size: 18px;
+        font-size: 38px;
         font-weight: 700;
         color: #0f172a;
         margin-bottom: 4px;
+        line-height: 1.1;
     }
 
     .fdr-fin-sub {
@@ -1057,6 +1121,12 @@
     /* Comparison Table */
     .fdr-comp-table {
         margin: 0;
+    }
+
+    .fdr-table-scroll::after {
+        content: "";
+        display: table;
+        clear: both;
     }
 
     .fdr-metric-col {
@@ -1119,6 +1189,12 @@
         to { transform: rotate(360deg); }
     }
 
+    @@media (max-width: 1280px) {
+        .fdr-page {
+            min-width: 0;
+        }
+    }
+
     @@media (max-width: 1024px) {
         .fdr-kpi-grid {
             grid-template-columns: repeat(2, 1fr);
@@ -1162,12 +1238,18 @@
     private ReportDetailsDto? report;
 
     private List<InventoryItemRow> inventoryRows = new();
+    private List<InventoryItemRow> liveStockInventoryRows = new();
+    private List<InventoryItemRow> orchardInventoryRows = new();
     private List<IncomeItemRow> liveStockIncomeRows = new();
     private List<IncomeItemRow> orchardIncomeRows = new();
     private List<ExpenseItemRow> mainExpenseRows = new();
     private List<ExpenseItemRow> subExpenseRows = new();
 
     private string ReportingPeriodDisplay => report?.ReportingPeriod ?? "01 Apr 2026 - 15 Apr 2026";
+    private string CompactPeriodDisplay =>
+        report is { PeriodStartDate: var s, PeriodEndDate: var e } && s != default && e != default
+            ? $"{s:dd-MMM yyyy} - {e:dd-MMM yyyy}"
+            : ReportingPeriodDisplay;
     private decimal TotalIncomeDisplay => report?.TotalIncome ?? IncomeGrandTotal;
     private decimal TotalExpenseDisplay => report?.TotalExpense ?? MainCategoriesTotal;
     private decimal NetProfitDisplay => report?.NetProfit ?? (TotalIncomeDisplay - TotalExpenseDisplay);
@@ -1191,18 +1273,35 @@
     private decimal ExpenseChangePct => ChangePercent(TotalExpenseDisplay, PrevExpense);
     private decimal NetChangePct => ChangePercent(NetProfitDisplay, PrevNetResult);
 
-    private int LivestockCount => inventoryRows.Count;
-    private int OrchardCount => orchardIncomeRows.Count;
+    private int LivestockCount => liveStockInventoryRows.Count;
+    private int OrchardCount => orchardInventoryRows.Count;
     private int TotalProductsCount => LivestockCount + OrchardCount;
 
+    private static decimal IncomeAmount(IncomeItemRow row) =>
+        row.TotalAmount != 0 ? row.TotalAmount : row.SoldQuantity * row.Rate;
+
+    private decimal LiveStockIncomeTotal => liveStockIncomeRows.Sum(IncomeAmount);
+    private decimal OrchardIncomeTotal => orchardIncomeRows.Sum(IncomeAmount);
+
+    private int LiveStockIncomeProductCount =>
+        liveStockIncomeRows.Count(r => IncomeAmount(r) > 0);
+
+    private int OrchardIncomeProductCount =>
+        orchardIncomeRows.Count(r => IncomeAmount(r) > 0);
+
     private decimal IncomeGrandTotal =>
-        liveStockIncomeRows.Sum(r => r.TotalAmount) + orchardIncomeRows.Sum(r => r.TotalAmount);
+        LiveStockIncomeTotal + OrchardIncomeTotal;
 
     private decimal MainCategoriesTotal =>
         mainExpenseRows.Sum(r => r.Amount);
 
     private decimal SubCategoriesTotal =>
         subExpenseRows.Sum(r => r.Amount);
+
+    private static readonly HashSet<string> OrchardProducts = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Mango", "Coconut", "Banana", "Papaya", "Guava", "Lemon", "Amla"
+    };
 
     protected override async Task OnInitializedAsync()
     {
@@ -1301,6 +1400,13 @@
             LoadDefaultInventoryMock();
         }
 
+        liveStockInventoryRows = inventoryRows
+            .Where(i => !OrchardProducts.Contains(i.ProductName))
+            .ToList();
+        orchardInventoryRows = inventoryRows
+            .Where(i => OrchardProducts.Contains(i.ProductName))
+            .ToList();
+
         if (r.IncomeItems != null && r.IncomeItems.Count > 0)
         {
             liveStockIncomeRows = r.IncomeItems
@@ -1330,6 +1436,42 @@
         else
         {
             LoadDefaultIncomeMock();
+        }
+
+        if (liveStockInventoryRows.Count == 0 && liveStockIncomeRows.Count > 0)
+        {
+            liveStockInventoryRows = liveStockIncomeRows
+                .Select(i => new InventoryItemRow
+                {
+                    ProductName = i.ProductName,
+                    IconKey = i.IconKey,
+                    Opening = 0,
+                    Purchase = 0,
+                    Hatched = 0,
+                    Sold = i.SoldQuantity,
+                    Mortality = 0,
+                    Others = 0,
+                    Closing = 0
+                })
+                .ToList();
+        }
+
+        if (orchardInventoryRows.Count == 0 && orchardIncomeRows.Count > 0)
+        {
+            orchardInventoryRows = orchardIncomeRows
+                .Select(i => new InventoryItemRow
+                {
+                    ProductName = i.ProductName,
+                    IconKey = i.IconKey,
+                    Opening = 0,
+                    Purchase = 0,
+                    Hatched = 0,
+                    Sold = i.SoldQuantity,
+                    Mortality = 0,
+                    Others = 0,
+                    Closing = 0
+                })
+                .ToList();
         }
 
         if (r.ExpenseItems != null && r.ExpenseItems.Count > 0)
@@ -1372,7 +1514,17 @@
             new() { ProductName = "Goat", Opening = 100, Purchase = 10, Hatched = 0, Sold = 6, Mortality = 1, Others = 1, Closing = 120 },
             new() { ProductName = "Quail", Opening = 100, Purchase = 10, Hatched = 2, Sold = 10, Mortality = 10, Others = 10, Closing = 120 },
             new() { ProductName = "Quail Eggs", Opening = 100, Purchase = 10, Hatched = 0, Sold = 6, Mortality = 1, Others = 1, Closing = 120 },
+            new() { ProductName = "Mango", Opening = 100, Purchase = 10, Hatched = 0, Sold = 0, Mortality = 0, Others = 0, Closing = 120 },
+            new() { ProductName = "Coconut", Opening = 103, Purchase = 10, Hatched = 0, Sold = 0, Mortality = 2, Others = 0, Closing = 120 },
+            new() { ProductName = "Banana", Opening = 100, Purchase = 10, Hatched = 0, Sold = 0, Mortality = 0, Others = 0, Closing = 120 },
         };
+
+        liveStockInventoryRows = inventoryRows
+            .Where(i => !OrchardProducts.Contains(i.ProductName))
+            .ToList();
+        orchardInventoryRows = inventoryRows
+            .Where(i => OrchardProducts.Contains(i.ProductName))
+            .ToList();
     }
 
     private void LoadDefaultIncomeMock()
@@ -1422,6 +1574,7 @@
     }
 
     private void GoToFinanceSummary() => Nav.NavigateTo("/FinanceSummary");
+    private void GoToExpenseEntry() => Nav.NavigateTo("/FifteenDaysEntry");
 
     private void DownloadReport()
     {
