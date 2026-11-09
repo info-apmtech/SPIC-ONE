@@ -1,0 +1,48 @@
+@namespace SPIC.MauiBlazorApp.Shared.Components.Publicity
+@* Drag-and-drop / browse zone. Keeps the picked files in Files (two-way); the page uploads them. *@
+<div class="pub-drop @(_over ? "is-over" : "") @CssClass">
+    <InputFile class="pub-drop__input" multiple="@Multiple" accept="@Accept" OnChange="Picked"
+               @ondragenter="() => _over = true" @ondragleave="() => _over = false" @ondrop="() => _over = false" aria-label="@Title" />
+    <i class="bi bi-cloud-arrow-up pub-drop__icon" aria-hidden="true"></i>
+    <span class="pub-drop__title">@Title <span class="pub-link">or click to browse</span></span>
+    <span class="pub-drop__hint">Support formats: @Formats (Max 10 MB)</span>
+</div>
+@if (Files.Count > 0)
+{
+    <ul class="pub-chips">
+        @foreach (var f in Files)
+        {
+            <li class="pub-chip"><i class="bi bi-paperclip"></i> @f.Name <small>@PubText.Size(f.Size)</small>
+                <button type="button" aria-label="Remove @f.Name" @onclick="() => Remove(f)"><i class="bi bi-x"></i></button></li>
+        }
+    </ul>
+}
+@code {
+    [Inject] private ToastService Toast { get; set; } = default!;
+    [Parameter] public List<IBrowserFile> Files { get; set; } = new();
+    [Parameter] public EventCallback<List<IBrowserFile>> FilesChanged { get; set; }
+    [Parameter] public bool Multiple { get; set; } = true;
+    [Parameter] public string Accept { get; set; } = PublicityApi.Accept;
+    [Parameter] public string Formats { get; set; } = "PDF, JPG, PNG, DOC, DOCX";
+    [Parameter] public string Title { get; set; } = "Drag and drop your file here";
+    [Parameter] public string? CssClass { get; set; }
+    private bool _over;
+
+    private async Task Picked(InputFileChangeEventArgs e)
+    {
+        var list = Multiple ? new List<IBrowserFile>(Files) : new List<IBrowserFile>();
+        foreach (var f in e.GetMultipleFiles(20))
+        {
+            if (f.Size > PublicityApi.MaxFileBytes) { Toast.Error($"\"{f.Name}\" is larger than 10 MB."); continue; }
+            list.Add(f);
+        }
+        Files = list;
+        await FilesChanged.InvokeAsync(list);
+    }
+
+    private async Task Remove(IBrowserFile f)
+    {
+        Files = Files.Where(x => x != f).ToList();
+        await FilesChanged.InvokeAsync(Files);
+    }
+}

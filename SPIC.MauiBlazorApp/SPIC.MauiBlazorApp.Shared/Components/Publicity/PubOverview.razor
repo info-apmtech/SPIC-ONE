@@ -1,0 +1,55 @@
+@namespace SPIC.MauiBlazorApp.Shared.Components.Publicity
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
+@inject PublicityApi Api
+@* "Program Overview": product details | design file | required location, then the RMDO remarks. *@
+<section class="pub-card">
+    <div class="pub-card__head">
+        <h2 class="pub-h2">@Title</h2>
+        @HeadActions
+    </div>
+    <div class="pub-overview">
+        <div class="pub-overview__col">
+            <h3 class="pub-h3">Product Details</h3>
+            <PubInfo Icon="bi-journals" Tone="pink" Label="Publicity Material" Value="@D.Material" />
+            <PubInfo Icon="bi-box-seam" Tone="green" Label="Product" Value="@D.Product" />
+            <PubInfo Icon="bi-123" Tone="blue" Label="Quantity" Value="@($"{D.Quantity} Nos")" />
+        </div>
+        <div class="pub-overview__col pub-overview__file">
+            <h3 class="pub-h3">Design File</h3>
+            @if (Design is null)
+            {
+                <p class="pub-muted">No design file attached.</p>
+            }
+            else
+            {
+                <div class="pub-filecard">
+                    <div class="pub-filecard__thumb">
+                        @if (PubText.IsImage(Design.FileName)) { <img src="@Api.FileUrl(Design.Path)" alt="@Design.FileName" /> }
+                        else { <i class="bi bi-file-earmark-pdf" aria-hidden="true"></i> }
+                    </div>
+                    <div class="pub-filecard__meta">
+                        <b>@Design.FileName</b>
+                        <span>@System.IO.Path.GetExtension(Design.FileName).TrimStart('.').ToUpperInvariant() - @PubText.Size(Design.SizeBytes)</span>
+                        <small>Uploaded on @PubText.DateTime(Design.UploadedAt)</small>
+                        <a class="pub-btn pub-btn--line pub-btn--sm" href="@Api.FileUrl(Design.Path, download: true)" target="_blank" rel="noopener"><i class="bi bi-download"></i> Export</a>
+                    </div>
+                </div>
+            }
+        </div>
+        <div class="pub-overview__col">
+            <h3 class="pub-h3">Required Location</h3>
+            <PubInfo Icon="bi-map" Tone="green" Label="State" Value="@D.State" />
+            <PubInfo Icon="bi-pin-map" Tone="violet" Label="Region" Value="@D.Region" />
+            <PubInfo Icon="bi-buildings" Tone="blue" Label="Headquarter (HQ)" Value="@D.Hq" />
+        </div>
+    </div>
+    <label class="pub-label">Remarks From RMDO</label>
+    <div class="pub-remarks">@(string.IsNullOrWhiteSpace(D.Remarks) ? "No remarks." : D.Remarks)</div>
+</section>
+@code {
+    [Parameter, EditorRequired] public PubDetailDto D { get; set; } = default!;
+    [Parameter] public string Title { get; set; } = "Program Overview";
+    [Parameter] public RenderFragment? HeadActions { get; set; }
+    private PubFileDto? Design => D.Files.LastOrDefault(f => f.Kind == PublicityFileKind.Design);
+}

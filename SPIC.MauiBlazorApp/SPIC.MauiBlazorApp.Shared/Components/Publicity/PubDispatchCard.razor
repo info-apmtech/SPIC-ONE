@@ -1,0 +1,94 @@
+@namespace SPIC.MauiBlazorApp.Shared.Components.Publicity
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
+@inject PublicityApi Api
+@* One dispatch / transfer: details grid, delivery rail, documents, acknowledgement.
+   Used by the Tracking tab for every role; role buttons come in through Actions. *@
+<section class="pub-card pub-card--flush">
+    <button type="button" class="pub-card__band pub-band--green pub-collapse" aria-expanded="@_open" @onclick="() => _open = !_open">
+        <div class="pub-collapse__title">
+            <h2 class="pub-h2">@Heading <small>- @PubText.Kind(X.Kind)</small></h2>
+            <PubPill Text="@(X.Kind == PublicityDispatchKind.Transfer ? $"From {X.SourceName}" : "From Vendor")" Tone="blue" />
+            <span class="pub-muted">@Caption</span>
+        </div>
+        <div class="pub-collapse__right">
+            <PubPill Text="@PubText.DispatchStatus(X.Status, X.Kind)" Tone="@(X.Status >= PublicityDispatchStatus.Acknowledged ? "green" : X.Status <= PublicityDispatchStatus.ProofSubmitted ? "amber" : "cyan")" />
+            <i class="bi bi-chevron-@(_open ? "up" : "down")" aria-hidden="true"></i>
+        </div>
+    </button>
+    @if (_open)
+    {
+        <div class="pub-card__body">
+            <div class="pub-grid pub-grid--3 pub-grid--ruled">
+                <div>
+                    <PubInfo Icon="bi-journals" Tone="pink" Label="@(X.Kind == PublicityDispatchKind.Transfer ? "Transfer ID" : "Dispatch ID")" Value="@X.DispatchNo" />
+                    <PubInfo Icon="bi-calendar-event" Tone="green" Label="Dispatch Date" Value="@PubText.Date(X.DispatchDate)" />
+                    <PubInfo Icon="bi-box-seam" Label="Product / Material" Value="@($"{D.Product} {D.Material}")" />
+                    <PubInfo Icon="bi-123" Label="Quantity" Value="@($"{X.Quantity} Nos")" />
+                </div>
+                <div>
+                    <PubInfo Icon="bi-shop" Tone="pink" Label="Source (From)" Value="@(X.Kind == PublicityDispatchKind.Transfer ? $"{X.SourceName} ({X.SourceIndentNo})" : $"Vendor {X.SourceName}")" />
+                    <PubInfo Icon="bi-geo-alt" Tone="green" Label="Destination (To)" Value="@(X.DestinationAddress ?? X.DestinationHq)" />
+                    <PubInfo Icon="bi-truck" Label="Transporter" Value="@X.Transporter" Sub="@(X.VehicleNo is null ? null : $"Vehicle {X.VehicleNo}")" />
+                    <PubInfo Icon="bi-upc-scan" Label="Tracking Number" Value="@X.TrackingNo" />
+                </div>
+                <div>
+                    <PubInfo Icon="bi-person-badge" Tone="green" Label="Responsible Person" Value="@X.ResponsibleName" Sub="@(X.ResponsibleRole is null ? null : $"({X.ResponsibleRole})")" />
+                    <PubInfo Icon="bi-map" Tone="violet" Label="State" Value="@D.State" />
+                    <PubInfo Icon="bi-pin-map" Label="Region" Value="@D.Region" />
+                    <PubInfo Icon="bi-buildings" Label="Headquarter (HQ)" Value="@X.DestinationHq" />
+                </div>
+            </div>
+
+            @if (X.Kind == PublicityDispatchKind.Transfer && Proof is not null)
+            {
+                <h3 class="pub-h3">Courier / Dispatch Proof</h3>
+                <div class="pub-proof">
+                    <div class="pub-proof__thumb">
+                        @if (PubText.IsImage(Proof.FileName)) { <img src="@Api.FileUrl(Proof.Path)" alt="Courier proof" /> }
+                        else { <i class="bi bi-receipt" aria-hidden="true"></i> }
+                    </div>
+                    <PubInfo Label="File Name" Value="@Proof.FileName" Icon="bi-paperclip" />
+                    <PubInfo Label="Uploaded By" Value="@Proof.UploadedByName" Icon="bi-person" Tone="green" />
+                    <PubInfo Label="Uploaded At" Value="@PubText.DateTime(Proof.UploadedAt)" Icon="bi-clock" Tone="violet" />
+                </div>
+            }
+
+            <div class="pub-sub-head">
+                <h3 class="pub-h3">@(X.Kind == PublicityDispatchKind.Transfer ? "Transfer Delivery Status" : "Delivery Status")</h3>
+                @Notice
+            </div>
+            <PubStepper Steps="X.Steps" Label="Delivery status" />
+
+            <h3 class="pub-h3">Dispatch Documents</h3>
+            <PubDocs Files="X.Files.Where(f => f.Kind != PublicityFileKind.AckPhoto).ToList()" />
+
+            @if (ShowAck && X.Ack is { IsDraft: false })
+            {
+                <PubAckCard A="X.Ack">
+                    <Actions>@AckActions</Actions>
+                </PubAckCard>
+            }
+            @Actions
+        </div>
+    }
+</section>
+@code {
+    [Parameter, EditorRequired] public PubDispatchDto X { get; set; } = default!;
+    [Parameter, EditorRequired] public PubDetailDto D { get; set; } = default!;
+    [Parameter] public string Heading { get; set; } = "Dispatch";
+    [Parameter] public bool ShowAck { get; set; } = true;
+    [Parameter] public bool StartOpen { get; set; } = true;
+    [Parameter] public RenderFragment? Actions { get; set; }
+    [Parameter] public RenderFragment? AckActions { get; set; }
+    [Parameter] public RenderFragment? Notice { get; set; }
+    private bool _open = true;
+    protected override void OnInitialized() => _open = StartOpen;
+    private PubFileDto? Proof => X.Files.LastOrDefault(f => f.Kind == PublicityFileKind.CourierProof);
+    private string Caption => X.Kind switch
+    {
+        PublicityDispatchKind.Transfer => $"Stock transfer from {X.SourceName} to {X.DestinationHq}",
+        PublicityDispatchKind.ReInitiation => $"Replacement dispatched from the vendor to {X.DestinationHq}",
+        _ => $"Material dispatched from the vendor to {X.DestinationHq}"
+    };
+}

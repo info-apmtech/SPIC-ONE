@@ -1,0 +1,43 @@
+@namespace SPIC.MauiBlazorApp.Shared.Components.Publicity
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
+@* The green-topped strip: indent no, stage, status, current owner, requested by. *@
+<section class="pub-card pub-strip">
+    <div class="pub-strip__cell">
+        <div class="pub-strip__id">@D.IndentNo <PubPill Text="@Badge" Tone="@BadgeTone" /></div>
+        <span class="pub-muted">Created on @PubText.DateTime(D.CreatedAt)</span>
+    </div>
+    <div class="pub-strip__cell">
+        <span class="pub-strip__cap">Current Stage</span>
+        <PubPill Text="@(StageText ?? PubText.Stage(D.Stage))" Tone="@PubText.StageTone(D.Stage)" CssClass="pub-pill--lg" />
+    </div>
+    <div class="pub-strip__cell">
+        <span class="pub-strip__cap">Status</span>
+        <PubPill Text="@PubText.Status(D.Status)" Tone="@PubText.StatusTone(D.Status)" CssClass="pub-pill--lg" />
+    </div>
+    <div class="pub-strip__cell">
+        <span class="pub-strip__cap">@(D.OwnerCaption == "Current Approver" && !D.CanReview ? "Pending With" : D.OwnerCaption)</span>
+        <div class="pub-person"><span class="pub-avatar">@Initial(D.OwnerName)</span><div><b>@D.OwnerName</b><small>@D.OwnerRole</small></div></div>
+    </div>
+    <div class="pub-strip__cell">
+        <span class="pub-strip__cap">Requested By</span>
+        <div class="pub-person"><span class="pub-avatar pub-avatar--dark">@Initial(D.RequestedByName)</span><div><b>@D.RequestedByName</b><small>@D.RequestedByRole</small></div></div>
+    </div>
+</section>
+@code {
+    [Parameter, EditorRequired] public PubDetailDto D { get; set; } = default!;
+    [Parameter] public string? StageText { get; set; }
+
+    private string Badge => D.Status switch
+    {
+        PublicityStatus.Draft => "Draft",
+        PublicityStatus.PendingApproval or PublicityStatus.PendingFinalApproval => "Submitted",
+        PublicityStatus.Returned => "Returned",
+        PublicityStatus.Rejected => "Rejected",
+        PublicityStatus.Completed => "Completed",
+        _ => "Approved"
+    };
+    private string BadgeTone => D.Status is PublicityStatus.Draft or PublicityStatus.PendingApproval or PublicityStatus.PendingFinalApproval ? "grey"
+        : D.Status is PublicityStatus.Returned or PublicityStatus.Rejected ? "red" : "green";
+    private static string Initial(string? name) => string.IsNullOrWhiteSpace(name) ? "?" : name.Trim()[..1].ToUpperInvariant();
+}
