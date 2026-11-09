@@ -372,54 +372,174 @@
     }
 </div>
 
-<!-- View details drawer -->
-<BottomSheet @bind-IsOpen="showDetailsDrawer" Title="Income Report Details" Subtitle="@selectedDetail?.ReportingPeriod">
-    @if (isLoadingDetail)
-    {
-        <EmptyState Icon="bi-hourglass-split" Title="Loading..." Compact="true" />
-    }
-    else if (selectedDetail is null)
-    {
-        <EmptyState Icon="bi-exclamation-triangle" Title="Could not load this report" Compact="true" />
-    }
-    else
-    {
-        <div class="ics-drawer-meta">
-            <div><span>Status</span><strong>@selectedDetail.Status</strong></div>
-            <div><span>Submitted By</span><strong>@(string.IsNullOrWhiteSpace(selectedDetail.SubmittedBy) ? "-" : selectedDetail.SubmittedBy)</strong></div>
-            <div><span>Submitted At</span><strong>@(selectedDetail.SubmittedAt is { } at ? at.ToString("dd MMM yyyy, hh:mm tt") : "-")</strong></div>
-            <div><span>Total Income</span><strong>@FormatCurrency(selectedDetail.TotalIncome)</strong></div>
+<!-- View details modal -->
+@if (showDetailsDrawer)
+{
+    <div class="ics-details-overlay" @onclick="() => showDetailsDrawer = false">
+        <div class="ics-details-modal" @onclick:stopPropagation="true">
+
+            @if (isLoadingDetail)
+            {
+                <div class="ics-details-header">
+                    <div class="ics-details-header-left">
+                        <button type="button" class="ics-details-back-icon" @onclick="() => showDetailsDrawer = false" aria-label="Back">
+                            <i class="bi bi-arrow-left"></i>
+                        </button>
+                        <div>
+                            <div class="ics-details-title">Income Report Details</div>
+                            <div class="ics-details-subtitle">Loading...</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="ics-details-body">
+                    <EmptyState Icon="bi-hourglass-split" Title="Loading..." Compact="true" />
+                </div>
+            }
+            else if (selectedDetail is null)
+            {
+                <div class="ics-details-header">
+                    <div class="ics-details-header-left">
+                        <button type="button" class="ics-details-back-icon" @onclick="() => showDetailsDrawer = false" aria-label="Back">
+                            <i class="bi bi-arrow-left"></i>
+                        </button>
+                        <div>
+                            <div class="ics-details-title">Income Report Details</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="ics-details-body">
+                    <EmptyState Icon="bi-exclamation-triangle" Title="Could not load this report" Compact="true" />
+                </div>
+            }
+            else
+            {
+                var liveRows = selectedDetail.IncomeItems.Where(i => i.Group == "LiveStock").ToList();
+                var orchardRows = selectedDetail.IncomeItems.Where(i => i.Group == "Orchard").ToList();
+                var livestockIncome = liveRows.Sum(i => i.TotalAmount);
+                var orchardIncome = orchardRows.Sum(i => i.TotalAmount);
+
+                <div class="ics-details-header">
+                    <div class="ics-details-header-left">
+                        <button type="button" class="ics-details-back-icon" @onclick="() => showDetailsDrawer = false" aria-label="Back">
+                            <i class="bi bi-arrow-left"></i>
+                        </button>
+                        <div>
+                            <div class="ics-details-title">@selectedDetail.ReportingPeriod Period Income Details</div>
+                            <div class="ics-details-subtitle">15 Days - wise rate break for all income entries</div>
+                        </div>
+                    </div>
+                    <button type="button" class="ics-details-excel-btn" @onclick="DownloadExcelAsync" disabled="@(_exporting || isLoading)">
+                        Download Excel
+                    </button>
+                </div>
+
+                <div class="ics-details-body">
+                    <div class="ics-details-cards-grid">
+                        <div class="ics-details-card">
+                            <div class="ics-details-card-label">Reporting Period</div>
+                            <div class="ics-details-card-value">@selectedDetail.ReportingPeriod</div>
+                            <div class="ics-details-card-icon"><i class="bi bi-calendar3"></i></div>
+                        </div>
+                        <div class="ics-details-card">
+                            <div class="ics-details-card-label">Livestock Income</div>
+                            <div class="ics-details-card-value">@FormatCurrency(livestockIncome)</div>
+                            <div class="ics-details-card-icon"><i class="bi bi-file-earmark-bar-graph"></i></div>
+                        </div>
+                        <div class="ics-details-card">
+                            <div class="ics-details-card-label">Orchard Income</div>
+                            <div class="ics-details-card-value">@FormatCurrency(orchardIncome)</div>
+                            <div class="ics-details-card-icon"><i class="bi bi-file-earmark-bar-graph"></i></div>
+                        </div>
+                        <div class="ics-details-card">
+                            <div class="ics-details-card-label">Total Income</div>
+                            <div class="ics-details-card-value">@FormatCurrency(selectedDetail.TotalIncome)</div>
+                            <div class="ics-details-card-icon"><i class="bi bi-file-earmark-bar-graph"></i></div>
+                        </div>
+                    </div>
+
+                    <div class="ics-details-section-title">Livestock Details</div>
+                    <div class="ics-details-table-wrap">
+                        <table class="ics-details-table">
+                            <thead>
+                                <tr>
+                                    <th>Product</th>
+                                    <th>Quantity</th>
+                                    <th>Unit</th>
+                                    <th>Rate Per Unit</th>
+                                    <th>Income</th>
+                                    <th>Remarks</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var item in liveRows)
+                                {
+                                    <tr>
+                                        <td>
+                                            <div class="ics-details-product-cell">
+                                                <span class="ics-details-product-icon">
+                                                    @SPIC.MauiBlazorApp.Shared.Services.FarmProductIcons.IconFor(item.IconKey ?? item.ProductName, "ics-details-monogram")
+                                                </span>
+                                                @item.ProductName
+                                            </div>
+                                        </td>
+                                        <td>@item.SoldQuantity</td>
+                                        <td>@item.Uom</td>
+                                        <td>@FormatAmount(item.Rate)</td>
+                                        <td>@FormatAmount(item.TotalAmount)</td>
+                                        <td>Remarks</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="ics-details-section-title" style="margin-top: 16px;">Orchard Sales</div>
+                    <div class="ics-details-table-wrap">
+                        <table class="ics-details-table">
+                            <thead>
+                                <tr>
+                                    <th>Product</th>
+                                    <th>Quantity</th>
+                                    <th>Unit</th>
+                                    <th>Rate Per Unit</th>
+                                    <th>Income</th>
+                                    <th>Remarks</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var item in orchardRows)
+                                {
+                                    <tr>
+                                        <td>
+                                            <div class="ics-details-product-cell">
+                                                <span class="ics-details-product-icon">
+                                                    @SPIC.MauiBlazorApp.Shared.Services.FarmProductIcons.IconFor(item.IconKey ?? item.ProductName, "ics-details-monogram")
+                                                </span>
+                                                @item.ProductName
+                                            </div>
+                                        </td>
+                                        <td>@item.SoldQuantity</td>
+                                        <td>@item.Uom</td>
+                                        <td>@FormatAmount(item.Rate)</td>
+                                        <td>@FormatAmount(item.TotalAmount)</td>
+                                        <td>Remarks</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="ics-details-footer">
+                        <button type="button" class="ics-details-back-list-btn" @onclick="() => showDetailsDrawer = false">
+                            Back to Batch List
+                        </button>
+                    </div>
+                </div>
+            }
+
         </div>
-
-        <h4 class="ics-drawer-subhead">Livestock</h4>
-        <table class="ics-drawer-table">
-            <thead><tr><th>Product</th><th>Qty</th><th>Rate</th><th>Amount</th></tr></thead>
-            <tbody>
-                @foreach (var item in selectedDetail.IncomeItems.Where(i => i.Group == "LiveStock"))
-                {
-                    <tr><td>@item.ProductName</td><td>@item.SoldQuantity @item.Uom</td><td>@FormatCurrency(item.Rate)</td><td>@FormatCurrency(item.TotalAmount)</td></tr>
-                }
-            </tbody>
-        </table>
-
-        <h4 class="ics-drawer-subhead">Orchard</h4>
-        <table class="ics-drawer-table">
-            <thead><tr><th>Product</th><th>Qty</th><th>Rate</th><th>Amount</th></tr></thead>
-            <tbody>
-                @foreach (var item in selectedDetail.IncomeItems.Where(i => i.Group == "Orchard"))
-                {
-                    <tr><td>@item.ProductName</td><td>@item.SoldQuantity @item.Uom</td><td>@FormatCurrency(item.Rate)</td><td>@FormatCurrency(item.TotalAmount)</td></tr>
-                }
-            </tbody>
-        </table>
-
-        @if (!string.IsNullOrWhiteSpace(selectedDetail.IncomeRemarks))
-        {
-            <h4 class="ics-drawer-subhead">Remarks</h4>
-            <p class="ics-drawer-remarks">@selectedDetail.IncomeRemarks</p>
-        }
-    }
-</BottomSheet>
+    </div>
+}
 
 <style>
     .ics-page { color: #1f2937; font-family: inherit; }
@@ -580,18 +700,116 @@
 
     .ics-others-row { display: flex; justify-content: space-between; margin-top: 14px; padding: 10px 14px; background: #f9fafb; border-radius: 8px; font-size: 13px; color: #374151; }
 
-    .ics-drawer-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 18px; }
-    .ics-drawer-meta div { display: flex; flex-direction: column; gap: 2px; font-size: 12px; color: #6b7280; }
-    .ics-drawer-meta strong { font-size: 14px; color: #111827; }
-    .ics-drawer-subhead { font-size: 13px; font-weight: 700; color: #374151; margin: 16px 0 8px; }
-    .ics-drawer-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-    .ics-drawer-table th { background: #f3f4f6; padding: 8px 10px; text-align: left; }
-    .ics-drawer-table td { padding: 8px 10px; border-bottom: 1px solid #f1f5f9; }
-    .ics-drawer-remarks { font-size: 13px; color: #4b5563; background: #f9fafb; padding: 10px 14px; border-radius: 8px; }
+    /* ---- Details modal ---- */
+    .ics-details-overlay {
+        position: fixed; inset: 0; z-index: 9999;
+        background: rgba(17, 24, 39, 0.52);
+        display: flex; align-items: stretch; justify-content: flex-end;
+        padding: 0;
+    }
+    .ics-details-modal {
+        width: min(1280px, calc(100vw - 28px));
+        height: 100vh;
+        max-height: 100vh;
+        background: #fff;
+        border-radius: 12px 0 0 12px;
+        border: 1px solid #dbe5df;
+        border-right: 0;
+        box-shadow: 0 24px 48px rgba(0, 0, 0, .18);
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+    }
+    .ics-details-header {
+        display: flex; justify-content: space-between; align-items: center;
+        gap: 16px;
+        padding: 14px 20px 10px;
+        background: #f7fbf8;
+        border-bottom: 1px solid #e2e8e2;
+    }
+    .ics-details-header-left { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
+    .ics-details-back-icon {
+        border: none; background: transparent; color: #374151;
+        width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center;
+        padding: 0; margin-top: 2px; cursor: pointer;
+    }
+    .ics-details-title {
+        font-size: 38px; font-size: clamp(20px, 2.2vw, 34px);
+        line-height: 1.15;
+        font-weight: 700; color: #1f2937;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .ics-details-subtitle { margin-top: 3px; font-size: 13px; color: #4b5563; }
+    .ics-details-excel-btn {
+        padding: 8px 14px; border-radius: 8px; border: 1px solid #3b9c73;
+        background: #f3fbf7; color: #1f7a56; font-size: 12px; font-weight: 600;
+        cursor: pointer; flex-shrink: 0;
+    }
+    .ics-details-excel-btn:disabled { opacity: .6; cursor: not-allowed; }
+
+    .ics-details-body { padding: 16px 20px 14px; overflow: auto; }
+    .ics-details-cards-grid {
+        display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px; margin-bottom: 12px;
+    }
+    .ics-details-card {
+        border: 1px solid #dbe5df; border-radius: 10px; background: #fff;
+        padding: 10px 12px; position: relative; min-height: 72px;
+    }
+    .ics-details-card-label { font-size: 12px; color: #6b7280; font-weight: 600; margin-bottom: 5px; }
+    .ics-details-card-value { font-size: 30px; font-size: clamp(14px, 1.5vw, 30px); color: #1f2937; font-weight: 700; }
+    .ics-details-card-icon {
+        position: absolute; right: 10px; top: 10px;
+        width: 36px; height: 36px; border-radius: 10px;
+        background: #e9f8ef; color: #24a35f;
+        display: inline-flex; align-items: center; justify-content: center;
+        font-size: 17px;
+    }
+
+    .ics-details-section-title {
+        margin: 10px 0 10px; font-size: 30px; font-size: clamp(16px, 1.6vw, 30px);
+        font-weight: 700; color: #1f2937;
+    }
+    .ics-details-table-wrap {
+        border: 1px solid #dbe5df; border-radius: 8px; overflow: hidden; background: #fff;
+    }
+    .ics-details-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+    .ics-details-table th {
+        background: #f1f7f3; padding: 10px 12px; text-align: left;
+        color: #455a50; font-size: 12px; font-weight: 700; border-bottom: 1px solid #e5ece8;
+    }
+    .ics-details-table td {
+        padding: 10px 12px; font-size: 13px; color: #374151;
+        border-bottom: 1px solid #edf3ef;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .ics-details-table tbody tr:last-child td { border-bottom: none; }
+    .ics-details-product-cell { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+    .ics-details-product-icon {
+        width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center;
+        flex-shrink: 0;
+    }
+    .ics-details-monogram {
+        width: 22px; height: 22px; border-radius: 6px;
+        background: #dcfce7; color: #047857;
+        display: inline-flex; align-items: center; justify-content: center;
+        font-size: 10px; font-weight: 700; text-transform: uppercase;
+    }
+    .ics-details-footer {
+        display: flex; justify-content: flex-end; margin-top: 12px;
+    }
+    .ics-details-back-list-btn {
+        padding: 8px 16px; border-radius: 8px;
+        border: 1px solid #ced8d2; background: #fff; color: #374151;
+        font-size: 12px; font-weight: 600; cursor: pointer;
+    }
+    .ics-details-back-list-btn:hover { background: #f8faf9; }
 
     @@media (max-width: 1100px) {
         .ics-stats-grid { grid-template-columns: repeat(2, 1fr); }
         .ics-charts-grid { grid-template-columns: 1fr; }
+        .ics-details-cards-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .ics-details-modal { width: calc(100vw - 12px); }
     }
 
     @@media (max-width: 640px) {
@@ -602,6 +820,9 @@
         .ics-dt-input { width: 100%; }
         .ics-pagination { flex-direction: column; align-items: center; }
         .ics-dt-footer-left { justify-content: center; }
+        .ics-details-modal { width: 100%; border-radius: 0; }
+        .ics-details-cards-grid { grid-template-columns: 1fr; }
+        .ics-details-table th, .ics-details-table td { padding: 8px; font-size: 11px; }
     }
 </style>
 
@@ -856,6 +1077,7 @@
     }
 
     private static string FormatCurrency(decimal v) => $"₹{v:N0}";
+    private static string FormatAmount(decimal v) => $"{v:N0}";
 
     private void GoToPage(int page)
     {
