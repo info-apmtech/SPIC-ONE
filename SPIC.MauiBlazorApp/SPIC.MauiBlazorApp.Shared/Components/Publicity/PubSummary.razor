@@ -1,0 +1,54 @@
+@namespace SPIC.MauiBlazorApp.Shared.Components.Publicity
+@using SPIC.Core.DTOs
+@* "Final Quantity Summary" (details tab) and "Final Acknowledgement Summary" (Final = true). *@
+<section class="pub-card pub-card--flush">
+    <div class="pub-card__band pub-band--green"><h2 class="pub-h2">@Title</h2></div>
+    <div class="pub-card__body">
+        @if (!Final)
+        {
+            <div class="pub-grid pub-grid--6">
+                <PubInfo Label="Request Quantity" Value="@N(S.Requested)" />
+                <PubInfo Label="Total Dispatched" Tone="green" Value="@N(S.Dispatched)" />
+                <PubInfo Label="Total Received" Value="@N(S.Received)" />
+                <PubInfo Label="Outstanding Quantity" Tone="amber" Value="@N(S.Outstanding)" />
+                <PubInfo Label="Material Condition" Tone="green" Value="@S.MaterialCondition" />
+                <PubInfo Label="Exception" Tone="pink" Value="@(S.ExceptionType == "None" ? "None" : $"{S.ExceptionType} ({S.ExceptionStatus})")" />
+            </div>
+        }
+        else
+        {
+            <div class="pub-grid pub-grid--6">
+                <PubInfo Label="Original Dispatched" Value="@N(S.OriginalDispatched)" />
+                <PubInfo Label="Original Received" Tone="green" Value="@N(S.OriginalReceived)" />
+                <PubInfo Label="Total Shortage" Tone="pink" Value="@N(S.Shortage)" />
+                <PubInfo Label="Total Damaged" Tone="pink" Value="@N(S.Damaged)" />
+                <PubInfo Label="Replacement Dispatched" Value="@N(S.ReplacementDispatched)" />
+                <PubInfo Label="Replacement Received" Value="@N(S.ReplacementReceived)" />
+            </div>
+            <div class="pub-grid pub-grid--4 pub-subcard">
+                <PubInfo Label="Total Physical Received" Tone="green" Value="@N(S.Received)" Sub="@($"(Original {S.OriginalReceived} + Replacement {S.ReplacementReceived})")" />
+                <PubInfo Label="Usable / Fulfilled Quantity" Tone="green" Value="@N(S.Usable)" Sub="@($"(Excluding {S.Damaged} damaged)")" />
+                <PubInfo Label="Outstanding Quantity" Value="@N(S.Outstanding)" Sub="@(S.Outstanding == 0 ? "All required usable quantity fulfilled." : "Awaiting resolution")" />
+                <PubInfo Label="Exception Status" Tone="green" Value="@S.ExceptionStatus" Sub="@(S.ExceptionType == "None" ? null : S.ExceptionType)" />
+            </div>
+            <div class="pub-grid pub-grid--2">
+                <div class="pub-statecard @(S.Outstanding == 0 ? "is-ok" : "is-wait")">
+                    <i class="bi @(S.Outstanding == 0 ? "bi-patch-check-fill" : "bi-hourglass-split")"></i>
+                    <div><span>Material Condition</span><b>@S.MaterialCondition</b>
+                        <small>@(S.Damaged > 0 ? $"{S.Damaged} Nos damaged, {S.Shortage} Nos shortage" : "All received material is in good condition")</small></div>
+                </div>
+                <div class="pub-statecard @(S.Outstanding == 0 ? "is-ok" : "is-wait")">
+                    <i class="bi @(S.Outstanding == 0 ? "bi-patch-check-fill" : "bi-arrow-repeat")"></i>
+                    <div><span>Current Status</span><b>@(S.Outstanding == 0 ? "Completed" : "Awaiting resolution")</b>
+                        <small>@(S.Outstanding == 0 ? "All required usable quantity delivered and acknowledged." : $"{S.Outstanding} Nos still to be fulfilled through re-dispatch or HQ transfer.")</small></div>
+                </div>
+            </div>
+        }
+    </div>
+</section>
+@code {
+    [Parameter, EditorRequired] public PubSummaryDto S { get; set; } = default!;
+    [Parameter] public string Title { get; set; } = "Final Quantity Summary";
+    [Parameter] public bool Final { get; set; }
+    private static string N(int n) => $"{n} Nos";
+}

@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
+﻿using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
@@ -294,6 +294,34 @@ namespace Spic.Infrastructure.Data
                 entity.HasKey(x => x.Id);
                 entity.HasIndex(x => x.CollectionId);
                 entity.HasIndex(x => x.ConsignmentId);
+            });
+
+            // Publicity Material Tracking (docs/publicity-tracking-plan.md)
+            builder.Entity<PublicityRequest>(entity =>
+            {
+                entity.HasIndex(x => x.IndentNo).IsUnique();
+                entity.HasIndex(x => x.HeadquarterId);
+                entity.HasIndex(x => x.CreatedByUserId);
+                entity.HasIndex(x => x.Status);
+                entity.HasOne(x => x.MaterialType).WithMany().HasForeignKey(x => x.MaterialTypeId).OnDelete(DeleteBehavior.Restrict);
+                entity.HasMany(x => x.Dispatches).WithOne(d => d.Request).HasForeignKey(d => d.RequestId).OnDelete(DeleteBehavior.Cascade);
+                entity.HasMany(x => x.Events).WithOne(e => e.Request).HasForeignKey(e => e.RequestId).OnDelete(DeleteBehavior.Cascade);
+            });
+            builder.Entity<PublicityDispatch>(entity =>
+            {
+                entity.HasIndex(x => x.DispatchNo).IsUnique();
+                entity.HasIndex(x => x.SourceRequestId);
+                entity.HasIndex(x => x.SourceHqId);
+                entity.HasOne(x => x.Acknowledgement).WithOne(a => a.Dispatch)
+                    .HasForeignKey<PublicityAcknowledgement>(a => a.DispatchId).OnDelete(DeleteBehavior.Cascade);
+            });
+            builder.Entity<PublicityAcknowledgement>(entity => entity.HasIndex(x => x.DispatchId).IsUnique());
+            builder.Entity<PublicityFile>(entity => entity.HasIndex(x => x.RequestId));
+            builder.Entity<PublicityEvent>(entity => entity.HasIndex(x => x.RequestId));
+            builder.Entity<PublicityNotification>(entity =>
+            {
+                entity.HasIndex(x => x.TargetUserId);
+                entity.HasIndex(x => new { x.TargetRole, x.TargetHqId });
             });
 
             builder.Entity<SampleLabResult>(entity =>
@@ -992,6 +1020,14 @@ namespace Spic.Infrastructure.Data
         public DbSet<LabCropRecommendation> LabCropRecommendations { get; set; }
         public DbSet<LabTranslation> LabTranslations { get; set; }
         public DbSet<SasCourier> SasCouriers { get; set; }
+        //// Publicity Material Tracking
+        public DbSet<PublicityMaterialType> PublicityMaterialTypes { get; set; }
+        public DbSet<PublicityRequest> PublicityRequests { get; set; }
+        public DbSet<PublicityDispatch> PublicityDispatches { get; set; }
+        public DbSet<PublicityAcknowledgement> PublicityAcknowledgements { get; set; }
+        public DbSet<PublicityFile> PublicityFiles { get; set; }
+        public DbSet<PublicityEvent> PublicityEvents { get; set; }
+        public DbSet<PublicityNotification> PublicityNotifications { get; set; }
 
         //// JMDO Task Allocation
         public DbSet<JmdoTaskAllocation> JmdoTaskAllocations { get; set; }

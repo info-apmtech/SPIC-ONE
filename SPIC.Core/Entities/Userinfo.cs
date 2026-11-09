@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Identity;
+﻿using Microsoft.AspNetCore.Identity;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
@@ -135,6 +135,13 @@ namespace SPIC.Core.Entities
         // Farm Operations approval workflow (2026-10-31): Farm Admin's two pages, separate from
         // productRateManagement (Farm Office's request/catalog page) so the two roles can be
         // granted Entry (request) vs Update (approve/manage) independently. Appended at the END.
+       
+
+        // Publicity Material Tracking (2026-11-08, docs/publicity-tracking-plan.md): RMDO raises and
+        // acknowledges (PublicityRequest); approvers and MD CS admins review, dispatch and resolve
+        // exceptions (PublicityReview). Appended at the END.
+        [PageModule("Publicity")] PublicityRequest,
+        [PageModule("Publicity")] PublicityReview,
         ProductRateApprovals, FarmProductMaster, SalesTracking, InventorySummary, IncomeSummary, ExpenseSummary
     }
 }

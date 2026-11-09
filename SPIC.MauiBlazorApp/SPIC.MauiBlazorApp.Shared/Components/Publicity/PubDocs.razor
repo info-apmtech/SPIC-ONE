@@ -1,0 +1,38 @@
+@namespace SPIC.MauiBlazorApp.Shared.Components.Publicity
+@using SPIC.Core.DTOs
+@inject PublicityApi Api
+@* Document cards with View / Download (Figma "Dispatch Documents"). *@
+@if (Files.Count == 0)
+{
+    <p class="pub-muted">@Empty</p>
+}
+else
+{
+    <div class="pub-docs">
+        @foreach (var f in Files)
+        {
+            <div class="pub-doc">
+                <div class="pub-doc__head">
+                    <i class="bi @(PubText.IsImage(f.FileName) ? "bi-file-earmark-image" : "bi-file-earmark-pdf-fill") pub-doc__icon" aria-hidden="true"></i>
+                    <div>
+                        <span class="pub-doc__title">@PubText.FileKind(f.Kind)</span>
+                        <span class="pub-doc__meta" title="@f.FileName">@f.FileName · @PubText.Size(f.SizeBytes)</span>
+                    </div>
+                    @if (OnDelete.HasDelegate)
+                    {
+                        <button type="button" class="pub-icon-btn" aria-label="Remove @f.FileName" @onclick="() => OnDelete.InvokeAsync(f)"><i class="bi bi-x-lg"></i></button>
+                    }
+                </div>
+                <div class="pub-doc__actions">
+                    <a class="pub-btn pub-btn--line-blue pub-btn--sm" href="@Api.FileUrl(f.Path)" target="_blank" rel="noopener">View</a>
+                    <a class="pub-btn pub-btn--line pub-btn--sm" href="@Api.FileUrl(f.Path, download: true)" target="_blank" rel="noopener">Download</a>
+                </div>
+            </div>
+        }
+    </div>
+}
+@code {
+    [Parameter] public List<PubFileDto> Files { get; set; } = new();
+    [Parameter] public string Empty { get; set; } = "No documents uploaded yet.";
+    [Parameter] public EventCallback<PubFileDto> OnDelete { get; set; }
+}

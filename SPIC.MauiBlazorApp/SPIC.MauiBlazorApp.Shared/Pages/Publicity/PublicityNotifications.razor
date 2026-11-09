@@ -1,0 +1,163 @@
+@page "/PublicityRequest/notifications"
+@page "/PublicityReview/notifications"
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
+@using SPIC.MauiBlazorApp.Shared.Components.Publicity
+@inject PublicityApi Api
+@inject NavigationManager Nav
+
+@* Publicity notifications (stock transfer orders, exceptions, dispatches, approvals) with the
+   transfer-order drawer (Figma "Stock Transfer Order Received"). *@
+
+<div class="pub-page">
+    <PageHeader Title="Notifications" Subtitle="Stay updated with important alerts, approvals and stock transfer orders.">
+        <Actions>
+            <a class="pub-btn pub-btn--line" href="@Api.Home"><i class="bi bi-arrow-left"></i> Back to List Page</a>
+            <button type="button" class="pub-btn pub-btn--line" @onclick="ReadAllAsync" disabled="@(_items?.All(n => n.IsRead) != false)">Mark All As Read</button>
+        </Actions>
+    </PageHeader>
+
+    <section class="pub-card">
+        <nav class="pub-tabs pub-tabs--inset" role="tablist">
+            @foreach (var (label, type) in Tabs)
+            {
+                <button type="button" role="tab" class="pub-tab @(type == _type ? "is-active" : "")" aria-selected="@(type == _type)" @onclick="() => LoadAsync(type)">@label</button>
+            }
+        </nav>
+        @if (_items is null)
+        {
+            <Skeleton Rows="5" />
+        }
+        else if (_items.Count == 0)
+        {
+            <EmptyState Icon="bi-bell" Title="No notifications" Message="Stock transfer orders, exceptions and dispatch updates appear here." />
+        }
+        else
+        {
+            <ul class="pub-notes">
+                @foreach (var n in _items)
+                {
+                    <li>
+                        <button type="button" class="pub-notice @(n.IsRead ? "" : "is-unread")" @onclick="() => OpenAsync(n)">
+                            <span class="pub-notice__icon pub-tint--@(n.Type == PublicityNotificationType.Exception ? "red" : "green")"><i class="bi @Icon(n.Type)"></i></span>
+                            <span class="pub-notice__body"><b>@n.Title</b><span>@n.Message</span>@if (n.SubText is not null) { <small>@n.SubText</small> }</span>
+                            <span class="pub-notice__when">@if (!n.IsRead) { <i class="pub-dot" aria-label="Unread"></i> } @PubText.DateTime(n.CreatedAt)</span>
+                        </button>
+                    </li>
+                }
+            </ul>
+        }
+    </section>
+
+    <BottomSheet @bind-IsOpen="_open" Size="BottomSheet.SheetSize.Full" CssClass="pub-sheet-wide" Title="@(_detail?.Notice.Title ?? "Notification")">
+        <HeaderActions>
+            @if (_detail is { Notice.IsRead: false }) { <button type="button" class="pub-btn pub-btn--line pub-btn--sm" @onclick="MarkReadAsync">Mark As Read</button> }
+        </HeaderActions>
+        <ChildContent>
+            @if (_detail is not null)
+            {
+                var n = _detail.Notice;
+                <div class="pub-card pub-notice-head">
+                    <span class="pub-notice__icon pub-tint--green"><i class="bi @Icon(n.Type)"></i></span>
+                    <div><PubPill Text="@TypeLabel(n.Type)" Tone="green" /><h3 class="pub-h2">@n.Title</h3><span class="pub-muted">@PubText.DateTime(n.CreatedAt)</span></div>
+                </div>
+                <div class="pub-banner pub-banner--green"><p>@n.Message. @n.SubText</p></div>
+                @if (_detail.DestinationIndentNo is not null)
+                {
+                    <section class="pub-card pub-card--flush">
+                        <div class="pub-card__band pub-band--green"><h2 class="pub-h2">Transfer Order Details</h2></div>
+                        <div class="pub-grid pub-grid--3">
+                            <PubInfo Label="Destination Request ID" Hint="Shortage" Tone="pink" Value="@_detail.DestinationIndentNo" />
+                            <PubInfo Label="From" Hint="Source HQ" Value="@_detail.SourceHq" />
+                            <PubInfo Label="Source Request ID" Hint="Excess" Tone="pink" Value="@_detail.SourceIndentNo" />
+                            <PubInfo Label="To" Hint="Destination HQ" Value="@_detail.DestinationHq" />
+                            <PubInfo Label="Product / Material" Value="@($"{_detail.Product} {_detail.Material}")" />
+                            <PubInfo Label="Transfer Quantity" Value="@($"{_detail.TransferQty} Nos")" />
+                        </div>
+                    </section>
+                    @if (_detail.SourceIndentNo is not null)
+                    {
+                        <section class="pub-card pub-card--amber">
+                            <h2 class="pub-h2 pub-text-amber">Source Excess Reference</h2>
+                            <div class="pub-grid pub-grid--4">
+                                <PubInfo Label="Reported Excess" Value="@($"{_detail.ReportedExcess} Nos")" />
+                                <PubInfo Label="Already Transferred" Value="@($"{_detail.AlreadyTransferred} Nos")" />
+                                <PubInfo Label="Remaining Excess" Value="@($"{_detail.RemainingExcess} Nos")" />
+                                <PubInfo Label="Requested Now" Value="@($"{_detail.TransferQty} Nos")" />
+                            </div>
+                        </section>
+                    }
+                    <section class="pub-card pub-card--blue"><h2 class="pub-h2">Reason for Transfer</h2><p>@_detail.Reason</p></section>
+                }
+            }
+        </ChildContent>
+        <Footer>
+            @if (_detail is not null)
+            {
+                <button type="button" class="pub-btn pub-btn--grey" @onclick="() => _open = false"><i class="bi bi-chevron-double-left"></i> Back to List</button>
+                <a class="pub-btn pub-btn--grey" href="@($"{Api.Home}/{_detail.Notice.RequestId}?tab=tracking")">View Details</a>
+                @if (_detail.SourceIndentNo is not null && _detail.Notice.Type == PublicityNotificationType.StockTransfer && !Api.IsDispatcher)
+                {
+                    <a class="pub-btn pub-btn--primary" href="@($"/PublicityRequest/{_detail.Notice.RequestId}/transfer/{_detail.Notice.DispatchId}")">View Transfer <i class="bi bi-chevron-double-right"></i></a>
+                }
+            }
+        </Footer>
+    </BottomSheet>
+</div>
+
+@code {
+    private static readonly (string, int?)[] Tabs =
+        { ("All", null), ("Stock Transfer", (int)PublicityNotificationType.StockTransfer), ("Exception", (int)PublicityNotificationType.Exception), ("Dispatch & Approvals", (int)PublicityNotificationType.Dispatch) };
+    private List<PubNotificationDto>? _items;
+    private int? _type;
+    private bool _open;
+    private PubNotificationDetailDto? _detail;
+
+    protected override Task OnInitializedAsync() => LoadAsync(null);
+
+    private async Task LoadAsync(int? type)
+    {
+        _type = type;
+        _items = null;
+        var all = await Api.NotificationsAsync(type == (int)PublicityNotificationType.Dispatch ? null : type) ?? new();
+        _items = type == (int)PublicityNotificationType.Dispatch
+            ? all.Where(n => n.Type is PublicityNotificationType.Dispatch or PublicityNotificationType.Approval or PublicityNotificationType.General).ToList()
+            : all;
+    }
+
+    private async Task OpenAsync(PubNotificationDto n)
+    {
+        _detail = await Api.NotificationAsync(n.Id);
+        _open = _detail is not null;
+    }
+
+    private async Task MarkReadAsync()
+    {
+        if (_detail is null || !await Api.MarkReadAsync(_detail.Notice.Id)) return;
+        _detail.Notice.IsRead = true;
+        var row = _items?.FirstOrDefault(x => x.Id == _detail.Notice.Id);
+        if (row is not null) row.IsRead = true;
+    }
+
+    private async Task ReadAllAsync()
+    {
+        if (await Api.MarkReadAsync(0)) await LoadAsync(_type);
+    }
+
+    private static string Icon(PublicityNotificationType t) => t switch
+    {
+        PublicityNotificationType.StockTransfer => "bi-truck",
+        PublicityNotificationType.Exception => "bi-exclamation-octagon",
+        PublicityNotificationType.Dispatch => "bi-box-seam",
+        _ => "bi-bell"
+    };
+
+    private static string TypeLabel(PublicityNotificationType t) => t switch
+    {
+        PublicityNotificationType.StockTransfer => "Stock Transfer Order",
+        PublicityNotificationType.Exception => "Exception",
+        PublicityNotificationType.Dispatch => "Dispatch",
+        PublicityNotificationType.Approval => "Approval",
+        _ => "General"
+    };
+}

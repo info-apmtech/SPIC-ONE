@@ -1,0 +1,240 @@
+@page "/PublicityReview/{Id:int}/dispatch"
+@page "/PublicityRequest/{Id:int}/transfer/{DispatchId:int}"
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
+@using SPIC.MauiBlazorApp.Shared.Components.Publicity
+@inject PublicityApi Api
+@inject NavigationManager Nav
+@inject ToastService Toast
+
+@*
+    "Create Dispatch", two modes on one page:
+      /PublicityReview/{id}/dispatch[?kind=1]        ADMIN-MD CS: vendor dispatch (or re-initiation)
+      /PublicityRequest/{sourceId}/transfer/{dispId} source-HQ RMDO: courier proof for a stock
+                                                      transfer order; the receipt is OCR-read
+*@
+
+<div class="pub-page">
+    <PageHeader Title="Create Dispatch" Subtitle="@(Proof ? "Upload the courier receipt; the details are read from the image automatically." : "Create dispatch for the approved request and provide transport details.")">
+        <Actions><a class="pub-btn pub-btn--line" href="@Back"><i class="bi bi-arrow-left"></i> Back to My Request</a></Actions>
+    </PageHeader>
+
+    @if (_d is null || _lookups is null)
+    {
+        <Skeleton Rows="10" />
+    }
+    else if (Proof && _x is null)
+    {
+        <EmptyState Icon="bi-truck" Title="Transfer order not found" Message="This transfer order is no longer waiting for your dispatch proof." />
+    }
+    else if (Proof)
+    {
+        var x = _x!;
+        <section class="pub-card pub-strip">
+            <div class="pub-strip__cell"><div class="pub-strip__id">@x.DispatchNo <PubPill Text="Approved" Tone="green" /></div><span class="pub-muted">Created on @PubText.DateTime(x.CreatedAt)</span></div>
+            <div class="pub-strip__cell"><span class="pub-strip__cap">Current Stage</span><PubPill Text="@PubText.DispatchStatus(x.Status, x.Kind)" Tone="amber" CssClass="pub-pill--lg" /></div>
+            <div class="pub-strip__cell"><span class="pub-strip__cap">Requested By</span><b>@x.CreatedByName</b></div>
+            <div class="pub-strip__cell"><span class="pub-strip__cap">Source HQ</span><b>@_d.Hq</b></div>
+            <div class="pub-strip__cell"><span class="pub-strip__cap">Destination HQ</span><b>@x.DestinationHq</b></div>
+        </section>
+
+        <section class="pub-card">
+            <h2 class="pub-h2">Read Information (Read Only)</h2>
+            <div class="pub-grid pub-grid--4">
+                <PubInfo Label="Source Request ID" Value="@_d.IndentNo"><span>@_d.IndentNo <PubPill Text="Excess" Tone="blue" /></span></PubInfo>
+                <PubInfo Label="Source HQ" Tone="amber" Value="@_d.Hq" />
+                <PubInfo Label="Product / Material" Value="@($"{_d.Product} {_d.Material}")" />
+                <PubInfo Label="Available Excess Quantity" Value="@($"{_d.Summary.Excess} Nos")" />
+                <PubInfo Label="Destination Request ID" Tone="violet"><span>@x.RequestIndentNo <PubPill Text="Shortage" Tone="red" /></span></PubInfo>
+                <PubInfo Label="Destination HQ" Value="@x.DestinationHq" />
+                <PubInfo Label="Transfer Quantity" Value="@($"{x.Quantity} Nos")" />
+                <PubInfo Label="Request Date (Admin)" Value="@PubText.DateTime(x.CreatedAt)" />
+            </div>
+        </section>
+
+        <section class="pub-card">
+            <h2 class="pub-h2">Upload Courier / Dispatch Proof</h2>
+            <p class="pub-muted">Upload the courier receipt / dispatch document. We read the details from the image automatically.</p>
+            <PubDocs Files="x.Files.Where(f => f.Kind == PublicityFileKind.CourierProof).ToList()" Empty="" OnDelete="RemoveFile" />
+            <PubDrop Files="_proofFiles" FilesChanged="ProofPicked" Multiple="false" Title="Drag &amp; drop file here" />
+            @if (_reading) { <p class="pub-muted"><span class="spinner-border spinner-border-sm"></span> Reading the receipt...</p> }
+        </section>
+
+        <section class="pub-card">
+            <div class="pub-card__head"><h2 class="pub-h2">Extracted Details <small>(Auto-read from Document)</small></h2>
+                @if (_ocrFound) { <PubPill Text="Auto-filled using OCR" Tone="green" /> }</div>
+            <div class="pub-form pub-form--4">
+                <div class="pub-field"><label class="pub-label pub-req" for="pp-tr">Courier / Transporter</label>
+                    <input id="pp-tr" class="pub-input" list="pub-couriers" @bind="_proof.Transporter" placeholder="e.g. Blue Dart Express" /></div>
+                <div class="pub-field"><label class="pub-label pub-req" for="pp-awb">Tracking No. / AWB</label>
+                    <input id="pp-awb" class="pub-input" @bind="_proof.TrackingNo" placeholder="AWB-9842019" /></div>
+                <div class="pub-field"><label class="pub-label pub-req" for="pp-dd">Dispatch Date</label>
+                    <input id="pp-dd" type="date" class="pub-input" @bind="_proof.DispatchDate" /></div>
+                <div class="pub-field"><label class="pub-label" for="pp-vn">Vehicle No</label>
+                    <input id="pp-vn" class="pub-input" @bind="_proof.VehicleNo" placeholder="e.g. TN 09 AB 1234" /></div>
+                <div class="pub-field pub-field--full"><label class="pub-label" for="pp-rem">Remarks (Optional)</label>
+                    <input id="pp-rem" class="pub-input" @bind="_proof.Remarks" placeholder="Enter remarks about dispatch" /></div>
+            </div>
+        </section>
+
+        <div class="pub-footer">
+            <a class="pub-btn pub-btn--grey" href="@Back"><i class="bi bi-chevron-double-left"></i> Back to List</a>
+            <span class="pub-footer__gap"></span>
+            <a class="pub-btn pub-btn--grey" href="@Back">Cancel</a>
+            <button type="button" class="pub-btn pub-btn--primary" disabled="@_busy" @onclick="SubmitProofAsync">Submit Proof to Admin <i class="bi bi-chevron-double-right"></i></button>
+        </div>
+    }
+    else
+    {
+        <PubHeader D="_d" StageText="@(Kind == PublicityDispatchKind.ReInitiation ? "Re-initiation" : null)" />
+        <PubOverview D="_d" Title="Read Information (Read Only)" />
+
+        <section class="pub-card">
+            <h2 class="pub-h2">@(Kind == PublicityDispatchKind.ReInitiation ? "Re-initiation Dispatch Data" : "Feed Logistics & Dispatch Data")</h2>
+            @if (Kind == PublicityDispatchKind.ReInitiation) { <p class="pub-muted">Replacement for the shortage / damage: @_d.Summary.Outstanding Nos outstanding.</p> }
+            <div class="pub-form pub-form--3">
+                <div class="pub-field"><label class="pub-label pub-req" for="cd-dd">Dispatch Date</label><input id="cd-dd" type="date" class="pub-input" @bind="_dto.DispatchDate" /></div>
+                <div class="pub-field"><label class="pub-label pub-req" for="cd-qty">Dispatch Quantity</label><input id="cd-qty" type="number" min="1" class="pub-input" @bind="_dto.Quantity" /></div>
+                <div class="pub-field"><label class="pub-label pub-req" for="cd-vendor">Vendor</label>
+                    <input id="cd-vendor" class="pub-input" list="pub-vendors" @bind="_dto.VendorName" placeholder="Select or type the vendor" />
+                    <datalist id="pub-vendors">@foreach (var v in _lookups.Vendors) { <option value="@v"></option> }</datalist></div>
+                <div class="pub-field"><label class="pub-label pub-req" for="cd-tr">Transporter / Courier</label>
+                    <input id="cd-tr" class="pub-input" list="pub-couriers" @bind="_dto.Transporter" placeholder="e.g. Blue Dart Express" /></div>
+                <div class="pub-field"><label class="pub-label" for="cd-vn">Vehicle No</label><input id="cd-vn" class="pub-input" @bind="_dto.VehicleNo" placeholder="e.g. TN 09 AB 1234" /></div>
+                <div class="pub-field"><label class="pub-label" for="cd-awb">Tracking No.</label><input id="cd-awb" class="pub-input" @bind="_dto.TrackingNo" placeholder="e.g. AWB-9842019" /></div>
+                <div class="pub-field"><label class="pub-label" for="cd-ed">Expected Delivery Date</label><input id="cd-ed" type="date" class="pub-input" @bind="_dto.ExpectedDeliveryDate" /></div>
+                <div class="pub-field"><label class="pub-label pub-req" for="cd-resp">Responsible SMDO / RM / RMDO / MO</label>
+                    <select id="cd-resp" class="pub-input" @bind="_dto.ResponsibleUserId"><option value="">Select Responsible Officer</option>
+                        @foreach (var p in _people) { <option value="@p.UserId">@p.Name @(p.Role is null ? "" : $"({p.Role})")</option> }</select></div>
+                <div class="pub-field"><label class="pub-label" for="cd-rem">Remarks (Optional)</label><input id="cd-rem" class="pub-input" @bind="_dto.Remarks" placeholder="Enter remarks about dispatch" /></div>
+            </div>
+        </section>
+
+        <section class="pub-card">
+            <h2 class="pub-h2">Dispatch / Note Approval Document @if (Kind == PublicityDispatchKind.Original) { <span class="pub-text-red">(Required)</span> }</h2>
+            <p class="pub-muted">Upload the note approval / dispatch document for this dispatch</p>
+            <PubDrop @bind-Files="_noteFiles" Multiple="false" />
+            <h3 class="pub-h3">Transport Slip / E-Way Bill / Other Documents <small>(Optional)</small></h3>
+            <PubDrop @bind-Files="_docFiles" />
+        </section>
+
+        <section class="pub-card">
+            <h2 class="pub-h2">Delivery Address</h2>
+            <p class="pub-muted">Select an existing address or type a new address</p>
+            <div class="pub-field">
+                <label class="pub-label pub-req" for="cd-addr">Delivery Address</label>
+                <textarea id="cd-addr" rows="3" class="pub-input pub-textarea" @bind="_dto.DestinationAddress" placeholder="e.g. 123, SPIC Building, Anna Salai, Chennai - 600002"></textarea>
+                @if (_d.KnownAddresses.Count > 0)
+                {
+                    <div class="pub-chips">@foreach (var a in _d.KnownAddresses) { <button type="button" class="pub-chip pub-chip--btn" @onclick="() => _dto.DestinationAddress = a">@a</button> }</div>
+                }
+            </div>
+        </section>
+
+        <div class="pub-footer">
+            <a class="pub-btn pub-btn--grey" href="@Back"><i class="bi bi-chevron-double-left"></i> Back to List</a>
+            <span class="pub-footer__gap"></span>
+            <a class="pub-btn pub-btn--grey" href="@Back">Cancel</a>
+            <button type="button" class="pub-btn pub-btn--primary" disabled="@_busy" @onclick="CreateAsync">Confirm and Create Dispatch <i class="bi bi-chevron-double-right"></i></button>
+        </div>
+    }
+    <datalist id="pub-couriers">@foreach (var c in _lookups?.Couriers ?? new()) { <option value="@c"></option> }</datalist>
+</div>
+
+@code {
+    [Parameter] public int Id { get; set; }
+    [Parameter] public int? DispatchId { get; set; }
+
+    private bool Proof => DispatchId is > 0;
+    private PublicityDispatchKind Kind => Nav.ToAbsoluteUri(Nav.Uri).Query.Contains("kind=1") ? PublicityDispatchKind.ReInitiation : PublicityDispatchKind.Original;
+    private string Back => Proof ? $"/PublicityRequest/{Id}?tab=tracking" : $"/PublicityReview/{Id}";
+
+    private PubDetailDto? _d;
+    private PubLookupsDto? _lookups;
+    private List<PubPerson> _people = new();
+    private PubDispatchDto? _x;
+    private readonly PubDispatchCreateDto _dto = new();
+    private readonly PubProofDto _proof = new();
+    private List<IBrowserFile> _noteFiles = new(), _docFiles = new(), _proofFiles = new();
+    private bool _busy, _reading, _ocrFound;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _lookups = await Api.LookupsAsync();
+        _d = await Api.GetAsync(Id);
+        if (_d is null) return;
+        if (Proof)
+        {
+            _x = _d.OutgoingTransfers.FirstOrDefault(t => t.Id == DispatchId && t.CanSubmitProof);
+            if (_x is not null) (_proof.Transporter, _proof.TrackingNo, _proof.DispatchDate, _proof.VehicleNo) = (_x.Transporter, _x.TrackingNo, _x.DispatchDate ?? PubText.Today, _x.VehicleNo);
+            return;
+        }
+        _people = (await Api.LookupsAsync(_d.RegionId))?.People ?? new();
+        _dto.Kind = Kind;
+        _dto.Quantity = Kind == PublicityDispatchKind.ReInitiation ? _d.Summary.Outstanding : _d.Quantity;
+        _dto.DispatchDate = PubText.Today;
+        _dto.DestinationAddress = _d.KnownAddresses.FirstOrDefault();
+        _dto.ResponsibleUserId = _d.RequestedByUserId;
+    }
+
+    private async Task CreateAsync()
+    {
+        string? error = _dto.DispatchDate is null ? "Select the dispatch date."
+            : _dto.Quantity <= 0 ? "Enter the dispatch quantity."
+            : string.IsNullOrWhiteSpace(_dto.VendorName) ? "Select the vendor."
+            : string.IsNullOrWhiteSpace(_dto.Transporter) ? "Enter the transporter / courier."
+            : string.IsNullOrWhiteSpace(_dto.ResponsibleUserId) ? "Select the responsible officer."
+            : string.IsNullOrWhiteSpace(_dto.DestinationAddress) ? "Enter the delivery address."
+            : Kind == PublicityDispatchKind.Original && _noteFiles.Count == 0 ? "Upload the dispatch / note approval document." : null;
+        if (error != null) { Toast.Error(error); return; }
+        _busy = true;
+        var saved = await Api.CreateDispatchAsync(Id, _dto);
+        if (saved is not null)
+        {
+            if (_noteFiles.Count > 0) await Api.UploadAsync(Id, PublicityFileKind.NoteApproval, _noteFiles, saved.Id);
+            if (_docFiles.Count > 0) await Api.UploadAsync(Id, PublicityFileKind.DispatchDocument, _docFiles, saved.Id);
+            Nav.NavigateTo($"/PublicityReview/done?type=dispatch&id={Id}&no={Uri.EscapeDataString(saved.DispatchNo ?? "")}");
+        }
+        _busy = false;
+    }
+
+    private async Task ProofPicked(List<IBrowserFile> files)
+    {
+        _proofFiles = files;
+        var file = files.FirstOrDefault();
+        if (file is null || _x is null) return;
+        _reading = true;
+        StateHasChanged();
+        var uploaded = await Api.UploadAsync(Id, PublicityFileKind.CourierProof, files, _x.Id);
+        if (uploaded is not null)
+        {
+            _x.Files.AddRange(uploaded);
+            _proofFiles = new();
+            if (PubText.IsImage(file.Name) && await Api.OcrAsync(file) is { Found: true } ocr)
+            {
+                _ocrFound = true;
+                _proof.Transporter = ocr.Transporter ?? _proof.Transporter;
+                _proof.TrackingNo = ocr.TrackingNo ?? _proof.TrackingNo;
+                _proof.DispatchDate = ocr.DispatchDate ?? _proof.DispatchDate;
+                _proof.VehicleNo = ocr.VehicleNo ?? _proof.VehicleNo;
+            }
+        }
+        _reading = false;
+    }
+
+    private async Task RemoveFile(PubFileDto f)
+    {
+        if (await Api.DeleteFileAsync(f.Id)) _x?.Files.Remove(f);
+    }
+
+    private async Task SubmitProofAsync()
+    {
+        if (_x!.Files.All(f => f.Kind != PublicityFileKind.CourierProof)) { Toast.Error("Upload the courier / dispatch proof."); return; }
+        if (string.IsNullOrWhiteSpace(_proof.Transporter) || string.IsNullOrWhiteSpace(_proof.TrackingNo) || _proof.DispatchDate is null)
+        { Toast.Error("Courier, tracking number and dispatch date are required."); return; }
+        _busy = true;
+        var ok = await Api.ProofAsync(_x.Id, _proof);
+        _busy = false;
+        if (ok) Nav.NavigateTo($"/PublicityRequest/done?type=proof&id={Id}&no={Uri.EscapeDataString(_x.DispatchNo)}");
+    }
+}

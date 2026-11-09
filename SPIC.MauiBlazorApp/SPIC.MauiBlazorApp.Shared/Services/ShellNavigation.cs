@@ -1,4 +1,4 @@
-using SPIC.Core.Entities;
+﻿using SPIC.Core.Entities;
 
 namespace SPIC.MauiBlazorApp.Shared.Services;
 
@@ -128,6 +128,18 @@ public static class ShellNavigation
         {
             ShortLabel = "Consignments", Group = "SAS Portal",
             Rule = s => s.CanSeeMenu(PagePermission.ConsignmentHistory)
+        },
+
+        // ---- Publicity Material Tracking (2026-11-08): RMDO requests, reviewers / MD CS review ----
+        new("PublicityRequest", "Publicity Request", "bi-megaphone", "/PublicityRequest", nameof(PagePermission.PublicityRequest))
+        {
+            ShortLabel = "Publicity", Group = "Publicity",
+            Rule = s => s.CanSeeMenu(PagePermission.PublicityRequest)
+        },
+        new("PublicityReview", "Publicity Review", "bi-clipboard2-check", "/PublicityReview", nameof(PagePermission.PublicityReview))
+        {
+            ShortLabel = "Publicity Review", Group = "Publicity",
+            Rule = s => s.CanSeeMenu(PagePermission.PublicityReview)
         },
 
         // ---- SAS Lab portal (version 2, 2026-09-27) and payments: DESIGNATION only ----
