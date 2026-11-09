@@ -7,6 +7,8 @@
 @inject PublicityApi Api
 @inject NavigationManager Nav
 @inject ToastService Toast
+@inject IJSRuntime JS
+@implements IDisposable
 
 @* Create / edit a request (RMDO). Draft keeps it private; Submit sends it to RM review.
    /PublicityReview/edit/{id}: the approver whose turn it is edits every field ("Edit Publicity
@@ -36,8 +38,10 @@
                 </div>
                 <div class="pub-field">
                     <label class="pub-label pub-req" for="pr-prod">Product</label>
-                    <select id="pr-prod" class="pub-input" @bind="_dto.ProductId"><option value="0">Select Product</option>
-                        @foreach (var p in _lookups.Products) { <option value="@p.Id">@p.Name</option> }</select>
+                    <select id="pr-prod" class="pub-input" @onchange="e => OnNativeSelect(e, OnProductChanged)">
+                        <option value="0">Select Product</option>
+                        @foreach (var p in _lookups.Products) { <option value="@p.Id" selected="@(_dto.ProductId == p.Id)">@p.Name</option> }
+                    </select>
                 </div>
                 <div class="pub-field">
                     <label class="pub-label pub-req" for="pr-qty">Quantity</label>
@@ -45,8 +49,9 @@
                 </div>
                 <div class="pub-field">
                     <label class="pub-label pub-req" for="pr-by">Requested By</label>
-                    <select id="pr-by" class="pub-input" @bind="_dto.RequestedByUserId">
-                        @foreach (var p in _lookups.People) { <option value="@p.UserId">@p.Name @(p.Role is null ? "" : $"({p.Role})")</option> }</select>
+                    <select id="pr-by" class="pub-input" @onchange="e => OnNativeSelect(e, OnRequestedByChanged)">
+                        @foreach (var p in _lookups.People) { <option value="@p.UserId" selected="@(_dto.RequestedByUserId == p.UserId)">@p.Name @(p.Role is null ? "" : $"({p.Role})")</option> }
+                    </select>
                 </div>
             </div>
 
@@ -133,6 +138,47 @@
         if (_dto.StateId > 0) _regions = await Api.RegionsAsync(_dto.StateId) ?? new();
         if (_dto.RegionId > 0) _hqs = await Api.HqsAsync(_dto.RegionId) ?? new();
     }
+
+    // Product and Requested By become searchable (Select2) the same way every other list/filter
+    // page in the app does it (see select2-interop.js) - the native <select> stays the source of
+    // truth via @onchange (progressive enhancement), Select2 just also calls the same method directly.
+    private DotNetObjectReference<PublicityForm>? _objRef;
+    private bool _select2Ready;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_lookups is null || _select2Ready) return;
+        _select2Ready = true;
+        _objRef ??= DotNetObjectReference.Create(this);
+        var configs = new[]
+        {
+            new { id = "pr-prod", method = nameof(OnProductChanged), parent = (string?)null },
+            new { id = "pr-by", method = nameof(OnRequestedByChanged), parent = (string?)null }
+        };
+        await JS.InvokeVoidAsync("spicSelect2.initMultiple", configs, _objRef);
+    }
+
+    private static Task OnNativeSelect(ChangeEventArgs e, Action<List<string>?> handler)
+    {
+        handler(e.Value is string s && !string.IsNullOrEmpty(s) ? new List<string> { s } : new List<string>());
+        return Task.CompletedTask;
+    }
+
+    [JSInvokable]
+    public void OnProductChanged(List<string>? values)
+    {
+        _dto.ProductId = values is { Count: > 0 } && int.TryParse(values[0], out var v) ? v : 0;
+        StateHasChanged();
+    }
+
+    [JSInvokable]
+    public void OnRequestedByChanged(List<string>? values)
+    {
+        _dto.RequestedByUserId = values is { Count: > 0 } ? values[0] : null;
+        StateHasChanged();
+    }
+
+    public void Dispose() => _objRef?.Dispose();
 
     private async Task StateChanged(ChangeEventArgs e)
     {

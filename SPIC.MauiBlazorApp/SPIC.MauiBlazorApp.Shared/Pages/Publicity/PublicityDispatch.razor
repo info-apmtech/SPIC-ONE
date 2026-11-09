@@ -6,6 +6,8 @@
 @inject PublicityApi Api
 @inject NavigationManager Nav
 @inject ToastService Toast
+@inject IJSRuntime JS
+@implements IDisposable
 
 @*
     "Create Dispatch", two modes on one page:
@@ -104,8 +106,10 @@
                 <div class="pub-field"><label class="pub-label" for="cd-awb">Tracking No.</label><input id="cd-awb" class="pub-input" @bind="_dto.TrackingNo" placeholder="e.g. AWB-9842019" /></div>
                 <div class="pub-field"><label class="pub-label" for="cd-ed">Expected Delivery Date</label><input id="cd-ed" type="date" class="pub-input" @bind="_dto.ExpectedDeliveryDate" /></div>
                 <div class="pub-field"><label class="pub-label pub-req" for="cd-resp">Responsible SMDO / RM / RMDO / MO</label>
-                    <select id="cd-resp" class="pub-input" @bind="_dto.ResponsibleUserId"><option value="">Select Responsible Officer</option>
-                        @foreach (var p in _people) { <option value="@p.UserId">@p.Name @(p.Role is null ? "" : $"({p.Role})")</option> }</select></div>
+                    <select id="cd-resp" class="pub-input" @onchange="e => OnNativeSelect(e, OnResponsibleChanged)">
+                        <option value="">Select Responsible Officer</option>
+                        @foreach (var p in _people) { <option value="@p.UserId" selected="@(_dto.ResponsibleUserId == p.UserId)">@p.Name @(p.Role is null ? "" : $"({p.Role})")</option> }
+                    </select></div>
                 <div class="pub-field"><label class="pub-label" for="cd-rem">Remarks (Optional)</label><input id="cd-rem" class="pub-input" @bind="_dto.Remarks" placeholder="Enter remarks about dispatch" /></div>
             </div>
         </section>
@@ -176,6 +180,35 @@
         _dto.DestinationAddress = _d.KnownAddresses.FirstOrDefault();
         _dto.ResponsibleUserId = _d.RequestedByUserId;
     }
+
+    // Responsible Officer becomes searchable (Select2), same wiring as every other list/filter page
+    // in the app (see select2-interop.js) - native <select> stays the source of truth via @onchange.
+    private DotNetObjectReference<PublicityDispatch>? _objRef;
+    private bool _select2Ready;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (Proof || _d is null || _lookups is null || _select2Ready) return;
+        _select2Ready = true;
+        _objRef ??= DotNetObjectReference.Create(this);
+        var configs = new[] { new { id = "cd-resp", method = nameof(OnResponsibleChanged), parent = (string?)null } };
+        await JS.InvokeVoidAsync("spicSelect2.initMultiple", configs, _objRef);
+    }
+
+    private static Task OnNativeSelect(ChangeEventArgs e, Action<List<string>?> handler)
+    {
+        handler(e.Value is string s && !string.IsNullOrEmpty(s) ? new List<string> { s } : new List<string>());
+        return Task.CompletedTask;
+    }
+
+    [JSInvokable]
+    public void OnResponsibleChanged(List<string>? values)
+    {
+        _dto.ResponsibleUserId = values is { Count: > 0 } ? values[0] : null;
+        StateHasChanged();
+    }
+
+    public void Dispose() => _objRef?.Dispose();
 
     private async Task CreateAsync()
     {

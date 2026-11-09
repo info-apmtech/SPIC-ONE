@@ -77,20 +77,26 @@
         </NavLink>
     }
 
-    @* Publicity Material Tracking: RMDO requests and the reviewer / MD CS side (page-permission gated). *@
-    @if (loginState.CanSeeMenu(PagePermission.PublicityRequest))
+    @* Publicity Material Tracking: RMDO requests and the reviewer / MD CS side, grouped under one
+       collapsible "Publicity" parent (page-permission gated per child, pure union like DemoDocumentation). *@
+    @if (AnyPublicityAccessible)
     {
-        <NavLink class="@NavLinkClass("Publicity Request")" href="/PublicityRequest">
-            <i class="bi bi-megaphone SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
-            Publicity Request
-        </NavLink>
-    }
-    @if (loginState.CanSeeMenu(PagePermission.PublicityReview))
-    {
-        <NavLink class="@NavLinkClass("Publicity Review")" href="/PublicityReview">
-            <i class="bi bi-clipboard2-check SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
-            Publicity Review
-        </NavLink>
+        <div class="settings-menu-wrapper">
+            <a href="javascript:void(0);"
+               class="nav-link mt-2 @(ShowPublicityExpanded ? "active" : "") @MatchClass("Publicity")"
+               @onclick="TogglePublicityMenu">
+                <i class="bi bi-megaphone SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+                Publicity
+                <i class="bi @(ShowPublicityExpanded ? "bi-chevron-up" : "bi-chevron-down") chevron-icon"></i>
+            </a>
+
+            @if (ShowPublicityExpanded)
+            {
+                <ul class="submenu-list">
+                    @PublicityMenuItems
+                </ul>
+            }
+        </div>
     }
 
     @* SAS Lab portal (version 2) and payments: DESIGNATION only (HasPageStrict, no Admin / CorporateAdmin bypass). *@
@@ -1153,6 +1159,7 @@
     private bool isSasOpen = false;
     private bool isFarmOpen = false;
     private bool ShowDemoDocumentationExpanded { get; set; }
+    private bool ShowPublicityExpanded { get; set; }
     protected override void OnInitialized()
     {
         isJmdoOpen = IsJmdoSectionActive();
@@ -1827,5 +1834,36 @@
     private void ToggleDemoDocumentationMenu()
     {
         ShowDemoDocumentationExpanded = !ShowDemoDocumentationExpanded;
+    }
+
+    // Publicity group: pure union of its two children's CanSeeMenu, same shape as DemoDocumentation.
+    private bool AnyPublicityAccessible =>
+        loginState.CanSeeMenu(PagePermission.PublicityRequest) || loginState.CanSeeMenu(PagePermission.PublicityReview);
+
+    private RenderFragment PublicityMenuItems =>
+    @<text>
+        @if (loginState.CanSeeMenu(PagePermission.PublicityRequest))
+        {
+            <li class="submenu-item">
+                <NavLink href="/PublicityRequest/new" class="@SubmenuLinkClass("Publicity Request")" Match="NavLinkMatch.All">
+                    <i class="bi bi-megaphone SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+                    Publicity Request
+                </NavLink>
+            </li>
+        }
+        @if (loginState.CanSeeMenu(PagePermission.PublicityReview))
+        {
+            <li class="submenu-item">
+                <NavLink href="/PublicityReview" class="@SubmenuLinkClass("Publicity Review")" Match="NavLinkMatch.All">
+                    <i class="bi bi-clipboard2-check SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+                    Publicity Review
+                </NavLink>
+            </li>
+        }
+    </text>;
+
+    private void TogglePublicityMenu()
+    {
+        ShowPublicityExpanded = !ShowPublicityExpanded;
     }
 }
