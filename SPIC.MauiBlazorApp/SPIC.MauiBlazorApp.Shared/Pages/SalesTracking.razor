@@ -116,15 +116,15 @@
                 <p>Track actual sales performance against the planned targets.</p>
             </div>
             <div class="trk-header-actions">
-                <button type="button" class="trk-btn-outline-green" @onclick="@(() => Nav.NavigateTo($"/PlanReview?csr2Id={CSR2Id}"))">
+                <button type="button" class="trk-btn-outline-green" @onclick="@(() => Nav.NavigateTo(TrackingView ? "/SalesTrackingList" : $"/PlanReview?csr2Id={CSR2Id}"))">
                     <SalesAuditIcon Name="arrow-left" Size="15" />
-                    Back to Plan Review
+                    @(TrackingView ? "Back to Tracking List" : "Back to Plan Review")
                 </button>
                 <button type="button" class="trk-btn-outline" disabled title="Tracking report export is not available until a report API is configured.">
                     <SalesAuditIcon Name="download" Size="15" />
                     Download Tracking Report
                 </button>
-                @if (HasData)
+                @if (HasData && !TrackingView)
                 {
                     <button type="button" class="trk-btn-solid" @onclick="GoToPeriodEndReview">
                         View Final Review
@@ -139,14 +139,14 @@
         <div class="trk-card" style="padding: 16px; margin: 12px 0;">
             <h3 class="trk-card-title">Import actual sales achievements (SAP invoice report)</h3>
             <p>Upload a full .xlsx/.xls invoice snapshot for this confirmed scheme. Only invoice items with valid billing dates and exact product-master names are accepted. Uploading again replaces the previous product achievement snapshot.</p>
-            @if (IsPlanConfirmed && !IsFinalSubmitted)
+            @if (!TrackingView && IsPlanConfirmed && !IsFinalSubmitted)
             {
                 <InputFile OnChange="UploadAchievementsAsync" accept=".xlsx,.xls"
                            disabled="@IsUploadingAchievements" />
             }
             else
             {
-                <p>@(IsFinalSubmitted ? "Final-submitted Sales Audit is locked." : "Confirm the plan in Tab 4 before importing achievements.")</p>
+                <p>@(TrackingView ? "Read-only Sales Tracking view. Import is unavailable." : IsFinalSubmitted ? "Final-submitted Sales Audit is locked." : "Confirm the plan in Tab 4 before importing achievements.")</p>
             }
             @if (IsUploadingAchievements)
             {
@@ -482,7 +482,7 @@
                     {
                         <span class="trk-footer-note"><SalesAuditIcon Name="info" Size="16" /> Sales data is required to review performance.</span>
                     }
-                    <button type="button" class="trk-btn trk-btn-primary" disabled="@(!HasData)" @onclick="GoToPeriodEndReview">
+                    <button type="button" class="trk-btn trk-btn-primary" disabled="@(!HasData || TrackingView)" @onclick="GoToPeriodEndReview">
                         Go To Final Review
                         <SalesAuditIcon Name="chevrons-right" Size="16" />
                     </button>
@@ -498,6 +498,10 @@
 @code {
     [SupplyParameterFromQuery(Name = "csr2Id")]
     public int? CSR2Id { get; set; }
+
+    // UI-only navigation hint. API must authorize each CSR2 record independently.
+    [SupplyParameterFromQuery(Name = "trackingView")]
+    public bool TrackingView { get; set; }
 
     // Retained for old URLs; this query parameter no longer fabricates achievement data.
     [SupplyParameterFromQuery(Name = "state")]
@@ -685,7 +689,7 @@
 
     private async Task UploadAchievementsAsync(InputFileChangeEventArgs e)
     {
-        if (CSR2Id is null or <= 0 || !IsPlanConfirmed || IsFinalSubmitted || IsUploadingAchievements)
+        if (TrackingView || CSR2Id is null or <= 0 || !IsPlanConfirmed || IsFinalSubmitted || IsUploadingAchievements)
             return;
         var file = e.File;
         ImportError = ImportResult = "";
@@ -795,19 +799,19 @@
             using var overviewResponse = await Http.GetAsync($"api/SalesAudit/overview?csr2Id={id}");
             if (!overviewResponse.IsSuccessStatusCode)
             {
-                Error = $"Unable to load programme (HTTP {(int)overviewResponse.StatusCode}).";
+                Error = $"Unable to load programme (HTTP {(int)overviewResponse.StatusCode}) from GET api/SalesAudit/overview?csr2Id={id}. Check read authorization for this CSR2 record.";
                 return;
             }
             using var detailsResponse = await Http.GetAsync($"api/SalesAudit/details?csr2Id={id}");
             if (!detailsResponse.IsSuccessStatusCode)
             {
-                Error = $"Unable to load sales plan / achievement (HTTP {(int)detailsResponse.StatusCode}).";
+                Error = $"Unable to load sales plan / achievement (HTTP {(int)detailsResponse.StatusCode}) from GET api/SalesAudit/details?csr2Id={id}.";
                 return;
             }
             using var dealersResponse = await Http.GetAsync($"api/SalesAudit/dealer-mapping?csr2Id={id}");
             if (!dealersResponse.IsSuccessStatusCode)
             {
-                Error = $"Unable to load dealer allocation (HTTP {(int)dealersResponse.StatusCode}).";
+                Error = $"Unable to load dealer allocation (HTTP {(int)dealersResponse.StatusCode}) from GET api/SalesAudit/dealer-mapping?csr2Id={id}.";
                 return;
             }
 
@@ -931,11 +935,11 @@
         catch (JSDisconnectedException) { }
         catch (JSException) { }
     }
-    private void BackToList() => Nav.NavigateTo("/SalesAudit");
+    private void BackToList() => Nav.NavigateTo(TrackingView ? "/SalesTrackingList" : "/SalesAudit");
     private void RequestExtension() { /* No extension API is present; do not fake requests. */ }
     private void GoToPeriodEndReview()
     {
-        if (HasData && CSR2Id is > 0)
+        if (!TrackingView && HasData && CSR2Id is > 0)
             Nav.NavigateTo($"/PeriodEndReview?csr2Id={CSR2Id.Value}");
     }
 }

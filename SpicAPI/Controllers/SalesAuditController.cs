@@ -260,6 +260,83 @@ public sealed class SalesAuditController : ControllerBase
         }).ToList());
     }
 
+    // READ-ONLY tracking detail authorization. Call this from GET overview/details/
+    // dealer-mapping/sap-sales BEFORE the existing responsible-person-only Forbid.
+    // Never use this helper for POST/PUT/DELETE or Sales Audit plan mutations.
+    private async Task<bool> CanViewTrackingRecordAsync(int csr2Id)
+    {
+        if (csr2Id <= 0) return false;
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrWhiteSpace(userId)) return false;
+
+        var employee = await _db.Set<Employeelogin>().AsNoTracking()
+            .FirstOrDefaultAsync(x => x.IsActive && x.UserId == userId,
+                HttpContext.RequestAborted);
+        if (employee is null) return false;
+        var role = ResolveTrackingRole(employee, User);
+        var scopeField = role switch
+        {
+            "RM" or "RMM" => "RegionId",
+            "SMM" => "HeadquartersId",
+            "SMDO" or "SMD" => "StateId",
+            _ => ""
+        };
+        // Existing Admin/SuperAdmin access stays governed by existing endpoint rules.
+        if (scopeField.Length == 0) return false;
+
+        var assigned = scopeField switch
+        {
+            "RegionId" => ReadIds(employee, "RegionIds", "RegionId"),
+            "HeadquartersId" => ReadIds(employee, "HeadquartersIds", "HeadquartersId", "HQId"),
+            "StateId" => ReadIds(employee, "StateIds", "StateId"),
+            _ => new HashSet<int>()
+        };
+        if (assigned.Count == 0) return false;
+
+        var configuredProgramIds = (_options.EligibleProgramIds ?? Array.Empty<int>())
+            .Where(x => x > 0).Distinct().ToArray();
+        var matching = await (from c2 in _db.Set<CSR2>().AsNoTracking()
+                              join c1 in _db.Set<CSR1>().AsNoTracking()
+                                  on c2.CSR1Id equals c1.Id
+                              where c2.Id == csr2Id
+                                  && c2.Status == CSR2Status.Approved
+                                  && c1.Status == CSR1Status.Approved
+                                  && c1.IsActive
+                              select new { c1.ProgramId, c1.HeadquarterId })
+                              .FirstOrDefaultAsync(HttpContext.RequestAborted);
+        if (matching is null || !matching.HeadquarterId.HasValue) return false;
+        if (configuredProgramIds.Length > 0 &&
+            !configuredProgramIds.Contains(matching.ProgramId)) return false;
+        var hqId = matching.HeadquarterId.Value;
+
+        if (scopeField == "HeadquartersId") return assigned.Contains(hqId);
+        if (scopeField == "RegionId")
+        {
+            var regionIds = assigned.ToArray();
+            foreach (var regionId in regionIds)
+            {
+                var found = await _db.Database.SqlQuery<int>($@"
+                    SELECT h.""Id"" AS ""Value""
+                    FROM ""Headquarters"" h
+                    WHERE h.""Id"" = {hqId} AND h.""RegionId"" = {regionId}")
+                    .AnyAsync(HttpContext.RequestAborted);
+                if (found) return true;
+            }
+            return false;
+        }
+        foreach (var stateId in assigned)
+        {
+            var found = await _db.Database.SqlQuery<int>($@"
+                SELECT h.""Id"" AS ""Value""
+                FROM ""Headquarters"" h
+                INNER JOIN ""Regions"" r ON r.""Id"" = h.""RegionId""
+                WHERE h.""Id"" = {hqId} AND r.""StateId"" = {stateId}")
+                .AnyAsync(HttpContext.RequestAborted);
+            if (found) return true;
+        }
+        return false;
+    }
+
     // Compatibility with scalar RegionId/HeadquartersId and optional integer[]
     // RegionIds/HeadquartersIds on the existing Employeelogin entity.
     // ReadIds intentionally refuses unknown geography rather than returning everything.
