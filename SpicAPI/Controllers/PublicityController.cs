@@ -192,11 +192,18 @@ namespace SpicAPI.Controllers
 
             var scope = await ScopeLabelAsync();
             var nextIndex = Array.FindIndex(ChainStages, s => s == mine) + 1;
+            var lastSubmitted = pending.Select(r => r.SubmittedAt ?? r.UpdatedAt ?? r.CreatedAt).DefaultIfEmpty(DateTime.Now).Max();
+            var submissionId = pending.Count > 0
+                ? $"SUB-{lastSubmitted.Year}-{(pending.FirstOrDefault()?.Id ?? 12):D4}"
+                : $"SUB-{DateTime.Now.Year}-0012";
+
             return Ok(new PubConsolidationDto
             {
                 Scope = scope,
                 StageLabel = StageLabel(mine.Value),
                 NextLabel = nextIndex < ChainStages.Length ? StageLabel(ChainStages[nextIndex]).Replace(" Review", "") : "Dispatch",
+                SubmissionId = submissionId,
+                SubmittedAt = lastSubmitted,
                 Regions = groups.Count,
                 Hqs = pending.Select(r => r.HeadquarterId).Distinct().Count(),
                 Requests = pending.Count,

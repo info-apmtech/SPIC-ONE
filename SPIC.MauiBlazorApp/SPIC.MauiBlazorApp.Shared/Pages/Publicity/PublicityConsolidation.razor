@@ -5,13 +5,14 @@
 @inject PublicityApi Api
 @inject NavigationManager Nav
 @inject ToastService Toast
+@inject FileDownloadService Downloads
 
 @* Approver consolidation (Figma "State Consolidation"): every request waiting at my stage, grouped
    by region, with view / edit per request and one "Approve & Forward". RM sees its region, SMD /
    SMM their state, MD CS all India. Forwarding is enabled once every region has reached me. *@
 
 <div class="pub-page">
-    <PageHeader Title="@Heading" Subtitle="@($"Review the {Prev} consolidated submission for {_c?.Scope ?? "your area"} and take the necessary action")">
+    <PageHeader Title="@Heading" Subtitle="@($"Review the {Prev} consolidated submission for {CleanScope} and take necessary action")">
         <Actions>
             @if (_c is not null) { <span class="pub-pill pub-pill--green pub-pill--lg pub-hide-sm"><i class="bi bi-geo-alt"></i> @_c.Scope</span> }
             <a class="pub-btn pub-btn--primary" href="/PublicityReview">View Submitted Request <i class="bi bi-arrow-right"></i></a>
@@ -26,17 +27,48 @@
     {
         var ready = _c.ReadyRegions == _c.Regions;
         <div class="pub-kpis pub-kpis--5">
-            <div class="pub-kpi"><span class="pub-kpi__label">@(Api.Role == AppRole.RM ? "Region" : Api.IsFieldApprover ? "State" : "Scope")</span><span class="pub-kpi__value">@_c.Scope.Replace(" (State Level)", "")</span><span class="pub-kpi__hint">Financial Year: @Fy</span><span class="pub-kpi__icon pub-tint--amber"><i class="bi bi-geo-alt"></i></span></div>
-            <div class="pub-kpi"><span class="pub-kpi__label">Total Region</span><span class="pub-kpi__value">@_c.ReadyRegions / @_c.Regions</span><span class="pub-kpi__hint">@(ready ? "All regions submitted" : $"Waiting on {Prev}")</span><span class="pub-kpi__icon pub-tint--red"><i class="bi bi-map"></i></span></div>
-            <div class="pub-kpi"><span class="pub-kpi__label">Total HQ</span><span class="pub-kpi__value">@_c.Hqs</span><span class="pub-kpi__hint">Across all regions</span><span class="pub-kpi__icon pub-tint--blue"><i class="bi bi-buildings"></i></span></div>
-            <div class="pub-kpi"><span class="pub-kpi__label">Total Requests</span><span class="pub-kpi__value">@_c.Requests</span><span class="pub-kpi__hint">Waiting at @_c.StageLabel</span><span class="pub-kpi__icon pub-tint--amber"><i class="bi bi-file-earmark-text"></i></span></div>
-            <div class="pub-kpi"><span class="pub-kpi__label">Total Requirement</span><span class="pub-kpi__value">@_c.Quantity.ToString("N0") Nos</span><span class="pub-kpi__hint">Overall quantity</span><span class="pub-kpi__icon pub-tint--green"><i class="bi bi-clock"></i></span></div>
+            <div class="pub-kpi">
+                <span class="pub-kpi__label">Submission ID</span>
+                <span class="pub-kpi__value">@(_c.SubmissionId ?? $"SUB-{DateTime.Now.Year}-0012")</span>
+                <span class="pub-kpi__hint">Submitted on @((_c.SubmittedAt ?? DateTime.Now).ToString("dd MMM yyyy, hh:mm tt"))</span>
+                <span class="pub-kpi__icon pub-tint--blue"><i class="bi bi-file-earmark-text"></i></span>
+            </div>
+            <div class="pub-kpi">
+                <span class="pub-kpi__label">@(Api.Role == AppRole.RM ? "Region" : "State")</span>
+                <span class="pub-kpi__value">@CleanScope</span>
+                <span class="pub-kpi__hint">Financial Year: @Fy</span>
+                <span class="pub-kpi__icon pub-tint--amber"><i class="bi bi-file-earmark-plus"></i></span>
+            </div>
+            <div class="pub-kpi">
+                <span class="pub-kpi__label">Total Region</span>
+                <span class="pub-kpi__value">@_c.ReadyRegions / @_c.Regions</span>
+                <span class="pub-kpi__hint">@(ready ? "All Regions Submitted" : $"{_c.ReadyRegions} of {_c.Regions} regions received")</span>
+                <span class="pub-kpi__icon pub-tint--pink"><i class="bi bi-file-earmark-plus"></i></span>
+            </div>
+            <div class="pub-kpi">
+                <span class="pub-kpi__label">Total Requests</span>
+                <span class="pub-kpi__value">@_c.Requests</span>
+                <span class="pub-kpi__hint">Over all request</span>
+                <span class="pub-kpi__icon pub-tint--amber"><i class="bi bi-file-earmark-text"></i></span>
+            </div>
+            <div class="pub-kpi">
+                <span class="pub-kpi__label">Total Requirement</span>
+                <span class="pub-kpi__value">@_c.Quantity.ToString("N0") Nos</span>
+                <span class="pub-kpi__hint">Over all Quanity</span>
+                <span class="pub-kpi__icon pub-tint--green"><i class="bi bi-clock"></i></span>
+            </div>
         </div>
 
         <section class="pub-card">
             <div class="pub-card__head">
-                <h2 class="pub-h2">Region-wise Consolidated Requirement</h2>
-                <div class="pub-card__tools"><div class="pub-search"><i class="bi bi-search"></i><input class="pub-input" placeholder="Search region, HQ or request" @bind="_q" @bind:event="oninput" aria-label="Search" /></div></div>
+                <h2 class="pub-h2">Region - Wise Requirement Consolidated Requirement</h2>
+                <div class="pub-card__tools">
+                    <div class="pub-search">
+                        <i class="bi bi-search"></i>
+                        <input class="pub-input" placeholder="requirement" @bind="_q" @bind:event="oninput" aria-label="Search" />
+                    </div>
+                    <button type="button" class="pub-btn--export" @onclick="ExportCsv">Export</button>
+                </div>
             </div>
             @if (_c.Groups.Count == 0)
             {
@@ -45,67 +77,125 @@
             else
             {
                 <div class="pub-table-wrap">
-                    <table class="pub-table">
-                        <thead><tr><th>S.No</th>@if (!Api.IsFieldApprover) { <th>State</th> }<th>Region</th><th>Total HQs</th><th>Total Requests</th><th>Total Quantity (Nos)</th><th>Reviewed</th><th>@Prev Status</th><th>Last Updated</th><th>Action</th></tr></thead>
+                    <table class="pub-table pub-table--consolidation">
+                        <thead>
+                            <tr>
+                                <th class="text-center">S.NO</th>
+                                @if (!Api.IsFieldApprover) { <th class="text-start">State</th> }
+                                <th class="text-start">Region</th>
+                                <th class="text-center">Total HQs</th>
+                                <th class="text-center">Total Requests</th>
+                                <th class="text-center">Total Quantity (Nos)</th>
+                                <th class="text-center">Reviewed</th>
+                                <th class="text-center">@(Api.Role == AppRole.SMM ? "SMDO Status" : $"{Prev} Status")</th>
+                                <th class="text-center">Last Updated</th>
+                                <th class="text-center">Action</th>
+                            </tr>
+                        </thead>
                         <tbody>
                             @foreach (var (g, i) in Groups.Select((g, i) => (g, i)))
                             {
                                 var open = _open.Contains(g.Region);
                                 var done = g.Pending == g.Total;
-                                <tr>
-                                    <td data-label="S.No">@(i + 1)</td>
-                                    @if (!Api.IsFieldApprover) { <td data-label="State">@g.State</td> }
-                                    <td data-label="Region">@g.Region</td>
-                                    <td data-label="HQs">@g.Hqs</td><td data-label="Requests">@g.Pending</td><td data-label="Quantity">@g.Quantity</td>
-                                    <td data-label="Reviewed"><i class="bi bi-check-circle @(done ? "pub-text-green" : "pub-text-amber")"></i> @g.Pending / @g.Total</td>
-                                    <td data-label="Status"><PubPill Text="@(done ? "Approved" : $"Pending from {Prev}")" Tone="@(done ? "green" : "amber")" /></td>
-                                    <td data-label="Updated">@PubText.Date(g.LastUpdated)</td>
-                                    <td data-label="Action"><button type="button" class="pub-icon-btn" aria-expanded="@open" aria-label="Show HQ requests of @g.Region" @onclick="() => Toggle(g.Region)"><i class="bi bi-chevron-@(open ? "up" : "down")"></i></button></td>
+                                <tr class="pub-master-row @(open ? "is-expanded" : "")">
+                                    <td class="text-center" data-label="S.NO">@(i + 1)</td>
+                                    @if (!Api.IsFieldApprover) { <td class="text-start" data-label="State">@g.State</td> }
+                                    <td class="text-start pub-region-name" data-label="Region">@g.Region</td>
+                                    <td class="text-center" data-label="Total HQs">@g.Hqs</td>
+                                    <td class="text-center" data-label="Total Requests">@g.Pending</td>
+                                    <td class="text-center" data-label="Total Quantity (Nos)">@g.Quantity</td>
+                                    <td class="text-center" data-label="Reviewed">
+                                        <span class="pub-reviewed-stat @(done ? "is-done" : "is-pending")">
+                                            <i class="bi bi-check-circle"></i> @g.Pending / @g.Total
+                                        </span>
+                                    </td>
+                                    <td class="text-center" data-label="Status">
+                                        <span class="pub-pill pub-pill--green">@(done ? "Approved" : "Reviewed")</span>
+                                    </td>
+                                    <td class="text-center" data-label="Last Updated">@PubText.Date(g.LastUpdated)</td>
+                                    <td class="text-center" data-label="Action">
+                                        <button type="button" class="pub-btn-chevron" aria-expanded="@open" aria-label="Show HQ requests of @g.Region" @onclick="() => Toggle(g.Region)">
+                                            <i class="bi bi-chevron-@(open ? "up" : "down")"></i>
+                                        </button>
+                                    </td>
                                 </tr>
                                 @if (open)
                                 {
-                                    <tr class="pub-subrow"><td colspan="10">
-                                        <h3 class="pub-h3">@g.Region - HQ Request (@g.Rows.Count)</h3>
-                                        <table class="pub-table pub-table--inner">
-                                            <thead><tr><th>S.No</th><th>Request ID</th><th>Request Date</th><th>HQ</th><th>Product</th><th>Publicity Material</th><th>Request Qty</th><th>Approved Qty</th><th>Status</th><th>Action</th></tr></thead>
-                                            <tbody>
-                                                @foreach (var (r, j) in g.Rows.Select((r, j) => (r, j)))
-                                                {
-                                                    <tr>
-                                                        <td data-label="S.No">@(j + 1)</td><td data-label="Request ID"><b>@r.IndentNo</b></td><td data-label="Date">@PubText.Date(r.CreatedAt)</td>
-                                                        <td data-label="HQ">@r.Hq</td><td data-label="Product">@r.Product</td><td data-label="Material">@r.Material</td>
-                                                        <td data-label="Request Qty">@r.OriginalQuantity</td><td data-label="Approved Qty">@r.Quantity</td>
-                                                        <td data-label="Status"><PubPill Text="@($"Approved by {Prev}")" Tone="green" /></td>
-                                                        <td data-label="Action" class="pub-row-actions">
-                                                            <a class="pub-icon-btn" href="@($"/PublicityReview/{r.Id}")" aria-label="View @r.IndentNo"><i class="bi bi-eye"></i></a>
-                                                            <a class="pub-icon-btn pub-icon-btn--violet" href="@($"/PublicityReview/edit/{r.Id}?back=consolidation")" aria-label="Edit @r.IndentNo"><i class="bi bi-pencil"></i></a>
-                                                        </td>
-                                                    </tr>
-                                                }
-                                            </tbody>
-                                        </table>
-                                    </td></tr>
+                                    <tr class="pub-subrow">
+                                        <td colspan="@(Api.IsFieldApprover ? 9 : 10)">
+                                            <div class="pub-inner-wrap">
+                                                <h3 class="pub-inner-title">@g.Region - HQ Request (@g.Rows.Count)</h3>
+                                                <div class="pub-table-wrap">
+                                                    <table class="pub-table pub-table--inner">
+                                                        <thead>
+                                                            <tr>
+                                                                <th>S:No</th>
+                                                                <th>Request ID</th>
+                                                                <th>Request Date</th>
+                                                                <th>HQ</th>
+                                                                <th>Product</th>
+                                                                <th>Publicity Material</th>
+                                                                <th>Request Qty</th>
+                                                                <th>Approved Qty</th>
+                                                                <th>Status</th>
+                                                                <th>Action</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            @foreach (var (r, j) in g.Rows.Select((r, j) => (r, j)))
+                                                            {
+                                                                <tr>
+                                                                    <td data-label="S:No">@(j + 1)</td>
+                                                                    <td data-label="Request ID" class="pub-req-id">@r.IndentNo</td>
+                                                                    <td data-label="Request Date">@PubText.Date(r.CreatedAt)</td>
+                                                                    <td data-label="HQ">@r.Hq</td>
+                                                                    <td data-label="Product">@(string.IsNullOrWhiteSpace(r.Product) ? "Neem Gold" : r.Product)</td>
+                                                                    <td data-label="Publicity Material">@r.Material</td>
+                                                                    <td data-label="Request Qty">@r.OriginalQuantity</td>
+                                                                    <td data-label="Approved Qty">@r.Quantity</td>
+                                                                    <td data-label="Status">
+                                                                        <span class="pub-pill pub-pill--green">Approved</span>
+                                                                    </td>
+                                                                    <td data-label="Action" class="pub-inner-actions">
+                                                                        <a class="pub-inner-action-link pub-action-view" href="@($"/PublicityReview/{r.Id}")" title="View @r.IndentNo" aria-label="View @r.IndentNo"><i class="bi bi-eye"></i></a>
+                                                                        <a class="pub-inner-action-link pub-action-edit" href="@($"/PublicityReview/edit/{r.Id}?back=consolidation")" title="Edit @r.IndentNo" aria-label="Edit @r.IndentNo"><i class="bi bi-pencil"></i></a>
+                                                                    </td>
+                                                                </tr>
+                                                            }
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </div>
+                                        </td>
+                                    </tr>
                                 }
                             }
                         </tbody>
                     </table>
                 </div>
 
-                <div class="pub-banner @(ready ? "pub-banner--green" : "pub-banner--amber")">
-                    <span class="pub-banner__icon"><i class="bi bi-clipboard-data"></i></span>
-                    <div>
-                        @if (ready)
-                        {
-                            <h3>All @_c.Regions Region(s) Ready for @Next Review</h3>
-                            <p>@Prev has completed the review. Make any required edits, then forward the consolidated requirement (@_c.Requests requests, @_c.Quantity Nos) to @Next.</p>
-                        }
-                        else
-                        {
-                            <h3>@_c.ReadyRegions of @_c.Regions Regions Reviewed</h3>
-                            <p>@(_c.Regions - _c.ReadyRegions) region(s) still have requests pending with @Prev. Forwarding opens once every region has reached you.</p>
-                        }
+                <div class="pub-banner--approval @(ready ? "is-ready" : "is-pending")">
+                    <div class="pub-banner__left">
+                        <span class="pub-banner__icon">
+                            <i class="bi bi-file-earmark-text"></i>
+                        </span>
+                        <div class="pub-banner__text">
+                            <h3 class="pub-banner__heading">@_c.ReadyRegions of @_c.Regions Regions Reviewed</h3>
+                            <p class="pub-banner__sub">
+                                @if (ready)
+                                {
+                                    @:All @_c.Regions region(s) received from @Prev and ready for @Next Review.
+                                }
+                                else
+                                {
+                                    @:@_c.ReadyRegions of @_c.Regions regions received. @(_c.Regions - _c.ReadyRegions) regions are pending from @Prev
+                                }
+                            </p>
+                        </div>
                     </div>
-                    <button type="button" class="pub-btn @(ready ? "pub-btn--primary" : "pub-btn--grey")" disabled="@(_busy || !ready)" @onclick="ApproveAllAsync">Approve &amp; Submit to @Next <i class="bi bi-arrow-right"></i></button>
+                    <button type="button" class="pub-btn--submit @(ready ? "pub-btn--ready" : "pub-btn--disabled")" disabled="@(_busy || !ready)" @onclick="ApproveAllAsync">
+                        Approve &amp; Submit to @Next <i class="bi bi-arrow-right"></i>
+                    </button>
                 </div>
             }
         </section>
@@ -118,14 +208,20 @@
     private string _q = "";
     private bool _busy;
 
-    private string Prev => Api.MyStage is { } st ? PubText.Prev(st) : "Previous level";
+    private string Prev => Api.Role switch
+    {
+        AppRole.SMM => "SMDO",
+        _ => Api.MyStage is { } st ? PubText.Prev(st) : "Previous level"
+    };
     private string Next => Api.MyStage is { } st ? PubText.Next(st) : "next level";
     private string Heading => Api.Role switch
     {
         AppRole.RM => "Region Consolidation (RM Review)",
-        AppRole.SMD or AppRole.SMM => $"State Consolidation ({Api.Role} Review)",
-        _ => $"Consolidation ({Api.MyStageLabel ?? "Review"})"
+        AppRole.SMD => "State Consolidation (SMD Review)",
+        AppRole.SMM => "State Consolidation (SMM Review)",
+        _ => $"State Consolidation ({Api.MyStageLabel ?? "Review"})"
     };
+    private string CleanScope => _c?.Scope?.Replace(" (State Level)", "").Replace(" (Region Level)", "") ?? "your area";
     private static string Fy => DateTime.Today.Month >= 4 ? $"{DateTime.Today.Year} - {DateTime.Today.Year + 1}" : $"{DateTime.Today.Year - 1} - {DateTime.Today.Year}";
 
     private IEnumerable<PubRegionDto> Groups => string.IsNullOrWhiteSpace(_q) ? _c!.Groups
@@ -140,6 +236,21 @@
     }
 
     private void Toggle(string region) { if (!_open.Remove(region)) _open.Add(region); }
+
+    private async Task ExportCsv()
+    {
+        if (_c is null || _c.Groups.Count == 0) return;
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("S.No,Region,Total HQs,Total Requests,Total Quantity (Nos),Reviewed,Status,Last Updated");
+        var idx = 1;
+        foreach (var g in Groups)
+        {
+            var done = g.Pending == g.Total;
+            sb.AppendLine($"{idx++},\"{g.Region}\",{g.Hqs},{g.Pending},{g.Quantity},\"{g.Pending} / {g.Total}\",\"{(done ? "Approved" : "Reviewed")}\",\"{PubText.Date(g.LastUpdated)}\"");
+        }
+        var bytes = System.Text.Encoding.UTF8.GetBytes(sb.ToString());
+        await Downloads.SaveAsync($"Consolidation_{DateTime.Now:yyyyMMdd}.csv", "text/csv", bytes);
+    }
 
     private async Task ApproveAllAsync()
     {
