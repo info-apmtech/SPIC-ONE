@@ -267,6 +267,8 @@ namespace SPIC.Core.DTOs
         public string Scope { get; set; } = "";
         public string StageLabel { get; set; } = "";
         public string NextLabel { get; set; } = "";
+        public string? SubmissionId { get; set; }
+        public DateTime? SubmittedAt { get; set; }
         public int Regions { get; set; }
         public int Hqs { get; set; }
         public int Requests { get; set; }
