@@ -717,8 +717,8 @@ namespace SpicAPI.Controllers
                     dto.SourceIndentNo = source.IndentNo;
                     dto.SourceHq = names.Hqs.GetValueOrDefault(source.HeadquarterId);
                     dto.ReportedExcess = s.Excess;
-                    dto.AlreadyTransferred = await _db.PublicityDispatches.Where(x => x.SourceRequestId == source.Id &&
-                        x.Status >= PublicityDispatchStatus.Dispatched).SumAsync(x => (int?)x.Quantity) ?? 0;
+                    // every other transfer order on this excess, shipped or not, so two open orders never both show the full excess
+                    dto.AlreadyTransferred = s.TransferredOut - d.Quantity;
                     dto.RemainingExcess = Math.Max(0, s.Excess - dto.AlreadyTransferred);
                 }
             }
