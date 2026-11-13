@@ -1,0 +1,249 @@
+@page "/PublicityRequest/new"
+@page "/PublicityRequest/edit/{Id:int}"
+@page "/PublicityReview/edit/{Id:int}"
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
+@using SPIC.MauiBlazorApp.Shared.Components.Publicity
+@inject PublicityApi Api
+@inject NavigationManager Nav
+@inject ToastService Toast
+@inject IJSRuntime JS
+@implements IDisposable
+
+@* Create / edit a request (RMDO). Draft keeps it private; Submit sends it to RM review.
+   /PublicityReview/edit/{id}: the approver whose turn it is edits every field ("Edit Publicity
+   Material Request"); the request stays on its stage and the changes land in the history. *@
+
+<div class="pub-page">
+    <PageHeader Title="@(Id is null ? "Create Publicity Material Request" : Approver ? "Edit Publicity Material Request" : $"Edit Request {_indent}")"
+                Subtitle="@(Approver ? "Update the publicity material details. The changes are saved and reflected in the approval workflow" : "Enter the publicity material requirement and submit it for approval")">
+        <Actions><a class="pub-btn pub-btn--line" href="@Back"><i class="bi bi-arrow-left"></i> Back to My Request</a></Actions>
+    </PageHeader>
+    @if (_detail is not null && Approver) { <PubHeader D="_detail" /> }
+
+    @if (_lookups is null)
+    {
+        <Skeleton Rows="8" />
+    }
+    else
+    {
+        <section class="pub-card">
+            <h2 class="pub-h2">Request Details</h2>
+            <p class="pub-muted">Provide the publicity material, product, quantity and supporting file details</p>
+            <div class="pub-form pub-form--4">
+                <div class="pub-field">
+                    <label class="pub-label pub-req" for="pr-mat">Type of Publicity Material</label>
+                    <select id="pr-mat" class="pub-input" @bind="_dto.MaterialTypeId"><option value="0">Select Material</option>
+                        @foreach (var m in _lookups.Materials) { <option value="@m.Id">@m.Name</option> }</select>
+                </div>
+                <div class="pub-field">
+                    <label class="pub-label pub-req" for="pr-prod">Product</label>
+                    <select id="pr-prod" class="pub-input" @onchange="e => OnNativeSelect(e, OnProductChanged)">
+                        <option value="0">Select Product</option>
+                        @foreach (var p in _lookups.Products) { <option value="@p.Id" selected="@(_dto.ProductId == p.Id)">@p.Name</option> }
+                    </select>
+                </div>
+                <div class="pub-field">
+                    <label class="pub-label pub-req" for="pr-qty">Quantity</label>
+                    <input id="pr-qty" class="pub-input" type="number" min="1" placeholder="Enter Required Quantity" @bind="_qty" />
+                </div>
+                <div class="pub-field">
+                    <label class="pub-label pub-req" for="pr-by">Requested By</label>
+                    <select id="pr-by" class="pub-input" @onchange="e => OnNativeSelect(e, OnRequestedByChanged)">
+                        @foreach (var p in _lookups.People) { <option value="@p.UserId" selected="@(_dto.RequestedByUserId == p.UserId)">@p.Name @(p.Role is null ? "" : $"({p.Role})")</option> }
+                    </select>
+                </div>
+            </div>
+
+            @if (_existing.Count > 0)
+            {
+                <PubDocs Files="_existing" OnDelete="RemoveExisting" />
+            }
+            <PubDrop @bind-Files="_files" Multiple="false" Title="Drag and drop your design file here" />
+
+            <div class="pub-field">
+                <label class="pub-label" for="pr-rem">Remarks</label>
+                <textarea id="pr-rem" class="pub-input pub-textarea" rows="4" placeholder="Need to add your remarks" @bind="_dto.Remarks"></textarea>
+            </div>
+        </section>
+
+        <section class="pub-card">
+            <h2 class="pub-h2">Location</h2>
+            <p class="pub-muted">Select the state, region and headquarters where the material is required.</p>
+            <div class="pub-form pub-form--3">
+                <div class="pub-field">
+                    <label class="pub-label pub-req" for="pr-state">State</label>
+                    <select id="pr-state" class="pub-input" value="@_dto.StateId" @onchange="StateChanged"><option value="0">Select State</option>
+                        @foreach (var s in _states) { <option value="@s.Id">@s.Name</option> }</select>
+                </div>
+                <div class="pub-field">
+                    <label class="pub-label pub-req" for="pr-region">Region</label>
+                    <select id="pr-region" class="pub-input" value="@_dto.RegionId" @onchange="RegionChanged"><option value="0">Select Region</option>
+                        @foreach (var s in _regions) { <option value="@s.Id">@s.Name</option> }</select>
+                </div>
+                <div class="pub-field">
+                    <label class="pub-label pub-req" for="pr-hq">Headquarter (HQ)</label>
+                    <select id="pr-hq" class="pub-input" @bind="_dto.HeadquarterId"><option value="0">Select Headquarter</option>
+                        @foreach (var s in _hqs) { <option value="@s.Id">@s.Name</option> }</select>
+                </div>
+            </div>
+        </section>
+
+        <div class="pub-footer">
+            <a class="pub-btn pub-btn--grey" href="@Back"><i class="bi bi-chevron-double-left"></i> Back to List</a>
+            <span class="pub-footer__gap"></span>
+            <button type="button" class="pub-btn pub-btn--grey" disabled="@_busy" @onclick="() => SaveAsync(false)">Save as Draft</button>
+            <button type="button" class="pub-btn pub-btn--primary" disabled="@_busy" @onclick="() => SaveAsync(true)">@(Approver ? "Save Changes" : "Submit Request") <i class="bi bi-chevron-double-right"></i></button>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public int? Id { get; set; }
+
+    private bool Approver => Nav.ToBaseRelativePath(Nav.Uri).StartsWith("PublicityReview", StringComparison.OrdinalIgnoreCase);
+    private string Back => !Approver ? "/PublicityRequest"
+        : Nav.Uri.Contains("back=consolidation") ? "/PublicityReview/consolidation" : $"/PublicityReview/{Id}";
+    private PubDetailDto? _detail;
+    private PubLookupsDto? _lookups;
+    private readonly PubUpsertDto _dto = new();
+    private int? _qty;
+    private string? _indent;
+    private List<IBrowserFile> _files = new();
+    private List<PubFileDto> _existing = new();
+    private List<PubOption> _states = new(), _regions = new(), _hqs = new();
+    private bool _busy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _lookups = await Api.LookupsAsync();
+        _states = await Api.StatesAsync() ?? new();
+        if (Id is int id && await Api.GetAsync(id) is { } d)
+        {
+            _detail = d;
+            // a state / region reviewer may not have the requester in their own people list
+            if (_lookups is not null && d.RequestedByUserId is { } rb && _lookups.People.All(p => p.UserId != rb))
+                _lookups.People.Insert(0, new PubPerson { UserId = rb, Name = d.RequestedByName ?? rb, Role = d.RequestedByRole });
+            if (Approver ? !d.CanReview : !d.CanEdit) { Nav.NavigateTo($"{Api.Home}/{id}"); return; }
+            _indent = d.IndentNo;
+            (_dto.MaterialTypeId, _dto.ProductId, _qty, _dto.RequestedByUserId, _dto.Remarks) = (d.MaterialTypeId, d.ProductId, d.Quantity, d.RequestedByUserId, d.Remarks);
+            (_dto.StateId, _dto.RegionId, _dto.HeadquarterId) = (d.StateId, d.RegionId, d.HeadquarterId);
+            _existing = d.Files.Where(f => f.Kind == PublicityFileKind.Design).ToList();
+        }
+        else if (_lookups is not null)
+        {
+            _dto.RequestedByUserId = _lookups.MyUserId;
+            (_dto.StateId, _dto.RegionId, _dto.HeadquarterId) = (_lookups.MyStateId, _lookups.MyRegionId, _lookups.MyHqId);
+        }
+        if (_dto.StateId > 0) _regions = await Api.RegionsAsync(_dto.StateId) ?? new();
+        if (_dto.RegionId > 0) _hqs = await Api.HqsAsync(_dto.RegionId) ?? new();
+    }
+
+    // Product and Requested By become searchable (Select2) the same way every other list/filter
+    // page in the app does it (see select2-interop.js) - the native <select> stays the source of
+    // truth via @onchange (progressive enhancement), Select2 just also calls the same method directly.
+    private DotNetObjectReference<PublicityForm>? _objRef;
+    private bool _select2Ready;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_lookups is null || _select2Ready) return;
+        _select2Ready = true;
+        _objRef ??= DotNetObjectReference.Create(this);
+        var configs = new[]
+        {
+            new { id = "pr-prod", method = nameof(OnProductChanged), parent = (string?)null },
+            new { id = "pr-by", method = nameof(OnRequestedByChanged), parent = (string?)null }
+        };
+        await JS.InvokeVoidAsync("spicSelect2.initMultiple", configs, _objRef);
+    }
+
+    private static Task OnNativeSelect(ChangeEventArgs e, Action<List<string>?> handler)
+    {
+        handler(e.Value is string s && !string.IsNullOrEmpty(s) ? new List<string> { s } : new List<string>());
+        return Task.CompletedTask;
+    }
+
+    [JSInvokable]
+    public void OnProductChanged(List<string>? values)
+    {
+        _dto.ProductId = values is { Count: > 0 } && int.TryParse(values[0], out var v) ? v : 0;
+        StateHasChanged();
+    }
+
+    [JSInvokable]
+    public void OnRequestedByChanged(List<string>? values)
+    {
+        _dto.RequestedByUserId = values is { Count: > 0 } ? values[0] : null;
+        StateHasChanged();
+    }
+
+    public void Dispose() => _objRef?.Dispose();
+
+    private async Task StateChanged(ChangeEventArgs e)
+    {
+        _dto.StateId = int.TryParse(e.Value?.ToString(), out var v) ? v : 0;
+        _dto.RegionId = _dto.HeadquarterId = 0;
+        _hqs = new();
+        _regions = _dto.StateId > 0 ? await Api.RegionsAsync(_dto.StateId) ?? new() : new();
+    }
+
+    private async Task RegionChanged(ChangeEventArgs e)
+    {
+        _dto.RegionId = int.TryParse(e.Value?.ToString(), out var v) ? v : 0;
+        _dto.HeadquarterId = 0;
+        _hqs = _dto.RegionId > 0 ? await Api.HqsAsync(_dto.RegionId) ?? new() : new();
+    }
+
+    private async Task RemoveExisting(PubFileDto f)
+    {
+        if (await Api.DeleteFileAsync(f.Id)) _existing.Remove(f);
+    }
+
+    private async Task SaveAsync(bool submit)
+    {
+        string? error = _dto.MaterialTypeId <= 0 ? "Select the type of publicity material."
+            : _dto.ProductId <= 0 ? "Select the product."
+            : _qty is not > 0 ? "Enter the required quantity."
+            : _dto.HeadquarterId <= 0 ? "Select the state, region and headquarter." : null;
+        if (error != null) { Toast.Error(error); return; }
+        if (Approver)
+        {
+            _busy = true;
+            _dto.Quantity = _qty!.Value;
+            _dto.Submit = false;
+            var ok = await Api.SaveAsync(Id, _dto) is not null;
+            if (ok && _files.Count > 0) ok = await Api.UploadAsync(Id!.Value, PublicityFileKind.Design, _files) is not null;
+            _busy = false;
+            if (!ok) return;
+            _files = new();
+            Toast.Success("Changes saved. The request stays at your review stage.");
+            if (submit) Nav.NavigateTo(Back);
+            return;
+        }
+        if (submit && !await Toast.ConfirmAsync("Submit request", "Submit this request for RM review? You cannot edit it after submission unless it is returned.", "Submit")) return;
+
+        _busy = true;
+        _dto.Quantity = _qty!.Value;
+        _dto.Submit = false;
+        var saved = await Api.SaveAsync(Id, _dto);
+        if (saved is not null)
+        {
+            Id = saved.Id;
+            if (_files.Count > 0)
+            {
+                if (await Api.UploadAsync(saved.Id, PublicityFileKind.Design, _files) is null) saved = null;
+                else _files = new();
+            }
+        }
+        if (saved is not null && submit)
+        {
+            _dto.Submit = true;
+            saved = await Api.SaveAsync(saved.Id, _dto);
+        }
+        _busy = false;
+        if (saved is null) return;
+        Toast.Success(submit ? $"Request {saved.IndentNo} submitted for RM review." : $"Draft {saved.IndentNo} saved.");
+        Nav.NavigateTo(submit ? $"/PublicityRequest/{saved.Id}" : "/PublicityRequest");
+    }
+}

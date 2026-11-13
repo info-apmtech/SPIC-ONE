@@ -1,0 +1,432 @@
+@page "/PublicityRequest"
+@page "/PublicityReview"
+@using ClosedXML.Excel
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
+@using SPIC.MauiBlazorApp.Shared.Components.Publicity
+@inject PublicityApi Api
+@inject NavigationManager Nav
+@inject FileDownloadService Downloads
+@inject ToastService Toast
+@implements IDisposable
+
+@*
+    One list for both sides of the module:
+      /PublicityRequest  RMDO "My Publicity Material Request" (8 KPI cards, own HQ requests, create)
+      /PublicityReview   approvers / MD CS "Submitted Requests" (6 KPI cards, review banner,
+                         state / region / HQ / stage filters)
+    The API scopes the rows by role; this page only changes captions and columns.
+*@
+
+<div class="pub-page">
+    <PageHeader Title="@(Review && Api.Role != AppRole.RM ? "Submitted Requests" : "My Publicity Material Request")" Subtitle="@Subtitle">
+        <Actions>
+            @if (Review && !string.IsNullOrEmpty(_lookups?.MyScope)) { <span class="pub-pill pub-pill--green pub-pill--lg pub-hide-sm"><i class="bi bi-geo-alt"></i> @_lookups.MyScope</span> }
+            <a class="pub-btn pub-btn--ghost" href="@($"{Api.Home}/notifications")"><i class="bi bi-bell"></i> <span class="pub-hide-sm">Notifications</span></a>
+            @if (Review && Api.MyStageLabel is not null && Api.Role is AppRole.RM or AppRole.SMD or AppRole.SMM or AppRole.MDAdmin)
+            {
+                <a class="pub-btn pub-btn--line" href="/PublicityReview/consolidation"><i class="bi bi-diagram-3"></i> <span class="pub-hide-sm">Consolidation</span></a>
+            }
+            @if (Api.CanCreate)
+            {
+                <a class="pub-btn pub-btn--primary" href="/PublicityRequest/new"><i class="bi bi-plus-lg"></i> Create New Request</a>
+            }
+        </Actions>
+    </PageHeader>
+
+    @if (Review && Api.Role != AppRole.RM && _stats?.PendingMine > 0)
+    {
+        <section class="pub-banner pub-banner--red">
+            <span class="pub-banner__icon"><i class="bi bi-clipboard2-check"></i></span>
+            <div>
+                <h3>New Request for Review</h3>
+                <b>@Api.MyStageLabel Action Required</b>
+                <p>@_stats.PendingMine new submission(s) from @(Api.MyStage is { } st ? PubText.Prev(st) : "the approvers") are awaiting your review.</p>
+            </div>
+            <button type="button" class="pub-btn pub-btn--danger" @onclick="ShowMine">View New Requests <i class="bi bi-arrow-right"></i></button>
+        </section>
+    }
+
+    <div class="pub-kpis @(!Review ? "" : Api.Role == AppRole.RM ? "pub-kpis--5" : "pub-kpis--3")">
+        @foreach (var k in Kpis)
+        {
+            <button type="button" class="pub-kpi @(k.Status == _status && k.Status != null ? "is-active" : "")" @onclick="() => QuickStatus(k.Status)">
+                <span class="pub-kpi__label">@k.Label</span>
+                <span class="pub-kpi__value">@(_stats is null ? "-" : k.Value(_stats).ToString())</span>
+                <span class="pub-kpi__hint">@k.Hint</span>
+                <span class="pub-kpi__icon pub-tint--@k.Tone"><i class="bi @k.Icon"></i></span>
+            </button>
+        }
+    </div>
+
+    <section class="pub-card pub-card--flush pub-filters">
+        <button type="button" class="pub-card__band pub-band--green pub-collapse" aria-expanded="@_filtersOpen" @onclick="() => _filtersOpen = !_filtersOpen">
+            <span class="pub-h3"><i class="bi bi-funnel"></i> Filters</span>
+            <i class="bi bi-chevron-@(_filtersOpen ? "up" : "down")"></i>
+        </button>
+        @if (_filtersOpen)
+        {
+            <div class="pub-card__body">
+                <div class="pub-form pub-form--4">
+                    <div class="pub-field">
+                        <label class="pub-label">Date Range</label>
+                        <div class="pub-dates"><input type="date" class="pub-input" @bind="_from" aria-label="From date" /><span>to</span><input type="date" class="pub-input" @bind="_to" aria-label="To date" /></div>
+                    </div>
+                    <div class="pub-field">
+                        <label class="pub-label" for="pf-prod">Product</label>
+                        <select id="pf-prod" class="pub-input" @bind="_product"><option value="0">All Product</option>
+                            @foreach (var p in _lookups?.Products ?? new()) { <option value="@p.Id">@p.Name</option> }</select>
+                    </div>
+                    <div class="pub-field">
+                        <label class="pub-label" for="pf-mat">Publicity Material</label>
+                        <select id="pf-mat" class="pub-input" @bind="_material"><option value="0">All Material</option>
+                            @foreach (var m in _lookups?.Materials ?? new()) { <option value="@m.Id">@m.Name</option> }</select>
+                    </div>
+                    @if (Review && ShowState)
+                    {
+                        <div class="pub-field">
+                            <label class="pub-label" for="pf-state">State</label>
+                            <select id="pf-state" class="pub-input" value="@_state" @onchange="StateChanged"><option value="0">All State</option>
+                                @foreach (var s in _states) { <option value="@s.Id">@s.Name</option> }</select>
+                        </div>
+                    }
+                    @if (Review && Api.Role != AppRole.RM)
+                    {
+                        <div class="pub-field">
+                            <label class="pub-label" for="pf-region">Region</label>
+                            <select id="pf-region" class="pub-input" value="@_region" @onchange="RegionChanged"><option value="0">All Region</option>
+                                @foreach (var s in _regions) { <option value="@s.Id">@s.Name</option> }</select>
+                        </div>
+                    }
+                    @if (Review)
+                    {
+                        <div class="pub-field">
+                            <label class="pub-label" for="pf-hq">HQ</label>
+                            <select id="pf-hq" class="pub-input" @bind="_hq"><option value="0">All HQ</option>
+                                @foreach (var s in _hqs) { <option value="@s.Id">@s.Name</option> }</select>
+                        </div>
+                        <div class="pub-field">
+                            <label class="pub-label" for="pf-stage">Current Stage</label>
+                            <select id="pf-stage" class="pub-input" @bind="_stage"><option value="">All Stage</option>
+                                @foreach (var s in Enum.GetValues<PublicityStage>()) { <option value="@((int)s)">@PubText.Stage(s)</option> }</select>
+                        </div>
+                    }
+                    <div class="pub-field">
+                        <label class="pub-label" for="pf-status">Status</label>
+                        <select id="pf-status" class="pub-input" value="@(_status is null ? "" : ((int)_status).ToString())" @onchange="e => _status = int.TryParse(e.Value?.ToString(), out var v) ? (PublicityStatus)v : null">
+                            <option value="">All Status</option>
+                            @foreach (var s in Enum.GetValues<PublicityStatus>()) { <option value="@((int)s)">@PubText.Status(s)</option> }</select>
+                    </div>
+                </div>
+                <div class="pub-actions-right">
+                    <button type="button" class="pub-btn pub-btn--line-grey" @onclick="ClearAsync"><i class="bi bi-x-lg"></i> Clear All</button>
+                    <button type="button" class="pub-btn pub-btn--blue" @onclick="() => LoadAsync(1)"><i class="bi bi-funnel"></i> Apply Filters</button>
+                </div>
+            </div>
+        }
+    </section>
+
+    <section class="pub-card">
+        <div class="pub-card__head">
+            <h2 class="pub-h2">@(_awaitingMe ? "Awaiting My Review" : "Submitted Request")</h2>
+            <div class="pub-card__tools">
+                <div class="pub-search"><i class="bi bi-search"></i><input class="pub-input" placeholder="Search indent, product, material..." @bind="_q" @bind:event="oninput" @onkeyup="SearchKey" aria-label="Search" /></div>
+                <button type="button" class="pub-btn pub-btn--line" @onclick="ExportAsync" disabled="@(_page?.Items.Count is not > 0)"><i class="bi bi-download"></i> Export</button>
+            </div>
+        </div>
+
+        @if (_page is null)
+        {
+            <Skeleton Rows="6" />
+        }
+        else if (_page.Items.Count == 0)
+        {
+            <EmptyState Icon="bi-megaphone" Title="No requests found" Message="@(Review ? "Nothing matches these filters." : "Create your first publicity material request.")" />
+        }
+        else
+        {
+            <div class="pub-table-wrap">
+                <table class="pub-table">
+                    <thead>
+                        <tr>
+                            <th>S.No</th><th>Indent No.</th><th>Product</th>
+                            @if (Review) { <th>Request Date</th> }
+                            <th>Publicity Material</th><th>Quantity</th>
+                            @if (Review && ShowState) { <th>State</th> }
+                            <th>HQ</th><th>Current Stage</th><th>Status</th><th>Created Date</th><th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @for (var i = 0; i < _page.Items.Count; i++)
+                        {
+                            var r = _page.Items[i];
+                            <tr class="@(r.AwaitingMe ? "is-mine" : "")">
+                                <td data-label="S.No">@((_pageNo - 1) * _size + i + 1)</td>
+                                <td data-label="Indent No."><b>@r.IndentNo</b></td>
+                                <td data-label="Product">@r.Product</td>
+                                @if (Review) { <td data-label="Request Date">@PubText.Date(r.CreatedAt)</td> }
+                                <td data-label="Material">@r.Material</td>
+                                <td data-label="Quantity">@r.Quantity</td>
+                                @if (Review && ShowState) { <td data-label="State">@r.State</td> }
+                                <td data-label="HQ">@r.Hq</td>
+                                <td data-label="Stage"><PubPill Text="@(r.StatusNote ?? (Review ? PubText.StageShort(r.Stage) : PubText.Stage(r.Stage)))" Tone="@(r.StatusNote is null ? PubText.StageTone(r.Stage) : "red")" /></td>
+                                <td data-label="Status"><PubPill Text="@StatusFor(r).Text" Tone="@StatusFor(r).Tone" /></td>
+                                <td data-label="Created">@PubText.Date(r.CreatedAt)</td>
+                                <td data-label="Action" class="pub-row-actions">
+                                    <a class="pub-icon-btn" href="@($"{Api.Home}/{r.Id}")" aria-label="View @r.IndentNo" title="View"><i class="bi bi-eye"></i></a>
+                                    @if (!Review && r.Status is PublicityStatus.Draft or PublicityStatus.Returned)
+                                    {
+                                        <a class="pub-icon-btn pub-icon-btn--violet" href="@($"/PublicityRequest/edit/{r.Id}")" aria-label="Edit @r.IndentNo" title="Edit"><i class="bi bi-pencil"></i></a>
+                                    }
+                                    @if (!Review && r.Status == PublicityStatus.Draft)
+                                    {
+                                        <button type="button" class="pub-icon-btn pub-icon-btn--red" aria-label="Delete @r.IndentNo" title="Delete" @onclick="() => DeleteAsync(r)"><i class="bi bi-trash"></i></button>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <LabPager Page="_pageNo" PageSize="_size" Total="_page.Total" PageChanged="LoadAsync" PageSizeChanged="SizeAsync" />
+        }
+    </section>
+</div>
+
+@code {
+    private bool Review => Nav.ToBaseRelativePath(Nav.Uri).StartsWith("PublicityReview", StringComparison.OrdinalIgnoreCase);
+
+    private PubStatsDto? _stats;
+    private PubPageDto? _page;
+    private PubLookupsDto? _lookups;
+    private List<PubOption> _states = new(), _regions = new(), _hqs = new();
+    private bool _filtersOpen = true, _awaitingMe;
+    private DateTime? _from, _to;
+    private int _product, _material, _state, _region, _hq, _pageNo = 1, _size = 16;
+    private string _stage = "";
+    private PublicityStatus? _status;
+    private string _q = "";
+    private CancellationTokenSource? _cts;
+
+    private sealed record Kpi(string Label, string Hint, string Icon, string Tone, Func<PubStatsDto, int> Value, PublicityStatus? Status = null);
+
+    private bool ShowState => Api.Role is not (AppRole.RM or AppRole.SMD or AppRole.SMM);
+
+    private string Subtitle => !Review ? "View, track and manage all your publicity material requests"
+        : Api.Role switch
+        {
+            AppRole.RM => "Review, approve and track publicity material requests from RMDO under your region.",
+            AppRole.SMD or AppRole.SMM => "Track and manage the state submissions awaiting your review.",
+            _ => "Track submissions, final approvals, dispatches and exceptions."
+        };
+
+    /// <summary>Reviewer wording: "Pending" when it waits for me, "Approved" once I forwarded it.</summary>
+    private (string Text, string Tone) StatusFor(PubRowDto r)
+    {
+        if (Review && r.AwaitingMe) return ("Pending", "amber");
+        if (Review && Api.MyStage is { } mine && r.Stage > mine && r.Stage <= PublicityStage.DgmMdCsReview
+            && r.Status is PublicityStatus.PendingApproval or PublicityStatus.PendingFinalApproval) return ("Approved", "green");
+        return (PubText.Status(r.Status), PubText.StatusTone(r.Status));
+    }
+
+    private IEnumerable<Kpi> Kpis => Review && Api.Role == AppRole.RM
+        ? new Kpi[]
+        {
+            new("Pending for My Approval", "Need your action", "bi-file-earmark-text", "blue", s => s.PendingMine),
+            new("Approved by RM", "Your approved requests", "bi-clock", "green", s => s.ApprovedByMe),
+            new("Dispatch & Delivery", "In transit / delivery", "bi-truck", "amber", s => s.InDispatch, PublicityStatus.InDispatch),
+            new("Completed", "Delivery & acknowledged", "bi-check2-circle", "green", s => s.Completed, PublicityStatus.Completed),
+            new("Returned", "Returned for correction", "bi-arrow-counterclockwise", "red", s => s.Returned, PublicityStatus.Returned)
+        }
+        : Review && Api.Role is AppRole.SMD or AppRole.SMM
+        ? new Kpi[]
+        {
+            new("Total Submitted", $"All submissions received from {PubText.Prev(Api.MyStage!.Value)}", "bi-file-earmark-text", "blue", s => s.Total),
+            new($"{Api.Role} Review", "Awaiting your review and decision", "bi-hourglass-split", "amber", s => s.PendingMine),
+            new("Final Approval", $"Approved by {Api.Role} and moved on towards ADMIN - MD CS", "bi-file-earmark-check", "violet", s => s.FinalApproval),
+            new("Dispatch & Delivery", "Final approval completed, dispatch / delivery in progress", "bi-clock", "green", s => s.InDispatch, PublicityStatus.InDispatch),
+            new("Acknowledgement", "Material delivered; acknowledgement pending", "bi-clock", "cyan", s => s.AckPending, PublicityStatus.AcknowledgementPending),
+            new("Completed", "Acknowledgement completed; request closed", "bi-check2-circle", "green", s => s.Completed, PublicityStatus.Completed)
+        }
+        : Review
+        ? new Kpi[]
+        {
+            new("Total Submitted", "Received for review", "bi-file-earmark-text", "blue", s => s.Total),
+            new("Pending Review", $"Awaiting {Api.MyStageLabel ?? "approval"}", "bi-hourglass-split", "amber", s => s.PendingMine > 0 ? s.PendingMine : s.PendingApproval),
+            new("With DGM-MD CS", "Awaiting final approval", "bi-file-earmark-check", "violet", s => s.WithDgm),
+            new("Dispatch Pending", "Ready for dispatch creation", "bi-clock", "green", s => s.DispatchPending, PublicityStatus.FinalApproved),
+            new("Exceptions", "Requires action", "bi-exclamation-octagon", "cyan", s => s.Exception, PublicityStatus.ExceptionRaised),
+            new("Completed", "Process completed", "bi-check2-circle", "green", s => s.Completed, PublicityStatus.Completed)
+        }
+        : new Kpi[]
+        {
+            new("Total Request", "All requests created", "bi-file-earmark-text", "blue", s => s.Total + s.Draft),
+            new("Draft", "Not yet submitted", "bi-file-earmark", "amber", s => s.Draft, PublicityStatus.Draft),
+            new("Pending Approval", "Under review with RM/SMD/SMM", "bi-clock", "red", s => s.PendingApproval, PublicityStatus.PendingApproval),
+            new("Final Approved", "Note approval completed", "bi-file-earmark-check", "green", s => s.FinalApproved, PublicityStatus.FinalApproved),
+            new("In Dispatch", "Material dispatched", "bi-truck", "violet", s => s.InDispatch, PublicityStatus.InDispatch),
+            new("Acknowledgement Pending", "Waiting for receipt confirmation", "bi-inbox", "cyan", s => s.AckPending, PublicityStatus.AcknowledgementPending),
+            new("Completed", "Received and closed", "bi-check2-circle", "green", s => s.Completed, PublicityStatus.Completed),
+            new("Exception", "Shortage / Excess / Damaged", "bi-exclamation-octagon", "red", s => s.Exception, PublicityStatus.ExceptionRaised)
+        };
+
+    // /PublicityRequest and /PublicityReview both route here (same component type), so the Blazor
+    // router reuses this instance across the two aliases instead of recreating it - OnInitializedAsync
+    // only ever runs once per instance, so switching between them would otherwise keep showing
+    // whichever one's data loaded first. OnParametersSetAsync runs on every navigation (including the
+    // first), so re-fetch whenever the path itself actually changed.
+    private string? _loadedPath;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var path = Nav.ToBaseRelativePath(Nav.Uri).Split('?')[0].TrimEnd('/');
+        if (string.Equals(path, _loadedPath, StringComparison.OrdinalIgnoreCase)) return;
+        _loadedPath = path;
+
+        // Request and Review hide different filters (state/region/HQ are Review-only), so a stale
+        // selection from the other side would otherwise keep silently filtering the new list.
+        _from = _to = null;
+        _product = _material = _state = _region = _hq = 0;
+        _stage = _q = "";
+        _status = null;
+        _states = _regions = _hqs = new();
+
+        var uri = Nav.ToAbsoluteUri(Nav.Uri);
+        _awaitingMe = uri.Query.Contains("mine=1");
+        var statsTask = Api.StatsAsync();
+        _lookups = await Api.LookupsAsync();
+        if (Review && ShowState) _states = await Api.StatesAsync() ?? new();
+        else if (Review && _lookups is not null)
+        {
+            // region / state reviewers filter inside their own area
+            _regions = await Api.RegionsAsync(_lookups.MyStateId) ?? new();
+            if (Api.Role == AppRole.RM) _hqs = await Api.HqsAsync(_lookups.MyRegionId) ?? new();
+        }
+        _stats = await statsTask;
+        await LoadAsync(1);
+    }
+
+    private async Task LoadAsync(int page)
+    {
+        _pageNo = page;
+        _cts?.Cancel();
+        _cts = new CancellationTokenSource();
+        var q = new List<string> { $"page={page}", $"size={_size}" };
+        if (_from.HasValue) q.Add($"from={_from:yyyy-MM-dd}");
+        if (_to.HasValue) q.Add($"to={_to:yyyy-MM-dd}");
+        if (_product > 0) q.Add($"productId={_product}");
+        if (_material > 0) q.Add($"materialTypeId={_material}");
+        if (_status.HasValue) q.Add($"status={(int)_status}");
+        if (_stage != "") q.Add($"stage={_stage}");
+        if (_state > 0) q.Add($"stateId={_state}");
+        if (_region > 0) q.Add($"regionId={_region}");
+        if (_hq > 0) q.Add($"hqId={_hq}");
+        if (!string.IsNullOrWhiteSpace(_q)) q.Add($"q={Uri.EscapeDataString(_q.Trim())}");
+        if (_awaitingMe) q.Add("awaitingMe=true");
+        if (Review) q.Add("submittedOnly=true");
+        var result = await Api.ListAsync(string.Join("&", q), _cts.Token);
+        if (result is not null) _page = result;
+        else _page ??= new PubPageDto();
+    }
+
+    private Task SizeAsync(int size) { _size = size; return LoadAsync(1); }
+
+    private Task QuickStatus(PublicityStatus? status)
+    {
+        _status = _status == status ? null : status;
+        _awaitingMe = false;
+        return LoadAsync(1);
+    }
+
+    private Task ShowMine()
+    {
+        if (Api.Role is AppRole.RM or AppRole.SMD or AppRole.SMM or AppRole.MDAdmin)
+        {
+            Nav.NavigateTo("/PublicityReview/consolidation");
+            return Task.CompletedTask;
+        }
+        _awaitingMe = true;
+        _status = null;
+        return LoadAsync(1);
+    }
+
+    private async Task SearchKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" || _q.Length == 0 || _q.Length >= 3) await LoadAsync(1);
+    }
+
+    private async Task StateChanged(ChangeEventArgs e)
+    {
+        _state = int.TryParse(e.Value?.ToString(), out var v) ? v : 0;
+        _region = _hq = 0;
+        _hqs = new();
+        _regions = _state > 0 ? await Api.RegionsAsync(_state) ?? new() : new();
+    }
+
+    private async Task RegionChanged(ChangeEventArgs e)
+    {
+        _region = int.TryParse(e.Value?.ToString(), out var v) ? v : 0;
+        _hq = 0;
+        _hqs = _region > 0 ? await Api.HqsAsync(_region) ?? new() : new();
+    }
+
+    private Task ClearAsync()
+    {
+        _from = _to = null;
+        _product = _material = _state = _region = _hq = 0;
+        _stage = _q = "";
+        if (Api.Role != AppRole.RM && !ShowState) _hqs = new();
+        _status = null;
+        _awaitingMe = false;
+        return LoadAsync(1);
+    }
+
+    private async Task DeleteAsync(PubRowDto r)
+    {
+        if (!await Toast.ConfirmAsync("Delete draft", $"Delete draft {r.IndentNo}? This cannot be undone.", "Delete", danger: true)) return;
+        if (await Api.DeleteAsync(r.Id))
+        {
+            Toast.Success("Draft deleted.");
+            _stats = await Api.StatsAsync();
+            await LoadAsync(_pageNo);
+        }
+    }
+
+    private async Task ExportAsync()
+    {
+        // export every row that matches the filters, not just the visible page
+        var size = _size;
+        _size = 1000;
+        await LoadAsync(1);
+        var rows = _page?.Items ?? new();
+        _size = size;
+        try
+        {
+            using var wb = new XLWorkbook();
+            var sheet = wb.Worksheets.Add("Publicity Requests");
+            string[] head = { "S.No", "Indent No.", "Product", "Publicity Material", "Quantity", "State", "Region", "HQ", "Current Stage", "Status", "Created Date" };
+            for (var c = 0; c < head.Length; c++) sheet.Cell(1, c + 1).Value = head[c];
+            for (var i = 0; i < rows.Count; i++)
+            {
+                var r = rows[i];
+                object[] v = { i + 1, r.IndentNo, r.Product, r.Material, r.Quantity, r.State, r.Region, r.Hq, PubText.Stage(r.Stage), PubText.Status(r.Status), PubText.Date(r.CreatedAt) };
+                for (var c = 0; c < v.Length; c++) sheet.Cell(i + 2, c + 1).Value = XLCellValue.FromObject(v[c]);
+            }
+            sheet.Columns().AdjustToContents();
+            using var ms = new MemoryStream();
+            wb.SaveAs(ms);
+            await Downloads.SaveAsync($"PublicityRequests_{DateTime.Now:yyyyMMdd}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", ms.ToArray());
+        }
+        catch (Exception)
+        {
+            Toast.Error("We could not build the Excel file. Please try again.");
+        }
+        await LoadAsync(1);
+    }
+
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+    }
+}

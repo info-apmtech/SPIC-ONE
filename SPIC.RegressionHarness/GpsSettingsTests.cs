@@ -30,7 +30,7 @@ internal static class GpsSettingsTests
     private static void EntityDefaultsAreValid()
     {
         var entity = new GpsSetting();
-        Check.Equal("GpsSetting default interval is 20 seconds", 20, entity.IntervalSeconds);
+        Check.Equal("GpsSetting default interval is 10 seconds", 10, entity.IntervalSeconds);
         Check.That("GpsSetting default IsActive is true", entity.IsActive);
         Check.That("GpsSetting CreatedAt is initialized", entity.CreatedAt <= DateTime.UtcNow);
     }

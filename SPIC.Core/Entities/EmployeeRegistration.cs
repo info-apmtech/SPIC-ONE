@@ -1,6 +1,7 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 using System.Text;
 
 namespace SPIC.Core.Entities
@@ -49,6 +50,10 @@ namespace SPIC.Core.Entities
             public int RegionId { get; set; }
             [Display(Name = "Headquarters")]
             public int HeadquartersId { get; set; }
+            [Column(TypeName = "integer[]")]
+            public int[]? RegionIds { get; set; }
+            [Column(TypeName = "integer[]")]
+            public int[]? HeadquartersIds { get; set; }
             //[Required]
             //[Display(Name = "User Name")]
             //public string UserName { get; set; }
@@ -75,6 +80,8 @@ namespace SPIC.Core.Entities
 		public int StateId { get; set; }
 		public int RegionId { get; set; }
 		public int HeadquartersId { get; set; }
+		public int[]? RegionIds { get; set; }
+		public int[]? HeadquartersIds { get; set; }
 		public bool IsActive { get; set; } = true;
 		public string? CreatedBy { get; set; }
 		public string? UpdatedBy { get; set; }

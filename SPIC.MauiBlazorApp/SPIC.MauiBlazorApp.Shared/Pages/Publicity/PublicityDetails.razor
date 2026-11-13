@@ -1,0 +1,624 @@
+@page "/PublicityRequest/{Id:int}"
+@page "/PublicityReview/{Id:int}"
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
+@using SPIC.MauiBlazorApp.Shared.Components.Publicity
+@using static SPIC.MauiBlazorApp.Shared.Components.Feedback.BottomSheet
+@inject PublicityApi Api
+@inject NavigationManager Nav
+@inject ToastService Toast
+@inject FileDownloadService Downloads
+@inject IJSRuntime JS
+
+@*
+    One details page for every role (Figma "My Publicity Material Request Details" + the admin
+    "Tracking & Delivery" variants). The API decides what the caller may do (CanEdit, CanReview,
+    CanDispatch, CanResolve, CanAcknowledge, CanSubmitProof); this page renders those buttons.
+    ?tab=tracking | ack | docs opens a tab directly.
+*@
+
+<div class="pub-page pub-print">
+    <PageHeader Title="@(ReadOnlyReviewer ? "Request Details" : "My Publicity Material Request Details")" Subtitle="@Subtitle">
+        <Actions>
+            <a class="pub-btn pub-btn--line" href="@Api.Home"><i class="bi bi-arrow-left"></i> <span class="pub-hide-sm">Back to List Page</span></a>
+            <button type="button" class="pub-btn pub-btn--line pub-hide-sm" @onclick="DownloadReportAsync" disabled="@(_d is null)">Download Report</button>
+            <button type="button" class="pub-btn pub-btn--line pub-hide-sm" @onclick="PrintAsync"><i class="bi bi-printer"></i> Print</button>
+        </Actions>
+    </PageHeader>
+
+    @if (_d is null)
+    {
+        <Skeleton Rows="10" />
+    }
+    else
+    {
+        var d = _d;
+        <PubHeader D="d" />
+
+        @if (_tab == 0)
+        {
+            <section class="pub-card">
+                <h2 class="pub-h2">Request Timeline</h2>
+                <PubStepper Steps="d.Timeline" Label="Request timeline" />
+            </section>
+        }
+
+        <nav class="pub-tabs" role="tablist">
+            @foreach (var (label, i) in Tabs.Select((t, i) => (t, i)))
+            {
+                <button type="button" role="tab" class="pub-tab @(i == _tab ? "is-active" : "")" aria-selected="@(i == _tab)" @onclick="() => _tab = i">@label</button>
+            }
+        </nav>
+
+        @switch (_tab)
+        {
+            case 0:
+                <PubOverview D="d">
+                    <HeadActions>
+                        @if (d.CanDispatch) { <a class="pub-btn pub-btn--primary" href="@($"/PublicityReview/{d.Id}/dispatch")">Create Dispatch <i class="bi bi-arrow-right"></i></a> }
+                    </HeadActions>
+                </PubOverview>
+
+                @if (d.Dispatches.Count > 0) { <PubSummary S="d.Summary" Title="Final Quantity Summary" /> }
+
+                @if (Review && d.Stage <= PublicityStage.Dispatch)
+                {
+                    <section class="pub-card">
+                        <h2 class="pub-h2">@(d.CanReview && Api.Role is AppRole.SMD ? "SMDO Remarks" : "Additional Details")</h2>
+                        <label class="pub-label" for="rv-card">Additional Remarks (if any)</label>
+                        @if (d.CanReview)
+                        {
+                            <textarea id="rv-card" rows="3" class="pub-input pub-textarea" placeholder="No additional remarks" @bind="_reviewRemarks"></textarea>
+                        }
+                        else
+                        {
+                            <div class="pub-remarks">@(d.ApproverRemarks ?? "No additional remarks")</div>
+                        }
+                    </section>
+                }
+
+                <section class="pub-card">
+                    <h2 class="pub-h2">Approval History</h2>
+                    <div class="pub-table-wrap">
+                        <table class="pub-table pub-table--history">
+                            <thead><tr><th>S.No</th><th>Stage</th><th>Action</th><th>Created By</th><th>Designation</th><th>Date &amp; Time</th><th>Remarks / Changes</th></tr></thead>
+                            <tbody>
+                                @for (var i = 0; i < d.History.Count; i++)
+                                {
+                                    var h = d.History[i];
+                                    <tr>
+                                        <td data-label="S.No"><span class="pub-hdot pub-hdot--@h.State"></span> @(i + 1)</td>
+                                        <td data-label="Stage">@h.Stage</td>
+                                        <td data-label="Action"><PubPill Text="@h.Action" Tone="@ActionTone(h.Action)" /></td>
+                                        <td data-label="Created By">@if (h.By is not null) { <span class="pub-person pub-person--sm"><span class="pub-avatar">@h.By[..1]</span>@h.By</span> } else { <span>-</span> }</td>
+                                        <td data-label="Designation">@(h.Role ?? "-")</td>
+                                        <td data-label="Date">@(h.At is null ? "-" : PubText.DateTime(h.At))</td>
+                                        <td data-label="Remarks">@(h.Remarks ?? "-")</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <div class="pub-footer">
+                    <a class="pub-btn pub-btn--grey" href="@Api.Home"><i class="bi bi-chevron-double-left"></i> Back to List</a>
+                    <span class="pub-footer__gap"></span>
+                    @if (d.CanEdit)
+                    {
+                        <a class="pub-btn pub-btn--line" href="@($"/PublicityRequest/edit/{d.Id}")"><i class="bi bi-pencil"></i> Edit &amp; Resubmit</a>
+                    }
+                    @if (d.CanReview)
+                    {
+                        <a class="pub-btn pub-btn--line-blue" href="@($"/PublicityReview/edit/{d.Id}")"><i class="bi bi-pencil-square"></i> Edit</a>
+                        <button type="button" class="pub-btn pub-btn--line-red" @onclick="() => _reviewOpen = true"><i class="bi bi-arrow-counterclockwise"></i> Return / Request Changes</button>
+                        <button type="button" class="pub-btn pub-btn--primary" disabled="@_busy" @onclick="ApproveAsync"><i class="bi bi-check2"></i> Approve &amp; Forward to @PubText.Next(d.Stage)</button>
+                    }
+                    else if (ReadOnlyReviewer)
+                    {
+                        <button type="button" class="pub-btn pub-btn--line" @onclick="PrintAsync">Print <i class="bi bi-printer"></i></button>
+                        <button type="button" class="pub-btn pub-btn--primary" @onclick="DownloadReportAsync">Download Report <i class="bi bi-download"></i></button>
+                    }
+                </div>
+                break;
+
+            case 1:
+                <h2 class="pub-h2">Tracking &amp; Delivery <small>(View Only)</small></h2>
+                <p class="pub-muted">Track the dispatch details, courier / transport information and delivery status</p>
+
+                @if (d.Dispatches.Count == 0 && d.OutgoingTransfers.Count == 0)
+                {
+                    <EmptyState Icon="bi-truck" Title="Not dispatched yet" Message="Dispatch details appear here once the material is dispatched.">
+                        @if (d.CanDispatch) { <a class="pub-btn pub-btn--primary" href="@($"/PublicityReview/{d.Id}/dispatch")">Create Dispatch</a> }
+                    </EmptyState>
+                }
+                @for (var i = 0; i < d.Dispatches.Count; i++)
+                {
+                    var x = d.Dispatches[i];
+                    <PubDispatchCard X="x" D="d" Heading="@($"Dispatch {i + 1}")" StartOpen="@(i == d.Dispatches.Count - 1 || d.Dispatches.Count < 3)">
+                        <Notice>
+                            @if (x.Status == PublicityDispatchStatus.TransferRequested) { <span class="pub-note pub-note--amber">Courier proof is pending from the source RMDO.</span> }
+                            @if (x.Status == PublicityDispatchStatus.ProofSubmitted) { <span class="pub-note pub-note--blue">Source RMDO uploaded the dispatch proof. Admin review pending.</span> }
+                        </Notice>
+                        <AckActions><button type="button" class="pub-btn pub-btn--line pub-btn--sm" @onclick="() => _tab = 2">View Acknowledgement <i class="bi bi-arrow-right"></i></button></AckActions>
+                        <Actions>
+                            @if (Api.IsDispatcher && x.Status is >= PublicityDispatchStatus.ProofSubmitted and < PublicityDispatchStatus.Acknowledged)
+                            {
+                                <div class="pub-actions-right">
+                                    @if (x.Status == PublicityDispatchStatus.ProofSubmitted)
+                                    {
+                                        <button type="button" class="pub-btn pub-btn--primary" @onclick="() => OpenStatus(x, PublicityDispatchStatus.Dispatched)">Update Dispatch Details</button>
+                                    }
+                                    @if (x.Status == PublicityDispatchStatus.Dispatched)
+                                    {
+                                        <button type="button" class="pub-btn pub-btn--line" @onclick="() => OpenStatus(x, PublicityDispatchStatus.InTransit)"><i class="bi bi-truck"></i> Mark In Transit</button>
+                                    }
+                                    @if (x.Status is PublicityDispatchStatus.Dispatched or PublicityDispatchStatus.InTransit)
+                                    {
+                                        <button type="button" class="pub-btn pub-btn--primary" @onclick="() => OpenStatus(x, PublicityDispatchStatus.Delivered)"><i class="bi bi-box-seam"></i> Mark Delivered</button>
+                                    }
+                                </div>
+                            }
+                            @if (x.CanAcknowledge)
+                            {
+                                <div class="pub-banner pub-banner--blue">
+                                    <span class="pub-banner__icon"><i class="bi bi-hourglass-split"></i></span>
+                                    <div><h3>Awaiting Acknowledgement</h3><p>Once the material reaches you, submit the receipt acknowledgement.</p></div>
+                                    <button type="button" class="pub-btn pub-btn--primary" @onclick="() => _tab = 2">Acknowledge <i class="bi bi-arrow-right"></i></button>
+                                </div>
+                            }
+                        </Actions>
+                    </PubDispatchCard>
+                }
+
+                @if (d.Summary.ExceptionStatus == "Raised")
+                {
+                    <section class="pub-card pub-card--flush">
+                        <div class="pub-card__band pub-band--red">
+                            <div><h2 class="pub-h2 pub-text-red">Exception Raised</h2><span class="pub-muted">@d.Summary.ExceptionType reported in the acknowledgement.</span></div>
+                            @if (d.CanResolve) { <button type="button" class="pub-btn pub-btn--primary" @onclick="OpenResolve">Resolve Exception <i class="bi bi-arrow-right"></i></button> }
+                        </div>
+                        <div class="pub-grid pub-grid--3">
+                            <PubInfo Label="Exception Type">
+                                @foreach (var t in d.Summary.ExceptionType.Split(" + ")) { <PubPill Text="@t" Tone="red" /> }
+                            </PubInfo>
+                            <PubInfo Label="Raised By" Tone="green" Value="@d.ExceptionRaisedBy" />
+                            <PubInfo Label="Raised On" Value="@PubText.DateTime(d.ExceptionRaisedAt)" />
+                            <div class="pub-grid__wide"><span class="pub-info__label">Remarks</span><b class="pub-info__value pub-info__value--sm">@(d.ExceptionRemarks ?? "-")</b></div>
+                        </div>
+                    </section>
+                }
+
+                @for (var i = 0; i < d.OutgoingTransfers.Count; i++)
+                {
+                    var x = d.OutgoingTransfers[i];
+                    <PubDispatchCard X="x" D="d" Heading="Stock Transfer Order" ShowAck="false">
+                        <Notice>
+                            @if (x.Status == PublicityDispatchStatus.TransferRequested) { <span class="pub-note pub-note--blue">Admin has requested to transfer @x.Quantity Nos to @x.DestinationHq from your excess stock.</span> }
+                        </Notice>
+                        <Actions>
+                            @if (x.CanSubmitProof)
+                            {
+                                <div class="pub-actions-right">
+                                    <a class="pub-btn pub-btn--primary" href="@($"/PublicityRequest/{d.Id}/transfer/{x.Id}")"><i class="bi bi-truck"></i> @(x.Status == PublicityDispatchStatus.TransferRequested ? "Create Transfer" : "Update Proof")</a>
+                                </div>
+                            }
+                        </Actions>
+                    </PubDispatchCard>
+                }
+
+                @if (d.Status == PublicityStatus.Completed)
+                {
+                    <div class="pub-banner pub-banner--green">
+                        <span class="pub-banner__icon"><i class="bi bi-patch-check-fill"></i></span>
+                        <div><h3>Request Completed</h3>
+                            <p>@(d.Summary.ExceptionStatus == "Resolved" ? "Shortage and damaged quantity were resolved; all required usable quantity is received." : "The material has been delivered and acknowledged.")</p></div>
+                    </div>
+                }
+                break;
+
+            case 2:
+                <h2 class="pub-h2">Acknowledgement</h2>
+                <p class="pub-muted">Receipt confirmation for every dispatch of this request</p>
+
+                @if (_ackTarget is not null)
+                {
+                    var x = _ackTarget;
+                    <section class="pub-card">
+                        <h2 class="pub-h2">Dispatch Summary</h2>
+                        <div class="pub-grid pub-grid--5">
+                            <PubInfo Label="Dispatch ID" Value="@x.DispatchNo" />
+                            <PubInfo Label="Dispatch Date" Value="@PubText.Date(x.DispatchDate)" />
+                            <PubInfo Label="Product / Material" Value="@($"{d.Product} {d.Material}")" />
+                            <PubInfo Label="Dispatch Quantity" Value="@($"{x.Quantity} Nos")" />
+                            <PubInfo Label="Expected Delivery" Value="@PubText.Date(x.ExpectedDeliveryDate ?? x.DeliveredAt)" />
+                        </div>
+
+                        <h2 class="pub-h2">Acknowledgement Details</h2>
+                        <div class="pub-form pub-form--3">
+                            <div class="pub-field">
+                                <label class="pub-label pub-req" for="ack-qty">Quantity Received</label>
+                                <input id="ack-qty" type="number" min="0" class="pub-input" @bind="_ack.ReceivedQty" @bind:event="oninput" />
+                            </div>
+                            <div class="pub-field">
+                                <span class="pub-label pub-req">Material Condition</span>
+                                <div class="pub-radios">
+                                    <label class="pub-radio @(!_ack.IsDamaged ? "is-good" : "")"><input type="radio" name="cond" checked="@(!_ack.IsDamaged)" @onchange="() => _ack.IsDamaged = false" /> In Good Condition</label>
+                                    <label class="pub-radio @(_ack.IsDamaged ? "is-bad" : "")"><input type="radio" name="cond" checked="@_ack.IsDamaged" @onchange="() => _ack.IsDamaged = true" /> In Damaged Condition</label>
+                                </div>
+                            </div>
+                            @if (_ack.IsDamaged)
+                            {
+                                <div class="pub-field">
+                                    <label class="pub-label pub-req" for="ack-dmg">Damaged Quantity</label>
+                                    <input id="ack-dmg" type="number" min="1" class="pub-input" @bind="_ack.DamagedQty" @bind:event="oninput" />
+                                </div>
+                            }
+                            <div class="pub-field">
+                                <label class="pub-label pub-req" for="ack-by">Acknowledged By</label>
+                                <select id="ack-by" class="pub-input" @bind="_ack.AcknowledgedByUserId">
+                                    @foreach (var p in _lookups?.People ?? new()) { <option value="@p.UserId">@p.Name @(p.Role is null ? "" : $"({p.Role})")</option> }
+                                </select>
+                            </div>
+                            <div class="pub-field pub-field--wide">
+                                <label class="pub-label" for="ack-rem">Remarks</label>
+                                <input id="ack-rem" class="pub-input" placeholder="Received 90 posters, out of which 5 posters are damaged." @bind="_ack.Remarks" />
+                            </div>
+                        </div>
+                        <PubDrop @bind-Files="_ackFiles" Title="Drag &amp; drop images or click to upload" />
+                    </section>
+
+                    @if (AckShortage > 0 || AckDamaged > 0 || AckExcess > 0)
+                    {
+                        <section class="pub-card pub-card--danger">
+                            <h2 class="pub-h2"><i class="bi bi-exclamation-circle pub-text-red"></i> Exception Details</h2>
+                            <p class="pub-muted">Auto detected from the quantities entered above</p>
+                            <div class="pub-grid pub-grid--3">
+                                <PubInfo Label="Exception Type" Tone="pink" Value="@AckType" Sub="Auto detected" />
+                                <PubInfo Label="@(AckExcess > 0 ? "Excess Quantity" : "Shortage Quantity")" Value="@($"{(AckExcess > 0 ? AckExcess : AckShortage)} Nos")" Sub="Auto calculated" />
+                                <PubInfo Label="Damaged Quantity" Value="@($"{AckDamaged} Nos")" Sub="Auto calculated" />
+                            </div>
+                        </section>
+                    }
+
+                    <div class="pub-banner pub-banner--amber">
+                        <span class="pub-banner__icon"><i class="bi bi-info-circle"></i></span>
+                        <div><h3>After Submission</h3>
+                            <p>@(AckShortage > 0 || AckDamaged > 0 ? "Your acknowledgement will be recorded. Since there is a shortage / damage, an exception is created and sent to the ADMIN - MD CS." : "Your acknowledgement will be recorded. Any shortage, excess or damage reported is sent to the admin for further action.")</p></div>
+                    </div>
+
+                    <div class="pub-footer">
+                        <span class="pub-footer__gap"></span>
+                        <button type="button" class="pub-btn pub-btn--grey" disabled="@_busy" @onclick="() => SaveAckAsync(false)">Save as Draft</button>
+                        <button type="button" class="pub-btn pub-btn--primary" disabled="@_busy" @onclick="() => SaveAckAsync(true)">Submit Acknowledgement <i class="bi bi-chevron-double-right"></i></button>
+                    </div>
+                }
+
+                @for (var i = 0; i < d.Dispatches.Count; i++)
+                {
+                    var x = d.Dispatches[i];
+                    var a = x.Ack is { IsDraft: false } ? x.Ack : null;
+                    <section class="pub-card pub-card--flush">
+                        <div class="pub-card__band pub-band--green">
+                            <div class="pub-collapse__title">
+                                <h2 class="pub-h2">Acknowledgement @(i + 1) <small>- @PubText.Kind(x.Kind)</small></h2>
+                                @if (a is not null) { <PubPill Text="@(a.ExceptionType == "None" ? "Acknowledgement Completed" : $"Exception Raised ({a.ExceptionType})")" Tone="@(a.ExceptionType == "None" ? "green" : "red")" /> }
+                                else { <PubPill Text="@PubText.DispatchStatus(x.Status, x.Kind)" Tone="blue" /> }
+                            </div>
+                            <PubPill Text="@(x.DeliveredAt is null ? "In Transit" : $"Delivered on {PubText.DateTime(x.DeliveredAt)}")" Tone="@(x.DeliveredAt is null ? "amber" : "green")" />
+                        </div>
+                        <div class="pub-card__body">
+                            <div class="pub-grid pub-grid--5">
+                                <PubInfo Label="@(x.Kind == PublicityDispatchKind.Transfer ? "Transfer ID" : "Dispatch ID")" Value="@x.DispatchNo" />
+                                <PubInfo Label="Dispatch Date" Value="@PubText.Date(x.DispatchDate)" />
+                                <PubInfo Label="Product / Material" Tone="green" Value="@d.Product" Sub="@d.Material" />
+                                <PubInfo Label="Dispatch Quantity" Value="@($"{x.Quantity} Nos")" Sub="@(x.Kind == PublicityDispatchKind.Original ? null : "(Replacement Quantity)")" />
+                                <PubInfo Label="Responsible Person" Value="@(x.ResponsibleName ?? x.CreatedByName)" Sub="@x.ResponsibleRole" />
+                            </div>
+                            @if (a is null)
+                            {
+                                <div class="pub-banner pub-banner--amber">
+                                    <span class="pub-banner__icon"><i class="bi bi-info-circle"></i></span>
+                                    <div><h3>Awaiting Delivery</h3><p>The material (@x.Quantity Nos) is on its way. The acknowledgement is available after it is delivered and received.</p></div>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="pub-subcard">
+                                    <h3 class="pub-h3">Acknowledgement Details</h3>
+                                    <div class="pub-grid pub-grid--5">
+                                        <PubInfo Label="Received Quantity" Tone="green" Value="@($"{a.ReceivedQty} Nos")" />
+                                        <PubInfo Label="@(a.ExcessQty > 0 ? "Excess Quantity" : "Shortage Quantity")" Tone="pink" Value="@($"{(a.ExcessQty > 0 ? a.ExcessQty : a.ShortageQty)} Nos")" />
+                                        <PubInfo Label="Material Condition" Tone="pink" Value="@(a.IsDamaged ? "Damaged" : "Good Condition")" />
+                                        <PubInfo Label="Damaged Quantity" Tone="pink" Value="@($"{a.DamagedQty} Nos")" />
+                                        <PubInfo Label="Status" Tone="pink"><PubPill Text="@(a.ExceptionType == "None" ? "Acknowledgement Completed" : "Exception Raised")" Tone="@(a.ExceptionType == "None" ? "green" : "red")" /></PubInfo>
+                                        <PubInfo Label="Submitted By" Tone="green" Value="@a.AcknowledgedByName" Sub="RMDO" />
+                                        <PubInfo Label="Received On" Tone="pink" Value="@PubText.DateTime(a.SubmittedAt)" />
+                                        <div class="pub-grid__wide"><span class="pub-info__label">Remarks</span><b class="pub-info__value pub-info__value--sm">@(a.Remarks ?? "-")</b></div>
+                                    </div>
+                                    @{ var photos = x.Files.Where(f => f.Kind == PublicityFileKind.AckPhoto).ToList(); }
+                                    <span class="pub-label">Uploaded Photos (@photos.Count)</span>
+                                    <div class="pub-photos">
+                                        @foreach (var p in photos)
+                                        {
+                                            <a class="pub-photo" href="@Api.FileUrl(p.Path)" target="_blank" rel="noopener" title="@p.FileName">
+                                                @if (PubText.IsImage(p.FileName)) { <img src="@Api.FileUrl(p.Path)" alt="@p.FileName" loading="lazy" /> } else { <i class="bi bi-file-earmark"></i> }
+                                                <span class="pub-photo__eye"><i class="bi bi-eye"></i></span>
+                                            </a>
+                                        }
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    </section>
+                }
+
+                @if (d.Dispatches.Any(x => x.Ack is { IsDraft: false }))
+                {
+                    <PubSummary S="d.Summary" Title="Final Acknowledgement Summary" Final="true" />
+                }
+                else if (_ackTarget is null)
+                {
+                    <EmptyState Icon="bi-inbox" Title="No acknowledgement yet" Message="Acknowledgements appear here once the material is received." />
+                }
+                break;
+
+            default:
+                <section class="pub-card">
+                    <h2 class="pub-h2">Related Documents</h2>
+                    @foreach (var g in d.Files.GroupBy(f => f.Kind))
+                    {
+                        <h3 class="pub-h3">@PubText.FileKind(g.Key)</h3>
+                        <PubDocs Files="g.ToList()" />
+                    }
+                    @if (d.Files.Count == 0) { <EmptyState Icon="bi-folder2-open" Title="No documents" Message="Files uploaded during the request, dispatch and acknowledgement appear here." /> }
+                </section>
+                break;
+        }
+
+        <BottomSheet @bind-IsOpen="_reviewOpen" Title="Return / Request Changes" Subtitle="@($"The request goes back to {d.RequestedByName} for correction.")">
+            <ChildContent>
+                <div class="pub-field"><label class="pub-label pub-req" for="rv-rem">Changes required</label>
+                    <textarea id="rv-rem" rows="5" class="pub-input pub-textarea" @bind="_reviewRemarks" placeholder="Explain what has to change"></textarea></div>
+            </ChildContent>
+            <Footer>
+                <button type="button" class="pub-btn pub-btn--grey" @onclick="() => _reviewOpen = false">Cancel</button>
+                <button type="button" class="pub-btn pub-btn--danger" disabled="@_busy" @onclick="ReturnAsync">Return</button>
+            </Footer>
+        </BottomSheet>
+
+        <BottomSheet @bind-IsOpen="_statusOpen" Title="@(_statusTo switch { PublicityDispatchStatus.Dispatched => "Confirm Transfer & Dispatch", PublicityDispatchStatus.InTransit => "Mark In Transit", _ => "Mark Delivered" })">
+            <ChildContent>
+                <div class="pub-form">
+                    @if (_statusTo == PublicityDispatchStatus.Dispatched)
+                    {
+                        <div class="pub-field"><label class="pub-label pub-req" for="st-tr">Transporter / Courier</label><input id="st-tr" class="pub-input" @bind="_status.Transporter" /></div>
+                        <div class="pub-field"><label class="pub-label pub-req" for="st-awb">Tracking No. (AWB)</label><input id="st-awb" class="pub-input" @bind="_status.TrackingNo" /></div>
+                        <div class="pub-field"><label class="pub-label" for="st-dd">Transfer / Dispatch Date</label><input id="st-dd" type="date" class="pub-input" @bind="_status.DispatchDate" /></div>
+                    }
+                    @if (_statusTo != PublicityDispatchStatus.Delivered)
+                    {
+                        <div class="pub-field"><label class="pub-label" for="st-ed">Expected Delivery Date</label><input id="st-ed" type="date" class="pub-input" @bind="_status.ExpectedDeliveryDate" /></div>
+                    }
+                    <div class="pub-field"><label class="pub-label" for="st-loc">Current Location / Hub</label><input id="st-loc" class="pub-input" placeholder="e.g. Bengaluru Hub" @bind="_status.CurrentLocation" /></div>
+                </div>
+            </ChildContent>
+            <Footer>
+                <button type="button" class="pub-btn pub-btn--grey" @onclick="() => _statusOpen = false">Cancel</button>
+                <button type="button" class="pub-btn pub-btn--primary" disabled="@_busy" @onclick="StatusAsync">Save</button>
+            </Footer>
+        </BottomSheet>
+
+        <BottomSheet @bind-IsOpen="_resolveOpen" Title="Resolve Exception" Subtitle="@($"Outstanding: {d.Summary.Outstanding} Nos ({d.Summary.ExceptionType})")">
+            <ChildContent>
+                <div class="pub-radios pub-radios--stack">
+                    <label class="pub-radio @(_resolveTransfer ? "" : "is-good")"><input type="radio" name="rs" checked="@(!_resolveTransfer)" @onchange="() => _resolveTransfer = false" /> Re-initiate dispatch from the vendor</label>
+                    <label class="pub-radio @(_resolveTransfer ? "is-good" : "")"><input type="radio" name="rs" checked="@_resolveTransfer" @onchange="() => _resolveTransfer = true" disabled="@(d.ExcessSources.Count == 0)" /> Stock transfer from another HQ's excess @(d.ExcessSources.Count == 0 ? "(no excess available)" : "")</label>
+                </div>
+                @if (_resolveTransfer)
+                {
+                    <div class="pub-form">
+                        <div class="pub-field"><label class="pub-label pub-req" for="rs-src">Source Request (Excess)</label>
+                            <select id="rs-src" class="pub-input" @bind="_transfer.SourceRequestId"><option value="">Select source</option>
+                                @foreach (var s in d.ExcessSources) { <option value="@s.RequestId">@s.IndentNo - @s.Hq (@s.Remaining Nos available)</option> }</select></div>
+                        <div class="pub-field"><label class="pub-label pub-req" for="rs-qty">Transfer Quantity</label><input id="rs-qty" type="number" min="1" class="pub-input" @bind="_transfer.Quantity" /></div>
+                        <div class="pub-field"><label class="pub-label" for="rs-rem">Remarks</label><textarea id="rs-rem" rows="3" class="pub-input pub-textarea" @bind="_transfer.Remarks"></textarea></div>
+                    </div>
+                }
+            </ChildContent>
+            <Footer>
+                <button type="button" class="pub-btn pub-btn--grey" @onclick="() => _resolveOpen = false">Cancel</button>
+                <button type="button" class="pub-btn pub-btn--primary" disabled="@_busy" @onclick="ResolveAsync">@(_resolveTransfer ? "Send Transfer Order" : "Continue to Dispatch") <i class="bi bi-arrow-right"></i></button>
+            </Footer>
+        </BottomSheet>
+    }
+</div>
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private string[] Tabs => new[] { "Request Details & History", "Tracking & Delivery", Review ? "Exception Handling" : "Acknowledgement", "Related Documents" };
+    private bool Review => Nav.ToBaseRelativePath(Nav.Uri).StartsWith("PublicityReview", StringComparison.OrdinalIgnoreCase);
+    /// <summary>A reviewer looking at a request that is not waiting for them (SMM "Request Details").</summary>
+    private bool ReadOnlyReviewer => Review && _d is { CanReview: false, CanDispatch: false, CanResolve: false };
+    private string Subtitle => _d is { CanReview: true } ? $"Review the request details, edit if required and approve to forward to {PubText.Next(_d.Stage)}"
+        : ReadOnlyReviewer ? "View complete details, approval history and current status of the publicity material request."
+        : "View complete details, approval history, tracking and documents.";
+    private PubDetailDto? _d;
+    private PubLookupsDto? _lookups;
+    private int _tab;
+    private bool _busy;
+
+    private PubDispatchDto? _ackTarget;
+    private PubAckUpsertDto _ack = new();
+    private List<IBrowserFile> _ackFiles = new();
+
+    private bool _reviewOpen, _statusOpen, _resolveOpen, _resolveTransfer;
+    private string? _reviewRemarks;
+    private PubDispatchDto? _statusFor;
+    private PublicityDispatchStatus _statusTo;
+    private PubDispatchStatusDto _status = new();
+    private PubDispatchCreateDto _transfer = new();
+
+    private int AckShortage => _ackTarget is null ? 0 : Math.Max(0, _ackTarget.Quantity - _ack.ReceivedQty);
+    private int AckExcess => _ackTarget is null ? 0 : Math.Max(0, _ack.ReceivedQty - _ackTarget.Quantity);
+    private int AckDamaged => _ack.IsDamaged ? _ack.DamagedQty : 0;
+    private string AckType => string.Join(" + ", new[] { AckShortage > 0 ? "Shortage" : null, AckExcess > 0 ? "Excess" : null, AckDamaged > 0 ? "Damage" : null }.Where(x => x != null));
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var query = Nav.ToAbsoluteUri(Nav.Uri).Query;
+        _tab = query.Contains("tab=tracking") ? 1 : query.Contains("tab=ack") ? 2 : query.Contains("tab=docs") ? 3 : 0;
+        _lookups = await Api.LookupsAsync();
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _d = await Api.GetAsync(Id);
+        if (_d is null) return;
+        _ackTarget = _d.Dispatches.FirstOrDefault(x => x.CanAcknowledge);
+        _ackFiles = new();
+        _ack = _ackTarget?.Ack is { } a
+            ? new PubAckUpsertDto { ReceivedQty = a.ReceivedQty, IsDamaged = a.IsDamaged, DamagedQty = a.DamagedQty, AcknowledgedByUserId = a.AcknowledgedByUserId, Remarks = a.Remarks }
+            : new PubAckUpsertDto { ReceivedQty = _ackTarget?.Quantity ?? 0, AcknowledgedByUserId = _lookups?.MyUserId };
+    }
+
+    private static string ActionTone(string action) => action switch
+    {
+        "Not Started" => "grey",
+        "Pending Review" or "Edited" or "Returned" or "Exception Raised" => "amber",
+        "Rejected" => "red",
+        "Submitted" or "Created" => "grey",
+        _ => "green"
+    };
+
+    // ---- review ----------------------------------------------------------------------------
+
+    private async Task ApproveAsync()
+    {
+        var next = PubText.Next(_d!.Stage);
+        if (!await Toast.ConfirmAsync("Approve & forward", $"Approve {_d.IndentNo} ({_d.Quantity} Nos) and forward it to {next}?", "Approve & Forward")) return;
+        await ReviewAsync("Approve", $"Request approved and forwarded to {next}.");
+    }
+
+    private async Task ReturnAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_reviewRemarks)) { Toast.Error("Enter the changes required."); return; }
+        await ReviewAsync("Return", "Request returned to the RMDO for correction.");
+    }
+
+    private async Task ReviewAsync(string action, string done)
+    {
+        _busy = true;
+        var ok = await Api.ReviewAsync(Id, new PubReviewDto { Action = action, Remarks = _reviewRemarks });
+        _busy = false;
+        if (!ok) return;
+        _reviewOpen = false;
+        Toast.Success(done);
+        Nav.NavigateTo(Api.Home);
+    }
+
+    // ---- dispatch status (admin) -----------------------------------------------------------
+
+    private void OpenStatus(PubDispatchDto x, PublicityDispatchStatus to)
+    {
+        _statusFor = x;
+        _statusTo = to;
+        _status = new PubDispatchStatusDto { Status = to, Transporter = x.Transporter, TrackingNo = x.TrackingNo, DispatchDate = x.DispatchDate ?? PubText.Today, ExpectedDeliveryDate = x.ExpectedDeliveryDate, CurrentLocation = x.CurrentLocation };
+        _statusOpen = true;
+    }
+
+    private async Task StatusAsync()
+    {
+        _busy = true;
+        var ok = await Api.DispatchStatusAsync(_statusFor!.Id, _status);
+        _busy = false;
+        if (!ok) return;
+        _statusOpen = false;
+        if (_statusTo == PublicityDispatchStatus.Dispatched && _statusFor.Kind == PublicityDispatchKind.Transfer)
+        {
+            Nav.NavigateTo($"{Api.Home}/done?type=dispatch&id={Id}&no={Uri.EscapeDataString(_statusFor.DispatchNo)}");
+            return;
+        }
+        Toast.Success("Dispatch updated.");
+        await LoadAsync();
+    }
+
+    // ---- exception resolution (admin) ------------------------------------------------------
+
+    private void OpenResolve()
+    {
+        _resolveTransfer = false;
+        _transfer = new PubDispatchCreateDto { Kind = PublicityDispatchKind.Transfer, Quantity = _d!.Summary.Outstanding, Remarks = $"Shortage / damage resolution for {_d.Hq}" };
+        _resolveOpen = true;
+    }
+
+    private async Task ResolveAsync()
+    {
+        if (!_resolveTransfer)
+        {
+            Nav.NavigateTo($"/PublicityReview/{Id}/dispatch?kind=1");
+            return;
+        }
+        if (_transfer.SourceRequestId is not > 0 || _transfer.Quantity <= 0) { Toast.Error("Select the source request and quantity."); return; }
+        _busy = true;
+        var saved = await Api.CreateDispatchAsync(Id, _transfer);
+        _busy = false;
+        if (saved is null) return;
+        Nav.NavigateTo($"/PublicityReview/done?type=transfer&id={Id}&no={Uri.EscapeDataString(saved.DispatchNo ?? "")}");
+    }
+
+    // ---- acknowledgement (RMDO) ------------------------------------------------------------
+
+    private async Task SaveAckAsync(bool submit)
+    {
+        if (_ackTarget is null) return;
+        if (_ack.ReceivedQty < 0) { Toast.Error("Enter the received quantity."); return; }
+        if (_ack.IsDamaged && (_ack.DamagedQty <= 0 || _ack.DamagedQty > _ack.ReceivedQty)) { Toast.Error("Damaged quantity must be between 1 and the received quantity."); return; }
+        if (submit && !await Toast.ConfirmAsync("Submit acknowledgement", AckType.Length > 0
+                ? $"{AckType} will be raised as an exception to the ADMIN - MD CS. Submit?" : "Confirm that the material is received in good condition.", "Submit")) return;
+        _busy = true;
+        if (_ackFiles.Count > 0 && await Api.UploadAsync(Id, PublicityFileKind.AckPhoto, _ackFiles, _ackTarget.Id) is null) { _busy = false; return; }
+        _ackFiles = new();
+        _ack.Submit = submit;
+        var ok = await Api.AcknowledgeAsync(_ackTarget.Id, _ack);
+        _busy = false;
+        if (!ok) return;
+        Toast.Success(submit ? "Acknowledgement submitted." : "Acknowledgement draft saved.");
+        await LoadAsync();
+    }
+
+    // ---- print / report --------------------------------------------------------------------
+
+    private async Task PrintAsync()
+    {
+        try { await JS.InvokeVoidAsync("print"); } catch (Exception) { Toast.Info("Printing is not available on this device."); }
+    }
+
+    private async Task DownloadReportAsync()
+    {
+        var d = _d!;
+        var rows = new List<List<string>>
+        {
+            new() { "Indent No.", d.IndentNo }, new() { "Created On", PubText.DateTime(d.CreatedAt) },
+            new() { "Current Stage", PubText.Stage(d.Stage) }, new() { "Status", PubText.Status(d.Status) },
+            new() { "Publicity Material", d.Material }, new() { "Product", d.Product }, new() { "Quantity", $"{d.Quantity} Nos" },
+            new() { "State / Region / HQ", $"{d.State} / {d.Region} / {d.Hq}" }, new() { "Requested By", $"{d.RequestedByName} ({d.RequestedByRole})" },
+            new() { "Remarks", d.Remarks ?? "-" },
+            new() { "Dispatched", $"{d.Summary.Dispatched} Nos" }, new() { "Received", $"{d.Summary.Received} Nos" },
+            new() { "Damaged", $"{d.Summary.Damaged} Nos" }, new() { "Outstanding", $"{d.Summary.Outstanding} Nos" },
+            new() { "Exception", $"{d.Summary.ExceptionType} ({d.Summary.ExceptionStatus})" }
+        };
+        rows.AddRange(d.History.Where(h => h.At != null).Select(h => new List<string> { h.Stage, $"{h.Action} - {h.By} ({h.Role}) {PubText.DateTime(h.At)} {h.Remarks}" }));
+        rows.AddRange(d.Dispatches.Select(x => new List<string> { x.DispatchNo, $"{x.Quantity} Nos via {x.Transporter} {x.TrackingNo} - {PubText.DispatchStatus(x.Status, x.Kind)}" }));
+        try
+        {
+            await Downloads.PostAsync("api/Export/table-pdf", new { Title = $"Publicity Request {d.IndentNo}", Headers = new[] { "Field", "Value" }, Rows = rows }, $"{d.IndentNo}.pdf");
+        }
+        catch (Exception)
+        {
+            Toast.Error("We could not build the report. Please try again.");
+        }
+    }
+}

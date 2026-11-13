@@ -1,0 +1,1261 @@
+@page "/IncomeSummary"
+@using System.Net.Http.Json
+@using SPIC.MauiBlazorApp.Shared.Components.Feedback
+@inject NavigationManager Nav
+@inject HttpClient Http
+@inject IJSRuntime JS
+@inject SPIC.MauiBlazorApp.Shared.Services.ToastService Toast
+
+<PageTitle>Income Summary · SPIC ONE</PageTitle>
+
+<div class="ics-page">
+
+    <PageHeader Title="Income Summary"
+                Subtitle="Overview of farm sales income and reporting status"
+                ShowBack="false">
+        <Actions>
+            <button type="button" class="ics-btn-back" @onclick="GoBack">
+                <i class="bi bi-arrow-left"></i> Back to Income entry
+            </button>
+        </Actions>
+    </PageHeader>
+
+    <!-- Filters -->
+    <div class="ics-card ics-filters-card">
+        <div class="ics-filters-header" @onclick="ToggleFilters">
+            <div class="ics-filters-title"><i class="bi bi-filter"></i> Filters</div>
+            <i class="bi @(filtersExpanded ? "bi-chevron-down" : "bi-chevron-up")"></i>
+        </div>
+
+        @if (filtersExpanded)
+        {
+            <div class="ics-filters-body">
+                <div class="ics-filters-grid">
+                    <div class="ics-filter-group">
+                        <label>Period Type</label>
+                        @if (isLoadingInitial)
+                        {
+                            <Skeleton Variant="text" Height="38px" Rows="1" />
+                        }
+                        else
+                        {
+                            <select class="ics-select-chevron" @bind="periodType" @bind:after="OnPeriodTypeChanged">
+                                <option value="15Days">15 Days</option>
+                                <option value="1Month">1 Month</option>
+                            </select>
+                        }
+                    </div>
+                    <div class="ics-filter-group">
+                        <label for="ics-from-date">From Date</label>
+                        @if (isLoadingInitial)
+                        {
+                            <Skeleton Variant="text" Height="38px" Rows="1" />
+                        }
+                        else
+                        {
+                            <input id="ics-from-date" type="date" class="ics-input-date @(!string.IsNullOrEmpty(dateValidationError) ? "ics-input-error" : "")"
+                                   @bind="fromDateFilter" @bind:after="OnDatesChanged" max="@(toDateFilter?.ToString("yyyy-MM-dd"))" />
+                        }
+                    </div>
+                    <div class="ics-filter-group">
+                        <label for="ics-to-date">To Date</label>
+                        @if (isLoadingInitial)
+                        {
+                            <Skeleton Variant="text" Height="38px" Rows="1" />
+                        }
+                        else
+                        {
+                            <input id="ics-to-date" type="date" class="ics-input-date @(!string.IsNullOrEmpty(dateValidationError) ? "ics-input-error" : "")"
+                                   @bind="toDateFilter" @bind:after="OnDatesChanged" min="@(fromDateFilter?.ToString("yyyy-MM-dd"))" />
+                        }
+                    </div>
+                    <div class="ics-filter-group">
+                        <label>Income Category</label>
+                        @if (isLoadingInitial)
+                        {
+                            <Skeleton Variant="text" Height="38px" Rows="1" />
+                        }
+                        else
+                        {
+                            <select class="ics-select-chevron" @bind="categoryFilter">
+                                <option value="">All Category</option>
+                                <option value="LiveStock">Livestock</option>
+                                <option value="Orchard">Orchard</option>
+                            </select>
+                        }
+                    </div>
+                </div>
+
+                @if (!string.IsNullOrEmpty(dateValidationError))
+                {
+                    <div class="ics-filter-validation-error">
+                        <i class="bi bi-exclamation-triangle-fill"></i> @dateValidationError
+                    </div>
+                }
+
+                <div class="ics-filters-actions">
+                    <button type="button" class="ics-btn-clear" disabled="@isLoading" @onclick="ClearFiltersAsync"><i class="bi bi-x"></i> Clear All</button>
+                    <button type="button" class="ics-btn-primary" disabled="@isLoading" @onclick="ApplyFiltersAsync"><i class="bi bi-filter"></i> Apply Filters</button>
+                </div>
+            </div>
+        }
+    </div>
+
+    @if (!string.IsNullOrEmpty(loadError))
+    {
+        <div class="ics-card ics-error-card">
+            <EmptyState Icon="bi-exclamation-circle" Title="Could not load income data" Message="@loadError">
+                <button type="button" class="ics-btn-primary" @onclick="LoadSummaryAsync">
+                    <i class="bi bi-arrow-clockwise"></i> Retry
+                </button>
+            </EmptyState>
+        </div>
+    }
+    else
+    {
+        <!-- Stat cards -->
+        <div class="ics-stats-grid">
+            @if (isLoading)
+            {
+                @for (int i = 0; i < 4; i++)
+                {
+                    <div class="ics-stat-card ics-stat-skeleton-card">
+                        <Skeleton Variant="text" Height="14px" Rows="1" />
+                        <div style="margin: 8px 0;"><Skeleton Variant="text" Height="24px" Rows="1" /></div>
+                        <Skeleton Variant="text" Height="12px" Rows="1" />
+                    </div>
+                }
+            }
+            else
+            {
+                <div class="ics-stat-card">
+                    <div class="ics-stat-label">Total Income Till Date</div>
+                    <div class="ics-stat-value">@FormatCurrency(summary.TotalIncomeTillDate)</div>
+                    <div class="ics-stat-desc">@(summary.EarliestPeriodStart is { } s ? $"From {s:MMM yyyy} - {(summary.LatestPeriodEnd ?? s):dd MMM yyyy}" : "No records yet")</div>
+                    <div class="ics-stat-icon ics-icon-green"><i class="bi bi-file-earmark-arrow-up"></i></div>
+                </div>
+                <div class="ics-stat-card">
+                    <div class="ics-stat-label">Sales Records</div>
+                    <div class="ics-stat-value">@summary.SalesRecordsCount</div>
+                    <div class="ics-stat-desc">Total income entries recorded</div>
+                    <div class="ics-stat-icon ics-icon-blue"><i class="bi bi-file-earmark-text"></i></div>
+                </div>
+                <div class="ics-stat-card">
+                    <div class="ics-stat-label">Products Covered</div>
+                    <div class="ics-stat-value">@(summary.LivestockProductsCount + summary.OrchardProductsCount) Product@((summary.LivestockProductsCount + summary.OrchardProductsCount) == 1 ? "" : "s")</div>
+                    <div class="ics-stat-desc">@summary.LivestockProductsCount Livestock line@(summary.LivestockProductsCount == 1 ? "" : "s") &middot; @summary.OrchardProductsCount Orchard variet@(summary.OrchardProductsCount == 1 ? "y" : "ies")</div>
+                    <div class="ics-stat-icon ics-icon-purple"><i class="bi bi-clock-history"></i></div>
+                </div>
+                <div class="ics-stat-card">
+                    <div class="ics-stat-label">Reporting Period</div>
+                    <div class="ics-stat-value ics-stat-value-sm">@(summary.LatestReportingPeriod ?? "No reports yet")</div>
+                    <div class="ics-stat-desc">
+                        @if (summary.GraceDaysRemaining is { } g)
+                        {
+                            <i class="bi bi-info-circle"></i> @(g == 0 ? "Last day to update" : $"Only {g} day{(g == 1 ? "" : "s")} left to update")
+                        }
+                        else if (summary.LatestPeriodEnd is not null)
+                        {
+                            <span>Editing window closed</span>
+                        }
+                    </div>
+                    <div class="ics-stat-icon ics-icon-amber"><i class="bi bi-clock-history"></i></div>
+                </div>
+            }
+        </div>
+
+        <!-- Table -->
+        <div class="ics-card ics-table-card">
+            <div class="ics-table-top-header">
+                <h2>Livestock Sales Ledger</h2>
+                <button type="button" class="ics-btn-outline" disabled="@(_exporting || isLoading)" @onclick="DownloadExcelAsync"><i class="bi bi-file-earmark-excel"></i> Download Excel</button>
+            </div>
+
+            <!-- DataTables Toolbar: Search -->
+            <div class="ics-dt-toolbar">
+                <div class="ics-dt-search">
+                    <label>
+                        Search:
+                        <div class="ics-dt-search-input-wrap">
+                            <i class="bi bi-search ics-dt-search-icon"></i>
+                            <input type="text" class="ics-dt-input" placeholder="Search ledger..."
+                                   @bind="tableSearchText" @bind:event="oninput" @bind:after="OnSearchChanged"
+                                   disabled="@isLoading" />
+                            @if (!string.IsNullOrEmpty(tableSearchText))
+                            {
+                                <button type="button" class="ics-dt-search-clear" @onclick="ClearSearch" title="Clear search">
+                                    <i class="bi bi-x"></i>
+                                </button>
+                            }
+                        </div>
+                    </label>
+                </div>
+            </div>
+
+            <div class="ics-table-scroll">
+                @if (isLoading)
+                {
+                    <div class="ics-skeleton-table-wrap">
+                        <Skeleton Variant="table" Rows="6" LoadingText="Loading income ledger..." />
+                    </div>
+                }
+                else
+                {
+                    <table class="ics-table">
+                        <thead>
+                            <tr>
+                                <th>S.NO</th>
+                                <th class="ics-sortable" @onclick='() => SortBy("Period")' title="Sort by Reporting Period">
+                                    <div class="ics-th-content"><span>Reporting Period</span><i class="bi @GetSortIcon("Period")"></i></div>
+                                </th>
+                                <th class="ics-sortable" @onclick='() => SortBy("Livestock")' title="Sort by Livestock Income">
+                                    <div class="ics-th-content"><span>Livestock Income</span><i class="bi @GetSortIcon("Livestock")"></i></div>
+                                </th>
+                                <th class="ics-sortable" @onclick='() => SortBy("Orchard")' title="Sort by Orchard Income">
+                                    <div class="ics-th-content"><span>Orchard Income</span><i class="bi @GetSortIcon("Orchard")"></i></div>
+                                </th>
+                                <th class="ics-sortable" @onclick='() => SortBy("Total")' title="Sort by Total Income">
+                                    <div class="ics-th-content"><span>Total Income</span><i class="bi @GetSortIcon("Total")"></i></div>
+                                </th>
+                                <th class="ics-sortable" @onclick='() => SortBy("Status")' title="Sort by Status">
+                                    <div class="ics-th-content"><span>Status</span><i class="bi @GetSortIcon("Status")"></i></div>
+                                </th>
+                                <th>View</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (allRows.Count == 0)
+                            {
+                                <tr><td colspan="7" class="ics-empty-td">No income reports found for this filter.</td></tr>
+                            }
+                            else if (TotalFilteredCount == 0)
+                            {
+                                <tr>
+                                    <td colspan="7" class="ics-empty-td">
+                                        <div>No matching records found for "<strong>@tableSearchText</strong>".</div>
+                                        <button type="button" class="ics-btn-clear" style="margin-top: 10px;" @onclick="ClearSearch">
+                                            <i class="bi bi-x"></i> Clear Search
+                                        </button>
+                                    </td>
+                                </tr>
+                            }
+                            else
+                            {
+                                @foreach (var (row, index) in PagedRows)
+                                {
+                                    <tr>
+                                        <td>@(((currentPage - 1) * pageSize) + index + 1)</td>
+                                        <td>@row.ReportingPeriod</td>
+                                        <td>@FormatCurrency(row.LivestockIncome)</td>
+                                        <td>@FormatCurrency(row.OrchardIncome)</td>
+                                        <td>@FormatCurrency(row.TotalIncome)</td>
+                                        <td><span class="@("ics-badge-status " + (row.Status == "Submitted" ? "ics-badge-submitted" : "ics-badge-draft"))">@row.Status</span></td>
+                                        <td>
+                                            <button type="button" class="ics-view-btn" @onclick="() => ViewReportAsync(row)" aria-label="View"><i class="bi bi-eye"></i></button>
+                                        </td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                }
+            </div>
+
+            @if (!isLoading && allRows.Count > 0)
+            {
+                <div class="ics-pagination ics-dt-footer">
+                    <div class="ics-dt-footer-left">
+                        <div class="ics-items-per-page">
+                            <span>Items Per Page</span>
+                            <select @bind="pageSize" @bind:after="OnPageSizeChanged">
+                                <option value="10">10</option>
+                                <option value="25">25</option>
+                                <option value="50">50</option>
+                                <option value="100">100</option>
+                            </select>
+                        </div>
+                        <div class="ics-dt-info">@ShowingEntriesText</div>
+                    </div>
+                    <div class="ics-pagination-buttons">
+                        <button type="button" class="ics-page-btn" disabled="@(currentPage == 1)" @onclick="() => GoToPage(currentPage - 1)"><i class="bi bi-chevron-left"></i></button>
+                        @foreach (var pNum in VisiblePageNumbers)
+                        {
+                            @if (pNum == -1)
+                            {
+                                <span class="ics-page-ellipsis">..</span>
+                            }
+                            else
+                            {
+                                <button type="button" class="@("ics-page-btn" + (pNum == currentPage ? " ics-page-active" : ""))" @onclick="() => GoToPage(pNum)">@pNum</button>
+                            }
+                        }
+                        <button type="button" class="ics-page-btn" disabled="@(currentPage == TotalPages)" @onclick="() => GoToPage(currentPage + 1)"><i class="bi bi-chevron-right"></i></button>
+                    </div>
+                </div>
+            }
+        </div>
+
+        <!-- Charts -->
+        <div class="ics-charts-grid">
+            <div class="ics-card ics-chart-card">
+                <div class="ics-chart-head">
+                    <div>
+                        <h2>Live Income Overview</h2>
+                        <p>Top 5 Products by income</p>
+                    </div>
+                    <span class="ics-chip">Total Livestock Income @FormatCurrency(summary.TotalLivestockIncome)</span>
+                </div>
+                @if (summary.TopLivestockProducts.Count == 0)
+                {
+                    <EmptyState Icon="bi-pie-chart" Title="No livestock income yet" Compact="true" />
+                }
+                else
+                {
+                    <div class="ics-chart-body">
+                        <div class="ics-donut-wrap"><canvas id="incLiveDonutChart"></canvas></div>
+                        <div class="ics-legend-list">
+                            @for (var i = 0; i < summary.TopLivestockProducts.Count; i++)
+                            {
+                                var p = summary.TopLivestockProducts[i];
+                                <div class="ics-legend-row">
+                                    <span class="ics-legend-dot" style="background:@ChartColor(i)"></span>
+                                    <span class="ics-legend-name">@p.ProductName</span>
+                                    <span class="ics-legend-val">@FormatCurrency(p.TotalAmount)</span>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                    @if (summary.OtherLivestockProductCount > 0)
+                    {
+                        <div class="ics-others-row">
+                            <span>Others (@summary.OtherLivestockProductCount)</span>
+                            <span>@FormatCurrency(summary.TotalLivestockIncome - summary.TopLivestockProducts.Sum(p => p.TotalAmount))</span>
+                        </div>
+                    }
+                }
+            </div>
+
+            <div class="ics-card ics-chart-card">
+                <div class="ics-chart-head">
+                    <div>
+                        <h2>Orchard Income Overview</h2>
+                        <p>Top 5 Products by income</p>
+                    </div>
+                    <span class="ics-chip">Total Orchard Income @FormatCurrency(summary.TotalOrchardIncome)</span>
+                </div>
+                @if (summary.TopOrchardProducts.Count == 0)
+                {
+                    <EmptyState Icon="bi-bar-chart" Title="No orchard income yet" Compact="true" />
+                }
+                else
+                {
+                    <div class="ics-chart-body ics-chart-body-bar">
+                        <div class="ics-bar-legend">
+                            @for (var i = 0; i < summary.TopOrchardProducts.Count; i++)
+                            {
+                                <span class="ics-legend-dot" style="background:@ChartColor(i)"></span>
+                                <span>@summary.TopOrchardProducts[i].ProductName</span>
+                            }
+                        </div>
+                        <div class="ics-bar-wrap"><canvas id="incOrchardBarChart"></canvas></div>
+                    </div>
+                    @if (summary.OtherOrchardProductCount > 0)
+                    {
+                        <div class="ics-others-row">
+                            <span>Others (@summary.OtherOrchardProductCount)</span>
+                            <span>@FormatCurrency(summary.TotalOrchardIncome - summary.TopOrchardProducts.Sum(p => p.TotalAmount))</span>
+                        </div>
+                    }
+                }
+            </div>
+        </div>
+    }
+</div>
+
+<!-- View details modal -->
+@if (showDetailsDrawer)
+{
+    <div class="ics-details-overlay" @onclick="() => showDetailsDrawer = false">
+        <div class="ics-details-modal" @onclick:stopPropagation="true">
+
+            @if (isLoadingDetail)
+            {
+                <div class="ics-details-header">
+                    <div class="ics-details-header-left">
+                        <button type="button" class="ics-details-back-icon" @onclick="() => showDetailsDrawer = false" aria-label="Back">
+                            <i class="bi bi-arrow-left"></i>
+                        </button>
+                        <div>
+                            <div class="ics-details-title">Income Report Details</div>
+                            <div class="ics-details-subtitle">Loading...</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="ics-details-body">
+                    <EmptyState Icon="bi-hourglass-split" Title="Loading..." Compact="true" />
+                </div>
+            }
+            else if (selectedDetail is null)
+            {
+                <div class="ics-details-header">
+                    <div class="ics-details-header-left">
+                        <button type="button" class="ics-details-back-icon" @onclick="() => showDetailsDrawer = false" aria-label="Back">
+                            <i class="bi bi-arrow-left"></i>
+                        </button>
+                        <div>
+                            <div class="ics-details-title">Income Report Details</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="ics-details-body">
+                    <EmptyState Icon="bi-exclamation-triangle" Title="Could not load this report" Compact="true" />
+                </div>
+            }
+            else
+            {
+                var liveRows = selectedDetail.IncomeItems.Where(i => i.Group == "LiveStock").ToList();
+                var orchardRows = selectedDetail.IncomeItems.Where(i => i.Group == "Orchard").ToList();
+                var livestockIncome = liveRows.Sum(i => i.TotalAmount);
+                var orchardIncome = orchardRows.Sum(i => i.TotalAmount);
+
+                <div class="ics-details-header">
+                    <div class="ics-details-header-left">
+                        <button type="button" class="ics-details-back-icon" @onclick="() => showDetailsDrawer = false" aria-label="Back">
+                            <i class="bi bi-arrow-left"></i>
+                        </button>
+                        <div>
+                            <div class="ics-details-title">@selectedDetail.ReportingPeriod Period Income Details</div>
+                            <div class="ics-details-subtitle">15 Days - wise rate break for all income entries</div>
+                        </div>
+                    </div>
+                    <button type="button" class="ics-details-excel-btn" @onclick="DownloadExcelAsync" disabled="@(_exporting || isLoading)">
+                        Download Excel
+                    </button>
+                </div>
+
+                <div class="ics-details-body">
+                    <div class="ics-details-cards-grid">
+                        <div class="ics-details-card">
+                            <div class="ics-details-card-label">Reporting Period</div>
+                            <div class="ics-details-card-value">@selectedDetail.ReportingPeriod</div>
+                            <div class="ics-details-card-icon"><i class="bi bi-calendar3"></i></div>
+                        </div>
+                        <div class="ics-details-card">
+                            <div class="ics-details-card-label">Livestock Income</div>
+                            <div class="ics-details-card-value">@FormatCurrency(livestockIncome)</div>
+                            <div class="ics-details-card-icon"><i class="bi bi-file-earmark-bar-graph"></i></div>
+                        </div>
+                        <div class="ics-details-card">
+                            <div class="ics-details-card-label">Orchard Income</div>
+                            <div class="ics-details-card-value">@FormatCurrency(orchardIncome)</div>
+                            <div class="ics-details-card-icon"><i class="bi bi-file-earmark-bar-graph"></i></div>
+                        </div>
+                        <div class="ics-details-card">
+                            <div class="ics-details-card-label">Total Income</div>
+                            <div class="ics-details-card-value">@FormatCurrency(selectedDetail.TotalIncome)</div>
+                            <div class="ics-details-card-icon"><i class="bi bi-file-earmark-bar-graph"></i></div>
+                        </div>
+                    </div>
+
+                    <div class="ics-details-section-title">Livestock Details</div>
+                    <div class="ics-details-table-wrap">
+                        <table class="ics-details-table">
+                            <thead>
+                                <tr>
+                                    <th>Product</th>
+                                    <th>Quantity</th>
+                                    <th>Unit</th>
+                                    <th>Rate Per Unit</th>
+                                    <th>Income</th>
+                                    <th>Remarks</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var item in liveRows)
+                                {
+                                    <tr>
+                                        <td>
+                                            <div class="ics-details-product-cell">
+                                                <span class="ics-details-product-icon">
+                                                    @SPIC.MauiBlazorApp.Shared.Services.FarmProductIcons.IconFor(item.IconKey ?? item.ProductName, "ics-details-monogram")
+                                                </span>
+                                                @item.ProductName
+                                            </div>
+                                        </td>
+                                        <td>@item.SoldQuantity</td>
+                                        <td>@item.Uom</td>
+                                        <td>@FormatAmount(item.Rate)</td>
+                                        <td>@FormatAmount(item.TotalAmount)</td>
+                                        <td>Remarks</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="ics-details-section-title" style="margin-top: 16px;">Orchard Sales</div>
+                    <div class="ics-details-table-wrap">
+                        <table class="ics-details-table">
+                            <thead>
+                                <tr>
+                                    <th>Product</th>
+                                    <th>Quantity</th>
+                                    <th>Unit</th>
+                                    <th>Rate Per Unit</th>
+                                    <th>Income</th>
+                                    <th>Remarks</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var item in orchardRows)
+                                {
+                                    <tr>
+                                        <td>
+                                            <div class="ics-details-product-cell">
+                                                <span class="ics-details-product-icon">
+                                                    @SPIC.MauiBlazorApp.Shared.Services.FarmProductIcons.IconFor(item.IconKey ?? item.ProductName, "ics-details-monogram")
+                                                </span>
+                                                @item.ProductName
+                                            </div>
+                                        </td>
+                                        <td>@item.SoldQuantity</td>
+                                        <td>@item.Uom</td>
+                                        <td>@FormatAmount(item.Rate)</td>
+                                        <td>@FormatAmount(item.TotalAmount)</td>
+                                        <td>Remarks</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="ics-details-footer">
+                        <button type="button" class="ics-details-back-list-btn" @onclick="() => showDetailsDrawer = false">
+                            Back to Batch List
+                        </button>
+                    </div>
+                </div>
+            }
+
+        </div>
+    </div>
+}
+
+<style>
+    .ics-page { color: #1f2937; font-family: inherit; }
+
+    .ics-btn-back {
+        display: inline-flex; align-items: center; gap: 8px;
+        padding: 8px 16px; background: #fff; border: 1px solid #065f46; color: #065f46;
+        border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer;
+    }
+
+    .ics-card {
+        background: #fff; border: 1px solid #e5e7eb; border-radius: 12px;
+        margin-bottom: 24px; box-shadow: 0 1px 2px rgba(0,0,0,.03);
+    }
+
+    .ics-filters-card { overflow: hidden; }
+    .ics-filters-header {
+        display: flex; justify-content: space-between; align-items: center;
+        padding: 16px 20px; cursor: pointer; background-color: #F5F8F6;
+    }
+    .ics-filters-title { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 14px; }
+    .ics-filters-body { padding: 0 20px 20px 20px; background-color: #FFFFFF; }
+    .ics-filters-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 20px; }
+    .ics-filter-group label { display: block; font-size: 12px; font-weight: 600; color: #374151; margin-bottom: 6px; }
+    .ics-filter-group select {
+        width: 100%; padding: 10px 32px 10px 12px; border: 1px solid #e5e7eb; border-radius: 6px;
+        font-size: 13px; color: #374151; background-color: #F8F9FA;
+        -webkit-appearance: none; -moz-appearance: none; appearance: none;
+    }
+    .ics-select-date, .ics-select-chevron {
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+        background-repeat: no-repeat; background-position: right 12px center;
+    }
+    .ics-filters-actions { display: flex; justify-content: flex-end; gap: 12px; }
+    .ics-btn-clear {
+        padding: 8px 16px; background: #fff; border: 1px solid #e5e7eb; color: #374151;
+        border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer;
+        display: inline-flex; align-items: center; gap: 6px;
+    }
+    .ics-btn-primary {
+        padding: 8px 20px; background: #4f46e5; border: none; color: #fff;
+        border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer;
+        display: inline-flex; align-items: center; gap: 6px;
+    }
+    .ics-btn-primary:disabled, .ics-btn-clear:disabled { opacity: .6; cursor: not-allowed; }
+
+    .ics-input-date {
+        width: 100%; padding: 9px 12px; border: 1px solid #e5e7eb; border-radius: 6px;
+        font-size: 13px; color: #374151; background-color: #F8F9FA; box-sizing: border-box;
+        font-family: inherit;
+    }
+    .ics-input-error { border-color: #ef4444 !important; background-color: #fef2f2 !important; }
+    .ics-filter-validation-error {
+        display: flex; align-items: center; gap: 6px; margin: -6px 0 16px; padding: 8px 12px;
+        background-color: #fef2f2; border: 1px solid #fecaca; border-radius: 6px;
+        color: #b91c1c; font-size: 12px; font-weight: 500;
+    }
+
+    .ics-error-card { padding: 32px 20px; }
+
+    .ics-stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+    .ics-stat-skeleton-card { display: flex; flex-direction: column; justify-content: space-between; min-height: 90px; }
+    .ics-stat-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; position: relative; box-shadow: 0 1px 2px rgba(0,0,0,.02); }
+    .ics-stat-label { font-size: 12px; color: #111827; font-weight: 600; margin-bottom: 6px; }
+    .ics-stat-value { font-size: 22px; font-weight: 700; color: #111827; margin-bottom: 6px; }
+    .ics-stat-value-sm { font-size: 16px; }
+    .ics-stat-desc { font-size: 11px; color: #6b7280; }
+    .ics-stat-icon { position: absolute; right: 16px; top: 16px; width: 34px; height: 34px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 16px; }
+    .ics-icon-green { background: #f0fdf4; color: #22c55e; }
+    .ics-icon-blue { background: #eff6ff; color: #3b82f6; }
+    .ics-icon-purple { background: #f5f3ff; color: #8b5cf6; }
+    .ics-icon-amber { background: #fff7ed; color: #f59e0b; }
+
+    .ics-table-top-header { display: flex; justify-content: space-between; align-items: center; padding: 20px; }
+    .ics-table-top-header h2 { margin: 0; font-size: 18px; font-weight: 700; color: #111827; }
+    .ics-btn-outline {
+        padding: 6px 12px; background: #fff; border: 1px solid #065f46; color: #065f46;
+        border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer;
+        display: inline-flex; align-items: center; gap: 6px;
+    }
+    .ics-btn-outline:disabled { opacity: .6; cursor: not-allowed; }
+
+    /* DataTables Toolbar */
+    .ics-dt-toolbar {
+        display: flex; justify-content: flex-end; align-items: center; padding: 12px 20px;
+        background: #fafafa; border-top: 1px solid #f3f4f6; border-bottom: 1px solid #e5e7eb;
+        flex-wrap: wrap; gap: 12px;
+    }
+    .ics-dt-search label { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: #374151; margin: 0; font-weight: 500; }
+    .ics-dt-search-input-wrap { position: relative; display: inline-flex; align-items: center; }
+    .ics-dt-search-icon { position: absolute; left: 10px; color: #9ca3af; font-size: 13px; pointer-events: none; }
+    .ics-dt-input {
+        padding: 6px 30px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px;
+        color: #111827; background: #fff; width: 220px;
+    }
+    .ics-dt-input:focus { outline: none; border-color: #065f46; box-shadow: 0 0 0 2px rgba(6, 95, 70, 0.15); }
+    .ics-dt-search-clear { position: absolute; right: 6px; background: transparent; border: none; color: #9ca3af; cursor: pointer; padding: 2px 4px; font-size: 14px; display: flex; align-items: center; }
+    .ics-dt-search-clear:hover { color: #374151; }
+
+    .ics-table-card { overflow: hidden; }
+    .ics-table-scroll { overflow-x: auto; }
+    .ics-skeleton-table-wrap { padding: 20px; }
+    .ics-table { width: 100%; border-collapse: collapse; text-align: center; }
+    .ics-table th { padding: 14px 16px; background: #f3f4f6; font-size: 12px; font-weight: 700; color: #374151; border-bottom: 1px solid #e5e7eb; }
+    .ics-table td { padding: 14px 16px; font-size: 13px; color: #4b5563; border-bottom: 1px solid #e5e7eb; }
+    .ics-table td:first-child, .ics-table th:first-child,
+    .ics-table td:nth-child(2), .ics-table th:nth-child(2) { text-align: left; }
+    .ics-table tbody tr:last-child td { border-bottom: none; }
+
+    .ics-sortable { cursor: pointer; user-select: none; }
+    .ics-sortable:hover { background-color: #e5e7eb; }
+    .ics-th-content { display: inline-flex; align-items: center; gap: 6px; }
+    .ics-sort-muted { opacity: 0.35; font-size: 11px; }
+    .ics-sort-active { opacity: 1; color: #065f46; font-size: 12px; }
+
+    .ics-empty-td { text-align: center !important; padding: 32px !important; color: #9ca3af; font-style: italic; }
+
+    .ics-badge-status { padding: 4px 12px; border-radius: 999px; font-size: 11px; font-weight: 700; }
+    .ics-badge-submitted { background: #16a34a; color: #fff; }
+    .ics-badge-draft { background: #fde68a; color: #92400e; }
+
+    .ics-view-btn { width: 30px; height: 30px; border-radius: 6px; border: 1px solid #e5e7eb; background: #fff; color: #2563eb; cursor: pointer; }
+    .ics-view-btn:hover { background: #eff6ff; }
+    .ics-view-btn:disabled { opacity: .5; cursor: not-allowed; color: #9ca3af; }
+
+    .ics-pagination { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-top: 1px solid #e5e7eb; flex-wrap: wrap; gap: 16px; }
+    .ics-dt-footer-left { display: flex; align-items: center; flex-wrap: wrap; gap: 16px; }
+    .ics-dt-info { font-size: 13px; color: #6b7280; font-weight: 500; }
+    .ics-items-per-page { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #111827; }
+    .ics-items-per-page select { padding: 6px 28px 6px 12px; border: 1px solid #e5e7eb; border-radius: 6px; background: #fff; appearance: none; }
+    .ics-pagination-buttons { display: flex; align-items: center; gap: 4px; }
+    .ics-page-btn { min-width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; background: #fff; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 13px; color: #374151; cursor: pointer; }
+    .ics-page-btn:hover { background: #f3f4f6; }
+    .ics-page-btn:disabled { opacity: .5; cursor: not-allowed; }
+    .ics-page-active { background: #065f46; border-color: #065f46; color: #fff; }
+    .ics-page-ellipsis { color: #111827; padding: 0 4px; }
+
+    .ics-charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    .ics-chart-card { padding: 20px; }
+    .ics-chart-head { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; flex-wrap: wrap; gap: 10px; }
+    .ics-chart-head h2 { margin: 0; font-size: 16px; font-weight: 700; color: #111827; }
+    .ics-chart-head p { margin: 2px 0 0; font-size: 12px; color: #6b7280; }
+    .ics-chip { background: #ecfdf5; border: 1px solid #a7f3d0; color: #065f46; font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: 8px; white-space: nowrap; }
+
+    .ics-chart-body { display: flex; align-items: center; gap: 24px; }
+    .ics-donut-wrap { width: 180px; height: 180px; flex-shrink: 0; position: relative; }
+    .ics-legend-list { flex: 1; display: flex; flex-direction: column; gap: 10px; }
+    .ics-legend-row { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+    .ics-legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .ics-legend-name { flex: 1; color: #374151; font-weight: 500; }
+    .ics-legend-val { font-weight: 600; color: #111827; }
+
+    .ics-chart-body-bar { flex-direction: column; align-items: stretch; gap: 10px; }
+    .ics-bar-legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px; color: #374151; }
+    .ics-bar-legend span:nth-child(odd) { margin-left: 10px; }
+    .ics-bar-legend span:first-child { margin-left: 0; }
+    .ics-bar-wrap { height: 220px; }
+
+    .ics-others-row { display: flex; justify-content: space-between; margin-top: 14px; padding: 10px 14px; background: #f9fafb; border-radius: 8px; font-size: 13px; color: #374151; }
+
+    /* ---- Details modal ---- */
+    .ics-details-overlay {
+        position: fixed; inset: 0; z-index: 9999;
+        background: rgba(17, 24, 39, 0.52);
+        display: flex; align-items: stretch; justify-content: flex-end;
+        padding: 0;
+    }
+    .ics-details-modal {
+        width: min(1280px, calc(100vw - 28px));
+        height: 100vh;
+        max-height: 100vh;
+        background: #fff;
+        border-radius: 12px 0 0 12px;
+        border: 1px solid #dbe5df;
+        border-right: 0;
+        box-shadow: 0 24px 48px rgba(0, 0, 0, .18);
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+    }
+    .ics-details-header {
+        display: flex; justify-content: space-between; align-items: center;
+        gap: 16px;
+        padding: 14px 20px 10px;
+        background: #f7fbf8;
+        border-bottom: 1px solid #e2e8e2;
+    }
+    .ics-details-header-left { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
+    .ics-details-back-icon {
+        border: none; background: transparent; color: #374151;
+        width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center;
+        padding: 0; margin-top: 2px; cursor: pointer;
+    }
+    .ics-details-title {
+        font-size: 38px; font-size: clamp(20px, 2.2vw, 34px);
+        line-height: 1.15;
+        font-weight: 700; color: #1f2937;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .ics-details-subtitle { margin-top: 3px; font-size: 13px; color: #4b5563; }
+    .ics-details-excel-btn {
+        padding: 8px 14px; border-radius: 8px; border: 1px solid #3b9c73;
+        background: #f3fbf7; color: #1f7a56; font-size: 12px; font-weight: 600;
+        cursor: pointer; flex-shrink: 0;
+    }
+    .ics-details-excel-btn:disabled { opacity: .6; cursor: not-allowed; }
+
+    .ics-details-body { padding: 16px 20px 14px; overflow: auto; }
+    .ics-details-cards-grid {
+        display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px; margin-bottom: 12px;
+    }
+    .ics-details-card {
+        border: 1px solid #dbe5df; border-radius: 10px; background: #fff;
+        padding: 10px 12px; position: relative; min-height: 72px;
+    }
+    .ics-details-card-label { font-size: 12px; color: #6b7280; font-weight: 600; margin-bottom: 5px; }
+    .ics-details-card-value { font-size: 30px; font-size: clamp(14px, 1.5vw, 30px); color: #1f2937; font-weight: 700; }
+    .ics-details-card-icon {
+        position: absolute; right: 10px; top: 10px;
+        width: 36px; height: 36px; border-radius: 10px;
+        background: #e9f8ef; color: #24a35f;
+        display: inline-flex; align-items: center; justify-content: center;
+        font-size: 17px;
+    }
+
+    .ics-details-section-title {
+        margin: 10px 0 10px; font-size: 30px; font-size: clamp(16px, 1.6vw, 30px);
+        font-weight: 700; color: #1f2937;
+    }
+    .ics-details-table-wrap {
+        border: 1px solid #dbe5df; border-radius: 8px; overflow: hidden; background: #fff;
+    }
+    .ics-details-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+    .ics-details-table th {
+        background: #f1f7f3; padding: 10px 12px; text-align: left;
+        color: #455a50; font-size: 12px; font-weight: 700; border-bottom: 1px solid #e5ece8;
+    }
+    .ics-details-table td {
+        padding: 10px 12px; font-size: 13px; color: #374151;
+        border-bottom: 1px solid #edf3ef;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .ics-details-table tbody tr:last-child td { border-bottom: none; }
+    .ics-details-product-cell { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+    .ics-details-product-icon {
+        width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center;
+        flex-shrink: 0;
+    }
+    .ics-details-monogram {
+        width: 22px; height: 22px; border-radius: 6px;
+        background: #dcfce7; color: #047857;
+        display: inline-flex; align-items: center; justify-content: center;
+        font-size: 10px; font-weight: 700; text-transform: uppercase;
+    }
+    .ics-details-footer {
+        display: flex; justify-content: flex-end; margin-top: 12px;
+    }
+    .ics-details-back-list-btn {
+        padding: 8px 16px; border-radius: 8px;
+        border: 1px solid #ced8d2; background: #fff; color: #374151;
+        font-size: 12px; font-weight: 600; cursor: pointer;
+    }
+    .ics-details-back-list-btn:hover { background: #f8faf9; }
+
+    @@media (max-width: 1100px) {
+        .ics-stats-grid { grid-template-columns: repeat(2, 1fr); }
+        .ics-charts-grid { grid-template-columns: 1fr; }
+        .ics-details-cards-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .ics-details-modal { width: calc(100vw - 12px); }
+    }
+
+    @@media (max-width: 640px) {
+        .ics-filters-grid { grid-template-columns: 1fr; }
+        .ics-stats-grid { grid-template-columns: 1fr; }
+        .ics-chart-body { flex-direction: column; }
+        .ics-dt-toolbar { flex-direction: column; align-items: stretch; }
+        .ics-dt-input { width: 100%; }
+        .ics-pagination { flex-direction: column; align-items: center; }
+        .ics-dt-footer-left { justify-content: center; }
+        .ics-details-modal { width: 100%; border-radius: 0; }
+        .ics-details-cards-grid { grid-template-columns: 1fr; }
+        .ics-details-table th, .ics-details-table td { padding: 8px; font-size: 11px; }
+    }
+</style>
+
+@code {
+    private bool filtersExpanded = true;
+    private bool isLoadingInitial = true;
+    private bool isLoading = true;
+    private string? loadError;
+    private bool _exporting;
+
+    private string periodType = "15Days";
+    private DateTime? fromDateFilter;
+    private DateTime? toDateFilter;
+    private string categoryFilter = "";
+    private string? dateValidationError;
+
+    private IncomeSummaryResponseDto summary = new();
+    private List<IncomeReportRowDto> allRows = new();
+
+    // ---- DataTables State ----
+    private string tableSearchText = "";
+    private string sortColumn = "Period";
+    private bool sortAscending = false; // Default: latest period first
+    private int currentPage = 1;
+    private int pageSize = 10;
+
+    private IEnumerable<IncomeReportRowDto> FilteredRows
+    {
+        get
+        {
+            var rows = allRows.AsEnumerable();
+
+            if (!string.IsNullOrWhiteSpace(tableSearchText))
+            {
+                var q = tableSearchText.Trim();
+                rows = rows.Where(r =>
+                    (r.ReportingPeriod ?? "").Contains(q, StringComparison.OrdinalIgnoreCase) ||
+                    (r.Status ?? "").Contains(q, StringComparison.OrdinalIgnoreCase) ||
+                    r.LivestockIncome.ToString("N0").Contains(q) ||
+                    r.OrchardIncome.ToString("N0").Contains(q) ||
+                    r.TotalIncome.ToString("N0").Contains(q));
+            }
+
+            rows = sortColumn switch
+            {
+                "Period" => sortAscending ? rows.OrderBy(r => r.PeriodStartDate) : rows.OrderByDescending(r => r.PeriodStartDate),
+                "Livestock" => sortAscending ? rows.OrderBy(r => r.LivestockIncome) : rows.OrderByDescending(r => r.LivestockIncome),
+                "Orchard" => sortAscending ? rows.OrderBy(r => r.OrchardIncome) : rows.OrderByDescending(r => r.OrchardIncome),
+                "Total" => sortAscending ? rows.OrderBy(r => r.TotalIncome) : rows.OrderByDescending(r => r.TotalIncome),
+                "Status" => sortAscending ? rows.OrderBy(r => r.Status) : rows.OrderByDescending(r => r.Status),
+                _ => sortAscending ? rows.OrderBy(r => r.PeriodStartDate) : rows.OrderByDescending(r => r.PeriodStartDate)
+            };
+
+            return rows;
+        }
+    }
+
+    private int TotalFilteredCount => FilteredRows.Count();
+    private int TotalPages => Math.Max(1, (int)Math.Ceiling(TotalFilteredCount / (double)pageSize));
+
+    private IEnumerable<(IncomeReportRowDto Row, int Index)> PagedRows =>
+        FilteredRows.Skip((currentPage - 1) * pageSize).Select((r, i) => (r, i)).Take(pageSize);
+
+    private string ShowingEntriesText
+    {
+        get
+        {
+            var total = TotalFilteredCount;
+            var grandTotal = allRows.Count;
+            if (total == 0)
+            {
+                return grandTotal == 0
+                    ? "Showing 0 to 0 of 0 entries"
+                    : $"Showing 0 to 0 of 0 entries (filtered from {grandTotal} total entries)";
+            }
+            var start = ((currentPage - 1) * pageSize) + 1;
+            var end = Math.Min(currentPage * pageSize, total);
+            return total == grandTotal
+                ? $"Showing {start} to {end} of {total} entries"
+                : $"Showing {start} to {end} of {total} entries (filtered from {grandTotal} total entries)";
+        }
+    }
+
+    private IEnumerable<int> VisiblePageNumbers
+    {
+        get
+        {
+            var total = TotalPages;
+            var set = new SortedSet<int> { 1, total };
+            for (var i = Math.Max(1, currentPage - 1); i <= Math.Min(total, currentPage + 1); i++) set.Add(i);
+            for (var i = 1; i <= Math.Min(3, total); i++) set.Add(i);
+            for (var i = Math.Max(1, total - 2); i <= total; i++) set.Add(i);
+
+            var result = new List<int>();
+            int? prev = null;
+            foreach (var n in set)
+            {
+                if (prev is { } p && n - p > 1) result.Add(-1);
+                result.Add(n);
+                prev = n;
+            }
+            return result;
+        }
+    }
+
+    private static readonly string[] Palette =
+        { "#2563eb", "#16a34a", "#8b5cf6", "#f59e0b", "#ef4444", "#06b6d4", "#ec4899" };
+
+    private static string ChartColor(int i) => Palette[i % Palette.Length];
+
+    protected override async Task OnInitializedAsync()
+    {
+        isLoadingInitial = true;
+        await LoadSummaryAsync();
+        isLoadingInitial = false;
+    }
+
+    private string CurrentQueryString()
+    {
+        var qp = new List<string>();
+        if (fromDateFilter.HasValue) qp.Add($"fromDate={fromDateFilter.Value:yyyy-MM-dd}");
+        if (toDateFilter.HasValue) qp.Add($"toDate={toDateFilter.Value:yyyy-MM-dd}");
+        if (!string.IsNullOrWhiteSpace(categoryFilter)) qp.Add($"incomeCategory={Uri.EscapeDataString(categoryFilter)}");
+        if (!string.IsNullOrWhiteSpace(periodType)) qp.Add($"periodType={Uri.EscapeDataString(periodType)}");
+        return qp.Count > 0 ? "?" + string.Join("&", qp) : "";
+    }
+
+    private async Task LoadSummaryAsync()
+    {
+        isLoading = true;
+        loadError = null;
+        StateHasChanged();
+
+        try
+        {
+            var result = await Http.GetFromJsonAsync<IncomeSummaryResponseDto>("api/FarmReport/income-summary" + CurrentQueryString());
+            summary = result ?? new();
+            allRows = summary.Rows;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Loading income summary failed: {ex.Message}");
+            loadError = "Unable to load income data from the server. Please try again.";
+            summary = new();
+            allRows = new();
+        }
+        finally
+        {
+            isLoading = false;
+            currentPage = 1;
+            StateHasChanged();
+        }
+
+        await RenderChartsAsync();
+    }
+
+    private void OnDatesChanged()
+    {
+        if (fromDateFilter.HasValue && toDateFilter.HasValue && fromDateFilter.Value.Date > toDateFilter.Value.Date)
+        {
+            dateValidationError = "From Date cannot be later than To Date.";
+        }
+        else
+        {
+            dateValidationError = null;
+        }
+    }
+
+    private async Task OnPeriodTypeChanged()
+    {
+        tableSearchText = "";
+        await LoadSummaryAsync();
+    }
+
+    private void SortBy(string column)
+    {
+        if (sortColumn == column)
+        {
+            sortAscending = !sortAscending;
+        }
+        else
+        {
+            sortColumn = column;
+            sortAscending = true;
+        }
+        currentPage = 1;
+    }
+
+    private string GetSortIcon(string column)
+    {
+        if (sortColumn != column) return "bi-arrow-down-up ics-sort-muted";
+        return sortAscending ? "bi-arrow-up ics-sort-active" : "bi-arrow-down ics-sort-active";
+    }
+
+    private void OnPageSizeChanged() => currentPage = 1;
+
+    private void OnSearchChanged() => currentPage = 1;
+
+    private void ClearSearch()
+    {
+        tableSearchText = "";
+        currentPage = 1;
+    }
+
+    private async Task RenderChartsAsync()
+    {
+        if (summary.TopLivestockProducts.Count == 0 && summary.TopOrchardProducts.Count == 0)
+            return;
+
+        var data = new
+        {
+            livestock = new
+            {
+                labels = summary.TopLivestockProducts.Select(p => p.ProductName).ToArray(),
+                values = summary.TopLivestockProducts.Select(p => p.TotalAmount).ToArray(),
+                colors = Enumerable.Range(0, summary.TopLivestockProducts.Count).Select(ChartColor).ToArray(),
+                productCount = summary.LivestockProductsCount
+            },
+            orchard = new
+            {
+                labels = summary.TopOrchardProducts.Select(p => p.ProductName).ToArray(),
+                values = summary.TopOrchardProducts.Select(p => p.TotalAmount).ToArray(),
+                colors = Enumerable.Range(0, summary.TopOrchardProducts.Count).Select(ChartColor).ToArray()
+            }
+        };
+
+        try { await JS.InvokeVoidAsync("loadIncomeSummaryCharts", data); }
+        catch (Exception ex) { Console.WriteLine($"Chart render failed: {ex.Message}"); }
+    }
+
+    private async Task ApplyFiltersAsync()
+    {
+        OnDatesChanged();
+        if (!string.IsNullOrEmpty(dateValidationError))
+        {
+            Toast.Warning(dateValidationError);
+            return;
+        }
+        tableSearchText = "";
+        await LoadSummaryAsync();
+    }
+
+    private async Task ClearFiltersAsync()
+    {
+        periodType = "15Days";
+        fromDateFilter = null;
+        toDateFilter = null;
+        categoryFilter = "";
+        dateValidationError = null;
+        tableSearchText = "";
+        await LoadSummaryAsync();
+    }
+
+    private static string FormatCurrency(decimal v) => $"₹{v:N0}";
+    private static string FormatAmount(decimal v) => $"{v:N0}";
+
+    private void GoToPage(int page)
+    {
+        if (page < 1 || page > TotalPages) return;
+        currentPage = page;
+    }
+
+    private void GoBack() => Nav.NavigateTo("/FifteenDaysEntry");
+
+    private void ToggleFilters() => filtersExpanded = !filtersExpanded;
+
+    private async Task DownloadExcelAsync()
+    {
+        if (_exporting) return;
+        _exporting = true;
+        try
+        {
+            var response = await Http.GetAsync("api/FarmReport/income-summary/export" + CurrentQueryString());
+            if (!response.IsSuccessStatusCode)
+            {
+                Toast.Error("Could not generate the Excel file.");
+                return;
+            }
+
+            var bytes = await response.Content.ReadAsByteArrayAsync();
+            var fileName = $"IncomeSummary_{DateTime.Now:yyyyMMdd}.xlsx";
+            await JS.InvokeVoidAsync("downloadFileFromBytes", fileName,
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", Convert.ToBase64String(bytes));
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Excel export failed: {ex.Message}");
+            Toast.Error("Could not download the Excel file.");
+        }
+        finally
+        {
+            _exporting = false;
+        }
+    }
+
+    // ---- View details drawer ----
+    private bool showDetailsDrawer;
+    private bool isLoadingDetail;
+    private ReportDetailsDto? selectedDetail;
+
+    // A "15Days" row has one id; a merged "1Month" row has up to two - fetch every one and, when
+    // there's more than one, merge them into a single combined view (summed per-product amounts,
+    // a weighted-average Rate so the merged line stays mathematically consistent with the sum)
+    // rather than just showing the first report and silently dropping the other.
+    private async Task ViewReportAsync(IncomeReportRowDto row)
+    {
+        showDetailsDrawer = true;
+        isLoadingDetail = true;
+        selectedDetail = null;
+        StateHasChanged();
+
+        try
+        {
+            var ids = row.ReportIds.Count > 0 ? row.ReportIds : (row.ReportId > 0 ? new List<int> { row.ReportId } : new List<int>());
+            var details = (await Task.WhenAll(ids.Select(id => Http.GetFromJsonAsync<ReportDetailsDto>($"api/FarmReport/{id}"))))
+                .Where(d => d is not null).Select(d => d!).ToList();
+
+            selectedDetail = details.Count switch
+            {
+                0 => null,
+                1 => details[0],
+                _ => MergeDetails(row, details)
+            };
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Loading report details failed: {ex.Message}");
+        }
+        finally
+        {
+            isLoadingDetail = false;
+            StateHasChanged();
+        }
+    }
+
+    private static ReportDetailsDto MergeDetails(IncomeReportRowDto row, List<ReportDetailsDto> details)
+    {
+        var mergedItems = details
+            .SelectMany(d => d.IncomeItems)
+            .GroupBy(i => (i.Group, i.ProductName))
+            .Select(g =>
+            {
+                var qty = g.Sum(i => i.SoldQuantity);
+                var amount = g.Sum(i => i.TotalAmount);
+                return new IncomeItemDto
+                {
+                    Group = g.Key.Group,
+                    ProductName = g.Key.ProductName,
+                    IconKey = g.First().IconKey,
+                    SoldQuantity = qty,
+                    Uom = g.First().Uom,
+                    Rate = qty != 0 ? amount / qty : g.First().Rate,
+                    TotalAmount = amount
+                };
+            })
+            .ToList();
+
+        var submittedBy = string.Join(", ", details.Select(d => d.SubmittedBy).Where(s => !string.IsNullOrWhiteSpace(s)).Distinct());
+        var remarks = string.Join(" | ", details.Select(d => d.IncomeRemarks).Where(r => !string.IsNullOrWhiteSpace(r)));
+
+        return new ReportDetailsDto
+        {
+            Id = 0,
+            ReportingPeriod = row.ReportingPeriod,
+            Status = row.Status,
+            SubmittedBy = submittedBy,
+            SubmittedAt = details.Max(d => d.SubmittedAt),
+            TotalIncome = details.Sum(d => d.TotalIncome),
+            IncomeRemarks = string.IsNullOrWhiteSpace(remarks) ? null : remarks,
+            IncomeItems = mergedItems
+        };
+    }
+
+    public class IncomeReportRowDto
+    {
+        public int ReportId { get; set; }
+        public List<int> ReportIds { get; set; } = new();
+        public string ReportingPeriod { get; set; } = "";
+        public DateTime PeriodStartDate { get; set; }
+        public DateTime PeriodEndDate { get; set; }
+        public decimal LivestockIncome { get; set; }
+        public decimal OrchardIncome { get; set; }
+        public decimal TotalIncome { get; set; }
+        public string Status { get; set; } = "Draft";
+    }
+
+    public class ProductIncomeDto
+    {
+        public string ProductName { get; set; } = "";
+        public decimal TotalAmount { get; set; }
+    }
+
+    public class IncomeSummaryResponseDto
+    {
+        public decimal TotalIncomeTillDate { get; set; }
+        public DateTime? EarliestPeriodStart { get; set; }
+        public int SalesRecordsCount { get; set; }
+        public int LivestockProductsCount { get; set; }
+        public int OrchardProductsCount { get; set; }
+        public string? LatestReportingPeriod { get; set; }
+        public DateTime? LatestPeriodEnd { get; set; }
+        public int? GraceDaysRemaining { get; set; }
+        public List<IncomeReportRowDto> Rows { get; set; } = new();
+        public List<ProductIncomeDto> TopLivestockProducts { get; set; } = new();
+        public decimal TotalLivestockIncome { get; set; }
+        public int OtherLivestockProductCount { get; set; }
+        public List<ProductIncomeDto> TopOrchardProducts { get; set; } = new();
+        public decimal TotalOrchardIncome { get; set; }
+        public int OtherOrchardProductCount { get; set; }
+        public List<int> AvailableYears { get; set; } = new();
+    }
+
+    public class IncomeItemDto
+    {
+        public int Id { get; set; }
+        public string Group { get; set; } = "LiveStock";
+        public string ProductName { get; set; } = "";
+        public string? IconKey { get; set; }
+        public int SoldQuantity { get; set; }
+        public string Uom { get; set; } = "";
+        public decimal Rate { get; set; }
+        public decimal TotalAmount { get; set; }
+    }
+
+    public class ReportDetailsDto
+    {
+        public int Id { get; set; }
+        public string ReportingPeriod { get; set; } = "";
+        public string Status { get; set; } = "Draft";
+        public string SubmittedBy { get; set; } = "";
+        public DateTime? SubmittedAt { get; set; }
+        public decimal TotalIncome { get; set; }
+        public string? IncomeRemarks { get; set; }
+        public List<IncomeItemDto> IncomeItems { get; set; } = new();
+    }
+}

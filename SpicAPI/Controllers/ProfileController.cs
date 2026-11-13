@@ -373,7 +373,9 @@ namespace SpicAPI.Controllers
                 login.ZoneId = request.ZoneId;
                 login.StateId = request.StateId;
                 login.RegionId = request.RegionId;
+                login.RegionIds = request.RegionId > 0 ? new[] { request.RegionId } : Array.Empty<int>();
                 login.HeadquartersId = request.HeadquartersId;
+                login.HeadquartersIds = request.HeadquartersId > 0 ? new[] { request.HeadquartersId } : Array.Empty<int>();
                 login.IsActive = request.IsActive;
 
                 await _employeeLoginRepo.UpdateAsync(login);
@@ -525,6 +527,8 @@ namespace SpicAPI.Controllers
             StateId = 0,
             RegionId = 0,
             HeadquartersId = 0,
+            RegionIds = Array.Empty<int>(),
+            HeadquartersIds = Array.Empty<int>(),
             IsActive = user.IsActive
         };
 
@@ -589,6 +593,8 @@ namespace SpicAPI.Controllers
             StateId = login.StateId,
             RegionId = login.RegionId,
             HeadquartersId = login.HeadquartersId,
+            RegionIds = login.RegionIds ?? (login.RegionId > 0 ? new[] { login.RegionId } : Array.Empty<int>()),
+            HeadquartersIds = login.HeadquartersIds ?? (login.HeadquartersId > 0 ? new[] { login.HeadquartersId } : Array.Empty<int>()),
             IsActive = login.IsActive
         };
 

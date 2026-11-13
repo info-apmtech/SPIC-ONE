@@ -1,0 +1,60 @@
+@page "/PublicityReview/done"
+@page "/PublicityRequest/done"
+@using SPIC.Core.DTOs
+@inject PublicityApi Api
+@inject NavigationManager Nav
+
+@* Success page after a dispatch, a transfer order or a courier proof (?type=dispatch|transfer|proof&id=&no=). *@
+
+<div class="pub-page">
+    <PageHeader Title="@Heading" Subtitle="@Sub">
+        <Actions><a class="pub-btn pub-btn--line" href="@($"{Root}/{_id}?tab=tracking")"><i class="bi bi-arrow-left"></i> Back to Tracking &amp; Delivery</a></Actions>
+    </PageHeader>
+    <section class="pub-done">
+        <span class="pub-done__icon"><i class="bi bi-patch-check"></i></span>
+        <h2>@Title</h2>
+        <p>@Message</p>
+        <table class="pub-done__table">
+            <thead><tr><th colspan="4">@(_type == "transfer" ? "Transfer Order" : "Dispatch ID"): <b>@_no</b></th></tr></thead>
+            <tbody>
+                <tr><td>Request ID</td><td>@(_d?.IndentNo ?? "-")</td><td>Product / Material</td><td>@(_d is null ? "-" : $"{_d.Product} {_d.Material}")</td></tr>
+                <tr><td>Destination HQ</td><td>@(_d?.Hq ?? "-")</td><td>Submitted On</td><td>@PubText.DateTime(DateTime.UtcNow)</td></tr>
+            </tbody>
+        </table>
+        <div class="pub-done__actions">
+            <a class="pub-btn pub-btn--line" href="@Api.Home">@(_type == "transfer" ? "Close" : "Back to List")</a>
+            <a class="pub-btn pub-btn--primary" href="@($"{Root}/{_id}?tab=tracking")">@(_type == "transfer" ? "Go to Exception Details" : "Go to Tracking & Delivery") <i class="bi bi-arrow-right"></i></a>
+        </div>
+    </section>
+</div>
+
+@code {
+    private string _type = "dispatch", _no = "";
+    private int _id;
+    private PubDetailDto? _d;
+    private string Root => Nav.ToBaseRelativePath(Nav.Uri).StartsWith("PublicityReview", StringComparison.OrdinalIgnoreCase) ? "/PublicityReview" : "/PublicityRequest";
+
+    private string Heading => _type switch { "transfer" => "Transfer Order Sent Successfully!", "proof" => "Stock Transfer Dispatch", _ => "Dispatch Created" };
+    private string Sub => _type switch
+    {
+        "transfer" => "The transfer order has been sent to the source HQ RMDO.",
+        "proof" => "The stock transfer dispatch details have been saved successfully.",
+        _ => "The dispatch details have been saved successfully."
+    };
+    private string Title => _type switch { "transfer" => "Transfer Order Sent Successfully", "proof" => "Dispatch Proof Submitted Successfully!", _ => "Dispatch Created Successfully!" };
+    private string Message => _type switch
+    {
+        "transfer" => "The transfer order has been sent to the source HQ RMDO. The courier proof follows once the source RMDO confirms the dispatch.",
+        "proof" => "The courier proof has been sent to the ADMIN - MD CS for review and confirmation.",
+        _ => "This dispatch has been created and the request status has been updated."
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        var q = System.Web.HttpUtility.ParseQueryString(Nav.ToAbsoluteUri(Nav.Uri).Query);
+        _type = q["type"] ?? "dispatch";
+        _no = q["no"] ?? "";
+        int.TryParse(q["id"], out _id);
+        if (_id > 0) _d = await Api.GetAsync(_id);
+    }
+}

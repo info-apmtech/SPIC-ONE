@@ -271,6 +271,24 @@ namespace SpicAPI.Controllers
             claims.Add(new Claim("spic:hq_id", empLogin?.HeadquartersId.ToString() ?? "0"));
             claims.Add(new Claim("spic:zone_id", empLogin?.ZoneId.ToString() ?? "0"));
 
+            if (empLogin != null)
+            {
+                var regionIdsClaimValue = empLogin.RegionIds != null
+                    ? string.Join(",", empLogin.RegionIds.Where(id => id > 0))
+                    : (empLogin.RegionId > 0 ? empLogin.RegionId.ToString() : "");
+                claims.Add(new Claim("spic:region_ids", regionIdsClaimValue));
+
+                var hqIdsClaimValue = empLogin.HeadquartersIds != null
+                    ? string.Join(",", empLogin.HeadquartersIds.Where(id => id > 0))
+                    : (empLogin.HeadquartersId > 0 ? empLogin.HeadquartersId.ToString() : "");
+                claims.Add(new Claim("spic:hq_ids", hqIdsClaimValue));
+            }
+            else
+            {
+                claims.Add(new Claim("spic:region_ids", ""));
+                claims.Add(new Claim("spic:hq_ids", ""));
+            }
+
             // SpecialAdmin-only: database-backed multi-location scope.
             // For every other role these claims are omitted entirely, so existing
             // single-location behavior (spic:state_id etc.) is unchanged.

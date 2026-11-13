@@ -1,0 +1,23 @@
+@namespace SPIC.MauiBlazorApp.Shared.Components.Publicity
+@using SPIC.Core.DTOs
+@* Horizontal progress rail (vertical on phones). State: 0 pending, 1 current, 2 done, 3 warning. *@
+<ol class="pub-steps @CssClass" aria-label="@Label">
+    @for (var i = 0; i < Steps.Count; i++)
+    {
+        var s = Steps[i];
+        var next = i + 1 < Steps.Count ? Steps[i + 1] : null;
+        <li class="pub-step pub-step--@s.State">
+            <span class="pub-step__dot"><i class="bi @(s.State == 3 ? "bi-exclamation-lg" : "bi-patch-check")" aria-hidden="true"></i></span>
+            @if (next is not null) { <span class="pub-step__line @(next.State >= 1 && s.State >= 2 ? "is-done" : "")" aria-hidden="true"></span> }
+            <span class="pub-step__label">@s.Label</span>
+            @if (!string.IsNullOrWhiteSpace(s.Pill)) { <span class="pub-step__pill">@s.Pill</span> }
+            @if (s.At is not null) { <span class="pub-step__when">@(s.At.Value.TimeOfDay == TimeSpan.Zero ? PubText.Date(s.At) : PubText.DateTime(s.At))</span> }
+            @if (!string.IsNullOrWhiteSpace(s.Note) && s.State >= 1) { <span class="pub-step__when">@s.Note</span> }
+        </li>
+    }
+</ol>
+@code {
+    [Parameter] public List<PubStepDto> Steps { get; set; } = new();
+    [Parameter] public string Label { get; set; } = "Progress";
+    [Parameter] public string? CssClass { get; set; }
+}

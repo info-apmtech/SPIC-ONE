@@ -456,6 +456,40 @@
     private string GetHeadquarterName(int? headquarterId)
         => headquarterId == null ? "-" : headquarterNameById.TryGetValue(headquarterId.Value, out var v) ? v : "-";
 
+    private string GetRegionDisplay(Employeelogin login)
+    {
+        if (login.RegionIds != null)
+        {
+            if (login.RegionIds.Length == 0) return "-";
+            var names = login.RegionIds
+                .Select(id => regionNameById.TryGetValue(id, out var v) && !string.IsNullOrWhiteSpace(v) && v != "-" ? v : id.ToString())
+                .ToList();
+            return names.Count > 0 ? string.Join(", ", names) : "-";
+        }
+        if (login.RegionId > 0 && regionNameById.TryGetValue(login.RegionId, out var name) && !string.IsNullOrWhiteSpace(name) && name != "-")
+        {
+            return name;
+        }
+        return "-";
+    }
+
+    private string GetHeadquarterDisplay(Employeelogin login)
+    {
+        if (login.HeadquartersIds != null)
+        {
+            if (login.HeadquartersIds.Length == 0) return "-";
+            var names = login.HeadquartersIds
+                .Select(id => headquarterNameById.TryGetValue(id, out var v) && !string.IsNullOrWhiteSpace(v) && v != "-" ? v : id.ToString())
+                .ToList();
+            return names.Count > 0 ? string.Join(", ", names) : "-";
+        }
+        if (login.HeadquartersId > 0 && headquarterNameById.TryGetValue(login.HeadquartersId, out var name) && !string.IsNullOrWhiteSpace(name) && name != "-")
+        {
+            return name;
+        }
+        return "-";
+    }
+
     private string GetDesignationName(string? userId)
     {
         if (string.IsNullOrWhiteSpace(userId)) return "-";
@@ -558,8 +592,8 @@
                         OfficialPhoneNumber = string.IsNullOrWhiteSpace(emp.OfficialPhoneNumber) ? "-" : emp.OfficialPhoneNumber,
                         Email = string.IsNullOrWhiteSpace(emp.Email) ? "-" : emp.Email,
                         ZoneName = GetZoneName(login.ZoneId),
-                        RegionName = GetRegionName(login.RegionId),
-                        HeadquartersName = GetHeadquarterName(login.HeadquartersId),
+                        RegionName = GetRegionDisplay(login),
+                        HeadquartersName = GetHeadquarterDisplay(login),
                         DesignationName = GetDesignationName(login.UserId),
                         Status = login.IsActive ? "Active" : "Inactive",
                         CreatedBy = GetCreatedByName(emp.CreatedBy),
@@ -608,7 +642,9 @@
                 e.Name.Contains(q, StringComparison.OrdinalIgnoreCase)
                 || e.EmployeeCode.Contains(q, StringComparison.OrdinalIgnoreCase)
                 || e.UserName.Contains(q, StringComparison.OrdinalIgnoreCase)
-                || e.Password.Contains(q, StringComparison.OrdinalIgnoreCase));
+                || e.Password.Contains(q, StringComparison.OrdinalIgnoreCase)
+                || e.RegionName.Contains(q, StringComparison.OrdinalIgnoreCase)
+                || e.HeadquartersName.Contains(q, StringComparison.OrdinalIgnoreCase));
         }
 
         if (!string.Equals(_roleFilter, "All", StringComparison.OrdinalIgnoreCase))

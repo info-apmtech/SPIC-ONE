@@ -734,3 +734,315 @@ window.destroySalesTrackingCharts = function () {
     if (window.trkGaugeChartInstance) { window.trkGaugeChartInstance.destroy(); window.trkGaugeChartInstance = null; }
     if (window.trkTrendChartInstance) { window.trkTrendChartInstance.destroy(); window.trkTrendChartInstance = null; }
 };
+
+// ── Income Summary: Top-5-by-income donut (Livestock) + horizontal bar (Orchard) ──
+// data shape: { livestock: { labels, values, colors, productCount }, orchard: { labels, values, colors } }
+// Real numbers passed in from IncomeSummary.razor - no hardcoded demo data, unlike most of this file.
+window.loadIncomeSummaryCharts = function (data) {
+    if (typeof Chart === 'undefined' || !data) return;
+    window.destroyIncomeSummaryCharts();
+
+    const rupee = v => '₹' + Number(v).toLocaleString('en-IN');
+    const tooltipStyle = {
+        backgroundColor: '#ffffff',
+        titleColor: '#1e293b',
+        titleFont: { size: 13, weight: 'bold' },
+        bodyColor: '#475569',
+        borderColor: '#e2e8f0',
+        borderWidth: 1,
+        padding: 10
+    };
+
+    // ── Live Income Overview: donut, center text = total product count ──
+    const donutCanvas = document.getElementById('incLiveDonutChart');
+    if (donutCanvas && data.livestock) {
+        const centerText = {
+            id: 'incDonutCenterText',
+            afterDraw(chart) {
+                const { ctx, chartArea: { left, right, top, bottom } } = chart;
+                const cx = (left + right) / 2;
+                const cy = (top + bottom) / 2;
+                ctx.save();
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillStyle = '#64748b';
+                ctx.font = "600 12px 'Inter', sans-serif";
+                ctx.fillText('Total', cx, cy - 22);
+                ctx.fillStyle = '#0f172a';
+                ctx.font = "700 24px 'Inter', sans-serif";
+                ctx.fillText(String(data.livestock.productCount || 0), cx, cy + 2);
+                ctx.fillStyle = '#64748b';
+                ctx.font = "600 12px 'Inter', sans-serif";
+                ctx.fillText('Products', cx, cy + 24);
+                ctx.restore();
+            }
+        };
+
+        window.incLiveDonutChartInstance = new Chart(donutCanvas.getContext('2d'), {
+            type: 'doughnut',
+            data: {
+                labels: data.livestock.labels,
+                datasets: [{
+                    data: data.livestock.values,
+                    backgroundColor: data.livestock.colors,
+                    borderWidth: 2,
+                    borderColor: '#ffffff'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: '68%',
+                plugins: {
+                    legend: { display: false },
+                    tooltip: Object.assign({}, tooltipStyle, {
+                        callbacks: { label: ctx => ` ${ctx.label}: ${rupee(ctx.raw)}` }
+                    })
+                }
+            },
+            plugins: [centerText]
+        });
+    }
+
+    // ── Orchard Income Overview: horizontal bar ──
+    const barCanvas = document.getElementById('incOrchardBarChart');
+    if (barCanvas && data.orchard) {
+        window.incOrchardBarChartInstance = new Chart(barCanvas.getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: data.orchard.labels,
+                datasets: [{
+                    data: data.orchard.values,
+                    backgroundColor: data.orchard.colors,
+                    borderRadius: 4,
+                    barThickness: 16
+                }]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: Object.assign({}, tooltipStyle, {
+                        callbacks: { label: ctx => ` ${rupee(ctx.raw)}` }
+                    })
+                },
+                scales: {
+                    x: {
+                        border: { display: false },
+                        grid: { color: '#f1f5f9' },
+                        ticks: { color: '#64748b', font: { size: 10 }, callback: v => rupee(v) }
+                    },
+                    y: {
+                        border: { display: false },
+                        grid: { display: false },
+                        ticks: { display: false } // labels are rendered in the HTML legend list next to the bars
+                    }
+                }
+            }
+        });
+    }
+};
+
+window.destroyIncomeSummaryCharts = function () {
+    if (window.incLiveDonutChartInstance) { window.incLiveDonutChartInstance.destroy(); window.incLiveDonutChartInstance = null; }
+    if (window.incOrchardBarChartInstance) { window.incOrchardBarChartInstance.destroy(); window.incOrchardBarChartInstance = null; }
+};
+
+// ── Expense Summary: Monthly Expense Trend (vertical bar) ──
+// data shape: { labels: [...], values: [...] } - one bar per calendar month in the active filter
+// range, real numbers from ExpenseSummary.razor. The category breakdown on that page is plain
+// HTML/CSS progress bars (no chart needed there), so this is the only chart this page uses.
+window.loadExpenseSummaryCharts = function (data) {
+    if (typeof Chart === 'undefined' || !data) return;
+    window.destroyExpenseSummaryCharts();
+
+    // Indian-numbering short form (K/L) for axis ticks and bar-top labels, matching the design.
+    const shortRupee = v => {
+        v = Number(v);
+        if (v >= 100000) return '₹' + (v / 100000).toFixed(v % 100000 === 0 ? 0 : 1) + 'L';
+        if (v >= 1000) return '₹' + (v / 1000).toFixed(v % 1000 === 0 ? 0 : 1) + 'K';
+        return '₹' + v;
+    };
+
+    const barTopLabels = {
+        id: 'expBarTopLabels',
+        afterDatasetsDraw(chart) {
+            const { ctx } = chart;
+            ctx.save();
+            ctx.font = "600 11px 'Inter', sans-serif";
+            ctx.fillStyle = '#334155';
+            ctx.textAlign = 'center';
+            chart.getDatasetMeta(0).data.forEach((bar, i) => {
+                const v = data.values[i];
+                if (v > 0) ctx.fillText(shortRupee(v), bar.x, bar.y - 6);
+            });
+            ctx.restore();
+        }
+    };
+
+    const canvas = document.getElementById('expMonthlyTrendChart');
+    if (!canvas) return;
+
+    window.expMonthlyTrendChartInstance = new Chart(canvas.getContext('2d'), {
+        type: 'bar',
+        data: {
+            labels: data.labels,
+            datasets: [{
+                data: data.values,
+                backgroundColor: '#6ee7b7',
+                hoverBackgroundColor: '#34d399',
+                borderRadius: 4,
+                maxBarThickness: 36
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            layout: { padding: { top: 20 } },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    backgroundColor: '#ffffff',
+                    titleColor: '#1e293b',
+                    bodyColor: '#475569',
+                    borderColor: '#e2e8f0',
+                    borderWidth: 1,
+                    padding: 10,
+                    callbacks: { label: ctx => ` ${'₹' + Number(ctx.raw).toLocaleString('en-IN')}` }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    border: { display: false },
+                    grid: { color: '#f1f5f9' },
+                    ticks: { color: '#64748b', font: { size: 10 }, callback: v => shortRupee(v) }
+                },
+                x: {
+                    border: { display: false },
+                    grid: { display: false },
+                    ticks: { color: '#64748b', font: { size: 11 } }
+                }
+            }
+        },
+        plugins: [barTopLabels]
+    });
+};
+
+window.destroyExpenseSummaryCharts = function () {
+    if (window.expMonthlyTrendChartInstance) { window.expMonthlyTrendChartInstance.destroy(); window.expMonthlyTrendChartInstance = null; }
+};
+
+// Shared by FarmDashboard.razor and FinanceSummary.razor's "Income, Expense & Profit Trends" card -
+// both used to hand-roll their own <svg> bar+line chart (duplicated math, a Y-axis title that
+// overlapped the tick labels, and a tooltip that was pinned to whichever bar was last clicked
+// instead of appearing on hover). Replaced with one real Chart.js chart, keyed by canvasId so both
+// pages' canvases can coexist; data = { labels, income, expense, netProfit } (parallel arrays).
+window.financeTrendChartInstances = window.financeTrendChartInstances || {};
+
+window.loadFinanceTrendChart = function (canvasId, data) {
+    if (typeof Chart === 'undefined' || !data) return;
+    window.destroyFinanceTrendChart(canvasId);
+
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+
+    const shortRupee = v => {
+        v = Number(v);
+        const sign = v < 0 ? '-' : '';
+        v = Math.abs(v);
+        if (v >= 100000) return sign + '₹' + (v / 100000).toFixed(v % 100000 === 0 ? 0 : 1) + 'L';
+        if (v >= 1000) return sign + '₹' + (v / 1000).toFixed(v % 1000 === 0 ? 0 : 1) + 'K';
+        return sign + '₹' + v;
+    };
+
+    window.financeTrendChartInstances[canvasId] = new Chart(canvas.getContext('2d'), {
+        data: {
+            labels: data.labels,
+            datasets: [
+                {
+                    type: 'bar',
+                    label: 'Income',
+                    data: data.income,
+                    backgroundColor: '#6ee7b7',
+                    hoverBackgroundColor: '#34d399',
+                    borderRadius: 4,
+                    maxBarThickness: 28,
+                    order: 2
+                },
+                {
+                    type: 'bar',
+                    label: 'Expense',
+                    data: data.expense,
+                    backgroundColor: '#fca5a5',
+                    hoverBackgroundColor: '#f87171',
+                    borderRadius: 4,
+                    maxBarThickness: 28,
+                    order: 2
+                },
+                {
+                    type: 'line',
+                    label: 'Net Profit',
+                    data: data.netProfit,
+                    borderColor: '#3b82f6',
+                    backgroundColor: '#3b82f6',
+                    pointBackgroundColor: '#ffffff',
+                    pointBorderColor: '#3b82f6',
+                    pointBorderWidth: 2,
+                    pointRadius: 4,
+                    pointHoverRadius: 6,
+                    tension: 0.3,
+                    borderWidth: 2.5,
+                    order: 1
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            layout: { padding: { top: 10 } },
+            plugins: {
+                // Both pages already render their own HTML legend above the chart.
+                legend: { display: false },
+                // mode:'index' + intersect:false (above) means this appears on hover anywhere over
+                // a period's column, for all three series at once - never pinned/always-on.
+                tooltip: {
+                    backgroundColor: '#ffffff',
+                    titleColor: '#1e293b',
+                    bodyColor: '#475569',
+                    borderColor: '#e2e8f0',
+                    borderWidth: 1,
+                    padding: 10,
+                    boxPadding: 4,
+                    callbacks: {
+                        label: ctx => ` ${ctx.dataset.label}: ${shortRupee(ctx.raw)}`
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    border: { display: false },
+                    grid: { color: '#f1f5f9' },
+                    title: { display: true, text: 'Amount (₹)', color: '#94a3b8', font: { size: 11 } },
+                    ticks: { color: '#64748b', font: { size: 10 }, callback: v => shortRupee(v) }
+                },
+                x: {
+                    border: { display: false },
+                    grid: { display: false },
+                    ticks: { color: '#64748b', font: { size: 11 } }
+                }
+            }
+        }
+    });
+};
+
+window.destroyFinanceTrendChart = function (canvasId) {
+    if (window.financeTrendChartInstances[canvasId]) {
+        window.financeTrendChartInstances[canvasId].destroy();
+        window.financeTrendChartInstances[canvasId] = null;
+    }
+};

@@ -1,7 +1,10 @@
-﻿@using SPIC.MauiBlazorApp.Shared.Services.Telemetry
+﻿@using SPIC.MauiBlazorApp.Shared.Services
+@using SPIC.MauiBlazorApp.Shared.Services.Telemetry
 @inject ClientTelemetry Telemetry
 @inject IJSRuntime JS
+@inject NavigationManager Nav
 
+@* Route discovery remains assembly-based, so page moves under Pages/Sas/farm keep their @page URLs unchanged. *@
 <Router AppAssembly="typeof(Layout.MainLayout).Assembly" NotFoundPage="typeof(Pages.NotFound)">
     <Found Context="routeData">
         <RouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)" />
@@ -24,5 +27,16 @@
 
         try { await JS.InvokeVoidAsync("notifyAppReady"); }
         catch (JSException) { }
+
+        // Cold-start deep link (e.g. the JMDO tracking notification, tapped while the app process
+        // was dead) - MainActivity.OnCreate set this before any circuit existed to hand it to. The
+        // warm case (process already alive) never touches this; it navigates directly via
+        // NavHistoryService.Current instead. One-shot: clear it so a later in-app reload of this
+        // same page doesn't replay a stale navigation.
+        if (PendingDeepLink.Route is { } route)
+        {
+            PendingDeepLink.Route = null;
+            Nav.NavigateTo(route);
+        }
     }
 }

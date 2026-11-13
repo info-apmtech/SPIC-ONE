@@ -1,0 +1,1102 @@
+@page "/ExpenseSummary"
+@using System.Net.Http.Json
+@using SPIC.MauiBlazorApp.Shared.Components.Feedback
+@inject NavigationManager Nav
+@inject HttpClient Http
+@inject IJSRuntime JS
+@inject SPIC.MauiBlazorApp.Shared.Services.ToastService Toast
+
+<PageTitle>Expense Summary · SPIC ONE</PageTitle>
+
+<div class="exs-page">
+
+    <PageHeader Title="Expense Summary"
+                Subtitle="View and analyze farm expenses for completed 15-day reporting"
+                ShowBack="false">
+        <Actions>
+            <button type="button" class="exs-btn-back" @onclick="GoBack">
+                <i class="bi bi-arrow-left"></i> Back to Income entry
+            </button>
+        </Actions>
+    </PageHeader>
+
+    <!-- Filters -->
+    <div class="exs-card exs-filters-card">
+        <div class="exs-filters-header" @onclick="ToggleFilters">
+            <div class="exs-filters-title"><i class="bi bi-filter"></i> Filters</div>
+            <i class="bi @(filtersExpanded ? "bi-chevron-down" : "bi-chevron-up")"></i>
+        </div>
+
+        @if (filtersExpanded)
+        {
+            <div class="exs-filters-body">
+                <div class="exs-filters-grid">
+                    <div class="exs-filter-group">
+                        <label>Period Type</label>
+                        @if (isLoadingInitial)
+                        {
+                            <Skeleton Variant="text" Height="38px" Rows="1" />
+                        }
+                        else
+                        {
+                            <select class="exs-select-chevron" @bind="periodType" @bind:after="OnPeriodTypeChanged">
+                                <option value="15Days">15 Days</option>
+                                <option value="1Month">1 Month</option>
+                            </select>
+                        }
+                    </div>
+                    <div class="exs-filter-group">
+                        <label for="exs-from-date">From Date</label>
+                        @if (isLoadingInitial)
+                        {
+                            <Skeleton Variant="text" Height="38px" Rows="1" />
+                        }
+                        else
+                        {
+                            <input id="exs-from-date" type="date" class="exs-input-date @(!string.IsNullOrEmpty(dateValidationError) ? "exs-input-error" : "")"
+                                   @bind="fromDateFilter" @bind:after="OnDatesChanged" max="@(toDateFilter?.ToString("yyyy-MM-dd"))" />
+                        }
+                    </div>
+                    <div class="exs-filter-group">
+                        <label for="exs-to-date">To Date</label>
+                        @if (isLoadingInitial)
+                        {
+                            <Skeleton Variant="text" Height="38px" Rows="1" />
+                        }
+                        else
+                        {
+                            <input id="exs-to-date" type="date" class="exs-input-date @(!string.IsNullOrEmpty(dateValidationError) ? "exs-input-error" : "")"
+                                   @bind="toDateFilter" @bind:after="OnDatesChanged" min="@(fromDateFilter?.ToString("yyyy-MM-dd"))" />
+                        }
+                    </div>
+                    <div class="exs-filter-group">
+                        <label>Expense Category</label>
+                        @if (isLoadingInitial)
+                        {
+                            <Skeleton Variant="text" Height="38px" Rows="1" />
+                        }
+                        else
+                        {
+                            <select class="exs-select-chevron" @bind="categoryFilter">
+                                <option value="">All Category</option>
+                                @foreach (var c in summary.CategoryBreakdown)
+                                {
+                                    <option value="@c.Category">@c.Category</option>
+                                }
+                            </select>
+                        }
+                    </div>
+                </div>
+
+                @if (!string.IsNullOrEmpty(dateValidationError))
+                {
+                    <div class="exs-filter-validation-error">
+                        <i class="bi bi-exclamation-triangle-fill"></i> @dateValidationError
+                    </div>
+                }
+
+                <div class="exs-filters-actions">
+                    <button type="button" class="exs-btn-clear" disabled="@isLoading" @onclick="ClearFiltersAsync"><i class="bi bi-x"></i> Clear All</button>
+                    <button type="button" class="exs-btn-primary" disabled="@isLoading" @onclick="ApplyFiltersAsync"><i class="bi bi-filter"></i> Apply Filters</button>
+                </div>
+            </div>
+        }
+    </div>
+
+    @if (!string.IsNullOrEmpty(loadError))
+    {
+        <div class="exs-card exs-error-card">
+            <EmptyState Icon="bi-exclamation-circle" Title="Could not load expense data" Message="@loadError">
+                <button type="button" class="exs-btn-primary" @onclick="LoadSummaryAsync">
+                    <i class="bi bi-arrow-clockwise"></i> Retry
+                </button>
+            </EmptyState>
+        </div>
+    }
+    else
+    {
+        <!-- Stat cards -->
+        <div class="exs-stats-grid">
+            @if (isLoading)
+            {
+                @for (int i = 0; i < 4; i++)
+                {
+                    <div class="exs-stat-card exs-stat-skeleton-card">
+                        <Skeleton Variant="text" Height="14px" Rows="1" />
+                        <div style="margin: 8px 0;"><Skeleton Variant="text" Height="24px" Rows="1" /></div>
+                        <Skeleton Variant="text" Height="12px" Rows="1" />
+                    </div>
+                }
+            }
+            else
+            {
+                <div class="exs-stat-card">
+                    <div class="exs-stat-label">Total Expense</div>
+                    <div class="exs-stat-value">@FormatCurrency(summary.TotalExpense)</div>
+                    <div class="exs-stat-desc">@(summary.EarliestPeriodStart is { } s ? $"From {s:MMM yyyy} - {(summary.LatestPeriodEnd ?? s):dd MMM yyyy}" : "No records yet")</div>
+                    <div class="exs-stat-icon exs-icon-green"><i class="bi bi-file-earmark-arrow-up"></i></div>
+                </div>
+                <div class="exs-stat-card">
+                    <div class="exs-stat-label">Highest Expense Category</div>
+                    <div class="exs-stat-value">@FormatCurrency(summary.HighestCategoryAmount)</div>
+                    <div class="exs-stat-desc">@(summary.HighestCategoryName ?? "-")</div>
+                    <div class="exs-stat-icon exs-icon-blue"><i class="bi bi-file-earmark-arrow-up"></i></div>
+                </div>
+                <div class="exs-stat-card">
+                    <div class="exs-stat-label">Expense Categories</div>
+                    <div class="exs-stat-value">@summary.CategoryCount Categor@(summary.CategoryCount == 1 ? "y" : "ies")</div>
+                    <div class="exs-stat-desc">Including Miscellaneous</div>
+                    <div class="exs-stat-icon exs-icon-purple"><i class="bi bi-clock-history"></i></div>
+                </div>
+                <div class="exs-stat-card">
+                    <div class="exs-stat-label">Summary Coverage</div>
+                    <div class="exs-stat-value exs-stat-value-sm">@(summary.EarliestPeriodStart is { } es && summary.LatestPeriodEnd is { } le ? $"{es:dd MMM yyyy} - {le:dd MMM yyyy}" : "No reports yet")</div>
+                    <div class="exs-stat-desc">@summary.Rows.Count Complete 15 Day report@(summary.Rows.Count == 1 ? "" : "s")</div>
+                    <div class="exs-stat-icon exs-icon-amber"><i class="bi bi-clock-history"></i></div>
+                </div>
+            }
+        </div>
+
+        <!-- Table -->
+        <div class="exs-card exs-table-card">
+            <div class="exs-table-top-header">
+                <div>
+                    <h2>15 - Day Expense Summary</h2>
+                    <p>List of all 15-day expense reports from Jan 2026 to till date</p>
+                </div>
+                <button type="button" class="exs-btn-outline" disabled="@(_exporting || isLoading)" @onclick="DownloadExcelAsync"><i class="bi bi-file-earmark-excel"></i> Download Excel</button>
+            </div>
+
+            <!-- DataTables Toolbar: Search -->
+            <div class="exs-dt-toolbar">
+                <div class="exs-dt-search">
+                    <label>
+                        Search:
+                        <div class="exs-dt-search-input-wrap">
+                            <i class="bi bi-search exs-dt-search-icon"></i>
+                            <input type="text" class="exs-dt-input" placeholder="Search expense reports..."
+                                   @bind="tableSearchText" @bind:event="oninput" @bind:after="OnSearchChanged"
+                                   disabled="@isLoading" />
+                            @if (!string.IsNullOrEmpty(tableSearchText))
+                            {
+                                <button type="button" class="exs-dt-search-clear" @onclick="ClearSearch" title="Clear search">
+                                    <i class="bi bi-x"></i>
+                                </button>
+                            }
+                        </div>
+                    </label>
+                </div>
+            </div>
+
+            <div class="exs-table-scroll">
+                @if (isLoading)
+                {
+                    <div class="exs-skeleton-table-wrap">
+                        <Skeleton Variant="table" Rows="6" LoadingText="Loading expense reports..." />
+                    </div>
+                }
+                else
+                {
+                    <table class="exs-table">
+                        <thead>
+                            <tr>
+                                <th>S.NO</th>
+                                <th class="exs-sortable" @onclick='() => SortBy("Period")' title="Sort by Reporting Period">
+                                    <div class="exs-th-content"><span>Reporting Period</span><i class="bi @GetSortIcon("Period")"></i></div>
+                                </th>
+                                <th class="exs-sortable" @onclick='() => SortBy("Total")' title="Sort by Total Expense">
+                                    <div class="exs-th-content"><span>Total Expense (₹)</span><i class="bi @GetSortIcon("Total")"></i></div>
+                                </th>
+                                <th class="exs-sortable" @onclick='() => SortBy("Status")' title="Sort by Status">
+                                    <div class="exs-th-content"><span>Status</span><i class="bi @GetSortIcon("Status")"></i></div>
+                                </th>
+                                <th>View</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (allRows.Count == 0)
+                            {
+                                <tr><td colspan="5" class="exs-empty-td">No expense reports found for this filter.</td></tr>
+                            }
+                            else if (TotalFilteredCount == 0)
+                            {
+                                <tr>
+                                    <td colspan="5" class="exs-empty-td">
+                                        <div>No matching records found for "<strong>@tableSearchText</strong>".</div>
+                                        <button type="button" class="exs-btn-clear" style="margin-top: 10px;" @onclick="ClearSearch">
+                                            <i class="bi bi-x"></i> Clear Search
+                                        </button>
+                                    </td>
+                                </tr>
+                            }
+                            else
+                            {
+                                @foreach (var (row, index) in PagedRows)
+                                {
+                                    <tr>
+                                        <td>@(((currentPage - 1) * pageSize) + index + 1)</td>
+                                        <td>@row.ReportingPeriod</td>
+                                        <td>@FormatCurrency(row.TotalExpense)</td>
+                                        <td><span class="@("exs-badge-status " + (row.Status == "Submitted" ? "exs-badge-submitted" : "exs-badge-draft"))">@row.Status</span></td>
+                                        <td>
+                                            <button type="button" class="exs-view-btn" @onclick="() => ViewReportAsync(row)" aria-label="View"><i class="bi bi-eye"></i></button>
+                                        </td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                }
+            </div>
+
+            @if (!isLoading && allRows.Count > 0)
+            {
+                <div class="exs-pagination exs-dt-footer">
+                    <div class="exs-dt-footer-left">
+                        <div class="exs-items-per-page">
+                            <span>Items Per Page</span>
+                            <select @bind="pageSize" @bind:after="OnPageSizeChanged">
+                                <option value="10">10</option>
+                                <option value="25">25</option>
+                                <option value="50">50</option>
+                                <option value="100">100</option>
+                            </select>
+                        </div>
+                        <div class="exs-dt-info">@ShowingEntriesText</div>
+                    </div>
+                    <div class="exs-pagination-buttons">
+                        <button type="button" class="exs-page-btn" disabled="@(currentPage == 1)" @onclick="() => GoToPage(currentPage - 1)"><i class="bi bi-chevron-left"></i></button>
+                        @foreach (var pNum in VisiblePageNumbers)
+                        {
+                            @if (pNum == -1)
+                            {
+                                <span class="exs-page-ellipsis">..</span>
+                            }
+                            else
+                            {
+                                <button type="button" class="@("exs-page-btn" + (pNum == currentPage ? " exs-page-active" : ""))" @onclick="() => GoToPage(pNum)">@pNum</button>
+                            }
+                        }
+                        <button type="button" class="exs-page-btn" disabled="@(currentPage == TotalPages)" @onclick="() => GoToPage(currentPage + 1)"><i class="bi bi-chevron-right"></i></button>
+                    </div>
+                </div>
+            }
+        </div>
+
+        <!-- Charts -->
+        <div class="exs-charts-grid">
+            <div class="exs-card exs-chart-card">
+                <div class="exs-chart-head">
+                    <h2>Monthly Expense Trend</h2>
+                    <p>Total expense per month@(summary.LatestPeriodEnd is { } mend ? $" (till {mend:dd MMM yyyy})" : "")</p>
+                </div>
+                @if (summary.MonthlyTrend.Count == 0)
+                {
+                    <EmptyState Icon="bi-bar-chart" Title="No expense data yet" Compact="true" />
+                }
+                else
+                {
+                    <div class="exs-trend-wrap"><canvas id="expMonthlyTrendChart"></canvas></div>
+                }
+            </div>
+
+            <div class="exs-card exs-chart-card">
+                <div class="exs-chart-head">
+                    <h2>Expense Category Overview</h2>
+                    <p>Total expense by category@(summary.LatestPeriodEnd is { } cend ? $" (till {cend:dd MMM yyyy})" : "")</p>
+                </div>
+                @if (summary.CategoryBreakdown.Count == 0)
+                {
+                    <EmptyState Icon="bi-list-ul" Title="No expense data yet" Compact="true" />
+                }
+                else
+                {
+                    var maxAmount = summary.CategoryBreakdown.Max(c => c.Amount);
+                    <div class="exs-cat-list">
+                        @for (var i = 0; i < summary.CategoryBreakdown.Count; i++)
+                        {
+                            var c = summary.CategoryBreakdown[i];
+                            var pct = maxAmount > 0 ? (double)(c.Amount / maxAmount) * 100 : 0;
+                            <div class="exs-cat-row">
+                                <span class="exs-cat-dot" style="background:@ChartColor(i)"></span>
+                                <span class="exs-cat-name">@c.Category</span>
+                                <div class="exs-cat-bar-track">
+                                    <div class="exs-cat-bar-fill" style="width:@(pct.ToString("0.##"))%;background:@ChartColor(i)"></div>
+                                </div>
+                                <span class="exs-cat-val">@FormatCurrency(c.Amount)</span>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+    }
+</div>
+
+<!-- View details drawer -->
+@if (showDetailsDrawer)
+{
+    <div class="exs-details-overlay" @onclick="() => showDetailsDrawer = false">
+        <div class="exs-details-modal" @onclick:stopPropagation="true">
+            <div class="exs-details-header">
+                <div class="exs-details-header-left">
+                    <button type="button" class="exs-details-back-icon" @onclick="() => showDetailsDrawer = false" aria-label="Back">
+                        <i class="bi bi-arrow-left"></i>
+                    </button>
+                    <div>
+                        <div class="exs-details-title">@($"{selectedDetail?.ReportingPeriod} Period Expense Details")</div>
+                        <div class="exs-details-subtitle">15 Days - wise rate break for all Expense entries</div>
+                    </div>
+                </div>
+                @if (selectedDetail is not null)
+                {
+                    <button type="button" class="exs-btn-outline" @onclick="DownloadDetailExcelAsync"><i class="bi bi-file-earmark-excel"></i> Download Excel</button>
+                }
+            </div>
+
+            <div class="exs-details-body">
+                @if (isLoadingDetail)
+                {
+                    <EmptyState Icon="bi-hourglass-split" Title="Loading..." Compact="true" />
+                }
+                else if (selectedDetail is null)
+                {
+                    <EmptyState Icon="bi-exclamation-triangle" Title="Could not load this report" Compact="true" />
+                }
+                else
+                {
+                    var mainItems = selectedDetail.ExpenseItems.Where(e => !e.IsSubCategory).ToList();
+                    var subItems = selectedDetail.ExpenseItems.Where(e => e.IsSubCategory).ToList();
+                    var periodTotal = mainItems.Sum(e => e.Amount);
+                    var highest = mainItems.OrderByDescending(e => e.Amount).FirstOrDefault();
+                    var subTotal = subItems.Sum(e => e.Amount);
+
+                    <div class="exs-details-cards-grid">
+                        <div class="exs-details-card">
+                            <div class="exs-details-card-label">Reporting Period</div>
+                            <div class="exs-details-card-value">@selectedDetail.ReportingPeriod</div>
+                            <div class="exs-details-card-sub">Complete 15 Day reports</div>
+                            <div class="exs-details-card-icon exs-card-icon-green"><i class="bi bi-file-earmark-bar-graph"></i></div>
+                        </div>
+                        <div class="exs-details-card">
+                            <div class="exs-details-card-label">Total Expense</div>
+                            <div class="exs-details-card-value">@FormatCurrency(periodTotal)</div>
+                            <div class="exs-details-card-sub">From @(summary.EarliestPeriodStart?.ToString("MMM yyyy") ?? "-") - @selectedDetail.ReportingPeriod</div>
+                            <div class="exs-details-card-icon exs-card-icon-blue"><i class="bi bi-file-earmark-bar-graph"></i></div>
+                        </div>
+                        <div class="exs-details-card">
+                            <div class="exs-details-card-label">Highest Expense</div>
+                            <div class="exs-details-card-value">@FormatCurrency(highest?.Amount ?? 0)</div>
+                            <div class="exs-details-card-sub">@(highest?.Category ?? "-")</div>
+                            <div class="exs-details-card-icon exs-card-icon-purple"><i class="bi bi-file-earmark-bar-graph"></i></div>
+                        </div>
+                        <div class="exs-details-card">
+                            <div class="exs-details-card-label">Total Expense</div>
+                            <div class="exs-details-card-value">@FormatCurrency(subTotal)</div>
+                            <div class="exs-details-card-sub">(Incl . Miscellaneous)</div>
+                            <div class="exs-details-card-icon exs-card-icon-orange"><i class="bi bi-file-earmark-bar-graph"></i></div>
+                        </div>
+                    </div>
+
+                    <h4 class="exs-drawer-subhead">Expenditure Breakup (Farm Operations)</h4>
+                    <p class="exs-drawer-note">Total expense under farm operations (excluding sub-category details)</p>
+                    <div class="exs-drawer-table-wrap">
+                        <table class="exs-drawer-table">
+                            <thead><tr><th>S.NO</th><th>Expense Category</th><th>Amount</th></tr></thead>
+                            <tbody>
+                                @for (var i = 0; i < mainItems.Count; i++)
+                                {
+                                    var item = mainItems[i];
+                                    <tr>
+                                        <td>@(i + 1)</td>
+                                        <td>
+                                            @item.Category
+                                            @if (item.IsAutoCalculated)
+                                            {
+                                                <span class="exs-auto-note">Auto-calculated from sub-categories</span>
+                                            }
+                                        </td>
+                                        <td>@FormatCurrencySpaced(item.Amount)</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+
+                    @if (subItems.Count > 0)
+                    {
+                        <h4 class="exs-drawer-subhead">Miscellaneous Expenditure (Sub-Categories)</h4>
+                        <p class="exs-drawer-note">Detailed breakup of miscellaneous expenses - the total is already reflected in the main table above.</p>
+                        <div class="exs-drawer-table-wrap">
+                            <table class="exs-drawer-table">
+                                <thead><tr><th>S.NO</th><th>Expense Category</th><th>Amount</th></tr></thead>
+                                <tbody>
+                                    @for (var i = 0; i < subItems.Count; i++)
+                                    {
+                                        <tr><td>@(i + 1)</td><td>@subItems[i].Category</td><td>@FormatCurrencySpaced(subItems[i].Amount)</td></tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+
+                    <div class="exs-grand-total">
+                        <div>
+                            <strong>Grand Total Expense</strong>
+                            <span>Total expense for @selectedDetail.ReportingPeriod</span>
+                        </div>
+                        <span class="exs-grand-total-val">@FormatCurrency(periodTotal)</span>
+                    </div>
+                }
+            </div>
+
+            <div class="exs-details-footer">
+                <button type="button" class="exs-btn-outline" @onclick="() => showDetailsDrawer = false"><i class="bi bi-arrow-left"></i> Back to Report List</button>
+            </div>
+        </div>
+    </div>
+}
+
+<style>
+    .exs-page { color: #1f2937; font-family: inherit; }
+
+    .exs-btn-back {
+        display: inline-flex; align-items: center; gap: 8px;
+        padding: 8px 16px; background: #fff; border: 1px solid #065f46; color: #065f46;
+        border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer;
+    }
+
+    .exs-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; margin-bottom: 24px; box-shadow: 0 1px 2px rgba(0,0,0,.03); }
+
+    .exs-filters-card { overflow: hidden; }
+    .exs-filters-header { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; cursor: pointer; background-color: #F5F8F6; }
+    .exs-filters-title { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 14px; }
+    .exs-filters-body { padding: 0 20px 20px 20px; background-color: #FFFFFF; }
+    .exs-filters-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 20px; }
+    .exs-filter-group label { display: block; font-size: 12px; font-weight: 600; color: #374151; margin-bottom: 6px; }
+    .exs-filter-group select {
+        width: 100%; padding: 10px 32px 10px 12px; border: 1px solid #e5e7eb; border-radius: 6px;
+        font-size: 13px; color: #374151; background-color: #F8F9FA;
+        -webkit-appearance: none; -moz-appearance: none; appearance: none;
+    }
+    .exs-select-date, .exs-select-chevron {
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+        background-repeat: no-repeat; background-position: right 12px center;
+    }
+    .exs-filters-actions { display: flex; justify-content: flex-end; gap: 12px; }
+    .exs-btn-clear { padding: 8px 16px; background: #fff; border: 1px solid #e5e7eb; color: #374151; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+    .exs-btn-primary { padding: 8px 20px; background: #4f46e5; border: none; color: #fff; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+    .exs-btn-primary:disabled, .exs-btn-clear:disabled { opacity: .6; cursor: not-allowed; }
+
+    .exs-input-date {
+        width: 100%; padding: 9px 12px; border: 1px solid #e5e7eb; border-radius: 6px;
+        font-size: 13px; color: #374151; background-color: #F8F9FA; box-sizing: border-box;
+        font-family: inherit;
+    }
+    .exs-input-error { border-color: #ef4444 !important; background-color: #fef2f2 !important; }
+    .exs-filter-validation-error {
+        display: flex; align-items: center; gap: 6px; margin: -6px 0 16px; padding: 8px 12px;
+        background-color: #fef2f2; border: 1px solid #fecaca; border-radius: 6px;
+        color: #b91c1c; font-size: 12px; font-weight: 500;
+    }
+
+    .exs-error-card { padding: 32px 20px; }
+
+    .exs-stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+    .exs-stat-skeleton-card { display: flex; flex-direction: column; justify-content: space-between; min-height: 90px; }
+    .exs-stat-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; position: relative; box-shadow: 0 1px 2px rgba(0,0,0,.02); }
+    .exs-stat-label { font-size: 12px; color: #111827; font-weight: 600; margin-bottom: 6px; }
+    .exs-stat-value { font-size: 22px; font-weight: 700; color: #111827; margin-bottom: 6px; }
+    .exs-stat-value-sm { font-size: 15px; }
+    .exs-stat-desc { font-size: 11px; color: #6b7280; }
+    .exs-stat-icon { position: absolute; right: 16px; top: 16px; width: 34px; height: 34px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 16px; }
+    .exs-icon-green { background: #f0fdf4; color: #22c55e; }
+    .exs-icon-blue { background: #eff6ff; color: #3b82f6; }
+    .exs-icon-purple { background: #f5f3ff; color: #8b5cf6; }
+    .exs-icon-amber { background: #fff7ed; color: #f59e0b; }
+
+    .exs-table-top-header { display: flex; justify-content: space-between; align-items: flex-start; padding: 20px; gap: 12px; flex-wrap: wrap; }
+    .exs-table-top-header h2 { margin: 0; font-size: 18px; font-weight: 700; color: #111827; }
+    .exs-table-top-header p { margin: 2px 0 0; font-size: 12px; color: #6b7280; }
+    .exs-btn-outline { padding: 6px 12px; background: #fff; border: 1px solid #065f46; color: #065f46; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+    .exs-btn-outline:disabled { opacity: .6; cursor: not-allowed; }
+
+    /* DataTables Toolbar */
+    .exs-dt-toolbar {
+        display: flex; justify-content: flex-end; align-items: center; padding: 12px 20px;
+        background: #fafafa; border-top: 1px solid #f3f4f6; border-bottom: 1px solid #e5e7eb;
+        flex-wrap: wrap; gap: 12px;
+    }
+    .exs-dt-search label { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: #374151; margin: 0; font-weight: 500; }
+    .exs-dt-search-input-wrap { position: relative; display: inline-flex; align-items: center; }
+    .exs-dt-search-icon { position: absolute; left: 10px; color: #9ca3af; font-size: 13px; pointer-events: none; }
+    .exs-dt-input {
+        padding: 6px 30px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px;
+        color: #111827; background: #fff; width: 220px;
+    }
+    .exs-dt-input:focus { outline: none; border-color: #065f46; box-shadow: 0 0 0 2px rgba(6, 95, 70, 0.15); }
+    .exs-dt-search-clear { position: absolute; right: 6px; background: transparent; border: none; color: #9ca3af; cursor: pointer; padding: 2px 4px; font-size: 14px; display: flex; align-items: center; }
+    .exs-dt-search-clear:hover { color: #374151; }
+
+    .exs-table-card { overflow: hidden; }
+    .exs-table-scroll { overflow-x: auto; }
+    .exs-skeleton-table-wrap { padding: 20px; }
+    .exs-table { width: 100%; border-collapse: collapse; text-align: center; }
+    .exs-table th { padding: 14px 16px; background: #f3f4f6; font-size: 12px; font-weight: 700; color: #374151; border-bottom: 1px solid #e5e7eb; }
+    .exs-table td { padding: 14px 16px; font-size: 13px; color: #4b5563; border-bottom: 1px solid #e5e7eb; }
+    .exs-table td:first-child, .exs-table th:first-child, .exs-table td:nth-child(2), .exs-table th:nth-child(2) { text-align: left; }
+    .exs-table tbody tr:last-child td { border-bottom: none; }
+    .exs-empty-td { text-align: center !important; padding: 32px !important; color: #9ca3af; font-style: italic; }
+
+    .exs-sortable { cursor: pointer; user-select: none; }
+    .exs-sortable:hover { background-color: #e5e7eb; }
+    .exs-th-content { display: inline-flex; align-items: center; gap: 6px; }
+    .exs-sort-muted { opacity: 0.35; font-size: 11px; }
+    .exs-sort-active { opacity: 1; color: #065f46; font-size: 12px; }
+
+    .exs-badge-status { padding: 4px 12px; border-radius: 999px; font-size: 11px; font-weight: 700; }
+    .exs-badge-submitted { background: #16a34a; color: #fff; }
+    .exs-badge-draft { background: #fde68a; color: #92400e; }
+
+    .exs-view-btn { width: 30px; height: 30px; border-radius: 6px; border: 1px solid #e5e7eb; background: #fff; color: #2563eb; cursor: pointer; }
+    .exs-view-btn:hover { background: #eff6ff; }
+    .exs-view-btn:disabled { opacity: .5; cursor: not-allowed; color: #9ca3af; }
+
+    .exs-pagination { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-top: 1px solid #e5e7eb; flex-wrap: wrap; gap: 16px; }
+    .exs-dt-footer-left { display: flex; align-items: center; flex-wrap: wrap; gap: 16px; }
+    .exs-dt-info { font-size: 13px; color: #6b7280; font-weight: 500; }
+    .exs-items-per-page { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #111827; }
+    .exs-items-per-page select { padding: 6px 28px 6px 12px; border: 1px solid #e5e7eb; border-radius: 6px; background: #fff; appearance: none; }
+    .exs-pagination-buttons { display: flex; align-items: center; gap: 4px; }
+    .exs-page-btn { min-width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; background: #fff; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 13px; color: #374151; cursor: pointer; }
+    .exs-page-btn:hover { background: #f3f4f6; }
+    .exs-page-btn:disabled { opacity: .5; cursor: not-allowed; }
+    .exs-page-active { background: #065f46; border-color: #065f46; color: #fff; }
+    .exs-page-ellipsis { color: #111827; padding: 0 4px; }
+
+    .exs-charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    .exs-chart-card { padding: 20px; }
+    .exs-chart-head { margin-bottom: 16px; }
+    .exs-chart-head h2 { margin: 0; font-size: 16px; font-weight: 700; color: #111827; display: inline; }
+    .exs-chart-head p { margin: 2px 0 0; font-size: 12px; color: #6b7280; }
+    .exs-trend-wrap { height: 280px; }
+
+    .exs-cat-list { display: flex; flex-direction: column; gap: 14px; }
+    .exs-cat-row { display: flex; align-items: center; gap: 10px; }
+    .exs-cat-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .exs-cat-name { width: 130px; flex-shrink: 0; font-size: 13px; color: #374151; }
+    .exs-cat-bar-track { flex: 1; height: 10px; background: #f1f5f9; border-radius: 6px; overflow: hidden; }
+    .exs-cat-bar-fill { height: 100%; border-radius: 6px; }
+    .exs-cat-val { width: 90px; flex-shrink: 0; text-align: right; font-size: 13px; font-weight: 600; color: #111827; }
+
+    .exs-details-overlay {
+        position: fixed; inset: 0; z-index: 9999;
+        background: rgba(17, 24, 39, 0.52);
+        display: flex; align-items: stretch; justify-content: flex-end;
+        padding: 0;
+    }
+    .exs-details-modal {
+        width: min(1280px, calc(100vw - 28px));
+        height: 100vh;
+        max-height: 100vh;
+        background: #fff;
+        border-radius: 12px 0 0 12px;
+        border: 1px solid #dbe5df;
+        border-right: 0;
+        box-shadow: 0 24px 48px rgba(0, 0, 0, .18);
+        overflow: hidden;
+        display: flex; flex-direction: column;
+    }
+    .exs-details-header {
+        display: flex; justify-content: space-between; align-items: center; gap: 16px;
+        padding: 14px 20px 10px;
+        background: #f7fbf8; border-bottom: 1px solid #e2e8e2;
+    }
+    .exs-details-header-left { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
+    .exs-details-back-icon {
+        border: none; background: transparent; color: #374151;
+        width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center;
+        padding: 0; margin-top: 2px; cursor: pointer;
+    }
+    .exs-details-title {
+        font-size: clamp(20px, 2.2vw, 34px);
+        line-height: 1.15;
+        font-weight: 700; color: #1f2937;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .exs-details-subtitle { margin-top: 3px; font-size: 13px; color: #4b5563; }
+    .exs-details-body { padding: 16px 20px 14px; overflow: auto; }
+    .exs-details-footer {
+        display: flex; justify-content: flex-end;
+        padding: 12px 20px; border-top: 1px solid #e5e7eb; background: #fff;
+    }
+
+    .exs-details-cards-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 10px;
+        margin-bottom: 12px;
+    }
+    .exs-details-card {
+        border: 1px solid #dbe5df;
+        border-radius: 12px;
+        padding: 12px 14px;
+        background: #fff;
+        position: relative;
+        min-height: 88px;
+    }
+    .exs-details-card-label { font-size: 12px; font-weight: 600; color: #6b7280; margin-bottom: 4px; }
+    .exs-details-card-value { font-size: 32px; font-size: clamp(16px, 1.9vw, 32px); font-weight: 700; color: #1f2937; line-height: 1.15; }
+    .exs-details-card-sub { margin-top: 3px; font-size: 10px; color: #9ca3af; }
+    .exs-details-card-icon {
+        position: absolute; right: 12px; top: 12px;
+        width: 34px; height: 34px; border-radius: 10px;
+        display: inline-flex; align-items: center; justify-content: center;
+        font-size: 16px;
+    }
+    .exs-card-icon-green { background: #e7f8eb; color: #22a45f; }
+    .exs-card-icon-blue { background: #e7f3ff; color: #4f9dfb; }
+    .exs-card-icon-purple { background: #efe9ff; color: #8b5cf6; }
+    .exs-card-icon-orange { background: #fff1e6; color: #fb923c; }
+
+    .exs-drawer-subhead { font-size: 24px; font-size: clamp(16px, 1.5vw, 24px); font-weight: 700; color: #1e293b; margin: 10px 0 2px; }
+    .exs-drawer-note { font-size: 11px; color: #6b7280; margin: 0 0 8px; }
+    .exs-drawer-table-wrap { border: 1px solid #dbe5df; border-radius: 8px; overflow: hidden; margin-bottom: 12px; }
+    .exs-drawer-table { width: 100%; border-collapse: collapse; font-size: 13px; table-layout: fixed; }
+    .exs-drawer-table th { background: #f1f7f3; padding: 10px 12px; text-align: left; font-size: 12px; color: #475569; }
+    .exs-drawer-table td { padding: 10px 12px; border-bottom: 1px solid #f1f5f9; }
+    .exs-drawer-table th:first-child, .exs-drawer-table td:first-child { width: 64px; }
+    .exs-drawer-table td:last-child { text-align: right; font-weight: 600; }
+    .exs-auto-note { display: block; font-size: 10px; color: #16a34a; font-weight: 500; }
+
+    .exs-grand-total { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; padding: 14px 18px; background: #ecfdf5; border-radius: 10px; }
+    .exs-grand-total div { display: flex; flex-direction: column; }
+    .exs-grand-total strong { color: #065f46; font-size: 14px; }
+    .exs-grand-total span:not(.exs-grand-total-val) { font-size: 11px; color: #047857; }
+    .exs-grand-total-val { font-size: 18px; font-weight: 700; color: #065f46; }
+
+    @@media (max-width: 1100px) {
+        .exs-stats-grid { grid-template-columns: repeat(2, 1fr); }
+        .exs-charts-grid { grid-template-columns: 1fr; }
+        .exs-details-modal { width: calc(100vw - 12px); }
+        .exs-details-cards-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+
+    @@media (max-width: 640px) {
+        .exs-filters-grid { grid-template-columns: 1fr; }
+        .exs-stats-grid { grid-template-columns: 1fr; }
+        .exs-cat-name { width: 90px; }
+        .exs-dt-toolbar { flex-direction: column; align-items: stretch; }
+        .exs-dt-input { width: 100%; }
+        .exs-pagination { flex-direction: column; align-items: center; }
+        .exs-dt-footer-left { justify-content: center; }
+        .exs-details-overlay { padding: 0; }
+        .exs-details-modal { width: 100%; max-height: 100vh; border-radius: 0; }
+        .exs-details-cards-grid { grid-template-columns: 1fr; }
+        .exs-drawer-table th, .exs-drawer-table td { padding: 8px; font-size: 11px; }
+    }
+</style>
+
+@code {
+    private bool filtersExpanded = true;
+    private bool isLoadingInitial = true;
+    private bool isLoading = true;
+    private string? loadError;
+    private bool _exporting;
+
+    private string periodType = "15Days";
+    private DateTime? fromDateFilter;
+    private DateTime? toDateFilter;
+    private string categoryFilter = "";
+    private string? dateValidationError;
+
+    private ExpenseSummaryResponseDto summary = new();
+    private List<ExpenseReportRowDto> allRows = new();
+
+    // ---- DataTables State ----
+    private string tableSearchText = "";
+    private string sortColumn = "Period";
+    private bool sortAscending = false; // Default: latest period first
+    private int currentPage = 1;
+    private int pageSize = 10;
+
+    private IEnumerable<ExpenseReportRowDto> FilteredRows
+    {
+        get
+        {
+            var rows = allRows.AsEnumerable();
+
+            if (!string.IsNullOrWhiteSpace(tableSearchText))
+            {
+                var q = tableSearchText.Trim();
+                rows = rows.Where(r =>
+                    (r.ReportingPeriod ?? "").Contains(q, StringComparison.OrdinalIgnoreCase) ||
+                    (r.Status ?? "").Contains(q, StringComparison.OrdinalIgnoreCase) ||
+                    r.TotalExpense.ToString("N0").Contains(q));
+            }
+
+            rows = sortColumn switch
+            {
+                "Period" => sortAscending ? rows.OrderBy(r => r.PeriodStartDate) : rows.OrderByDescending(r => r.PeriodStartDate),
+                "Total" => sortAscending ? rows.OrderBy(r => r.TotalExpense) : rows.OrderByDescending(r => r.TotalExpense),
+                "Status" => sortAscending ? rows.OrderBy(r => r.Status) : rows.OrderByDescending(r => r.Status),
+                _ => sortAscending ? rows.OrderBy(r => r.PeriodStartDate) : rows.OrderByDescending(r => r.PeriodStartDate)
+            };
+
+            return rows;
+        }
+    }
+
+    private int TotalFilteredCount => FilteredRows.Count();
+    private int TotalPages => Math.Max(1, (int)Math.Ceiling(TotalFilteredCount / (double)pageSize));
+
+    private IEnumerable<(ExpenseReportRowDto Row, int Index)> PagedRows =>
+        FilteredRows.Skip((currentPage - 1) * pageSize).Select((r, i) => (r, i)).Take(pageSize);
+
+    private string ShowingEntriesText
+    {
+        get
+        {
+            var total = TotalFilteredCount;
+            var grandTotal = allRows.Count;
+            if (total == 0)
+            {
+                return grandTotal == 0
+                    ? "Showing 0 to 0 of 0 entries"
+                    : $"Showing 0 to 0 of 0 entries (filtered from {grandTotal} total entries)";
+            }
+            var start = ((currentPage - 1) * pageSize) + 1;
+            var end = Math.Min(currentPage * pageSize, total);
+            return total == grandTotal
+                ? $"Showing {start} to {end} of {total} entries"
+                : $"Showing {start} to {end} of {total} entries (filtered from {grandTotal} total entries)";
+        }
+    }
+
+    private IEnumerable<int> VisiblePageNumbers
+    {
+        get
+        {
+            var total = TotalPages;
+            var set = new SortedSet<int> { 1, total };
+            for (var i = Math.Max(1, currentPage - 1); i <= Math.Min(total, currentPage + 1); i++) set.Add(i);
+            for (var i = 1; i <= Math.Min(3, total); i++) set.Add(i);
+            for (var i = Math.Max(1, total - 2); i <= total; i++) set.Add(i);
+
+            var result = new List<int>();
+            int? prev = null;
+            foreach (var n in set)
+            {
+                if (prev is { } p && n - p > 1) result.Add(-1);
+                result.Add(n);
+                prev = n;
+            }
+            return result;
+        }
+    }
+
+    private static readonly string[] Palette =
+        { "#065f46", "#4ade80", "#8b5cf6", "#93c5fd", "#fbbf24", "#60a5fa", "#60a5fa", "#60a5fa", "#60a5fa" };
+
+    private static string ChartColor(int i) => Palette[i % Palette.Length];
+
+    // NOTE: the category dropdown is informational only in this pass (it lists real categories from
+    // the data, but filtering the table/charts down to a single category isn't wired server-side yet
+    // - expense-summary's rows/trend are always the full per-report totals). Revisit if per-category
+    // row filtering turns out to be needed.
+    protected override async Task OnInitializedAsync()
+    {
+        isLoadingInitial = true;
+        await LoadSummaryAsync();
+        isLoadingInitial = false;
+    }
+
+    private string CurrentQueryString()
+    {
+        var qp = new List<string>();
+        if (fromDateFilter.HasValue) qp.Add($"fromDate={fromDateFilter.Value:yyyy-MM-dd}");
+        if (toDateFilter.HasValue) qp.Add($"toDate={toDateFilter.Value:yyyy-MM-dd}");
+        if (!string.IsNullOrWhiteSpace(periodType)) qp.Add($"periodType={Uri.EscapeDataString(periodType)}");
+        return qp.Count > 0 ? "?" + string.Join("&", qp) : "";
+    }
+
+    private async Task LoadSummaryAsync()
+    {
+        isLoading = true;
+        loadError = null;
+        StateHasChanged();
+
+        try
+        {
+            var result = await Http.GetFromJsonAsync<ExpenseSummaryResponseDto>("api/FarmReport/expense-summary" + CurrentQueryString());
+            summary = result ?? new();
+            allRows = summary.Rows;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Loading expense summary failed: {ex.Message}");
+            loadError = "Unable to load expense data from the server. Please try again.";
+            summary = new();
+            allRows = new();
+        }
+        finally
+        {
+            isLoading = false;
+            currentPage = 1;
+            StateHasChanged();
+        }
+
+        await RenderChartAsync();
+    }
+
+    private void OnDatesChanged()
+    {
+        if (fromDateFilter.HasValue && toDateFilter.HasValue && fromDateFilter.Value.Date > toDateFilter.Value.Date)
+        {
+            dateValidationError = "From Date cannot be later than To Date.";
+        }
+        else
+        {
+            dateValidationError = null;
+        }
+    }
+
+    private async Task OnPeriodTypeChanged()
+    {
+        tableSearchText = "";
+        await LoadSummaryAsync();
+    }
+
+    private void SortBy(string column)
+    {
+        if (sortColumn == column)
+        {
+            sortAscending = !sortAscending;
+        }
+        else
+        {
+            sortColumn = column;
+            sortAscending = true;
+        }
+        currentPage = 1;
+    }
+
+    private string GetSortIcon(string column)
+    {
+        if (sortColumn != column) return "bi-arrow-down-up exs-sort-muted";
+        return sortAscending ? "bi-arrow-up exs-sort-active" : "bi-arrow-down exs-sort-active";
+    }
+
+    private void OnPageSizeChanged() => currentPage = 1;
+
+    private void OnSearchChanged() => currentPage = 1;
+
+    private void ClearSearch()
+    {
+        tableSearchText = "";
+        currentPage = 1;
+    }
+
+    private async Task RenderChartAsync()
+    {
+        if (summary.MonthlyTrend.Count == 0) return;
+
+        var data = new
+        {
+            labels = summary.MonthlyTrend.Select(m => m.MonthLabel).ToArray(),
+            values = summary.MonthlyTrend.Select(m => m.TotalExpense).ToArray()
+        };
+
+        try { await JS.InvokeVoidAsync("loadExpenseSummaryCharts", data); }
+        catch (Exception ex) { Console.WriteLine($"Chart render failed: {ex.Message}"); }
+    }
+
+    private async Task ApplyFiltersAsync()
+    {
+        OnDatesChanged();
+        if (!string.IsNullOrEmpty(dateValidationError))
+        {
+            Toast.Warning(dateValidationError);
+            return;
+        }
+        tableSearchText = "";
+        await LoadSummaryAsync();
+    }
+
+    private async Task ClearFiltersAsync()
+    {
+        periodType = "15Days";
+        fromDateFilter = null;
+        toDateFilter = null;
+        categoryFilter = "";
+        dateValidationError = null;
+        tableSearchText = "";
+        await LoadSummaryAsync();
+    }
+
+    private static string FormatCurrency(decimal v) => $"₹{v:N0}";
+    private static string FormatCurrencySpaced(decimal v) => $"₹ {v:N0}";
+
+    private void GoToPage(int page)
+    {
+        if (page < 1 || page > TotalPages) return;
+        currentPage = page;
+    }
+
+    private void GoBack() => Nav.NavigateTo("/FifteenDaysEntry");
+
+    private void ToggleFilters() => filtersExpanded = !filtersExpanded;
+
+    private async Task DownloadExcelAsync()
+    {
+        if (_exporting) return;
+        _exporting = true;
+        try
+        {
+            var response = await Http.GetAsync("api/FarmReport/expense-summary/export" + CurrentQueryString());
+            if (!response.IsSuccessStatusCode)
+            {
+                Toast.Error("Could not generate the Excel file.");
+                return;
+            }
+
+            var bytes = await response.Content.ReadAsByteArrayAsync();
+            var fileName = $"ExpenseSummary_{DateTime.Now:yyyyMMdd}.xlsx";
+            await JS.InvokeVoidAsync("downloadFileFromBytes", fileName,
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", Convert.ToBase64String(bytes));
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Excel export failed: {ex.Message}");
+            Toast.Error("Could not download the Excel file.");
+        }
+        finally
+        {
+            _exporting = false;
+        }
+    }
+
+    private Task DownloadDetailExcelAsync()
+    {
+        Toast.Info("Use 'Download Excel' on the main report list for the full export.");
+        return Task.CompletedTask;
+    }
+
+    // ---- View details drawer ----
+    private bool showDetailsDrawer;
+    private bool isLoadingDetail;
+    private ReportDetailsDto? selectedDetail;
+
+    // A "15Days" row has one id; a merged "1Month" row has up to two - fetch every one and, when
+    // there's more than one, merge them into a single combined view (summed per-category amounts)
+    // rather than just showing the first report and silently dropping the other.
+    private async Task ViewReportAsync(ExpenseReportRowDto row)
+    {
+        showDetailsDrawer = true;
+        isLoadingDetail = true;
+        selectedDetail = null;
+        StateHasChanged();
+
+        try
+        {
+            var ids = row.ReportIds.Count > 0 ? row.ReportIds : (row.ReportId > 0 ? new List<int> { row.ReportId } : new List<int>());
+            var details = (await Task.WhenAll(ids.Select(id => Http.GetFromJsonAsync<ReportDetailsDto>($"api/FarmReport/{id}"))))
+                .Where(d => d is not null).Select(d => d!).ToList();
+
+            selectedDetail = details.Count switch
+            {
+                0 => null,
+                1 => details[0],
+                _ => MergeDetails(row, details)
+            };
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Loading report details failed: {ex.Message}");
+        }
+        finally
+        {
+            isLoadingDetail = false;
+            StateHasChanged();
+        }
+    }
+
+    private static ReportDetailsDto MergeDetails(ExpenseReportRowDto row, List<ReportDetailsDto> details)
+    {
+        var mergedItems = details
+            .SelectMany(d => d.ExpenseItems)
+            .GroupBy(i => (i.Category, i.IsSubCategory))
+            .Select(g => new ExpenseItemDto
+            {
+                Category = g.Key.Category,
+                Amount = g.Sum(i => i.Amount),
+                IsSubCategory = g.Key.IsSubCategory,
+                IsAutoCalculated = g.Any(i => i.IsAutoCalculated)
+            })
+            .ToList();
+
+        return new ReportDetailsDto
+        {
+            Id = 0,
+            ReportingPeriod = row.ReportingPeriod,
+            Status = row.Status,
+            ExpenseItems = mergedItems
+        };
+    }
+
+    public class ExpenseReportRowDto
+    {
+        public int ReportId { get; set; }
+        public List<int> ReportIds { get; set; } = new();
+        public string ReportingPeriod { get; set; } = "";
+        public DateTime PeriodStartDate { get; set; }
+        public DateTime PeriodEndDate { get; set; }
+        public decimal TotalExpense { get; set; }
+        public string Status { get; set; } = "Draft";
+    }
+
+    public class ExpenseCategoryDto
+    {
+        public string Category { get; set; } = "";
+        public decimal Amount { get; set; }
+    }
+
+    public class MonthlyExpenseDto
+    {
+        public string MonthLabel { get; set; } = "";
+        public int Year { get; set; }
+        public int Month { get; set; }
+        public decimal TotalExpense { get; set; }
+    }
+
+    public class ExpenseSummaryResponseDto
+    {
+        public decimal TotalExpense { get; set; }
+        public DateTime? EarliestPeriodStart { get; set; }
+        public DateTime? LatestPeriodEnd { get; set; }
+        public string? HighestCategoryName { get; set; }
+        public decimal HighestCategoryAmount { get; set; }
+        public int CategoryCount { get; set; }
+        public List<ExpenseReportRowDto> Rows { get; set; } = new();
+        public List<MonthlyExpenseDto> MonthlyTrend { get; set; } = new();
+        public List<ExpenseCategoryDto> CategoryBreakdown { get; set; } = new();
+        public List<int> AvailableYears { get; set; } = new();
+    }
+
+    public class ExpenseItemDto
+    {
+        public int Id { get; set; }
+        public string Category { get; set; } = "";
+        public decimal Amount { get; set; }
+        public bool IsSubCategory { get; set; }
+        public bool IsAutoCalculated { get; set; }
+    }
+
+    public class ReportDetailsDto
+    {
+        public int Id { get; set; }
+        public string ReportingPeriod { get; set; } = "";
+        public string Status { get; set; } = "Draft";
+        public List<ExpenseItemDto> ExpenseItems { get; set; } = new();
+    }
+}

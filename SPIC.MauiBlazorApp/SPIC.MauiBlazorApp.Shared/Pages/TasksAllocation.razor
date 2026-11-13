@@ -449,69 +449,104 @@
         }
         else if (currentTab == TaTab.Today)
         {
-            <div class="ta-wizard">
-                <!-- Status filter sidebar. The extra ta-stepper-wrap level (not used by the
-                     steps 1-5 wizard above, which uses .ta-stepper directly) keeps the legend
-                     OUTSIDE .ta-stepper itself - at phone width .ta-stepper becomes a horizontal
-                     row of pill buttons with overflow: hidden (see TasksAllocation.css), so the
-                     legend rendered as just another squeezed-in item in that row instead of
-                     stacking below it. -->
-                <div class="ta-stepper-wrap @(todayStepperCollapsed ? "ta-stepper-collapsed" : "")">
-                    <div class="ta-stepper">
-                        @foreach (var filter in TodayFilters)
+            @if (todayAllocation is null)
+            {
+                <div class="ta-status-card" style="background: #f8fafc; border: 1px dashed #cbd5e1; margin-top: 1rem;">
+                    <div class="ta-status-icon" style="color: #64748b;"><i class="bi bi-calendar-x"></i></div>
+                    <div class="ta-status-title" style="color: #334155;">No allocation for this week</div>
+                    <div class="ta-status-summary">You have not submitted a task allocation for this week. Please plan and submit your weekly allocation first.</div>
+                    <button type="button" class="ta-btn ta-btn-primary mt-3" style="display: inline-flex; align-items: center; gap: 6px;" @onclick="() => currentTab = TaTab.All">
+                        <i class="bi bi-calendar-plus"></i> Go to All Allocations
+                    </button>
+                </div>
+            }
+            else if (todayAllocation.Status != "Approved")
+            {
+                @if (todayAllocation.Status == "Rejected")
+                {
+                    <div class="ta-status-card" style="background: #fef2f2; border: 1px solid #fecaca; margin-top: 1rem;">
+                        <div class="ta-status-icon" style="color: #ef4444;"><i class="bi bi-x-circle"></i></div>
+                        <div class="ta-status-title" style="color: #b91c1c;">Allocation Rejected</div>
+                        <div class="ta-status-summary">Your weekly allocation was rejected by the MDO. Please review and resubmit your weekly plan.</div>
+                        <button type="button" class="ta-btn ta-btn-primary mt-3" style="display: inline-flex; align-items: center; gap: 6px;" @onclick="() => currentTab = TaTab.All">
+                            <i class="bi bi-pencil-square"></i> Update & Resubmit
+                        </button>
+                    </div>
+                }
+                else
+                {
+                    <div class="ta-status-card ta-status-pending" style="margin-top: 1rem;">
+                        <div class="ta-status-icon"><i class="bi bi-clock-history"></i></div>
+                        <div class="ta-status-title">Allocation submitted &mdash; awaiting MDO approval</div>
+                        <div class="ta-status-summary">@(string.IsNullOrWhiteSpace(submittedSummary) ? BuildSubmittedSummary(todayAllocation) : submittedSummary)</div>
+                        <p style="margin-top: 12px; font-size: 13px; color: #475569;">
+                            Your weekly allocation has been submitted and is currently waiting for MDO approval. Today's tasks will become available to start once approved.
+                        </p>
+                        <button type="button" class="ta-btn ta-btn-outline mt-3" style="display: inline-flex; align-items: center; gap: 6px;" @onclick="() => currentTab = TaTab.All">
+                            <i class="bi bi-eye"></i> View Weekly Plan
+                        </button>
+                    </div>
+                }
+            }
+            else
+            {
+                <div class="ta-wizard">
+                    <!-- Status filter sidebar. The extra ta-stepper-wrap level (not used by the
+                         steps 1-5 wizard above, which uses .ta-stepper directly) keeps the legend
+                         OUTSIDE .ta-stepper itself - at phone width .ta-stepper becomes a horizontal
+                         row of pill buttons with overflow: hidden (see TasksAllocation.css), so the
+                         legend rendered as just another squeezed-in item in that row instead of
+                         stacking below it. -->
+                    <div class="ta-stepper-wrap @(todayStepperCollapsed ? "ta-stepper-collapsed" : "")">
+                        <div class="ta-stepper">
+                            @foreach (var filter in TodayFilters)
+                            {
+                                var count = BadgeCount(filter.Status);
+                                <button type="button"
+                                        class="ta-step-item @(todayFilter == filter.Status ? "active" : "")"
+                                        @onclick="() => todayFilter = filter.Status">
+                                    <span class="ta-step-num">@filter.Number</span>
+                                    <span class="ta-step-label">@filter.Label</span>
+                                    <span class="ta-today-bell">
+                                        <i class="bi bi-bell"></i>
+                                        @if (count > 0)
+                                        {
+                                            <span class="ta-today-badge">@count</span>
+                                        }
+                                    </span>
+                                </button>
+                            }
+                        </div>
+
+                        @if (!todayStepperCollapsed)
                         {
-                            var count = BadgeCount(filter.Status);
-                            <button type="button"
-                                    class="ta-step-item @(todayFilter == filter.Status ? "active" : "")"
-                                    @onclick="() => todayFilter = filter.Status">
-                                <span class="ta-step-num">@filter.Number</span>
-                                <span class="ta-step-label">@filter.Label</span>
-                                <span class="ta-today-bell">
-                                    <i class="bi bi-bell"></i>
-                                    @if (count > 0)
-                                    {
-                                        <span class="ta-today-badge">@count</span>
-                                    }
-                                </span>
-                            </button>
+                            <!-- Explains what each task card's colour theme means (see StatusCardClass /
+                                 .ta-today-card.ta-status-* below) - same 3 stages as the filters above,
+                                 just as a colour key instead of a clickable filter. -->
+                            <div class="ta-status-legend">
+                                <div class="ta-status-legend-item">
+                                    <span class="ta-status-legend-dot ta-legend-yettostart"></span>
+                                    Yet to Start
+                                </div>
+                                <div class="ta-status-legend-item">
+                                    <span class="ta-status-legend-dot ta-legend-inprogress"></span>
+                                    In Progress
+                                </div>
+                                <div class="ta-status-legend-item">
+                                    <span class="ta-status-legend-dot ta-legend-completed"></span>
+                                    Completed
+                                </div>
+                            </div>
                         }
                     </div>
 
-                    @if (!todayStepperCollapsed)
-                    {
-                        <!-- Explains what each task card's colour theme means (see StatusCardClass /
-                             .ta-today-card.ta-status-* below) - same 3 stages as the filters above,
-                             just as a colour key instead of a clickable filter. -->
-                        <div class="ta-status-legend">
-                            <div class="ta-status-legend-item">
-                                <span class="ta-status-legend-dot ta-legend-yettostart"></span>
-                                Yet to Start
-                            </div>
-                            <div class="ta-status-legend-item">
-                                <span class="ta-status-legend-dot ta-legend-inprogress"></span>
-                                In Progress
-                            </div>
-                            <div class="ta-status-legend-item">
-                                <span class="ta-status-legend-dot ta-legend-completed"></span>
-                                Completed
-                            </div>
-                        </div>
-                    }
-                </div>
+                    <button type="button" class="ta-stepper-toggle" title="@(todayStepperCollapsed ? "Expand" : "Collapse")" @onclick="() => todayStepperCollapsed = !todayStepperCollapsed">
+                        <i class="bi @(todayStepperCollapsed ? "bi-chevron-right" : "bi-chevron-left")"></i>
+                    </button>
 
-                <button type="button" class="ta-stepper-toggle" title="@(todayStepperCollapsed ? "Expand" : "Collapse")" @onclick="() => todayStepperCollapsed = !todayStepperCollapsed">
-                    <i class="bi @(todayStepperCollapsed ? "bi-chevron-right" : "bi-chevron-left")"></i>
-                </button>
-
-                <!-- Task cards -->
-                <div class="ta-wizard-content">
-                    <div class="ta-today-grid">
-                        @if (todayAllocation is null)
-                        {
-                            <EmptyState Icon="bi-inbox" Title="No allocation for today" Compact="true" />
-                        }
-                        else
-                        {
+                    <!-- Task cards -->
+                    <div class="ta-wizard-content">
+                        <div class="ta-today-grid">
                             @if (BadgeCount(todayFilter) == 0)
                             {
                                 <EmptyState Icon="bi-inbox" Title="@EmptyTodayTitle" Compact="true" />
@@ -700,7 +735,6 @@
                                     </div>
                                 }
                             }
-                        }
                     </div>
 
                     @if (NextStatus is { } nextStatus && BadgeCount(nextStatus) > 0)
@@ -717,6 +751,7 @@
                     }
                 </div>
             </div>
+            }
         }
         else if (currentTab == TaTab.Completed)
         {
@@ -1026,7 +1061,21 @@
             }
             else if (!WeekSummaries.Any())
             {
-                <EmptyState Icon="bi-calendar-week" Title="No tasks match this filter" Compact="true" />
+                @if (todayAllocation != null && todayAllocation.Status != "Approved" && summaryFromDate <= DateTime.Today && summaryToDate >= DateTime.Today)
+                {
+                    <div class="ta-status-card ta-status-pending" style="margin-top: 1rem;">
+                        <div class="ta-status-icon"><i class="bi bi-clock-history"></i></div>
+                        <div class="ta-status-title">Allocation submitted &mdash; awaiting MDO approval</div>
+                        <div class="ta-status-summary">@(string.IsNullOrWhiteSpace(submittedSummary) ? BuildSubmittedSummary(todayAllocation) : submittedSummary)</div>
+                        <p style="margin-top: 12px; font-size: 13px; color: #475569;">
+                            Your weekly allocation has been submitted and is currently waiting for MDO approval. Tasks will appear in this summary once approved.
+                        </p>
+                    </div>
+                }
+                else
+                {
+                    <EmptyState Icon="bi-calendar-week" Title="No approved tasks match this filter" Compact="true" />
+                }
             }
             else
             {
@@ -1276,8 +1325,11 @@
     private bool MatchesCompletedStatusFilter(AllocTaskStatus status) =>
         string.IsNullOrEmpty(appliedCompletedStatus) || status.ToString() == appliedCompletedStatus;
 
+    private IEnumerable<JmdoTaskAllocationResponseDto> ApprovedAllocations =>
+        _allAllocations.Where(a => a.Status == "Approved");
+
     private IEnumerable<string> CompletedDealerOptions =>
-        _allAllocations.SelectMany(a => a.DealerAssignments)
+        ApprovedAllocations.SelectMany(a => a.DealerAssignments)
             .Select(d => d.DealerName)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(n => n);
@@ -1291,7 +1343,8 @@
     // instead of the one the JMDO is actually looking at on the other tab. Any other date range,
     // dealer, or status picked via Search falls back to filtering across every submitted week.
     private bool UseTodayAllocationSource =>
-        appliedCompletedFrom == DateTime.Today && appliedCompletedTo == DateTime.Today;
+        appliedCompletedFrom == DateTime.Today && appliedCompletedTo == DateTime.Today
+        && todayAllocation?.Status == "Approved";
 
     // Dealer filter only makes sense for dealer visits - Program/SPCM/Soil/PoS aren't tied to a
     // dealer, so picking one hides those sections entirely rather than showing them regardless.
@@ -1299,7 +1352,7 @@
         (UseTodayAllocationSource
             ? (todayAllocation?.DealerAssignments ?? Enumerable.Empty<JmdoDealerAssignmentResponseDto>())
                 .Where(d => d.Day == DateTime.Today.DayOfWeek)
-            : _allAllocations.SelectMany(a => a.DealerAssignments.Select(d => (Date: ExactTaskDate(a.AllocationDate, d.Day), Dealer: d)))
+            : ApprovedAllocations.SelectMany(a => a.DealerAssignments.Select(d => (Date: ExactTaskDate(a.AllocationDate, d.Day), Dealer: d)))
                 .Where(x => MatchesCompletedDateFilter(x.Date))
                 .Select(x => x.Dealer))
         .Where(d => MatchesCompletedStatusFilter(d.Status)
@@ -1309,7 +1362,7 @@
         CompletedDealerFilterActive ? Enumerable.Empty<JmdoAllocationProgramRowDto>() :
         (UseTodayAllocationSource
             ? todayAllocation?.Programs ?? Enumerable.Empty<JmdoAllocationProgramRowDto>()
-            : _allAllocations.SelectMany(a => a.Programs.Select(p => (Week: a.AllocationDate, Program: p)))
+            : ApprovedAllocations.SelectMany(a => a.Programs.Select(p => (Week: a.AllocationDate, Program: p)))
                 .Where(x => MatchesCompletedWeekFilter(x.Week))
                 .Select(x => x.Program))
         .Where(p => MatchesCompletedStatusFilter(p.Status));
@@ -1318,21 +1371,21 @@
         CompletedDealerFilterActive ? Enumerable.Empty<JmdoTaskAllocationResponseDto>() :
         (UseTodayAllocationSource
             ? (todayAllocation != null ? new[] { todayAllocation } : Enumerable.Empty<JmdoTaskAllocationResponseDto>())
-            : _allAllocations.Where(a => MatchesCompletedWeekFilter(a.AllocationDate)))
+            : ApprovedAllocations.Where(a => MatchesCompletedWeekFilter(a.AllocationDate)))
         .Where(a => a.SpcmTarget is > 0 && MatchesCompletedStatusFilter(a.SpcmStatus));
 
     private IEnumerable<JmdoTaskAllocationResponseDto> FilteredCompletedSoilAllocations =>
         CompletedDealerFilterActive ? Enumerable.Empty<JmdoTaskAllocationResponseDto>() :
         (UseTodayAllocationSource
             ? (todayAllocation != null ? new[] { todayAllocation } : Enumerable.Empty<JmdoTaskAllocationResponseDto>())
-            : _allAllocations.Where(a => MatchesCompletedWeekFilter(a.AllocationDate)))
+            : ApprovedAllocations.Where(a => MatchesCompletedWeekFilter(a.AllocationDate)))
         .Where(a => a.SoilSampleTarget is > 0 && MatchesCompletedStatusFilter(a.SoilSampleStatus));
 
     private IEnumerable<JmdoTaskAllocationResponseDto> FilteredCompletedPosAllocations =>
         CompletedDealerFilterActive ? Enumerable.Empty<JmdoTaskAllocationResponseDto>() :
         (UseTodayAllocationSource
             ? (todayAllocation != null ? new[] { todayAllocation } : Enumerable.Empty<JmdoTaskAllocationResponseDto>())
-            : _allAllocations.Where(a => MatchesCompletedWeekFilter(a.AllocationDate)))
+            : ApprovedAllocations.Where(a => MatchesCompletedWeekFilter(a.AllocationDate)))
         .Where(a => (a.UreaTarget > 0 || a.NpsTarget > 0 || a.DapTarget > 0 || a.OthersTarget > 0) && MatchesCompletedStatusFilter(a.PosLiquidationStatus));
 
     private bool AnyFilteredCompletedTasks =>
@@ -1403,7 +1456,8 @@
     // there isn't one yet) instead of independently recomputing "this week" - see the identical
     // reasoning on Task History's UseTodayAllocationSource, which this mirrors.
     private bool UseTodayAllocationSourceForSummary =>
-        appliedSummaryFrom == DateTime.Today && appliedSummaryTo == DateTime.Today;
+        appliedSummaryFrom == DateTime.Today && appliedSummaryTo == DateTime.Today
+        && todayAllocation?.Status == "Approved";
 
     // One card per allocation (= one submitted week), each showing that week's targets against
     // what's actually been done plus a Sun-Sat day breakdown of dealer visits.
@@ -1590,8 +1644,8 @@
             var filtersActive = !string.IsNullOrWhiteSpace(appliedSummaryDealer) || !string.IsNullOrEmpty(appliedSummaryStatus);
 
             IEnumerable<JmdoTaskAllocationResponseDto> source = UseTodayAllocationSourceForSummary
-                ? (todayAllocation != null ? new[] { todayAllocation } : Enumerable.Empty<JmdoTaskAllocationResponseDto>())
-                : _allAllocations.Where(a => MatchesSummaryWeekFilter(a.AllocationDate));
+                ? (todayAllocation != null && todayAllocation.Status == "Approved" ? new[] { todayAllocation } : Enumerable.Empty<JmdoTaskAllocationResponseDto>())
+                : ApprovedAllocations.Where(a => MatchesSummaryWeekFilter(a.AllocationDate));
 
             var weeks = source.Select(a => BuildWeekSummary(a, appliedSummaryDealer, appliedSummaryStatus));
 
@@ -1607,7 +1661,7 @@
         get
         {
             var rows = new List<TaskSummaryRow>();
-            foreach (var a in _allAllocations)
+            foreach (var a in ApprovedAllocations)
             {
                 foreach (var d in a.DealerAssignments)
                 {
@@ -1889,7 +1943,7 @@
 
     private int CountByStatus(AllocTaskStatus status)
     {
-        if (todayAllocation is null) return 0;
+        if (todayAllocation is null || todayAllocation.Status != "Approved") return 0;
         int count = 0;
         foreach (var d in todayAllocation.DealerAssignments.Where(x => x.Day == DateTime.Today.DayOfWeek))
             if (GetStatus($"dealer_{d.DealerId}") == status) count++;

@@ -64,6 +64,9 @@ namespace SPIC.Core.DTOs
 		public bool InSpic { get; set; }
 		public bool InGreenStar { get; set; }
 		public bool IsNewDealerRegistration { get; set; }
+		/// <summary>True once AVP Office has manually saved the company Dealer IDs for an
+		/// initial New Dealer. Initial New Dealers are not "Approved" until this is true.</summary>
+		public bool IsAvpOfficeSubmitted { get; set; }
 		public bool HasCompletedExistingMaintenance { get; set; }
 		public string? DealerCode { get; set; }
 		public string? CreatedBy { get; set; }
@@ -141,7 +144,12 @@ namespace SPIC.Core.DTOs
 		/// <summary>"In AVP" tile.</summary>
 		public int InAVP { get; set; }
 
-		/// <summary>"Approved" tile: AVPApproved == true.</summary>
+		/// <summary>"In AVP Office" tile: initial New Dealer approved by AVP but still
+		/// awaiting the manual company Dealer IDs.</summary>
+		public int InAvpOffice { get; set; }
+
+		/// <summary>"Approved" tile: AVPApproved == true, excluding initial New Dealers
+		/// that are still awaiting AVP Office completion.</summary>
 		public int Approved { get; set; }
 
 		/// <summary>"Rejected / Returned" tile: any of the three approval flags is false.</summary>

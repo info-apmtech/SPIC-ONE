@@ -70,6 +70,7 @@ namespace SPIC.MauiBlazorApp.Shared.Services
 		public string DistrictName { get; set; } = "";
 		public string RegionName { get; set; } = "";
 		public string HeadquarterName { get; set; } = "";
+		public int ZoneId { get; set; }
 		public int StateId { get; set; }
 		public int RegionId { get; set; }
 	}

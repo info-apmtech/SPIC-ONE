@@ -32,6 +32,9 @@ internal static class Program
 
 		// GPS Settings entity, DTOs, controller authorization, and role access.
 		GpsSettingsTests.Run();
+		Console.WriteLine();
+		MultiRegionHqTests.Run();
+		SessionClockTests.Run();
 
 		return Check.Report("Total");
 	}

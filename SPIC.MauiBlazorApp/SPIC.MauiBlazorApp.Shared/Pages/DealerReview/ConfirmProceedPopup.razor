@@ -138,48 +138,6 @@
                             </div>
                         </section>
 
-                        @if (IsNewDealerFinalApproval)
-                        {
-                            <section class="cp-code-section">
-                                <h2 class="cp-section-title">Dealer Code Review</h2>
-                                <div class="cp-code-row">
-                                    <div class="cp-code-field">
-                                        <label>Code Prefix</label>
-                                        <select class="cp-code-select"
-                                                value="@SelectedDealerCodePrefix"
-                                                @onchange="OnDealerCodePrefixChanged"
-                                                disabled="@(IsApproving || IsDealerCodePreviewLoading)">
-                                            <option value="D">D - SPIC</option>
-                                            <option value="N">N - GreenStar</option>
-                                            <option value="Z">Z - GreenStar</option>
-                                            <option value="T">T - GreenStar</option>
-                                        </select>
-                                    </div>
-                                    <div class="cp-code-field">
-                                        <label>Proposed Dealer Code</label>
-                                        <input class="cp-code-input"
-                                               value="@AvpDealerCode"
-                                               readonly
-                                               placeholder="Select prefix to generate Dealer Code" />
-                                    </div>
-                                </div>
-                                <div class="cp-code-help">
-                                    <strong>D</strong> saves the reviewed code to <strong>DealerCode + SPICCode</strong>.
-                                    <strong>N / Z / T</strong> save it to <strong>DealerCode + GreenStarCode</strong>.
-                                    For compatibility, <strong>N</strong> also mirrors to <strong>NCode</strong> and
-                                    <strong>T</strong> also mirrors to <strong>TnCode</strong>.
-                                </div>
-                                @if (IsDealerCodePreviewLoading)
-                                {
-                                    <div class="cp-code-loading">Generating Dealer Code preview...</div>
-                                }
-                                @if (!string.IsNullOrWhiteSpace(DealerCodePreviewError))
-                                {
-                                    <div class="cp-code-error">@DealerCodePreviewError</div>
-                                }
-                            </section>
-                        }
-
                         <section class="cp-remarks-section">
                             <h2 class="cp-section-title">Remarks <span class="cp-optional-text">@(IsNewDealer ? "(required)" : "(optional)")</span></h2>
                             <textarea class="cp-remarks-input" @bind="Remarks" placeholder="@(IsNewDealer ? "Remarks are required for this stage" : "Enter Remarks Optional")"></textarea>
@@ -353,7 +311,7 @@
                         </button>
                         <button class="cp-btn cp-btn-confirm"
                                 @onclick="OnConfirm"
-                                disabled="@(IsApproving || (IsNewDealerFinalApproval && (IsDealerCodePreviewLoading || string.IsNullOrWhiteSpace(AvpDealerCode))))">
+                                disabled="@IsApproving">
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <polyline points="20 6 9 17 4 12"></polyline>
                             </svg>
@@ -380,17 +338,12 @@
     [Parameter] public string NextStageTarget { get; set; } = "";
 
     [Parameter] public bool IsApproving { get; set; }
-    [Parameter] public bool IsDealerCodePreviewLoading { get; set; }
-    [Parameter] public string? DealerCodePreviewError { get; set; }
     [Parameter] public string? ApprovalError { get; set; }
-    [Parameter] public string SelectedDealerCodePrefix { get; set; } = "D";
-    [Parameter] public string AvpDealerCode { get; set; } = string.Empty;
 
-    /// <summary>Close (overlay click, X and Cancel all use it), confirm, and prefix change —
-    /// all handled by the page so the approval flow is untouched.</summary>
+    /// <summary>Close (overlay click, X and Cancel all use it) and confirm — both
+    /// handled by the page so the approval flow is untouched.</summary>
     [Parameter] public EventCallback OnClose { get; set; }
     [Parameter] public EventCallback OnConfirm { get; set; }
-    [Parameter] public EventCallback<ChangeEventArgs> OnDealerCodePrefixChanged { get; set; }
 
     // Two-way values. Each proxy writes the page's field through the matching callback,
     // which is exactly what the page's own @bind used to do.

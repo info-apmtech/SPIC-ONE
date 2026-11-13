@@ -34,7 +34,7 @@ namespace SpicAPI.Controllers
                 return Forbid403("Only JMDO users mark attendance here.");
 
             var userId = CurrentUserId();
-            var today = DateTime.Today;
+            var today = IndiaNow().Date;
 
             var attendance = await _db.JMDOAttendances.AsNoTracking()
                 .FirstOrDefaultAsync(a => a.UserId == userId && a.Date == today);
@@ -68,9 +68,9 @@ namespace SpicAPI.Controllers
             }
 
             var userId = CurrentUserId();
-            var date = dto.Date.Date;
+            var date = ToIndiaDate(dto.Date);
             var actor = User.Identity?.Name;
-            var now = DateTime.Now;
+            var now = IndiaNow();
 
             var attendance = await _db.JMDOAttendances
                 .FirstOrDefaultAsync(a => a.UserId == userId && a.Date == date);
@@ -114,7 +114,7 @@ namespace SpicAPI.Controllers
                 return Forbid403("Only JMDO users mark attendance here.");
 
             var userId = CurrentUserId();
-            var now = DateTime.Now;
+            var now = IndiaNow();
             var weekStart = WeekStartSunday(now.Date);
             var weekEndExclusive = weekStart.AddDays(7);
 
@@ -280,6 +280,39 @@ namespace SpicAPI.Controllers
         }
 
         private bool IsJmdo() => CurrentRole() == AppRole.JMDO;
+
+        // The API container runs on UTC (no TZ is set in the Docker image), but "today" here must
+        // mean the JMDO's own India day - otherwise, between 00:00 and 05:30 IST, DateTime.Today
+        // (UTC) is still yesterday, so a row saved with the device's IST date never matches GetToday's
+        // lookup even though the save itself succeeded. Mirrors StockReconciliationController's
+        // GetIndiaBusinessDate fallback chain for environments missing the IANA/Windows tz database.
+        private static DateTime IndiaNow() =>
+            IndiaTimeZone is { } tz ? TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz) : DateTime.UtcNow.AddHours(5.5);
+
+        // The India calendar day a client meant. The phone sends DateTime.Today with its offset
+        // ("2026-11-04T00:00:00+05:30"), and System.Text.Json turns an offset value into the SERVER's
+        // local time - on the UTC container that is 2026-11-03 18:30, so a plain .Date saved the row
+        // under the previous day and GetToday never found it. Local/Utc values are converted to India
+        // time first; an offset-less "2026-11-04" (Unspecified, e.g. from the date picker) already is one.
+        private static DateTime ToIndiaDate(DateTime value)
+        {
+            if (value.Kind == DateTimeKind.Unspecified) return value.Date;
+            var utc = value.ToUniversalTime();
+            return (IndiaTimeZone is { } tz ? TimeZoneInfo.ConvertTimeFromUtc(utc, tz) : utc.AddHours(5.5)).Date;
+        }
+
+        // Asia/Kolkata (IANA), then India Standard Time (Windows); null if neither tz database is present.
+        private static readonly TimeZoneInfo? IndiaTimeZone = FindIndiaTimeZone();
+
+        private static TimeZoneInfo? FindIndiaTimeZone()
+        {
+            foreach (var id in new[] { "Asia/Kolkata", "India Standard Time" })
+            {
+                try { return TimeZoneInfo.FindSystemTimeZoneById(id); }
+                catch (Exception) { /* try the next id */ }
+            }
+            return null;
+        }
 
         private static bool IsValidCoordinate(double? latitude, double? longitude)
         {
