@@ -6,6 +6,9 @@
 @using Microsoft.AspNetCore.Components
 @using Microsoft.AspNetCore.Components.Forms
 @using System.Net.Http.Headers
+@using System.IO.Compression
+@using System.Xml
+@using System.Text
 @implements IAsyncDisposable
 
 <PageTitle>Sales Tracking · SPIC ONE</PageTitle>
@@ -120,9 +123,9 @@
                     <SalesAuditIcon Name="arrow-left" Size="15" />
                     @(TrackingView ? "Back to Tracking List" : "Back to Plan Review")
                 </button>
-                <button type="button" class="trk-btn-outline" disabled title="Tracking report export is not available until a report API is configured.">
+                <button type="button" class="trk-btn-outline" disabled="@(!IsLoaded || IsExporting)" @onclick="DownloadTrackingReportAsync" title="Download an Excel (.xlsx) copy of the currently loaded tracking data">
                     <SalesAuditIcon Name="download" Size="15" />
-                    Download Tracking Report
+                    @(IsExporting ? "Preparing Excel..." : "Download Tracking Report")
                 </button>
                 @if (HasData && !TrackingView)
                 {
@@ -133,6 +136,11 @@
                 }
             </div>
         </div>
+
+        @if (!string.IsNullOrWhiteSpace(ExportError))
+        {
+            <div class="alert alert-warning" role="alert">@ExportError</div>
+        }
 
         <SalesAuditStepper CurrentStep="4" TrackingPhase="true" CSR2Id="@CSR2Id" />
 
@@ -426,9 +434,14 @@
             <!-- Dealer-wise Actual Sales (Top 5) -->
             <div class="trk-card">
                 <div class="trk-card-top">
-                    <h3 class="trk-card-title">Dealer - wise Uploaded Sales (Top 5, unverified)</h3>
+                    <h3 class="trk-card-title">Dealer-wise Matched SAP Sales (Top 5, read-only)</h3>
                     <button type="button" class="trk-btn-outline" disabled title="Details API not yet configured"><SalesAuditIcon Name="pencil" Size="15" /> View Details</button>
                 </div>
+                @if (!string.IsNullOrWhiteSpace(DealerSalesError))
+                {
+                    <div class="alert alert-warning">@DealerSalesError</div>
+                }
+                <p class="text-muted small">Dealer master names and HQ come from mapped registrations; actual gross sales come from Dealer Mapping's SAP invoice matches. Dealer-level planned values and percentages are unavailable because no dealer commitment is stored.</p>
                 <div class="trk-table-wrapper">
                     <table class="trk-table">
                         <thead>
@@ -447,23 +460,128 @@
                                 <tr>
                                     <td class="trk-col-no">@(index + 1)</td>
                                     <td>@row.Name</td>
-                                    <td>@row.Detail</td>
-                                    <td>@SalesAuditFormat.Rupees(row.Planned)</td>
-                                    <td>@SalesAuditFormat.Rupees(row.Actual)</td>
-                                    <td>@DealerAchievementCell(row.Planned, row.Actual)</td>
+                                    <td>@row.Location</td>
+                                    <td>--</td>
+                                    <td>@(DealerSalesLoaded ? SalesAuditFormat.Rupees(row.Actual) : "--")</td>
+                                    <td>--</td>
                                 </tr>
+                            }
+                            @if (TopDealers.Count == 0)
+                            {
+                                <tr><td colspan="6">No dealers are mapped to this programme.</td></tr>
                             }
                         </tbody>
                         <tfoot>
                             <tr>
                                 <td colspan="3" class="trk-total-label">Total (Top 5)</td>
-                                <td class="trk-total-value">@SalesAuditFormat.Rupees(TopDealers.Sum(r => r.Planned))</td>
-                                <td class="trk-total-value">@SalesAuditFormat.Rupees(TopDealers.Sum(r => r.Actual))</td>
-                                <td class="trk-total-value">@($"{Pct(Percent(TopDealers.Sum(r => r.Actual), TopDealers.Sum(r => r.Planned)))}%")</td>
+                                <td class="trk-total-value">--</td>
+                                <td class="trk-total-value">@(DealerSalesLoaded ? SalesAuditFormat.Rupees(TopDealers.Sum(r => r.Actual)) : "--")</td>
+                                <td class="trk-total-value">--</td>
                             </tr>
                         </tfoot>
                     </table>
                 </div>
+            </div>
+
+            <!-- Exact read-only comparison from Dealer Mapping SAP invoice matches. -->
+            <div class="trk-card">
+                <div class="trk-card-top">
+                    <h3 class="trk-card-title">Dealer Sales Achievement - SAP Invoice Matches</h3>
+                    <button type="button" class="trk-btn-outline" @onclick="() => ShowMatchedInvoiceDetails = !ShowMatchedInvoiceDetails">
+                        @(ShowMatchedInvoiceDetails ? "Hide Details" : "View Details")
+                    </button>
+                </div>
+                @if (MatchedDealerSales is not null)
+                {
+                    <p class="text-muted small">
+                        Scheme: @DateText(MatchedDealerSales.SchemeFrom) to @DateText(MatchedDealerSales.SchemeTo)
+                        | Mapped dealers: <strong>@MatchedDealerSales.MappedDealers</strong>
+                        | Matching invoice lines: <strong>@MatchedDealerSales.MatchedInvoiceLines</strong>
+                    </p>
+                    <div class="trk-table-wrapper">
+                        <table class="trk-table">
+                            <thead>
+                                <tr>
+                                    <th>Product</th>
+                                    <th>Planned Qty (MT)</th>
+                                    <th>Actual Qty (MT)</th>
+                                    <th>Planned Value (₹)</th>
+                                    <th>Actual Gross (₹)</th>
+                                    <th>Balance (₹)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var item in MatchedDealerSales.Products)
+                                {
+                                    <tr>
+                                        <td>@item.ProductName</td>
+                                        <td>@item.PlannedQuantityMT.ToString("N3")</td>
+                                        <td>@item.ActualQuantityMT.ToString("N3")</td>
+                                        <td>@SalesAuditFormat.Rupees(item.PlannedValueRs)</td>
+                                        <td>@SalesAuditFormat.Rupees(item.ActualGrossAmountRs)</td>
+                                        <td>@SalesAuditFormat.Rupees(item.BalanceValueRs)</td>
+                                    </tr>
+                                }
+                                @if (MatchedDealerSales.Products.Count == 0)
+                                {
+                                    <tr><td colspan="6">No product plan lines are available.</td></tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                    @if (ShowMatchedInvoiceDetails)
+                    {
+                        <h3 class="trk-card-title" style="margin-top:20px">Matched Dealer Invoice Details</h3>
+                        <div class="trk-table-wrapper">
+                            <table class="trk-table">
+                                <thead>
+                                    <tr>
+                                        <th>S:NO</th>
+                                        <th>Dealer Code</th>
+                                        <th>Dealer Name</th>
+                                        <th>Billing Date</th>
+                                        <th>Billing Document</th>
+                                        <th>Product Code</th>
+                                        <th>Product</th>
+                                        <th>Qty (MT)</th>
+                                        <th>Gross Amount (₹)</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var (item, index) in MatchedDealerSales.Rows.Select((r, i) => (r, i)))
+                                    {
+                                        <tr>
+                                            <td>@(index + 1)</td>
+                                            <td>@item.DealerCode</td>
+                                            <td>@item.DealerName</td>
+                                            <td>@item.BillingDate.ToString("dd MMM yyyy")</td>
+                                            <td>@item.BillingDocument</td>
+                                            <td>@item.ProductCode</td>
+                                            <td>@item.ProductName</td>
+                                            <td>@item.QuantityMT.ToString("N3")</td>
+                                            <td>@SalesAuditFormat.Rupees(item.GrossAmountRs)</td>
+                                        </tr>
+                                    }
+                                    @if (MatchedDealerSales.Rows.Count == 0)
+                                    {
+                                        <tr><td colspan="9">No matching SAP invoices were found for this scheme.</td></tr>
+                                    }
+                                </tbody>
+                                <tfoot>
+                                    <tr>
+                                        <td colspan="8" class="trk-total-label">Total matched invoice gross</td>
+                                        <td class="trk-total-value">@SalesAuditFormat.Rupees(MatchedDealerSales.Rows.Sum(r => r.GrossAmountRs))</td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    }
+                    <p class="text-muted small">Read-only SAP invoice matches. These values are not automatically saved as verified Sales Audit achievements.</p>
+                }
+                else
+                {
+                    <p class="text-muted small">@(string.IsNullOrWhiteSpace(DealerSalesError) ? "No matched SAP invoice data available." : DealerSalesError)</p>
+                }
             </div>
 
             <!-- Footer actions -->
@@ -482,7 +600,10 @@
                     {
                         <span class="trk-footer-note"><SalesAuditIcon Name="info" Size="16" /> Sales data is required to review performance.</span>
                     }
-                    <button type="button" class="trk-btn trk-btn-primary" disabled="@(!HasData || TrackingView)" @onclick="GoToPeriodEndReview">
+                    <button type="button"
+                            class="trk-btn trk-btn-primary"
+                            disabled="@(CSR2Id is null or <= 0 || !HasData)"
+                            @onclick="GoToPeriodEndReview">
                         Go To Final Review
                         <SalesAuditIcon Name="chevrons-right" Size="16" />
                     </button>
@@ -541,14 +662,52 @@
     {
         public List<DealerDto> Rows { get; set; } = new();
     }
+    // Current dealer-mapping API contract: identifiers and master details only.
+    // Per-dealer planned commitments are not stored in SalesAuditDealerMapping.
     private sealed class DealerDto
     {
-        public string CustomerNumber { get; set; } = "";
-        public string CustomerName { get; set; } = "";
-        public string CustomerDistrict { get; set; } = "";
-        public decimal PlannedCommitmentRs { get; set; }
-        public decimal ActualSalesRs { get; set; }
+        public string DealerCode { get; set; } = "";
+        public string DealerName { get; set; } = "";
+        public string HeadquartersName { get; set; } = "";
+        public string RegionName { get; set; } = "";
+        public string StateName { get; set; } = "";
     }
+
+    // Same SAP matched-invoice endpoint used by DealerMapping.razor.
+    private sealed class MatchedDealerSalesDto
+    {
+        public DateTime SchemeFrom { get; set; }
+        public DateTime SchemeTo { get; set; }
+        public int MappedDealers { get; set; }
+        public int MatchedInvoiceLines { get; set; }
+        public int ExcludedOutsideDates { get; set; }
+        public int ExcludedDifferentUnits { get; set; }
+        public List<MatchedProductSalesDto> Products { get; set; } = new();
+        public List<MatchedDealerInvoiceDto> Rows { get; set; } = new();
+    }
+    private sealed class MatchedProductSalesDto
+    {
+        public int ProductId { get; set; }
+        public string ProductName { get; set; } = "";
+        public decimal PlannedQuantityMT { get; set; }
+        public decimal ActualQuantityMT { get; set; }
+        public decimal PlannedValueRs { get; set; }
+        public decimal ActualGrossAmountRs { get; set; }
+        public decimal BalanceValueRs { get; set; }
+    }
+    private sealed class MatchedDealerInvoiceDto
+    {
+        public long SaleId { get; set; }
+        public string DealerCode { get; set; } = "";
+        public string DealerName { get; set; } = "";
+        public DateTime BillingDate { get; set; }
+        public string BillingDocument { get; set; } = "";
+        public string ProductCode { get; set; } = "";
+        public string ProductName { get; set; } = "";
+        public decimal QuantityMT { get; set; }
+        public decimal GrossAmountRs { get; set; }
+    }
+    private record DealerSalesRow(string DealerCode, string Name, string Location, decimal Actual);
 
     // Same read-only endpoint and saved-status semantics used in Plan Review.
     private sealed class MonthlySapResponse
@@ -595,33 +754,36 @@
     // A single month is shown as a real within-month cumulative trend, not a horizontal-bar chart.
     // The first point is the beginning-of-month zero baseline (not a fabricated invoice).
     // Subsequent points are derived exclusively from saved, dated SAP invoices.
-    private List<MonthlyChartPoint> MonthlyChartPoints
+    // Monthly chart data is immutable between refreshes; avoid recalculating it
+    // repeatedly from several Razor bindings during every render.
+    private List<MonthlyChartPoint>? _cachedMonthlyChartPoints;
+    private List<MonthlyChartPoint> MonthlyChartPoints =>
+        _cachedMonthlyChartPoints ??= BuildMonthlyChartPoints();
+
+    private List<MonthlyChartPoint> BuildMonthlyChartPoints()
     {
-        get
+        if (MonthlyInvoiceSales.Count == 1 && SelectedMonthDailySales.Count > 0)
         {
-            if (MonthlyInvoiceSales.Count == 1 && SelectedMonthDailySales.Count > 0)
-            {
-                var month = MonthlyInvoiceSales[0].Month;
-                var daysInMonth = DateTime.DaysInMonth(month.Year, month.Month);
-                var points = new List<MonthlyChartPoint>
+            var month = MonthlyInvoiceSales[0].Month;
+            var daysInMonth = DateTime.DaysInMonth(month.Year, month.Month);
+            var points = new List<MonthlyChartPoint>
                 {
                     new MonthlyChartPoint($"01 {month:MMM}", 0m, 86d, ChartY(0m), MonthlyTargetY)
                 };
-                decimal running = 0m;
-                foreach (var day in SelectedMonthDailySales)
-                {
-                    running += day.Amount;
-                    var x = 86d + 558d * Math.Max(1, day.Date.Day - 1) / Math.Max(1, daysInMonth - 1);
-                    points.Add(new MonthlyChartPoint(day.Date.ToString("dd MMM"), running, x,
-                        ChartY(running), MonthlyTargetY));
-                }
-                return points;
+            decimal running = 0m;
+            foreach (var day in SelectedMonthDailySales)
+            {
+                running += day.Amount;
+                var x = 86d + 558d * Math.Max(1, day.Date.Day - 1) / Math.Max(1, daysInMonth - 1);
+                points.Add(new MonthlyChartPoint(day.Date.ToString("dd MMM"), running, x,
+                    ChartY(running), MonthlyTargetY));
             }
-            return MonthlyInvoiceSales.Select((m, i) => new MonthlyChartPoint(
-                m.Month.ToString("MMM yyyy", System.Globalization.CultureInfo.InvariantCulture),
-                m.Amount, MonthlyInvoiceSales.Count == 1 ? 365d : 86d + 558d * i / (MonthlyInvoiceSales.Count - 1),
-                ChartY(m.Amount), MonthlyTargetY)).ToList();
+            return points;
         }
+        return MonthlyInvoiceSales.Select((m, i) => new MonthlyChartPoint(
+            m.Month.ToString("MMM yyyy", System.Globalization.CultureInfo.InvariantCulture),
+            m.Amount, MonthlyInvoiceSales.Count == 1 ? 365d : 86d + 558d * i / (MonthlyInvoiceSales.Count - 1),
+            ChartY(m.Amount), MonthlyTargetY)).ToList();
     }
     private IEnumerable<MonthlyChartTick> MonthlyChartTicks => Enumerable.Range(0, 5).Select(i =>
         new MonthlyChartTick(ChartBottom - (ChartBottom - ChartTop) * i / 4d,
@@ -642,8 +804,66 @@
             $"{m.Month:MMM yyyy} {SalesAuditFormat.Rupees(m.Amount)}")) +
         $". Full scheme required turnover benchmark: {SalesAuditFormat.Rupees(RequiredTurnover)}.";
 
+    private async Task LoadDealerSalesAsync(int csr2Id, DealerMappingDto mapping)
+    {
+        TopDealers = new();
+        DealerSalesLoaded = false;
+        MatchedDealerSales = null;
+        DealerSalesError = "";
+        try
+        {
+            // Match the Dealer Mapping page's endpoint and default matching rules.
+            using var response = await Http.GetAsync(
+                $"api/SalesAudit/dealer-mapping/sap-sales?csr2Id={csr2Id}");
+            if (!response.IsSuccessStatusCode)
+            {
+                DealerSalesError = $"Dealer SAP matches unavailable (HTTP {(int)response.StatusCode}).";
+                return;
+            }
+            var sales = await response.Content.ReadFromJsonAsync<MatchedDealerSalesDto>();
+            if (sales is null)
+            {
+                DealerSalesError = "Dealer SAP matches response was empty.";
+                return;
+            }
+            MatchedDealerSales = sales;
+            DealerSalesLoaded = true;
+            var totals = (sales.Rows ?? new())
+                .Where(x => !string.IsNullOrWhiteSpace(x.DealerCode))
+                .GroupBy(x => x.DealerCode.Trim(), StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(x => x.Key, x => x.Sum(r => r.GrossAmountRs),
+                    StringComparer.OrdinalIgnoreCase);
+
+            // Show mapped dealers even when they have no matching SAP sales.
+            // Do not group on absent legacy CustomerNumber; it collapsed all rows.
+            TopDealers = (mapping.Rows ?? new())
+                .Where(x => !string.IsNullOrWhiteSpace(x.DealerCode))
+                .GroupBy(x => x.DealerCode.Trim(), StringComparer.OrdinalIgnoreCase)
+                .Select(g =>
+                {
+                    var dealer = g.First();
+                    var code = g.Key;
+                    return new DealerSalesRow(code,
+                        string.IsNullOrWhiteSpace(dealer.DealerName) ? code : dealer.DealerName,
+                        SafeLabel(dealer.HeadquartersName) != "--" ? SafeLabel(dealer.HeadquartersName) :
+                        SafeLabel(dealer.RegionName) != "--" ? SafeLabel(dealer.RegionName) :
+                        SafeLabel(dealer.StateName),
+                        totals.TryGetValue(code, out var amount) ? amount : 0m);
+                })
+                .OrderByDescending(x => x.Actual)
+                .ThenBy(x => x.Name)
+                .Take(5)
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            DealerSalesError = $"Unable to load dealer SAP matches: {ex.Message}";
+        }
+    }
+
     private async Task LoadMonthlyInvoiceSalesAsync(int csr2Id)
     {
+        _cachedMonthlyChartPoints = null;
         MonthlyInvoiceSales = new();
         SelectedMonthDailySales = new();
         MonthlyTrendError = "";
@@ -736,7 +956,13 @@
     private decimal RequiredTurnover, ActualTurnover;
     private record SalesRow(string Name, string Detail, decimal Planned, decimal Actual);
     private List<SalesRow> ProductSales = new();
-    private List<SalesRow> TopDealers = new();
+    private List<DealerSalesRow> TopDealers = new();
+    private string DealerSalesError = "";
+    private bool DealerSalesLoaded;
+    private MatchedDealerSalesDto? MatchedDealerSales;
+    private bool ShowMatchedInvoiceDetails = true;
+    private static string SafeLabel(string? value) =>
+        string.IsNullOrWhiteSpace(value) || value.Trim() == "0" ? "--" : value.Trim();
 
     // HasData only indicates actual, persisted product achievement records.
     // A query string or SAP dealer commitment must not fabricate achievements.
@@ -784,6 +1010,10 @@
         ActualTurnover = 0m;
         ProductSales = new();
         TopDealers = new();
+        DealerSalesError = "";
+        DealerSalesLoaded = false;
+        MatchedDealerSales = null;
+        _cachedMonthlyChartPoints = null;
         MonthlyInvoiceSales = new();
         MonthlyTrendError = "";
         if (CSR2Id is null or <= 0)
@@ -796,19 +1026,35 @@
         try
         {
             var id = CSR2Id.Value;
-            using var overviewResponse = await Http.GetAsync($"api/SalesAudit/overview?csr2Id={id}");
+            // Launch independent read requests together; each endpoint enforces
+            // its own server-side authorization. Keep the existing error order.
+            // ReadAs... below remains sequential, but network latency overlaps.
+            using var overviewRequest = new HttpRequestMessage(HttpMethod.Get, $"api/SalesAudit/overview?csr2Id={id}");
+            using var detailsRequest = new HttpRequestMessage(HttpMethod.Get, $"api/SalesAudit/details?csr2Id={id}");
+            using var dealersRequest = new HttpRequestMessage(HttpMethod.Get, $"api/SalesAudit/dealer-mapping?csr2Id={id}");
+            var overviewTask = Http.SendAsync(overviewRequest);
+            var detailsTask = Http.SendAsync(detailsRequest);
+            var dealersTask = Http.SendAsync(dealersRequest);
+            await Task.WhenAll(overviewTask, detailsTask, dealersTask);
+            using var overviewResponse = await overviewTask;
+            using var detailsResponse = await detailsTask;
+            using var dealersResponse = await dealersTask;
             if (!overviewResponse.IsSuccessStatusCode)
             {
-                Error = $"Unable to load programme (HTTP {(int)overviewResponse.StatusCode}) from GET api/SalesAudit/overview?csr2Id={id}. Check read authorization for this CSR2 record.";
+                var responseBody = await overviewResponse.Content.ReadAsStringAsync();
+                var detail = string.IsNullOrWhiteSpace(responseBody)
+                    ? "The API did not include an error reason."
+                    : responseBody[..Math.Min(responseBody.Length, 400)];
+                Error = $"Unable to load programme (HTTP {(int)overviewResponse.StatusCode}) " +
+                    $"from GET api/SalesAudit/overview?csr2Id={id}. " +
+                    $"Server response: {detail}";
                 return;
             }
-            using var detailsResponse = await Http.GetAsync($"api/SalesAudit/details?csr2Id={id}");
             if (!detailsResponse.IsSuccessStatusCode)
             {
                 Error = $"Unable to load sales plan / achievement (HTTP {(int)detailsResponse.StatusCode}) from GET api/SalesAudit/details?csr2Id={id}.";
                 return;
             }
-            using var dealersResponse = await Http.GetAsync($"api/SalesAudit/dealer-mapping?csr2Id={id}");
             if (!dealersResponse.IsSuccessStatusCode)
             {
                 Error = $"Unable to load dealer allocation (HTTP {(int)dealersResponse.StatusCode}) from GET api/SalesAudit/dealer-mapping?csr2Id={id}.";
@@ -850,19 +1096,16 @@
                     names.TryGetValue(item.Key, out var extra) ? extra : $"Product #{item.Key}",
                     "MT", 0m, item.Value));
 
-            // Dealer actual amounts are imported SAP invoice totals and are not treated
-            // as verified SalesAuditAchievementLines / the overall Achievement KPI.
-            TopDealers = (dealers.Rows ?? new())
-                .GroupBy(x => x.CustomerNumber, StringComparer.OrdinalIgnoreCase)
-                .Select(g => new SalesRow(
-                    g.Select(x => x.CustomerName).FirstOrDefault(n => !string.IsNullOrWhiteSpace(n)) ?? g.Key,
-                    g.Select(x => x.CustomerDistrict).FirstOrDefault(n => !string.IsNullOrWhiteSpace(n)) ?? "--",
-                    g.Sum(x => x.PlannedCommitmentRs),
-                    g.Sum(x => x.ActualSalesRs)))
-                .OrderByDescending(x => x.Actual)
-                .Take(5)
-                .ToList();
-            await LoadMonthlyInvoiceSalesAsync(id);
+            // DealerMapping.razor resolves dealer membership from dealer-mapping and
+            // invoice values from sap-sales. Neither per-dealer plans nor actual values
+            // exist on dealer-mapping rows. Keep matched SAP figures distinct from the
+            // saved, verified SalesAuditAchievementLine KPI above.
+            // Separate SAP data semantics must remain intact; load in parallel.
+            // Dealer matching uses the endpoint default, while the monthly chart
+            // explicitly includes saved invoice rows.
+            await Task.WhenAll(
+                LoadDealerSalesAsync(id, dealers),
+                LoadMonthlyInvoiceSalesAsync(id));
             IsLoaded = true;
         }
         catch (Exception ex)
@@ -872,6 +1115,211 @@
         finally
         {
             IsLoading = false;
+        }
+    }
+
+
+    // Excel report: exported numbers are derived only from loaded, authorized dashboard data.
+    // No API write calls. Planned dealer amounts are intentionally absent, not zero.
+    private bool IsExporting;
+    private IJSObjectReference? _excelModule;
+    private string ExportError = "";
+    private async Task DownloadTrackingReportAsync()
+    {
+        if (!IsLoaded || CSR2Id is not > 0 || IsExporting) return;
+        IsExporting = true;
+        ExportError = "";
+        try
+        {
+            static object? N(decimal value) => value;
+            static string D(DateTime? value) => value?.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture) ?? "";
+            var sheets = new List<ExcelSheet>
+            {
+                new("Summary", new[] { "Metric", "Value" }, new List<object?[]>
+                {
+                    new object?[] { "CSR2 ID", CSR2Id.Value },
+                    new object?[] { "Programme Name", Overview?.ProgramName ?? "" },
+                    new object?[] { "Programme Type", Overview?.ProgramType ?? "" },
+                    new object?[] { "Scheme From", D(SchemeFrom) },
+                    new object?[] { "Scheme To", D(SchemeTo) },
+                    new object?[] { "Required Turnover (INR)", N(RequiredTurnover) },
+                    new object?[] { "Actual Turnover - saved audit (INR)", N(ActualTurnover) },
+                    new object?[] { "Achievement (%)", N(AchievementPct) },
+                    new object?[] { "Remaining (INR)", N(Remaining) },
+                    new object?[] { "Plan Confirmed", IsPlanConfirmed ? "Yes" : "No" },
+                    new object?[] { "Final Submitted", IsFinalSubmitted ? "Yes" : "No" },
+                    new object?[] { "Mapped Dealers (SAP match)", MatchedDealerSales?.MappedDealers },
+                    new object?[] { "Matched SAP Invoice Lines", MatchedDealerSales?.MatchedInvoiceLines },
+                    new object?[] { "Matched SAP Gross (INR, unverified)", MatchedDealerSales is null ? null : N(MatchedDealerSales.Rows.Sum(x => x.GrossAmountRs)) },
+                    new object?[] { "Note", "SAP matches are read-only and do not automatically count as verified audit achievements." }
+                }),
+                new("Product Achievements", new[] { "Product", "Unit", "Planned (INR)", "Saved Achievement (INR)", "Achievement (%)" },
+                    ProductSales.Select(p => new object?[]
+                    {
+                        p.Name, p.Detail, N(p.Planned), HasData ? N(p.Actual) : null,
+                        HasData && p.Planned > 0 ? N(p.Actual / p.Planned * 100m) : null
+                    }).ToList()),
+                new("Dealer Top 5", new[] { "Dealer Code", "Dealer Name", "Location", "Planned (INR)", "Matched SAP Gross (INR)", "Achievement (%)" },
+                    TopDealers.Select(p => new object?[] { p.DealerCode, p.Name, p.Location, null, DealerSalesLoaded ? N(p.Actual) : null, null }).ToList()),
+                new("SAP Product Matches", new[] { "Product", "Planned Qty (MT)", "Actual Qty (MT)", "Planned (INR)", "Actual SAP Gross (INR)", "Balance (INR)" },
+                    (MatchedDealerSales?.Products ?? new()).Select(p => new object?[]
+                    { p.ProductName, N(p.PlannedQuantityMT), N(p.ActualQuantityMT), N(p.PlannedValueRs), N(p.ActualGrossAmountRs), N(p.BalanceValueRs) }).ToList()),
+                new("Matched SAP Invoices", new[] { "Dealer Code", "Dealer Name", "Billing Date", "Billing Document", "Product Code", "Product", "Qty (MT)", "Gross (INR)" },
+                    (MatchedDealerSales?.Rows ?? new()).Select(p => new object?[]
+                    { p.DealerCode, p.DealerName, D(p.BillingDate), p.BillingDocument, p.ProductCode, p.ProductName, N(p.QuantityMT), N(p.GrossAmountRs) }).ToList()),
+                new("Monthly Saved Sales", new[] { "Month", "Saved SAP Gross (INR)" },
+                    MonthlyInvoiceSales.Select(m => new object?[] { m.Month.ToString("yyyy-MM"), N(m.Amount) }).ToList())
+            };
+            await using var stream = ExcelWriter.CreateWorkbook(sheets);
+            using var reference = new DotNetStreamReference(stream);
+            _excelModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/salesTrackingExcel.js");
+            await _excelModule.InvokeVoidAsync("downloadExcel", $"SalesTracking_CSR2_{CSR2Id.Value}_{DateTime.Today:yyyyMMdd}.xlsx", reference);
+        }
+        catch (Exception ex)
+        {
+            ExportError = "Excel export failed: " + ex.Message;
+        }
+        finally { IsExporting = false; }
+    }
+
+    private sealed record ExcelSheet(string Name, string[] Headers, List<object?[]> Rows);
+
+    // Minimal standards-compliant XLSX (Office Open XML) writer using framework APIs.
+    // Avoids introducing new NuGet dependencies into the existing MAUI project.
+    private static class ExcelWriter
+    {
+        private const string Ns = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+        private const string RelNs = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+        private static readonly XmlWriterSettings Settings = new() { Encoding = new UTF8Encoding(false), Indent = false, CloseOutput = false };
+
+        public static MemoryStream CreateWorkbook(IReadOnlyList<ExcelSheet> sheets)
+        {
+            var stream = new MemoryStream();
+            using (var zip = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
+            {
+                Write(zip, "[Content_Types].xml", w =>
+                {
+                    w.WriteStartElement("Types", "http://schemas.openxmlformats.org/package/2006/content-types");
+                    w.WriteStartElement("Default", "http://schemas.openxmlformats.org/package/2006/content-types"); w.WriteAttributeString("Extension", "rels"); w.WriteAttributeString("ContentType", "application/vnd.openxmlformats-package.relationships+xml"); w.WriteEndElement();
+                    w.WriteStartElement("Default", "http://schemas.openxmlformats.org/package/2006/content-types"); w.WriteAttributeString("Extension", "xml"); w.WriteAttributeString("ContentType", "application/xml"); w.WriteEndElement();
+                    Override(w, "/xl/workbook.xml", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml");
+                    Override(w, "/xl/styles.xml", "application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml");
+                    for (var i = 0; i < sheets.Count; i++) Override(w, $"/xl/worksheets/sheet{i + 1}.xml", "application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml");
+                    w.WriteEndElement();
+                });
+                Write(zip, "_rels/.rels", w =>
+                {
+                    w.WriteStartElement("Relationships", "http://schemas.openxmlformats.org/package/2006/relationships");
+                    Relationship(w, "rId1", "http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument", "xl/workbook.xml");
+                    w.WriteEndElement();
+                });
+                Write(zip, "xl/workbook.xml", w =>
+                {
+                    w.WriteStartElement("workbook", Ns);
+                    w.WriteAttributeString("xmlns", "r", null, RelNs);
+                    w.WriteStartElement("sheets", Ns);
+                    for (var i = 0; i < sheets.Count; i++)
+                    {
+                        w.WriteStartElement("sheet", Ns);
+                        w.WriteAttributeString("name", sheets[i].Name);
+                        w.WriteAttributeString("sheetId", (i + 1).ToString(System.Globalization.CultureInfo.InvariantCulture));
+                        w.WriteAttributeString("r", "id", RelNs, $"rId{i + 1}");
+                        w.WriteEndElement();
+                    }
+                    w.WriteEndElement(); w.WriteEndElement();
+                });
+                Write(zip, "xl/_rels/workbook.xml.rels", w =>
+                {
+                    w.WriteStartElement("Relationships", "http://schemas.openxmlformats.org/package/2006/relationships");
+                    for (var i = 0; i < sheets.Count; i++)
+                        Relationship(w, $"rId{i + 1}", "http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet", $"worksheets/sheet{i + 1}.xml");
+                    Relationship(w, $"rId{sheets.Count + 1}", "http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles", "styles.xml");
+                    w.WriteEndElement();
+                });
+                Write(zip, "xl/styles.xml", w =>
+                {
+                    w.WriteStartElement("styleSheet", Ns);
+                    w.WriteStartElement("fonts", Ns); w.WriteAttributeString("count", "2");
+                    w.WriteStartElement("font", Ns); w.WriteStartElement("sz", Ns); w.WriteAttributeString("val", "11"); w.WriteEndElement(); w.WriteEndElement();
+                    w.WriteStartElement("font", Ns); w.WriteStartElement("b", Ns); w.WriteEndElement(); w.WriteStartElement("sz", Ns); w.WriteAttributeString("val", "11"); w.WriteEndElement(); w.WriteEndElement(); w.WriteEndElement();
+                    w.WriteStartElement("fills", Ns); w.WriteAttributeString("count", "2");
+                    w.WriteStartElement("fill", Ns); w.WriteStartElement("patternFill", Ns); w.WriteAttributeString("patternType", "none"); w.WriteEndElement(); w.WriteEndElement();
+                    w.WriteStartElement("fill", Ns); w.WriteStartElement("patternFill", Ns); w.WriteAttributeString("patternType", "gray125"); w.WriteEndElement(); w.WriteEndElement(); w.WriteEndElement();
+                    w.WriteStartElement("borders", Ns); w.WriteAttributeString("count", "1"); w.WriteStartElement("border", Ns); w.WriteEndElement(); w.WriteEndElement();
+                    w.WriteStartElement("cellStyleXfs", Ns); w.WriteAttributeString("count", "1"); w.WriteStartElement("xf", Ns); w.WriteAttributeString("numFmtId", "0"); w.WriteAttributeString("fontId", "0"); w.WriteAttributeString("fillId", "0"); w.WriteAttributeString("borderId", "0"); w.WriteEndElement(); w.WriteEndElement();
+                    w.WriteStartElement("cellXfs", Ns); w.WriteAttributeString("count", "2");
+                    for (var i = 0; i < 2; i++) { w.WriteStartElement("xf", Ns); w.WriteAttributeString("numFmtId", "0"); w.WriteAttributeString("fontId", i.ToString()); w.WriteAttributeString("fillId", "0"); w.WriteAttributeString("borderId", "0"); w.WriteAttributeString("xfId", "0"); w.WriteEndElement(); }
+                    w.WriteEndElement(); w.WriteEndElement();
+                });
+                for (var i = 0; i < sheets.Count; i++)
+                {
+                    var sheet = sheets[i];
+                    Write(zip, $"xl/worksheets/sheet{i + 1}.xml", w =>
+                    {
+                        w.WriteStartElement("worksheet", Ns);
+                        w.WriteStartElement("sheetViews", Ns); w.WriteStartElement("sheetView", Ns); w.WriteAttributeString("workbookViewId", "0"); w.WriteStartElement("pane", Ns); w.WriteAttributeString("ySplit", "1"); w.WriteAttributeString("topLeftCell", "A2"); w.WriteAttributeString("state", "frozen"); w.WriteEndElement(); w.WriteEndElement(); w.WriteEndElement();
+                        w.WriteStartElement("sheetFormatPr", Ns); w.WriteAttributeString("defaultRowHeight", "16"); w.WriteEndElement();
+                        w.WriteStartElement("cols", Ns);
+                        for (int c = 0; c < sheet.Headers.Length; c++) { w.WriteStartElement("col", Ns); w.WriteAttributeString("min", (c + 1).ToString()); w.WriteAttributeString("max", (c + 1).ToString()); w.WriteAttributeString("width", "26"); w.WriteAttributeString("customWidth", "1"); w.WriteEndElement(); }
+                        w.WriteEndElement();
+                        w.WriteStartElement("sheetData", Ns);
+                        Row(w, 1, sheet.Headers.Cast<object?>().ToArray(), true);
+                        for (var r = 0; r < sheet.Rows.Count; r++) Row(w, r + 2, sheet.Rows[r], false);
+                        w.WriteEndElement();
+                        if (sheet.Headers.Length > 0) { w.WriteStartElement("autoFilter", Ns); w.WriteAttributeString("ref", $"A1:{Column(sheet.Headers.Length)}{sheet.Rows.Count + 1}"); w.WriteEndElement(); }
+                        w.WriteEndElement();
+                    });
+                }
+            }
+            stream.Position = 0;
+            return stream;
+        }
+
+        private static void Row(XmlWriter w, int rowNo, object?[] values, bool header)
+        {
+            w.WriteStartElement("row", Ns); w.WriteAttributeString("r", rowNo.ToString());
+            for (var c = 0; c < values.Length; c++)
+            {
+                var value = values[c];
+                if (value is null) continue;
+                w.WriteStartElement("c", Ns);
+                w.WriteAttributeString("r", $"{Column(c + 1)}{rowNo}");
+                if (header) w.WriteAttributeString("s", "1");
+                if (value is decimal or int or long or double or float)
+                {
+                    w.WriteStartElement("v", Ns); w.WriteString(Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture) ?? "0"); w.WriteEndElement();
+                }
+                else
+                {
+                    w.WriteAttributeString("t", "inlineStr");
+                    w.WriteStartElement("is", Ns); w.WriteStartElement("t", Ns);
+                    w.WriteString(Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture) ?? "");
+                    w.WriteEndElement(); w.WriteEndElement();
+                }
+                w.WriteEndElement();
+            }
+            w.WriteEndElement();
+        }
+        private static string Column(int index)
+        {
+            var s = "";
+            for (; index > 0; index = (index - 1) / 26) s = (char)('A' + (index - 1) % 26) + s;
+            return s;
+        }
+        private static void Write(ZipArchive zip, string path, Action<XmlWriter> write)
+        {
+            var entry = zip.CreateEntry(path, CompressionLevel.Optimal);
+            using var output = entry.Open();
+            using var writer = XmlWriter.Create(output, Settings);
+            writer.WriteStartDocument(); write(writer); writer.WriteEndDocument(); writer.Flush();
+        }
+        private static void Override(XmlWriter w, string part, string contentType)
+        {
+            w.WriteStartElement("Override", "http://schemas.openxmlformats.org/package/2006/content-types"); w.WriteAttributeString("PartName", part); w.WriteAttributeString("ContentType", contentType); w.WriteEndElement();
+        }
+        private static void Relationship(XmlWriter w, string id, string type, string target)
+        {
+            w.WriteStartElement("Relationship", "http://schemas.openxmlformats.org/package/2006/relationships"); w.WriteAttributeString("Id", id); w.WriteAttributeString("Type", type); w.WriteAttributeString("Target", target); w.WriteEndElement();
         }
     }
 
@@ -894,13 +1342,6 @@
         builder.OpenElement(8, "span");
         builder.AddContent(9, $"{Pct(pct)}%");
         builder.CloseElement(); builder.CloseElement();
-    };
-    private RenderFragment DealerAchievementCell(decimal planned, decimal actual) => builder =>
-    {
-        var pct = Percent(actual, planned);
-        builder.OpenElement(0, "span");
-        builder.AddContent(1, planned > 0 ? $"{Pct(pct)}%" : "--");
-        builder.CloseElement();
     };
 
     private bool _chartsDrawn;
@@ -928,7 +1369,17 @@
             await DestroyChartsAsync();
         }
     }
-    public async ValueTask DisposeAsync() => await DestroyChartsAsync();
+    public async ValueTask DisposeAsync()
+    {
+        await DestroyChartsAsync();
+        if (_excelModule is not null)
+        {
+            try { await _excelModule.DisposeAsync(); }
+            catch (JSDisconnectedException) { }
+            catch (JSException) { }
+            _excelModule = null;
+        }
+    }
     private async Task DestroyChartsAsync()
     {
         try { await JS.InvokeVoidAsync("destroySalesTrackingCharts"); }
@@ -939,7 +1390,10 @@
     private void RequestExtension() { /* No extension API is present; do not fake requests. */ }
     private void GoToPeriodEndReview()
     {
-        if (!TrackingView && HasData && CSR2Id is > 0)
-            Nav.NavigateTo($"/PeriodEndReview?csr2Id={CSR2Id.Value}");
+        if (CSR2Id is null or <= 0 || !HasData)
+            return;
+
+        Nav.NavigateTo(
+            $"/PeriodEndReview?csr2Id={CSR2Id.Value}&trackingView={TrackingView.ToString().ToLowerInvariant()}");
     }
 }

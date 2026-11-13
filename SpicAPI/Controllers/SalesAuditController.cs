@@ -337,6 +337,30 @@ public sealed class SalesAuditController : ControllerBase
         return false;
     }
 
+    // GET-only: existing owner access plus geographically scoped Sales Tracking viewers.
+    // Do not call this method from POST/PUT/PATCH/DELETE actions.
+    private async Task<bool> CanReadSalesAuditRecordAsync(int csr2Id)
+    {
+        if (csr2Id <= 0) return false;
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrWhiteSpace(userId)) return false;
+
+        var active = await _db.Set<Employeelogin>().AsNoTracking()
+            .AnyAsync(e => e.IsActive && e.UserId == userId, HttpContext.RequestAborted);
+        if (!active) return false;
+
+        var isOwner = await (from c2 in _db.Set<CSR2>().AsNoTracking()
+                             join c1 in _db.Set<CSR1>().AsNoTracking()
+                                 on c2.CSR1Id equals c1.Id
+                             where c2.Id == csr2Id && c1.ResponsiblePersonId == userId
+                             select c2.Id).AnyAsync(HttpContext.RequestAborted);
+        if (isOwner) return true;
+
+        // Approved CSR2, approved/active CSR1, programme filter, role,
+        // and employee geography are checked inside this existing method.
+        return await CanViewTrackingRecordAsync(csr2Id);
+    }
+
     // Compatibility with scalar RegionId/HeadquartersId and optional integer[]
     // RegionIds/HeadquartersIds on the existing Employeelogin entity.
     // ReadIds intentionally refuses unknown geography rather than returning everything.

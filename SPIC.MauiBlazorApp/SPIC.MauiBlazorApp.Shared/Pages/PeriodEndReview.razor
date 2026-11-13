@@ -1,5 +1,8 @@
 @page "/PeriodEndReview"
 @inject NavigationManager Nav
+@inject HttpClient Http
+@using System.Net.Http.Json
+@using Microsoft.AspNetCore.Components
 
 <PageTitle>Period-End Review · SPIC ONE</PageTitle>
 
@@ -18,268 +21,367 @@
             </button>
         </div>
 
-        <SalesAuditStepper CurrentStep="5" TrackingPhase="true" />
+        <SalesAuditStepper CurrentStep="5" TrackingPhase="true" CSR2Id="@CSR2Id" />
 
         <!-- Info banner -->
         <div class="perv-banner">
             <SalesAuditIcon Name="info" Size="16" />
-            <span>Program details are automatically loaded from CSR2 and MD Portal. Review the information before closing the scheme period.</span>
+            <span>Programme and financial values are loaded from the existing Sales Audit records. Figures are shown for review only; this page does not submit or close a scheme.</span>
         </div>
 
-        <!-- Program Summary -->
-        <div class="perv-card">
-            <h3 class="perv-card-title">Program Summary</h3>
+        @if (IsLoading)
+        {
+            <div class="alert alert-info" role="status">Loading period-end review...</div>
+        }
+        else if (!string.IsNullOrWhiteSpace(Error))
+        {
+            <div class="alert alert-danger" role="alert">@Error</div>
+        }
+        else if (IsLoaded)
+        {
+            <!-- Program Summary -->
+            <div class="perv-card">
+                <h3 class="perv-card-title">Program Summary</h3>
 
-            <div class="perv-summary">
-                <div class="perv-summary-item">
-                    <div class="perv-summary-icon perv-tone-green"><SalesAuditIcon Name="users" Size="22" StrokeWidth="1.6" /></div>
-                    <div class="perv-summary-text">
-                        <span class="perv-label">Program Name</span>
-                        <span class="perv-summary-value">@ProgramName</span>
+                <div class="perv-summary">
+                    <div class="perv-summary-item">
+                        <div class="perv-summary-icon perv-tone-green"><SalesAuditIcon Name="users" Size="22" StrokeWidth="1.6" /></div>
+                        <div class="perv-summary-text">
+                            <span class="perv-label">Program Name</span>
+                            <span class="perv-summary-value">@ProgramName</span>
+                        </div>
                     </div>
-                </div>
-                <div class="perv-summary-item">
-                    <div class="perv-summary-icon perv-tone-purple"><SalesAuditIcon Name="clipboard" Size="22" StrokeWidth="1.6" /></div>
-                    <div class="perv-summary-text">
-                        <span class="perv-label">Sanction Number</span>
-                        <span class="perv-summary-value">@SanctionNumber</span>
+                    <div class="perv-summary-item">
+                        <div class="perv-summary-icon perv-tone-purple"><SalesAuditIcon Name="clipboard" Size="22" StrokeWidth="1.6" /></div>
+                        <div class="perv-summary-text">
+                            <span class="perv-label">Sanction Number</span>
+                            <span class="perv-summary-value">@SanctionNumber</span>
+                        </div>
                     </div>
-                </div>
-                <div class="perv-summary-item">
-                    <div class="perv-summary-icon perv-tone-blue"><SalesAuditIcon Name="stamp" Size="22" StrokeWidth="1.6" /></div>
-                    <div class="perv-summary-text">
-                        <span class="perv-label">
-                            Scheme Period
-                            <button type="button" class="perv-inline-edit" aria-label="Request a scheme period extension" title="Request extension" @onclick="RequestExtension">
-                                <SalesAuditIcon Name="pencil" Size="13" />
-                            </button>
-                        </span>
-                        <span class="perv-summary-value">@SchemeStart.ToString("dd MMM yyyy") - @SchemeEnd.ToString("dd MMM yyyy")</span>
-                    </div>
-                </div>
-                <div class="perv-summary-item">
-                    <div class="perv-summary-icon perv-tone-green"><SalesAuditIcon Name="badge-check" Size="22" StrokeWidth="1.6" /></div>
-                    <div class="perv-summary-text">
-                        <span class="perv-label">Scheme Duration</span>
-                        <span class="perv-summary-value perv-green">@DurationText</span>
-                    </div>
-                </div>
-            </div>
-
-            <div class="perv-period-strip">
-                <div class="perv-period-cell">
-                    <SalesAuditIcon Name="clock" Size="20" CssClass="perv-period-icon" />
-                    <div>
-                        <span class="perv-period-label perv-orange">Scheme period Complete on</span>
-                        <strong>@SchemeEnd.ToString("dd MMM yyyy")</strong>
-                    </div>
-                </div>
-                <div class="perv-period-cell perv-period-center">
-                    <div>
-                        <span class="perv-period-label">Actual Sales captured till</span>
-                        <strong>@SalesCapturedTill.ToString("dd MMM yyyy, hh:mm tt")</strong>
-                    </div>
-                </div>
-                <div class="perv-period-cell perv-period-center">
-                    <SalesAuditIcon Name="calendar" Size="20" CssClass="perv-period-icon" />
-                    <div>
-                        <span class="perv-period-label">Extended Period <em>(if any)</em></span>
-                        <strong>@(ExtendedTo is null ? "Not Applied" : ExtendedTo.Value.ToString("dd MMM yyyy"))</strong>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Final Program Summary -->
-        <div class="perv-card">
-            <h3 class="perv-card-title">Final Program Summary</h3>
-
-            <div class="perv-kpi-grid">
-                <div class="perv-kpi perv-kpi-purple">
-                    <span class="perv-label">Required Turnover (TO)</span>
-                    <span class="perv-kpi-value">₹ @SalesAuditFormat.Crore(RequiredTurnover) Cr</span>
-                    <span class="perv-kpi-sub">Target to achieve</span>
-                </div>
-                <div class="perv-kpi perv-kpi-green">
-                    <span class="perv-label">Planned Commitment</span>
-                    <span class="perv-kpi-value">₹ @SalesAuditFormat.Crore(PlannedCommitment) Cr</span>
-                    <span class="perv-kpi-sub">Total planned sales</span>
-                </div>
-                <div class="perv-kpi perv-kpi-blue">
-                    <span class="perv-label">Actual Turnover Achieved</span>
-                    <span class="perv-kpi-value">₹ @SalesAuditFormat.Crore(ActualTurnover) Cr</span>
-                    <span class="perv-kpi-sub">Sales achieved</span>
-                </div>
-                <div class="perv-kpi perv-kpi-peach">
-                    <span class="perv-label">Balance to Target</span>
-                    <span class="perv-kpi-value perv-red">₹ @SalesAuditFormat.Crore(Balance) Cr</span>
-                    <span class="perv-kpi-sub">@(TargetAchieved ? "Target met" : "Yet to achieve")</span>
-                </div>
-                <div class="perv-kpi perv-kpi-peach">
-                    <span class="perv-label">Achievement</span>
-                    <span class="perv-kpi-value perv-orange">@Pct(AchievementPct)%</span>
-                    <span class="perv-kpi-sub">Against required TO</span>
-                </div>
-            </div>
-
-            <div class="perv-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100"
-                 aria-valuenow="@Pct(Math.Min(100m, AchievementPct))" aria-label="Achievement against the required turnover">
-                <div class="perv-progress-track">
-                    <div class="perv-progress-fill" style="width: @Pct(Math.Min(100m, AchievementPct))%;"></div>
-                </div>
-                <div class="perv-progress-labels">
-                    <span>0%</span>
-                    <span class="perv-green">Target (₹ @SalesAuditFormat.Crore(RequiredTurnover) Cr)</span>
-                    <span>100%</span>
-                </div>
-            </div>
-        </div>
-
-        <!-- Target outcome & next step -->
-        <div class="perv-card">
-            <div class="perv-card-top">
-                <h3 class="perv-card-title">Target Outcome &amp; Next Step</h3>
-                <button type="button" class="perv-btn-outline" @onclick="BackToTracking">
-                    <SalesAuditIcon Name="pencil" Size="15" /> View Details
-                </button>
-            </div>
-
-            <div class="perv-outcome @(TargetAchieved ? "perv-outcome-met" : "")">
-                <div class="perv-outcome-main">
-                    <div class="perv-outcome-head">
-                        <span class="perv-outcome-icon">
-                            @if (TargetAchieved)
-                            {
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>
-                            }
-                            else
-                            {
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"></path></svg>
-                            }
-                        </span>
-                        <div>
-                            <strong>@(TargetAchieved ? "Target Achieved" : "Target Not Achieved")</strong>
-                            <span>
-                                @(TargetAchieved
-                                    ? $"Actual turnover is ₹ {SalesAuditFormat.Crore(ActualTurnover - RequiredTurnover)} Cr above the required turnover"
-                                    : $"Actual turnover is ₹ {SalesAuditFormat.Crore(Balance)} Cr below the required turnover")
+                    <div class="perv-summary-item">
+                        <div class="perv-summary-icon perv-tone-blue"><SalesAuditIcon Name="stamp" Size="22" StrokeWidth="1.6" /></div>
+                        <div class="perv-summary-text">
+                            <span class="perv-label">
+                                Scheme Period
+                                <button type="button" class="perv-inline-edit" aria-label="Scheme extension unavailable" title="Extension API not configured" disabled>
+                                    <SalesAuditIcon Name="pencil" Size="13" />
+                                </button>
                             </span>
+                            <span class="perv-summary-value">@DateText(SchemeStart) - @DateText(SchemeEnd)</span>
                         </div>
                     </div>
-                    <div class="perv-outcome-figures">
-                        <div>
-                            <span class="perv-label">Required Turnover (TO)</span>
-                            <strong>₹ @SalesAuditFormat.Crore(RequiredTurnover) Cr</strong>
-                        </div>
-                        <div>
-                            <span class="perv-label">Actual Turnover Achieved</span>
-                            <strong>₹ @SalesAuditFormat.Crore(ActualTurnover) Cr</strong>
+                    <div class="perv-summary-item">
+                        <div class="perv-summary-icon perv-tone-green"><SalesAuditIcon Name="badge-check" Size="22" StrokeWidth="1.6" /></div>
+                        <div class="perv-summary-text">
+                            <span class="perv-label">Scheme Duration</span>
+                            <span class="perv-summary-value perv-green">@DurationText</span>
                         </div>
                     </div>
                 </div>
 
-                <div class="perv-outcome-note">
-                    <strong>What does this mean?</strong>
-                    <p>
-                        @(TargetAchieved
-                            ? "The scheme met its required turnover. Proceed to the final audit review to close the program."
-                            : "You need to either request an extension for the scheme period or close the program with the current performance. Choose one of the actions below to proceed.")
-                    </p>
+                <div class="perv-period-strip">
+                    <div class="perv-period-cell">
+                        <SalesAuditIcon Name="clock" Size="20" CssClass="perv-period-icon" />
+                        <div>
+                            <span class="perv-period-label perv-orange">Scheme period ends on</span>
+                            <strong>@DateText(SchemeEnd)</strong>
+                        </div>
+                    </div>
+                    <div class="perv-period-cell perv-period-center">
+                        <div>
+                            <span class="perv-period-label">Sales capture timestamp</span>
+                            <strong>Not available from current API</strong>
+                        </div>
+                    </div>
+                    <div class="perv-period-cell perv-period-center">
+                        <SalesAuditIcon Name="calendar" Size="20" CssClass="perv-period-icon" />
+                        <div>
+                            <span class="perv-period-label">Extended Period <em>(if any)</em></span>
+                            <strong>Not available from current API</strong>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Final Program Summary -->
+            <div class="perv-card">
+                <h3 class="perv-card-title">Final Program Summary</h3>
+
+                <div class="perv-kpi-grid">
+                    <div class="perv-kpi perv-kpi-purple">
+                        <span class="perv-label">Required Turnover (TO)</span>
+                        <span class="perv-kpi-value">₹ @SalesAuditFormat.Crore(RequiredTurnover) Cr</span>
+                        <span class="perv-kpi-sub">Target to achieve</span>
+                    </div>
+                    <div class="perv-kpi perv-kpi-green">
+                        <span class="perv-label">Planned Commitment</span>
+                        <span class="perv-kpi-value">₹ @SalesAuditFormat.Crore(PlannedCommitment) Cr</span>
+                        <span class="perv-kpi-sub">Total planned sales</span>
+                    </div>
+                    <div class="perv-kpi perv-kpi-blue">
+                        <span class="perv-label">Actual Turnover Achieved</span>
+                        <span class="perv-kpi-value">₹ @SalesAuditFormat.Crore(ActualTurnover) Cr</span>
+                        <span class="perv-kpi-sub">Sales achieved</span>
+                    </div>
+                    <div class="perv-kpi perv-kpi-peach">
+                        <span class="perv-label">Balance to Target</span>
+                        <span class="perv-kpi-value perv-red">₹ @SalesAuditFormat.Crore(Balance) Cr</span>
+                        <span class="perv-kpi-sub">@(TargetAchieved ? "Target met" : "Yet to achieve")</span>
+                    </div>
+                    <div class="perv-kpi perv-kpi-peach">
+                        <span class="perv-label">Achievement</span>
+                        <span class="perv-kpi-value perv-orange">@(RequiredTurnover > 0m ? $"{Pct(AchievementPct)}%" : "--")</span>
+                        <span class="perv-kpi-sub">Against required TO</span>
+                    </div>
+                </div>
+
+                <div class="perv-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100"
+                     aria-valuenow="@Pct(Math.Min(100m, AchievementPct))" aria-label="Achievement against the required turnover">
+                    <div class="perv-progress-track">
+                        <div class="perv-progress-fill" style="width: @Pct(Math.Min(100m, AchievementPct))%;"></div>
+                    </div>
+                    <div class="perv-progress-labels">
+                        <span>0%</span>
+                        <span class="perv-green">Target (₹ @SalesAuditFormat.Crore(RequiredTurnover) Cr)</span>
+                        <span>100%</span>
+                    </div>
                 </div>
             </div>
 
-            <div class="perv-options">
-                @* Both next steps stay available whatever the outcome: a scheme that missed its target
-                   can still be closed with its current performance, as the note above explains. *@
-                <div class="perv-option perv-option-green">
-                    <div class="perv-option-head">
-                        <SalesAuditIcon Name="clipboard" Size="30" StrokeWidth="1.5" CssClass="perv-option-icon" />
-                        <div>
-                            <strong>Target Achieved</strong>
-                            <span>The required turnover has been met. Proceed to the final audit review and closure.</span>
-                        </div>
-                    </div>
-                    <ul>
-                        <li><SalesAuditIcon Name="info" Size="15" /> Review final sales against the plan</li>
-                        <li><SalesAuditIcon Name="info" Size="15" /> Sales records are locked for the audit</li>
-                        <li><SalesAuditIcon Name="info" Size="15" /> Subject to Admin Approval</li>
-                    </ul>
-                    <button type="button" class="perv-option-btn perv-option-btn-green">
-                        Proceed to Final Review
-                        <SalesAuditIcon Name="chevrons-right" Size="16" />
+            <!-- Target outcome & next step -->
+            <div class="perv-card">
+                <div class="perv-card-top">
+                    <h3 class="perv-card-title">Target Outcome &amp; Next Step</h3>
+                    <button type="button" class="perv-btn-outline" @onclick="BackToTracking">
+                        <SalesAuditIcon Name="pencil" Size="15" /> View Details
                     </button>
                 </div>
 
-                <div class="perv-option perv-option-orange">
-                    <div class="perv-option-head">
-                        <SalesAuditIcon Name="calendar" Size="30" StrokeWidth="1.5" CssClass="perv-option-icon" />
-                        <div>
-                            <strong>Target Not Achieved</strong>
-                            <span>The required turnover has not been fully met. Request additional time to complete the target.</span>
+                <div class="perv-outcome @(TargetAchieved ? "perv-outcome-met" : "")">
+                    <div class="perv-outcome-main">
+                        <div class="perv-outcome-head">
+                            <span class="perv-outcome-icon">
+                                @if (TargetAchieved)
+                                {
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>
+                                }
+                                else
+                                {
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"></path></svg>
+                                }
+                            </span>
+                            <div>
+                                <strong>@(TargetAchieved ? "Target Achieved" : "Target Not Achieved")</strong>
+                                <span>
+                                    @(TargetAchieved
+                                        ? $"Actual turnover is ₹ {SalesAuditFormat.Crore(ActualTurnover - RequiredTurnover)} Cr above the required turnover"
+                                        : $"Actual turnover is ₹ {SalesAuditFormat.Crore(Balance)} Cr below the required turnover")
+                                </span>
+                            </div>
+                        </div>
+                        <div class="perv-outcome-figures">
+                            <div>
+                                <span class="perv-label">Required Turnover (TO)</span>
+                                <strong>₹ @SalesAuditFormat.Crore(RequiredTurnover) Cr</strong>
+                            </div>
+                            <div>
+                                <span class="perv-label">Actual Turnover Achieved</span>
+                                <strong>₹ @SalesAuditFormat.Crore(ActualTurnover) Cr</strong>
+                            </div>
                         </div>
                     </div>
-                    <ul>
-                        <li><SalesAuditIcon Name="info" Size="15" /> Provide Reason for extension</li>
-                        <li><SalesAuditIcon Name="info" Size="15" /> Suggest extended period</li>
-                        <li><SalesAuditIcon Name="info" Size="15" /> Subject to Admin Approval</li>
-                    </ul>
-                    <button type="button" class="perv-option-btn perv-option-btn-orange" @onclick="RequestExtension">
-                        Request Extension
-                        <SalesAuditIcon Name="chevrons-right" Size="16" />
-                    </button>
+
+                    <div class="perv-outcome-note">
+                        <strong>What does this mean?</strong>
+                        <p>
+                            @(TargetAchieved
+                                ? "The saved turnover meets the required turnover. A final closure workflow has not yet been connected."
+                                : "The saved turnover is below the required turnover. Extension and closure actions are unavailable until their APIs are configured.")
+                        </p>
+                    </div>
+                </div>
+
+                <div class="perv-options">
+                    @* The option cards are informational only until their server-side workflows are configured. *@
+                    <div class="perv-option perv-option-green">
+                        <div class="perv-option-head">
+                            <SalesAuditIcon Name="clipboard" Size="30" StrokeWidth="1.5" CssClass="perv-option-icon" />
+                            <div>
+                                <strong>Target Achieved</strong>
+                                <span>The required turnover has been met. Proceed to the final audit review and closure.</span>
+                            </div>
+                        </div>
+                        <ul>
+                            <li><SalesAuditIcon Name="info" Size="15" /> Review final sales against the plan</li>
+                            <li><SalesAuditIcon Name="info" Size="15" /> Sales records are locked for the audit</li>
+                            <li><SalesAuditIcon Name="info" Size="15" /> Subject to Admin Approval</li>
+                        </ul>
+                        <button type="button" class="perv-option-btn perv-option-btn-green" disabled title="Final review submission API not configured">
+                            Proceed to Final Review
+                            <SalesAuditIcon Name="chevrons-right" Size="16" />
+                        </button>
+                    </div>
+
+                    <div class="perv-option perv-option-orange">
+                        <div class="perv-option-head">
+                            <SalesAuditIcon Name="calendar" Size="30" StrokeWidth="1.5" CssClass="perv-option-icon" />
+                            <div>
+                                <strong>Target Not Achieved</strong>
+                                <span>The required turnover has not been fully met. Request additional time to complete the target.</span>
+                            </div>
+                        </div>
+                        <ul>
+                            <li><SalesAuditIcon Name="info" Size="15" /> Provide Reason for extension</li>
+                            <li><SalesAuditIcon Name="info" Size="15" /> Suggest extended period</li>
+                            <li><SalesAuditIcon Name="info" Size="15" /> Subject to Admin Approval</li>
+                        </ul>
+                        <button type="button" class="perv-option-btn perv-option-btn-orange" disabled title="Extension request API not configured">
+                            Request Extension
+                            <SalesAuditIcon Name="chevrons-right" Size="16" />
+                        </button>
+                    </div>
                 </div>
             </div>
-        </div>
 
-        <!-- Footer actions -->
-        <div class="perv-footer">
-            <button type="button" class="perv-btn perv-btn-back" @onclick="@(() => Nav.NavigateTo("/SalesAudit"))">
-                <SalesAuditIcon Name="chevrons-left" Size="16" />
-                Back to List
-            </button>
-            <div class="perv-footer-right">
-                <button type="button" class="perv-btn perv-btn-back" @onclick="BackToTracking">Close</button>
-                <button type="button" class="perv-btn perv-btn-primary">
-                    Go To Final Review
-                    <SalesAuditIcon Name="chevrons-right" Size="16" />
+            <!-- Footer actions -->
+            <div class="perv-footer">
+                <button type="button" class="perv-btn perv-btn-back" @onclick="BackToList">
+                    <SalesAuditIcon Name="chevrons-left" Size="16" />
+                    Back to List
                 </button>
+                <div class="perv-footer-right">
+                    <button type="button" class="perv-btn perv-btn-back" @onclick="BackToTracking">Close</button>
+                    <button type="button" class="perv-btn perv-btn-primary" disabled title="Final review submission API not configured">
+                        Go To Final Review
+                        <SalesAuditIcon Name="chevrons-right" Size="16" />
+                    </button>
+                </div>
             </div>
-        </div>
 
+        }
     </div>
 </div>
 
 @code {
-    // ---- Final figures at the end of the scheme period (sample data until the Sales Portal feed is wired) ----
-    private const string ProgramName = "Dealers Meet - State Level";
-    private const string SanctionNumber = "CSR/2024/TN/0847";
+    [SupplyParameterFromQuery(Name = "csr2Id")]
+    public int? CSR2Id { get; set; }
 
-    private readonly DateTime SchemeStart = new(2026, 8, 1);
-    private readonly DateTime SchemeEnd = new(2026, 10, 31);
-    private readonly DateTime SalesCapturedTill = new(2026, 10, 31, 23, 59, 0);
-    private readonly DateTime? ExtendedTo = null;
+    [SupplyParameterFromQuery(Name = "trackingView")]
+    public bool TrackingView { get; set; }
 
-    private const decimal RequiredTurnover = 2_20_00_000m;
-    private const decimal PlannedCommitment = 2_30_00_000m;
-    private const decimal ActualTurnover = 1_95_00_000m;
+    private sealed class OverviewDto
+    {
+        public string? ProgramName { get; set; }
+        public string? SanctionNumber { get; set; }
+        // Existing overview values are stored as CRORES.
+        public decimal ActualTurnoverCr { get; set; }
+    }
 
-    private decimal Balance => Math.Max(0, RequiredTurnover - ActualTurnover);
-    private decimal AchievementPct => RequiredTurnover == 0 ? 0 : ActualTurnover / RequiredTurnover * 100;
-    private bool TargetAchieved => ActualTurnover >= RequiredTurnover;
+    private sealed class PlanLineDto
+    {
+        public decimal ValueRs { get; set; }
+    }
 
+    private sealed class DetailsDto
+    {
+        public DateTime? SchemeFrom { get; set; }
+        public DateTime? SchemeTo { get; set; }
+        public decimal RequiredTurnoverRs { get; set; }
+        public List<PlanLineDto> Plan { get; set; } = new();
+    }
+
+    private string ProgramName = "--";
+    private string SanctionNumber = "--";
+    private DateTime? SchemeStart;
+    private DateTime? SchemeEnd;
+    private decimal RequiredTurnover;
+    private decimal PlannedCommitment;
+    private decimal ActualTurnover;
+    private bool IsLoading;
+    private bool IsLoaded;
+    private string Error = "";
+
+    private decimal Balance => Math.Max(0m, RequiredTurnover - ActualTurnover);
+    private decimal AchievementPct => RequiredTurnover <= 0m ? 0m : ActualTurnover / RequiredTurnover * 100m;
+    private bool TargetAchieved => RequiredTurnover > 0m && ActualTurnover >= RequiredTurnover;
+    private static string DateText(DateTime? date) => date?.ToString("dd MMM yyyy") ?? "--";
     private static string Pct(decimal value) => value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
 
     private string DurationText
     {
         get
         {
-            var days = (SchemeEnd - SchemeStart).Days + 1;
-            var months = (SchemeEnd.Year - SchemeStart.Year) * 12 + SchemeEnd.Month - SchemeStart.Month + 1;
+            if (SchemeStart is null || SchemeEnd is null) return "--";
+            if (SchemeEnd.Value.Date < SchemeStart.Value.Date) return "Invalid period";
+            var days = (SchemeEnd.Value.Date - SchemeStart.Value.Date).Days + 1;
+            var months = (SchemeEnd.Value.Year - SchemeStart.Value.Year) * 12
+                       + SchemeEnd.Value.Month - SchemeStart.Value.Month + 1;
             return $"{months} {(months == 1 ? "Month" : "Months")} ({days} Days)";
         }
     }
 
-    private void BackToTracking() => Nav.NavigateTo("/SalesTracking");
+    protected override async Task OnParametersSetAsync()
+    {
+        IsLoading = true;
+        IsLoaded = false;
+        Error = "";
+        if (CSR2Id is null or <= 0)
+        {
+            Error = "Missing CSR2 ID. Open Period-End Review from Sales Tracking.";
+            IsLoading = false;
+            return;
+        }
 
-    private void RequestExtension() => Nav.NavigateTo("/RequestExtension");
+        try
+        {
+            int id = CSR2Id.Value;
+            // Both GETs enforce the existing server-side record-level read scope.
+            // Keep values from these existing APIs instead of creating a new source of truth.
+            using var overviewResponse = await Http.GetAsync($"api/SalesAudit/overview?csr2Id={id}");
+            if (!overviewResponse.IsSuccessStatusCode)
+            {
+                Error = $"Unable to load programme (HTTP {(int)overviewResponse.StatusCode}).";
+                return;
+            }
+
+            using var detailsResponse = await Http.GetAsync($"api/SalesAudit/details?csr2Id={id}");
+            if (!detailsResponse.IsSuccessStatusCode)
+            {
+                Error = $"Unable to load sales plan (HTTP {(int)detailsResponse.StatusCode}).";
+                return;
+            }
+
+            var overview = await overviewResponse.Content.ReadFromJsonAsync<OverviewDto>();
+            var details = await detailsResponse.Content.ReadFromJsonAsync<DetailsDto>();
+            if (overview is null || details is null)
+            {
+                Error = "The Sales Audit APIs returned an empty response.";
+                return;
+            }
+
+            ProgramName = string.IsNullOrWhiteSpace(overview.ProgramName) ? "--" : overview.ProgramName;
+            SanctionNumber = string.IsNullOrWhiteSpace(overview.SanctionNumber) ? "--" : overview.SanctionNumber;
+            SchemeStart = details.SchemeFrom;
+            SchemeEnd = details.SchemeTo;
+            RequiredTurnover = details.RequiredTurnoverRs;
+            PlannedCommitment = (details.Plan ?? new()).Sum(p => p.ValueRs);
+            ActualTurnover = overview.ActualTurnoverCr * 10_000_000m;
+            IsLoaded = true;
+        }
+        catch (Exception ex)
+        {
+            Error = $"Unable to load Period-End Review: {ex.Message}";
+        }
+        finally { IsLoading = false; }
+    }
+
+    private void BackToTracking()
+    {
+        if (CSR2Id is > 0)
+            Nav.NavigateTo($"/SalesTracking?csr2Id={CSR2Id.Value}&trackingView={TrackingView.ToString().ToLowerInvariant()}");
+        else
+            Nav.NavigateTo("/SalesTrackingList");
+    }
+
+    private void BackToList() => Nav.NavigateTo(TrackingView ? "/SalesTrackingList" : "/SalesAudit");
 }
