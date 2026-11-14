@@ -110,8 +110,12 @@
                     }
                     @if (d.CanReview)
                     {
-                        <a class="pub-btn pub-btn--line-blue" href="@($"/PublicityReview/edit/{d.Id}")"><i class="bi bi-pencil-square"></i> Edit</a>
-                        <button type="button" class="pub-btn pub-btn--line-red" @onclick="() => _reviewOpen = true"><i class="bi bi-arrow-counterclockwise"></i> Return / Request Changes</button>
+                        @* DGM - MD CS (final approval) is approve-only - no Edit here, for anyone including Admin. *@
+                        @if (d.Stage != PublicityStage.DgmMdCsReview)
+                        {
+                            <a class="pub-btn pub-btn--line-blue" href="@($"/PublicityReview/edit/{d.Id}")"><i class="bi bi-pencil-square"></i> Edit</a>
+                        }
+                        <button type="button" class="pub-btn pub-btn--line-red" @onclick="() => _reviewOpen = true"><i class="bi bi-x-circle"></i> Reject</button>
                         <button type="button" class="pub-btn pub-btn--primary" disabled="@_busy" @onclick="ApproveAsync"><i class="bi bi-check2"></i> Approve &amp; Forward to @PubText.Next(d.Stage)</button>
                     }
                     else if (ReadOnlyReviewer)
@@ -376,14 +380,14 @@
                 break;
         }
 
-        <BottomSheet @bind-IsOpen="_reviewOpen" Title="Return / Request Changes" Subtitle="@($"The request goes back to {d.RequestedByName} for correction.")">
+        <BottomSheet @bind-IsOpen="_reviewOpen" Title="Reject Request" Subtitle="@($"{d.IndentNo} is rejected and closed - this cannot be undone.")">
             <ChildContent>
-                <div class="pub-field"><label class="pub-label pub-req" for="rv-rem">Changes required</label>
-                    <textarea id="rv-rem" rows="5" class="pub-input pub-textarea" @bind="_reviewRemarks" placeholder="Explain what has to change"></textarea></div>
+                <div class="pub-field"><label class="pub-label pub-req" for="rv-rem">Reason for rejection</label>
+                    <textarea id="rv-rem" rows="5" class="pub-input pub-textarea" @bind="_reviewRemarks" placeholder="Explain why this request is being rejected"></textarea></div>
             </ChildContent>
             <Footer>
                 <button type="button" class="pub-btn pub-btn--grey" @onclick="() => _reviewOpen = false">Cancel</button>
-                <button type="button" class="pub-btn pub-btn--danger" disabled="@_busy" @onclick="ReturnAsync">Return</button>
+                <button type="button" class="pub-btn pub-btn--danger" disabled="@_busy" @onclick="RejectAsync">Reject</button>
             </Footer>
         </BottomSheet>
 
@@ -502,10 +506,10 @@
         await ReviewAsync("Approve", $"Request approved and forwarded to {next}.");
     }
 
-    private async Task ReturnAsync()
+    private async Task RejectAsync()
     {
-        if (string.IsNullOrWhiteSpace(_reviewRemarks)) { Toast.Error("Enter the changes required."); return; }
-        await ReviewAsync("Return", "Request returned to the RMDO for correction.");
+        if (string.IsNullOrWhiteSpace(_reviewRemarks)) { Toast.Error("Enter the reason for rejection."); return; }
+        await ReviewAsync("Reject", $"Request {_d!.IndentNo} rejected.");
     }
 
     private async Task ReviewAsync(string action, string done)

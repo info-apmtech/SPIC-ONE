@@ -1118,5 +1118,8 @@ namespace Spic.Infrastructure.Data
         public DbSet<SalesAuditRecord> SalesAuditRecords => Set<SalesAuditRecord>();
         public DbSet<SalesAuditPlanLine> SalesAuditPlanLines => Set<SalesAuditPlanLine>();
         public DbSet<SalesAuditAchievementLine> SalesAuditAchievementLines => Set<SalesAuditAchievementLine>();
+        public DbSet<SalesAuditDealerMapping> SalesAuditDealerMappings => Set<SalesAuditDealerMapping>();
+        public DbSet<SalesAuditDealerSale> SalesAuditDealerSales => Set<SalesAuditDealerSale>();
+        public DbSet<SalesAuditMatchedInvoice> SalesAuditMatchedInvoices => Set<SalesAuditMatchedInvoice>();
     }
 }

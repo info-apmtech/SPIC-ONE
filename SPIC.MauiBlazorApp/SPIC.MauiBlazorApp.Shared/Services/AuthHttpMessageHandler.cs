@@ -33,9 +33,14 @@ namespace SPIC.MauiBlazorApp.Shared.Services
 
             var response = await base.SendAsync(request, cancellationToken);
 
+            // IIS supplies the server's UTC Date header. Synchronize before callers publish
+            // a new token, so an incorrect iPhone clock cannot immediately expire it.
+            if (response.Headers.Date is { } serverTime)
+                _loginState.Clock.Synchronize(serverTime);
+
             // A 401 means "session expired" only for a call that carried a token. The sign-in
             // endpoint answers 401 for a wrong password, and other anonymous calls never had a
-            // session to lose; reloading /login there would wipe the form and its error message.
+            // session to lose; reloading /login there would wipe the form and its error message.s
             if (response.StatusCode == HttpStatusCode.Unauthorized
                 && request.Headers.Authorization is not null
                 && !IsAnonymousEndpoint(request.RequestUri))
@@ -111,9 +116,11 @@ namespace SPIC.MauiBlazorApp.Shared.Services
                 await _session.SetAsync(SessionKeys.Token, rawToken);
                 await _session.SetAsync(SessionKeys.Expiration, result.Expiration.ToString("O"));
                 await _session.SetAsync(SessionKeys.RefreshToken, result.RefreshToken);
+                await _session.SetAsync(SessionKeys.ServerClockOffset, _loginState.Clock.SavedOffset);
                 await _session.SetPersistentAsync(SessionKeys.Token, rawToken);
                 await _session.SetPersistentAsync(SessionKeys.Expiration, result.Expiration.ToString("O"));
                 await _session.SetPersistentAsync(SessionKeys.RefreshToken, result.RefreshToken);
+                await _session.SetPersistentAsync(SessionKeys.ServerClockOffset, _loginState.Clock.SavedOffset);
 
                 return true;
             }

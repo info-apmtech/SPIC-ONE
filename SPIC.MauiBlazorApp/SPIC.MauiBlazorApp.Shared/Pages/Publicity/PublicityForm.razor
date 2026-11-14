@@ -7,6 +7,8 @@
 @inject PublicityApi Api
 @inject NavigationManager Nav
 @inject ToastService Toast
+@inject IJSRuntime JS
+@implements IDisposable
 
 @* Create / edit a request (RMDO). Draft keeps it private; Submit sends it to RM review.
    /PublicityReview/edit/{id}: the approver whose turn it is edits every field ("Edit Publicity
@@ -36,8 +38,10 @@
                 </div>
                 <div class="pub-field">
                     <label class="pub-label pub-req" for="pr-prod">Product</label>
-                    <select id="pr-prod" class="pub-input" @bind="_dto.ProductId"><option value="0">Select Product</option>
-                        @foreach (var p in _lookups.Products) { <option value="@p.Id">@p.Name</option> }</select>
+                    <select id="pr-prod" class="pub-input" @onchange="e => OnNativeSelect(e, OnProductChanged)">
+                        <option value="0">Select Product</option>
+                        @foreach (var p in _lookups.Products) { <option value="@p.Id" selected="@(_dto.ProductId == p.Id)">@p.Name</option> }
+                    </select>
                 </div>
                 <div class="pub-field">
                     <label class="pub-label pub-req" for="pr-qty">Quantity</label>
@@ -45,8 +49,9 @@
                 </div>
                 <div class="pub-field">
                     <label class="pub-label pub-req" for="pr-by">Requested By</label>
-                    <select id="pr-by" class="pub-input" @bind="_dto.RequestedByUserId">
-                        @foreach (var p in _lookups.People) { <option value="@p.UserId">@p.Name @(p.Role is null ? "" : $"({p.Role})")</option> }</select>
+                    <select id="pr-by" class="pub-input" @onchange="e => OnNativeSelect(e, OnRequestedByChanged)">
+                        @foreach (var p in _lookups.People) { <option value="@p.UserId" selected="@(_dto.RequestedByUserId == p.UserId)">@p.Name @(p.Role is null ? "" : $"({p.Role})")</option> }
+                    </select>
                 </div>
             </div>
 
@@ -87,8 +92,13 @@
         <div class="pub-footer">
             <a class="pub-btn pub-btn--grey" href="@Back"><i class="bi bi-chevron-double-left"></i> Back to List</a>
             <span class="pub-footer__gap"></span>
-            <button type="button" class="pub-btn pub-btn--grey" disabled="@_busy" @onclick="() => SaveAsync(false)">Save as Draft</button>
-            <button type="button" class="pub-btn pub-btn--primary" disabled="@_busy" @onclick="() => SaveAsync(true)">@(Approver ? "Save Changes" : "Submit Request") <i class="bi bi-chevron-double-right"></i></button>
+            @if (!Approver)
+            {
+                <button type="button" class="pub-btn pub-btn--grey" disabled="@_busy" @onclick="() => SaveAsync(false)">Save as Draft</button>
+            }
+            <button type="button" class="pub-btn pub-btn--primary" disabled="@_busy" @onclick="() => SaveAsync(true)">
+                @(Approver && _detail is not null ? $"Save & Forward to {PubText.Next(_detail.Stage)}" : Approver ? "Save & Forward" : "Submit Request") <i class="bi bi-chevron-double-right"></i>
+            </button>
         </div>
     }
 </div>
@@ -109,17 +119,39 @@
     private List<PubOption> _states = new(), _regions = new(), _hqs = new();
     private bool _busy;
 
-    protected override async Task OnInitializedAsync()
+    // /PublicityRequest/new, /PublicityRequest/edit/{id} and /PublicityReview/edit/{id} all route
+    // here (same component type), so the Blazor router reuses this instance across them instead of
+    // recreating it - OnInitializedAsync only ever runs once per instance, so navigating from one
+    // to another (e.g. editing a second request right after the first) would otherwise keep
+    // showing/saving against the FIRST request's now-stale _detail (including it going null if the
+    // very first load was the "new" route, which is exactly how a stray null _detail reaches the
+    // Approver branch and throws). OnParametersSetAsync runs on every navigation, including the first.
+    private string? _loadedPath;
+
+    protected override async Task OnParametersSetAsync()
     {
+        var path = Nav.ToBaseRelativePath(Nav.Uri).Split('?')[0].TrimEnd('/');
+        if (string.Equals(path, _loadedPath, StringComparison.OrdinalIgnoreCase)) return;
+        _loadedPath = path;
+
+        _detail = null;
+        _indent = null;
+        _existing = new();
+        _qty = null;
+        _dto.MaterialTypeId = _dto.ProductId = 0;
+        _dto.Remarks = null;
+
         _lookups = await Api.LookupsAsync();
         _states = await Api.StatesAsync() ?? new();
-        if (Id is int id && await Api.GetAsync(id) is { } d)
+        if (Id is int id)
         {
+            var d = await Api.GetAsync(id);
+            if (d is null) { Nav.NavigateTo(Api.Home, replace: true); return; }
+            if (Approver ? !d.CanReview : !d.CanEdit) { Nav.NavigateTo($"{Api.Home}/{id}", replace: true); return; }
             _detail = d;
             // a state / region reviewer may not have the requester in their own people list
             if (_lookups is not null && d.RequestedByUserId is { } rb && _lookups.People.All(p => p.UserId != rb))
                 _lookups.People.Insert(0, new PubPerson { UserId = rb, Name = d.RequestedByName ?? rb, Role = d.RequestedByRole });
-            if (Approver ? !d.CanReview : !d.CanEdit) { Nav.NavigateTo($"{Api.Home}/{id}"); return; }
             _indent = d.IndentNo;
             (_dto.MaterialTypeId, _dto.ProductId, _qty, _dto.RequestedByUserId, _dto.Remarks) = (d.MaterialTypeId, d.ProductId, d.Quantity, d.RequestedByUserId, d.Remarks);
             (_dto.StateId, _dto.RegionId, _dto.HeadquarterId) = (d.StateId, d.RegionId, d.HeadquarterId);
@@ -133,6 +165,47 @@
         if (_dto.StateId > 0) _regions = await Api.RegionsAsync(_dto.StateId) ?? new();
         if (_dto.RegionId > 0) _hqs = await Api.HqsAsync(_dto.RegionId) ?? new();
     }
+
+    // Product and Requested By become searchable (Select2) the same way every other list/filter
+    // page in the app does it (see select2-interop.js) - the native <select> stays the source of
+    // truth via @onchange (progressive enhancement), Select2 just also calls the same method directly.
+    private DotNetObjectReference<PublicityForm>? _objRef;
+    private bool _select2Ready;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_lookups is null || _select2Ready) return;
+        _select2Ready = true;
+        _objRef ??= DotNetObjectReference.Create(this);
+        var configs = new[]
+        {
+            new { id = "pr-prod", method = nameof(OnProductChanged), parent = (string?)null },
+            new { id = "pr-by", method = nameof(OnRequestedByChanged), parent = (string?)null }
+        };
+        await JS.InvokeVoidAsync("spicSelect2.initMultiple", configs, _objRef);
+    }
+
+    private static Task OnNativeSelect(ChangeEventArgs e, Action<List<string>?> handler)
+    {
+        handler(e.Value is string s && !string.IsNullOrEmpty(s) ? new List<string> { s } : new List<string>());
+        return Task.CompletedTask;
+    }
+
+    [JSInvokable]
+    public void OnProductChanged(List<string>? values)
+    {
+        _dto.ProductId = values is { Count: > 0 } && int.TryParse(values[0], out var v) ? v : 0;
+        StateHasChanged();
+    }
+
+    [JSInvokable]
+    public void OnRequestedByChanged(List<string>? values)
+    {
+        _dto.RequestedByUserId = values is { Count: > 0 } ? values[0] : null;
+        StateHasChanged();
+    }
+
+    public void Dispose() => _objRef?.Dispose();
 
     private async Task StateChanged(ChangeEventArgs e)
     {
@@ -163,16 +236,20 @@
         if (error != null) { Toast.Error(error); return; }
         if (Approver)
         {
+            // Editing IS the approval here: no separate "Approve & Forward" click afterwards -
+            // saving the change immediately forwards the request to the next stage.
+            var next = PubText.Next(_detail!.Stage);
             _busy = true;
             _dto.Quantity = _qty!.Value;
             _dto.Submit = false;
             var ok = await Api.SaveAsync(Id, _dto) is not null;
             if (ok && _files.Count > 0) ok = await Api.UploadAsync(Id!.Value, PublicityFileKind.Design, _files) is not null;
+            if (ok) ok = await Api.ReviewAsync(Id!.Value, new PubReviewDto { Action = "Approve" });
             _busy = false;
             if (!ok) return;
             _files = new();
-            Toast.Success("Changes saved. The request stays at your review stage.");
-            if (submit) Nav.NavigateTo(Back);
+            Toast.Success($"Changes saved and forwarded to {next}.");
+            Nav.NavigateTo(Back);
             return;
         }
         if (submit && !await Toast.ConfirmAsync("Submit request", "Submit this request for RM review? You cannot edit it after submission unless it is returned.", "Submit")) return;

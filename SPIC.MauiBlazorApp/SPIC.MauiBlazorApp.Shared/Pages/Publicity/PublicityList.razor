@@ -23,7 +23,7 @@
         <Actions>
             @if (Review && !string.IsNullOrEmpty(_lookups?.MyScope)) { <span class="pub-pill pub-pill--green pub-pill--lg pub-hide-sm"><i class="bi bi-geo-alt"></i> @_lookups.MyScope</span> }
             <a class="pub-btn pub-btn--ghost" href="@($"{Api.Home}/notifications")"><i class="bi bi-bell"></i> <span class="pub-hide-sm">Notifications</span></a>
-            @if (Review && Api.MyStageLabel is not null && Api.Role is AppRole.RM or AppRole.SMD or AppRole.SMM or AppRole.MDAdmin)
+            @if (Review && Api.MyStageLabel is not null && (Api.Role is AppRole.RM or AppRole.SMD or AppRole.SMM || Api.IsAdminMdCs))
             {
                 <a class="pub-btn pub-btn--line" href="/PublicityReview/consolidation"><i class="bi bi-diagram-3"></i> <span class="pub-hide-sm">Consolidation</span></a>
             }
@@ -270,8 +270,27 @@
             new("Exception", "Shortage / Excess / Damaged", "bi-exclamation-octagon", "red", s => s.Exception, PublicityStatus.ExceptionRaised)
         };
 
-    protected override async Task OnInitializedAsync()
+    // /PublicityRequest and /PublicityReview both route here (same component type), so the Blazor
+    // router reuses this instance across the two aliases instead of recreating it - OnInitializedAsync
+    // only ever runs once per instance, so switching between them would otherwise keep showing
+    // whichever one's data loaded first. OnParametersSetAsync runs on every navigation (including the
+    // first), so re-fetch whenever the path itself actually changed.
+    private string? _loadedPath;
+
+    protected override async Task OnParametersSetAsync()
     {
+        var path = Nav.ToBaseRelativePath(Nav.Uri).Split('?')[0].TrimEnd('/');
+        if (string.Equals(path, _loadedPath, StringComparison.OrdinalIgnoreCase)) return;
+        _loadedPath = path;
+
+        // Request and Review hide different filters (state/region/HQ are Review-only), so a stale
+        // selection from the other side would otherwise keep silently filtering the new list.
+        _from = _to = null;
+        _product = _material = _state = _region = _hq = 0;
+        _stage = _q = "";
+        _status = null;
+        _states = _regions = _hqs = new();
+
         var uri = Nav.ToAbsoluteUri(Nav.Uri);
         _awaitingMe = uri.Query.Contains("mine=1");
         var statsTask = Api.StatsAsync();
@@ -321,7 +340,7 @@
 
     private Task ShowMine()
     {
-        if (Api.Role is AppRole.RM or AppRole.SMD or AppRole.SMM or AppRole.MDAdmin)
+        if (Api.Role is AppRole.RM or AppRole.SMD or AppRole.SMM || Api.IsAdminMdCs)
         {
             Nav.NavigateTo("/PublicityReview/consolidation");
             return Task.CompletedTask;

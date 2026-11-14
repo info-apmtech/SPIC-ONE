@@ -334,89 +334,128 @@
 </div>
 
 <!-- View details drawer -->
-<BottomSheet @bind-IsOpen="showDetailsDrawer" Title="@($"{selectedDetail?.ReportingPeriod} Period Expense Details")" Subtitle="15 Days - wise rate break for all Expense entries">
-    <HeaderActions>
-        @if (selectedDetail is not null)
-        {
-            <button type="button" class="exs-btn-outline" @onclick="DownloadDetailExcelAsync"><i class="bi bi-file-earmark-excel"></i> Download Excel</button>
-        }
-    </HeaderActions>
-    <ChildContent>
-    @if (isLoadingDetail)
-    {
-        <EmptyState Icon="bi-hourglass-split" Title="Loading..." Compact="true" />
-    }
-    else if (selectedDetail is null)
-    {
-        <EmptyState Icon="bi-exclamation-triangle" Title="Could not load this report" Compact="true" />
-    }
-    else
-    {
-        var mainItems = selectedDetail.ExpenseItems.Where(e => !e.IsSubCategory).ToList();
-        var subItems = selectedDetail.ExpenseItems.Where(e => e.IsSubCategory).ToList();
-        var periodTotal = mainItems.Sum(e => e.Amount);
-        var highest = mainItems.OrderByDescending(e => e.Amount).FirstOrDefault();
-        var subTotal = subItems.Sum(e => e.Amount);
-
-        <div class="exs-drawer-stats">
-            <div><span>Reporting Period</span><strong>@selectedDetail.ReportingPeriod</strong></div>
-            <div><span>Total Expense</span><strong>@FormatCurrency(periodTotal)</strong></div>
-            <div><span>Highest Expense</span><strong>@FormatCurrency(highest?.Amount ?? 0)<small>@(highest?.Category)</small></strong></div>
-            <div><span>Miscellaneous Breakdown Total</span><strong>@FormatCurrency(subTotal)</strong></div>
-        </div>
-
-        <h4 class="exs-drawer-subhead">Expenditure Breakup (Farm Operations)</h4>
-        <p class="exs-drawer-note">Total expense under farm operations (excluding sub-category details)</p>
-        <table class="exs-drawer-table">
-            <thead><tr><th>S.NO</th><th>Expense Category</th><th>Amount</th></tr></thead>
-            <tbody>
-                @for (var i = 0; i < mainItems.Count; i++)
+@if (showDetailsDrawer)
+{
+    <div class="exs-details-overlay" @onclick="() => showDetailsDrawer = false">
+        <div class="exs-details-modal" @onclick:stopPropagation="true">
+            <div class="exs-details-header">
+                <div class="exs-details-header-left">
+                    <button type="button" class="exs-details-back-icon" @onclick="() => showDetailsDrawer = false" aria-label="Back">
+                        <i class="bi bi-arrow-left"></i>
+                    </button>
+                    <div>
+                        <div class="exs-details-title">@($"{selectedDetail?.ReportingPeriod} Period Expense Details")</div>
+                        <div class="exs-details-subtitle">15 Days - wise rate break for all Expense entries</div>
+                    </div>
+                </div>
+                @if (selectedDetail is not null)
                 {
-                    var item = mainItems[i];
-                    <tr>
-                        <td>@(i + 1)</td>
-                        <td>
-                            @item.Category
-                            @if (item.IsAutoCalculated)
-                            {
-                                <span class="exs-auto-note">Auto-calculated from sub-categories</span>
-                            }
-                        </td>
-                        <td>@FormatCurrency(item.Amount)</td>
-                    </tr>
+                    <button type="button" class="exs-btn-outline" @onclick="DownloadDetailExcelAsync"><i class="bi bi-file-earmark-excel"></i> Download Excel</button>
                 }
-            </tbody>
-        </table>
-
-        @if (subItems.Count > 0)
-        {
-            <h4 class="exs-drawer-subhead">Miscellaneous Expenditure (Sub-Categories)</h4>
-            <p class="exs-drawer-note">Detailed breakup of miscellaneous expenses - the total is already reflected in the main table above.</p>
-            <table class="exs-drawer-table">
-                <thead><tr><th>S.NO</th><th>Expense Category</th><th>Amount</th></tr></thead>
-                <tbody>
-                    @for (var i = 0; i < subItems.Count; i++)
-                    {
-                        <tr><td>@(i + 1)</td><td>@subItems[i].Category</td><td>@FormatCurrency(subItems[i].Amount)</td></tr>
-                    }
-                </tbody>
-            </table>
-        }
-
-        <div class="exs-grand-total">
-            <div>
-                <strong>Grand Total Expense</strong>
-                <span>Total expense for @selectedDetail.ReportingPeriod</span>
             </div>
-            <span class="exs-grand-total-val">@FormatCurrency(periodTotal)</span>
-        </div>
-    }
-    </ChildContent>
 
-    <Footer>
-        <button type="button" class="exs-btn-outline" @onclick="() => showDetailsDrawer = false"><i class="bi bi-arrow-left"></i> Back to Report List</button>
-    </Footer>
-</BottomSheet>
+            <div class="exs-details-body">
+                @if (isLoadingDetail)
+                {
+                    <EmptyState Icon="bi-hourglass-split" Title="Loading..." Compact="true" />
+                }
+                else if (selectedDetail is null)
+                {
+                    <EmptyState Icon="bi-exclamation-triangle" Title="Could not load this report" Compact="true" />
+                }
+                else
+                {
+                    var mainItems = selectedDetail.ExpenseItems.Where(e => !e.IsSubCategory).ToList();
+                    var subItems = selectedDetail.ExpenseItems.Where(e => e.IsSubCategory).ToList();
+                    var periodTotal = mainItems.Sum(e => e.Amount);
+                    var highest = mainItems.OrderByDescending(e => e.Amount).FirstOrDefault();
+                    var subTotal = subItems.Sum(e => e.Amount);
+
+                    <div class="exs-details-cards-grid">
+                        <div class="exs-details-card">
+                            <div class="exs-details-card-label">Reporting Period</div>
+                            <div class="exs-details-card-value">@selectedDetail.ReportingPeriod</div>
+                            <div class="exs-details-card-sub">Complete 15 Day reports</div>
+                            <div class="exs-details-card-icon exs-card-icon-green"><i class="bi bi-file-earmark-bar-graph"></i></div>
+                        </div>
+                        <div class="exs-details-card">
+                            <div class="exs-details-card-label">Total Expense</div>
+                            <div class="exs-details-card-value">@FormatCurrency(periodTotal)</div>
+                            <div class="exs-details-card-sub">From @(summary.EarliestPeriodStart?.ToString("MMM yyyy") ?? "-") - @selectedDetail.ReportingPeriod</div>
+                            <div class="exs-details-card-icon exs-card-icon-blue"><i class="bi bi-file-earmark-bar-graph"></i></div>
+                        </div>
+                        <div class="exs-details-card">
+                            <div class="exs-details-card-label">Highest Expense</div>
+                            <div class="exs-details-card-value">@FormatCurrency(highest?.Amount ?? 0)</div>
+                            <div class="exs-details-card-sub">@(highest?.Category ?? "-")</div>
+                            <div class="exs-details-card-icon exs-card-icon-purple"><i class="bi bi-file-earmark-bar-graph"></i></div>
+                        </div>
+                        <div class="exs-details-card">
+                            <div class="exs-details-card-label">Total Expense</div>
+                            <div class="exs-details-card-value">@FormatCurrency(subTotal)</div>
+                            <div class="exs-details-card-sub">(Incl . Miscellaneous)</div>
+                            <div class="exs-details-card-icon exs-card-icon-orange"><i class="bi bi-file-earmark-bar-graph"></i></div>
+                        </div>
+                    </div>
+
+                    <h4 class="exs-drawer-subhead">Expenditure Breakup (Farm Operations)</h4>
+                    <p class="exs-drawer-note">Total expense under farm operations (excluding sub-category details)</p>
+                    <div class="exs-drawer-table-wrap">
+                        <table class="exs-drawer-table">
+                            <thead><tr><th>S.NO</th><th>Expense Category</th><th>Amount</th></tr></thead>
+                            <tbody>
+                                @for (var i = 0; i < mainItems.Count; i++)
+                                {
+                                    var item = mainItems[i];
+                                    <tr>
+                                        <td>@(i + 1)</td>
+                                        <td>
+                                            @item.Category
+                                            @if (item.IsAutoCalculated)
+                                            {
+                                                <span class="exs-auto-note">Auto-calculated from sub-categories</span>
+                                            }
+                                        </td>
+                                        <td>@FormatCurrencySpaced(item.Amount)</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+
+                    @if (subItems.Count > 0)
+                    {
+                        <h4 class="exs-drawer-subhead">Miscellaneous Expenditure (Sub-Categories)</h4>
+                        <p class="exs-drawer-note">Detailed breakup of miscellaneous expenses - the total is already reflected in the main table above.</p>
+                        <div class="exs-drawer-table-wrap">
+                            <table class="exs-drawer-table">
+                                <thead><tr><th>S.NO</th><th>Expense Category</th><th>Amount</th></tr></thead>
+                                <tbody>
+                                    @for (var i = 0; i < subItems.Count; i++)
+                                    {
+                                        <tr><td>@(i + 1)</td><td>@subItems[i].Category</td><td>@FormatCurrencySpaced(subItems[i].Amount)</td></tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+
+                    <div class="exs-grand-total">
+                        <div>
+                            <strong>Grand Total Expense</strong>
+                            <span>Total expense for @selectedDetail.ReportingPeriod</span>
+                        </div>
+                        <span class="exs-grand-total-val">@FormatCurrency(periodTotal)</span>
+                    </div>
+                }
+            </div>
+
+            <div class="exs-details-footer">
+                <button type="button" class="exs-btn-outline" @onclick="() => showDetailsDrawer = false"><i class="bi bi-arrow-left"></i> Back to Report List</button>
+            </div>
+        </div>
+    </div>
+}
 
 <style>
     .exs-page { color: #1f2937; font-family: inherit; }
@@ -550,19 +589,87 @@
     .exs-cat-bar-fill { height: 100%; border-radius: 6px; }
     .exs-cat-val { width: 90px; flex-shrink: 0; text-align: right; font-size: 13px; font-weight: 600; color: #111827; }
 
-    .exs-drawer-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 18px; }
-    .exs-drawer-stats div { display: flex; flex-direction: column; gap: 2px; font-size: 12px; color: #6b7280; }
-    .exs-drawer-stats strong { font-size: 15px; color: #111827; display: flex; flex-direction: column; }
-    .exs-drawer-stats strong small { font-size: 11px; font-weight: 500; color: #6b7280; }
-    .exs-drawer-subhead { font-size: 14px; font-weight: 700; color: #1e293b; margin: 18px 0 2px; }
+    .exs-details-overlay {
+        position: fixed; inset: 0; z-index: 9999;
+        background: rgba(17, 24, 39, 0.52);
+        display: flex; align-items: stretch; justify-content: flex-end;
+        padding: 0;
+    }
+    .exs-details-modal {
+        width: min(1280px, calc(100vw - 28px));
+        height: 100vh;
+        max-height: 100vh;
+        background: #fff;
+        border-radius: 12px 0 0 12px;
+        border: 1px solid #dbe5df;
+        border-right: 0;
+        box-shadow: 0 24px 48px rgba(0, 0, 0, .18);
+        overflow: hidden;
+        display: flex; flex-direction: column;
+    }
+    .exs-details-header {
+        display: flex; justify-content: space-between; align-items: center; gap: 16px;
+        padding: 14px 20px 10px;
+        background: #f7fbf8; border-bottom: 1px solid #e2e8e2;
+    }
+    .exs-details-header-left { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
+    .exs-details-back-icon {
+        border: none; background: transparent; color: #374151;
+        width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center;
+        padding: 0; margin-top: 2px; cursor: pointer;
+    }
+    .exs-details-title {
+        font-size: clamp(20px, 2.2vw, 34px);
+        line-height: 1.15;
+        font-weight: 700; color: #1f2937;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .exs-details-subtitle { margin-top: 3px; font-size: 13px; color: #4b5563; }
+    .exs-details-body { padding: 16px 20px 14px; overflow: auto; }
+    .exs-details-footer {
+        display: flex; justify-content: flex-end;
+        padding: 12px 20px; border-top: 1px solid #e5e7eb; background: #fff;
+    }
+
+    .exs-details-cards-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 10px;
+        margin-bottom: 12px;
+    }
+    .exs-details-card {
+        border: 1px solid #dbe5df;
+        border-radius: 12px;
+        padding: 12px 14px;
+        background: #fff;
+        position: relative;
+        min-height: 88px;
+    }
+    .exs-details-card-label { font-size: 12px; font-weight: 600; color: #6b7280; margin-bottom: 4px; }
+    .exs-details-card-value { font-size: 32px; font-size: clamp(16px, 1.9vw, 32px); font-weight: 700; color: #1f2937; line-height: 1.15; }
+    .exs-details-card-sub { margin-top: 3px; font-size: 10px; color: #9ca3af; }
+    .exs-details-card-icon {
+        position: absolute; right: 12px; top: 12px;
+        width: 34px; height: 34px; border-radius: 10px;
+        display: inline-flex; align-items: center; justify-content: center;
+        font-size: 16px;
+    }
+    .exs-card-icon-green { background: #e7f8eb; color: #22a45f; }
+    .exs-card-icon-blue { background: #e7f3ff; color: #4f9dfb; }
+    .exs-card-icon-purple { background: #efe9ff; color: #8b5cf6; }
+    .exs-card-icon-orange { background: #fff1e6; color: #fb923c; }
+
+    .exs-drawer-subhead { font-size: 24px; font-size: clamp(16px, 1.5vw, 24px); font-weight: 700; color: #1e293b; margin: 10px 0 2px; }
     .exs-drawer-note { font-size: 11px; color: #6b7280; margin: 0 0 8px; }
-    .exs-drawer-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-    .exs-drawer-table th { background: #f3f4f6; padding: 10px 12px; text-align: left; font-size: 11px; color: #475569; }
+    .exs-drawer-table-wrap { border: 1px solid #dbe5df; border-radius: 8px; overflow: hidden; margin-bottom: 12px; }
+    .exs-drawer-table { width: 100%; border-collapse: collapse; font-size: 13px; table-layout: fixed; }
+    .exs-drawer-table th { background: #f1f7f3; padding: 10px 12px; text-align: left; font-size: 12px; color: #475569; }
     .exs-drawer-table td { padding: 10px 12px; border-bottom: 1px solid #f1f5f9; }
+    .exs-drawer-table th:first-child, .exs-drawer-table td:first-child { width: 64px; }
     .exs-drawer-table td:last-child { text-align: right; font-weight: 600; }
     .exs-auto-note { display: block; font-size: 10px; color: #16a34a; font-weight: 500; }
 
-    .exs-grand-total { display: flex; justify-content: space-between; align-items: center; margin-top: 18px; padding: 14px 18px; background: #ecfdf5; border-radius: 10px; }
+    .exs-grand-total { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; padding: 14px 18px; background: #ecfdf5; border-radius: 10px; }
     .exs-grand-total div { display: flex; flex-direction: column; }
     .exs-grand-total strong { color: #065f46; font-size: 14px; }
     .exs-grand-total span:not(.exs-grand-total-val) { font-size: 11px; color: #047857; }
@@ -571,6 +678,8 @@
     @@media (max-width: 1100px) {
         .exs-stats-grid { grid-template-columns: repeat(2, 1fr); }
         .exs-charts-grid { grid-template-columns: 1fr; }
+        .exs-details-modal { width: calc(100vw - 12px); }
+        .exs-details-cards-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
 
     @@media (max-width: 640px) {
@@ -581,6 +690,10 @@
         .exs-dt-input { width: 100%; }
         .exs-pagination { flex-direction: column; align-items: center; }
         .exs-dt-footer-left { justify-content: center; }
+        .exs-details-overlay { padding: 0; }
+        .exs-details-modal { width: 100%; max-height: 100vh; border-radius: 0; }
+        .exs-details-cards-grid { grid-template-columns: 1fr; }
+        .exs-drawer-table th, .exs-drawer-table td { padding: 8px; font-size: 11px; }
     }
 </style>
 
@@ -822,6 +935,7 @@
     }
 
     private static string FormatCurrency(decimal v) => $"₹{v:N0}";
+    private static string FormatCurrencySpaced(decimal v) => $"₹ {v:N0}";
 
     private void GoToPage(int page)
     {

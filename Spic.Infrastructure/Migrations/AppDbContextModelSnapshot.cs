@@ -3900,11 +3900,17 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<int>("HeadquartersId")
                         .HasColumnType("integer");
 
+                    b.PrimitiveCollection<int[]>("HeadquartersIds")
+                        .HasColumnType("integer[]");
+
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
                     b.Property<int>("RegionId")
                         .HasColumnType("integer");
+
+                    b.PrimitiveCollection<int[]>("RegionIds")
+                        .HasColumnType("integer[]");
 
                     b.Property<int>("Role")
                         .HasColumnType("integer");
@@ -9331,6 +9337,84 @@ namespace Spic.Infrastructure.Migrations
                     b.ToTable("SalesAuditAchievementLines");
                 });
 
+            modelBuilder.Entity("SPIC.Core.Entities.SalesAuditDealerMapping", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("CSR2Id")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("DealerRegistrationId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CSR2Id");
+
+                    b.HasIndex("DealerRegistrationId");
+
+                    b.ToTable("SalesAuditDealerMappings");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.SalesAuditDealerSale", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<Guid>("ImportBatchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("ImportedAtUtc")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("ImportedBy")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("SourceRowJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("UploadFileName")
+                        .IsRequired()
+                        .HasMaxLength(250)
+                        .HasColumnType("character varying(250)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("SalesAuditDealerSales");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.SalesAuditMatchedInvoice", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<int>("CSR2Id")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<long>("SourceSaleId")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("SalesAuditMatchedInvoices");
+                });
+
             modelBuilder.Entity("SPIC.Core.Entities.SalesAuditPlanLine", b =>
                 {
                     b.Property<int>("Id")
@@ -13265,6 +13349,25 @@ namespace Spic.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("RegionBudgetSummary");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.SalesAuditDealerMapping", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.CSR2", "CSR2")
+                        .WithMany()
+                        .HasForeignKey("CSR2Id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("SPIC.Core.Entities.DealerRegistration", "DealerRegistration")
+                        .WithMany()
+                        .HasForeignKey("DealerRegistrationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("CSR2");
+
+                    b.Navigation("DealerRegistration");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.SampleCollection", b =>

@@ -42,7 +42,8 @@ namespace SPIC.MauiBlazorApp.Shared.Services
         public const string RoleAccess = "spic_role_access";
         public const string DesignationName = "spic_designation_name";
         public const string RefreshToken = "spic_refresh_token";
+        public const string ServerClockOffset = "spic_server_clock_offset";
 
-        public static readonly string[] All = { Token, Expiration, RoleAccess, DesignationName, RefreshToken };
+        public static readonly string[] All = { Token, Expiration, RoleAccess, DesignationName, RefreshToken, ServerClockOffset };
     }
 }

@@ -131,7 +131,7 @@ public static class ShellNavigation
         },
 
         // ---- Publicity Material Tracking (2026-11-08): RMDO requests, reviewers / MD CS review ----
-        new("PublicityRequest", "Publicity Request", "bi-megaphone", "/PublicityRequest", nameof(PagePermission.PublicityRequest))
+        new("PublicityRequest", "Publicity Request", "bi-megaphone", "/PublicityRequest/new", nameof(PagePermission.PublicityRequest))
         {
             ShortLabel = "Publicity", Group = "Publicity",
             Rule = s => s.CanSeeMenu(PagePermission.PublicityRequest)

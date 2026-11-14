@@ -1,0 +1,640 @@
+﻿@page "/SalesTrackingList"
+@inject HttpClient Http
+@inject NavigationManager Nav
+@using System.Globalization
+@using System.Net.Http.Json
+
+<PageTitle>Sales Tracking List · SPIC ONE</PageTitle>
+
+<style>
+    .stl-page {
+        padding: 6px 2px 20px;
+    }
+
+    .stl-panel {
+        background: #fff;
+        border: 1px solid #dce4ee;
+        border-radius: 13px;
+        padding: 20px 22px;
+        box-shadow: 0 2px 10px rgba(12,37,68,.03);
+    }
+
+    .stl-top {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-bottom: 20px;
+    }
+
+    .stl-title {
+        font-size: 16px;
+        font-weight: 750;
+        color: #142b4e;
+        margin: 0;
+    }
+
+    .stl-search {
+        width: 270px;
+        max-width: 100%;
+        padding: 10px 13px;
+        background: #f1f5fa;
+        border: 1px solid #edf1f5;
+        border-radius: 7px;
+        color: #233b57;
+    }
+
+    .stl-wrap {
+        overflow-x: auto;
+        border-radius: 8px;
+        border: 1px solid #eef1f5;
+    }
+
+    .stl-table {
+        width: 100%;
+        border-collapse: collapse;
+        min-width: 1050px;
+    }
+
+        .stl-table th {
+            background: #f3f7f7;
+            font-size: 12px;
+            color: #173051;
+            font-weight: 700;
+            white-space: nowrap;
+            padding: 15px 14px;
+            text-align: left;
+        }
+
+        .stl-table td {
+            border-top: 1px solid #eff2f6;
+            padding: 15px 14px;
+            color: #173051;
+            font-size: 12px;
+            vertical-align: middle;
+        }
+
+    .stl-sanction {
+        color: #007c4f;
+        font-weight: 700;
+        white-space: nowrap;
+    }
+
+    .stl-money {
+        color: #087547;
+        font-weight: 700;
+        white-space: nowrap;
+    }
+
+    .stl-dates {
+        font-weight: 650;
+        white-space: nowrap;
+    }
+
+    .stl-period {
+        display: inline-block;
+        margin-top: 4px;
+        background: #dff9e8;
+        color: #0a7541;
+        border-radius: 4px;
+        padding: 3px 9px;
+        font-size: 10px;
+    }
+
+    .stl-progress-label {
+        color: #087547;
+        font-weight: 700;
+    }
+
+    .stl-progress-track {
+        width: 116px;
+        max-width: 100%;
+        height: 5px;
+        background: #e2e9f1;
+        border-radius: 6px;
+        margin-top: 6px;
+        overflow: hidden;
+    }
+
+    .stl-progress-fill {
+        height: 100%;
+        background: #149052;
+        border-radius: inherit;
+    }
+
+    .stl-status {
+        border-radius: 20px;
+        padding: 6px 11px;
+        background: #f0f3f8;
+        color: #173051;
+        font-size: 11px;
+        display: inline-block;
+        white-space: nowrap;
+    }
+
+        .stl-status::before {
+            content: '';
+            display: inline-block;
+            width: 6px;
+            height: 6px;
+            background: #687f98;
+            border-radius: 50%;
+            margin-right: 6px;
+            vertical-align: middle;
+        }
+
+    .stl-view {
+        border: 1px solid #067746;
+        color: #067746;
+        background: white;
+        padding: 7px 18px;
+        border-radius: 6px;
+        cursor: pointer;
+        white-space: nowrap;
+        font-size: 12px;
+    }
+
+        .stl-view:hover {
+            background: #eaf8f0;
+        }
+
+    .stl-bottom {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+        flex-wrap: wrap;
+        margin-top: 19px;
+    }
+
+    .stl-size {
+        display: flex;
+        align-items: center;
+        gap: 11px;
+        font-size: 12px;
+        color: #183052;
+    }
+
+        .stl-size select {
+            min-width: 110px;
+            padding: 8px 12px;
+            border: 1px solid #dce5f0;
+            border-radius: 6px;
+            background: white;
+        }
+
+    .stl-pages {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+    }
+
+        .stl-pages button {
+            background: white;
+            color: #244469;
+            padding: 8px 12px;
+            border: 1px solid #e0e7f0;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+
+            .stl-pages button:disabled {
+                opacity: .45;
+                cursor: default;
+            }
+
+        .stl-pages .stl-active {
+            background: #f0f5ff;
+            border-color: #e0e8f8;
+            font-weight: 700;
+        }
+
+    .stl-message {
+        padding: 16px 8px;
+        color: #63738c;
+        font-size: 13px;
+    }
+
+    .stl-error {
+        padding: 13px;
+        border-radius: 7px;
+        color: #981b1b;
+        background: #fff0f0;
+        margin-bottom: 12px;
+    }
+
+
+    /* Collapsible filters, matching Sales Audit styling. */
+    .stl-filter-card {
+        background: #fff;
+        border: 1px solid #dce4ee;
+        border-radius: 10px;
+        margin-bottom: 16px;
+        overflow: hidden;
+        box-shadow: 0 2px 8px rgba(12,37,68,.03);
+    }
+
+    .stl-filter-heading {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        border: 0;
+        background: #f5f8f8;
+        padding: 13px 16px;
+        color: #173051;
+        font-size: 13px;
+        font-weight: 700;
+        cursor: pointer;
+    }
+
+    .stl-filter-body {
+        padding: 16px;
+    }
+
+    .stl-filter-grid {
+        display: grid;
+        grid-template-columns: repeat(4,minmax(0,1fr));
+        gap: 16px;
+        align-items: end;
+    }
+
+    .stl-filter-field {
+        display: flex;
+        flex-direction: column;
+        gap: 7px;
+        min-width: 0;
+        color: #173051;
+        font-size: 12px;
+        font-weight: 600;
+    }
+
+        .stl-filter-field select, .stl-filter-field input {
+            width: 100%;
+            min-width: 0;
+            background: #f7f9fc;
+            border: 1px solid #e3eaf3;
+            border-radius: 6px;
+            color: #213650;
+            padding: 10px;
+            font-size: 12px;
+        }
+
+    .stl-date-fields {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+        .stl-date-fields input {
+            min-width: 0;
+        }
+
+    .stl-filter-actions {
+        display: flex;
+        gap: 8px;
+        justify-content: flex-end;
+        align-items: center;
+        grid-column: 3 / 5;
+    }
+
+        .stl-filter-actions button {
+            border-radius: 5px;
+            font-size: 12px;
+            cursor: pointer;
+            padding: 10px 15px;
+        }
+
+    .stl-clear {
+        background: #fff;
+        color: #173051;
+        border: 1px solid #dce4ee;
+    }
+
+    .stl-apply {
+        background: #3478ee;
+        color: #fff;
+        border: 1px solid #3478ee;
+    }
+
+    @@media (max-width: 1000px) {
+        .stl-filter-grid {
+            grid-template-columns: repeat(2,minmax(0,1fr));
+        }
+
+        .stl-filter-actions {
+            grid-column: 1 / 3;
+        }
+    }
+
+    @@media (max-width: 650px) {
+        .stl-filter-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .stl-filter-actions {
+            grid-column: 1;
+        }
+
+        .stl-date-fields {
+            flex-wrap: wrap;
+        }
+    }
+
+    @@media (max-width: 650px) {
+        .stl-panel {
+            padding: 14px;
+        }
+
+        .stl-search {
+            width: 100%;
+        }
+    }
+</style>
+
+<div class="container-fluid stl-page">
+    <div class="stl-filter-card">
+        <button type="button" class="stl-filter-heading" @onclick="() => FiltersOpen = !FiltersOpen" aria-expanded="@FiltersOpen">
+            <span>☰ &nbsp;Filters</span><span>@(FiltersOpen ? "⌄" : "›")</span>
+        </button>
+        @if (FiltersOpen)
+        {
+            <div class="stl-filter-body">
+                <div class="stl-filter-grid">
+                    <label class="stl-filter-field">
+                        <span>Sanction Number</span>
+                        <select @bind="SelectedSanction">
+                            <option value="">Select Sanction Number</option>
+                            @foreach (var value in Rows.Select(x => x.SanctionNumber).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct().OrderBy(x => x))
+                            {
+                                <option value="@value">@value</option>
+                            }
+                        </select>
+                    </label>
+                    <label class="stl-filter-field">
+                        <span>Program Name</span>
+                        <select @bind="SelectedProgram">
+                            <option value="">Select Program Name</option>
+                            @foreach (var value in Rows.Select(x => x.ProgramName).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct().OrderBy(x => x))
+                            {
+                                <option value="@value">@value</option>
+                            }
+                        </select>
+                    </label>
+                    <label class="stl-filter-field">
+                        <span>Location</span>
+                        <select @bind="SelectedLocation">
+                            <option value="">Select Location</option>
+                            @foreach (var value in Rows.Select(x => x.Location).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct().OrderBy(x => x))
+                            {
+                                <option value="@value">@value</option>
+                            }
+                        </select>
+                    </label>
+                    <div class="stl-filter-field">
+                        <span>Date Range</span>
+                        <div class="stl-date-fields">
+                            <input type="date" aria-label="From date" @bind="FromDate" />
+                            <span>to</span>
+                            <input type="date" aria-label="To date" @bind="ToDate" />
+                        </div>
+                    </div>
+                    <label class="stl-filter-field">
+                        <span>Status</span>
+                        <select @bind="SelectedStatus">
+                            <option value="">Select Status</option>
+                            @foreach (var value in Rows.Select(x => x.DocumentStatus).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct().OrderBy(x => x))
+                            {
+                                <option value="@value">@value</option>
+                            }
+                        </select>
+                    </label>
+                    <div class="stl-filter-actions">
+                        <button type="button" class="stl-clear" @onclick="ClearFilters">× &nbsp; Clear All</button>
+                        <button type="button" class="stl-apply" @onclick="ApplyFilters">☰ &nbsp; Apply Filters</button>
+                    </div>
+                </div>
+                @if (!string.IsNullOrWhiteSpace(FilterError))
+                {
+                    <p class="stl-error" role="alert">@FilterError</p>
+                }
+            </div>
+        }
+    </div>
+    <div class="stl-panel">
+        <div class="stl-top">
+            <h2 class="stl-title">Sales Audit List</h2>
+            <input class="stl-search" type="search" placeholder="Search zones, programs..." aria-label="Search sales audits" @bind="Search" @bind:event="oninput" @bind:after="ResetPage" />
+        </div>
+
+        @if (Loading)
+        {
+            <p class="stl-message" role="status">Loading permitted Sales Audit records...</p>
+        }
+        else if (!string.IsNullOrWhiteSpace(Error))
+        {
+            <div class="stl-error" role="alert">@Error</div>
+        }
+        else
+        {
+            <div class="stl-wrap">
+                <table class="stl-table">
+                    <thead>
+                        <tr>
+                            <th>Sanction Number</th>
+                            <th>Program Name</th>
+                            <th>Location</th>
+                            <th>Scheme Period</th>
+                            <th>Required TO (Auto)</th>
+                            <th>Actual Turnover</th>
+                            <th>Achievement</th>
+                            <th>Document Status</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in PagedRows)
+                        {
+                            <tr>
+                                <td><span class="stl-sanction">@Text(item.SanctionNumber)</span></td>
+                                <td>@Text(item.ProgramName)</td>
+                                <td>@Text(item.Location)</td>
+                                <td>
+                                    <div class="stl-dates">@DateText(item.SchemeFrom) to @DateText(item.SchemeTo)</div>
+                                    @if (item.SchemeFrom.HasValue && item.SchemeTo.HasValue && item.SchemeTo >= item.SchemeFrom)
+                                    {
+                                        <span class="stl-period">@MonthsText(item.SchemeFrom.Value, item.SchemeTo.Value)</span>
+                                    }
+                                </td>
+                                <td class="stl-money">@Crore(item.RequiredTurnover)</td>
+                                <td class="stl-money">@Crore(item.ActualTurnover)</td>
+                                <td>
+                                    <span class="stl-progress-label">@(item.ActualTurnover.HasValue && item.RequiredTurnover is > 0m ? Percent(item.ActualTurnover, item.RequiredTurnover).ToString("0.00", CultureInfo.InvariantCulture) + "%" : "--")</span>
+                                    <div class="stl-progress-track" role="progressbar" aria-label="Achievement" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@(Math.Clamp(Percent(item.ActualTurnover, item.RequiredTurnover), 0m, 100m).ToString(CultureInfo.InvariantCulture))">
+                                        <div class="stl-progress-fill" style="width:@(Math.Clamp(Percent(item.ActualTurnover, item.RequiredTurnover), 0m, 100m).ToString(CultureInfo.InvariantCulture))%"></div>
+                                    </div>
+                                </td>
+                                <td><span class="stl-status">@Text(item.DocumentStatus)</span></td>
+                                <td>
+                                    <button type="button"
+                                            class="stl-view"
+                                            @onclick="() => OpenTracking(item.Csr2Id)">
+                                        View
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                        @if (FilteredRows.Count == 0)
+                        {
+                            <tr><td colspan="9" class="stl-message">No accessible Sales Audit records found.</td></tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <div class="stl-bottom">
+                <label class="stl-size">
+                    Items Per Page
+                    <select value="@PageSize" @onchange="ChangePageSize">
+                        <option value="8">8</option>
+                        <option value="16">16</option>
+                        <option value="32">32</option>
+                        <option value="64">64</option>
+                    </select>
+                </label>
+                <div class="stl-pages">
+                    <button type="button" disabled="@(Page <= 1)" @onclick="PreviousPage" aria-label="Previous page">‹</button>
+                    <button type="button" class="stl-active" disabled>@Page</button>
+                    <button type="button" disabled="@(Page >= TotalPages)" @onclick="NextPage" aria-label="Next page">›</button>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    // Reuse the same authenticated, server-scoped list API as SalesAudit.razor.
+    private const string ListEndpoint = "api/SalesAudit/tracking/eligible";
+
+    private sealed class AuditRow
+    {
+        public int Csr2Id { get; set; }
+        public string? SanctionNumber { get; set; }
+        public string? ProgramName { get; set; }
+        public string? Location { get; set; }
+        public DateTime? SchemeFrom { get; set; }
+        public DateTime? SchemeTo { get; set; }
+        // This API returns crores, not rupees (same contract as SalesAudit.razor).
+        public decimal? RequiredTurnover { get; set; }
+        public decimal? ActualTurnover { get; set; }
+        public string? DocumentStatus { get; set; }
+    }
+
+    private readonly List<AuditRow> Rows = new();
+    private string Search = "";
+    private string Error = "";
+    private bool Loading = true;
+    private int Page = 1;
+    private int PageSize = 16;
+    private bool FiltersOpen = true;
+    private string SelectedSanction = "", SelectedProgram = "", SelectedLocation = "", SelectedStatus = "";
+    private string AppliedSanction = "", AppliedProgram = "", AppliedLocation = "", AppliedStatus = "";
+    private DateTime FromDate = DateTime.Today.AddMonths(-1), ToDate = DateTime.Today;
+    private DateTime AppliedFromDate, AppliedToDate;
+    private bool DateFilterApplied;
+    private string FilterError = "";
+
+    private void ApplyFilters()
+    {
+        if (FromDate.Date > ToDate.Date)
+        {
+            FilterError = "From date cannot be after To date.";
+            return;
+        }
+        FilterError = "";
+        AppliedSanction = SelectedSanction;
+        AppliedProgram = SelectedProgram;
+        AppliedLocation = SelectedLocation;
+        AppliedStatus = SelectedStatus;
+        AppliedFromDate = FromDate.Date;
+        AppliedToDate = ToDate.Date;
+        DateFilterApplied = true;
+        ResetPage();
+    }
+
+    private void ClearFilters()
+    {
+        SelectedSanction = SelectedProgram = SelectedLocation = SelectedStatus = "";
+        AppliedSanction = AppliedProgram = AppliedLocation = AppliedStatus = "";
+        FromDate = DateTime.Today.AddMonths(-1);
+        ToDate = DateTime.Today;
+        DateFilterApplied = false;
+        FilterError = "";
+        Search = "";
+        ResetPage();
+    }
+
+    private List<AuditRow> FilteredRows => Rows.Where(x =>
+        (string.IsNullOrEmpty(AppliedSanction) || x.SanctionNumber == AppliedSanction) &&
+        (string.IsNullOrEmpty(AppliedProgram) || x.ProgramName == AppliedProgram) &&
+        (string.IsNullOrEmpty(AppliedLocation) || x.Location == AppliedLocation) &&
+        (string.IsNullOrEmpty(AppliedStatus) || x.DocumentStatus == AppliedStatus) &&
+        (!DateFilterApplied || (x.SchemeFrom.HasValue && x.SchemeTo.HasValue &&
+            x.SchemeFrom.Value.Date <= AppliedToDate && x.SchemeTo.Value.Date >= AppliedFromDate)) &&
+        (string.IsNullOrWhiteSpace(Search) ||
+            new[] { x.SanctionNumber, x.ProgramName, x.Location, x.DocumentStatus, x.Csr2Id.ToString(CultureInfo.InvariantCulture) }
+                .Any(s => (s ?? "").Contains(Search.Trim(), StringComparison.OrdinalIgnoreCase))))
+        .OrderByDescending(x => x.Csr2Id).ToList();
+    private int TotalPages => Math.Max(1, (int)Math.Ceiling(FilteredRows.Count / (double)PageSize));
+    private IEnumerable<AuditRow> PagedRows => FilteredRows.Skip((Page - 1) * PageSize).Take(PageSize);
+    private void ResetPage() => Page = 1;
+    private void PreviousPage() => Page = Math.Max(1, Page - 1);
+    private void NextPage() => Page = Math.Min(TotalPages, Page + 1);
+    private void ChangePageSize(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var count) && count > 0)
+            PageSize = count;
+        Page = 1;
+    }
+    private void OpenTracking(int csr2Id)
+    {
+        if (csr2Id <= 0)
+            return;
+
+        Nav.NavigateTo($"/SalesTracking?csr2Id={csr2Id}&trackingView=true");
+    }
+
+    private static string Text(string? value) => string.IsNullOrWhiteSpace(value) ? "--" : value;
+    private static string DateText(DateTime? date) => date?.ToString("dd MMM yyyy", CultureInfo.InvariantCulture) ?? "--";
+    private static string Crore(decimal? value) => value.HasValue ? $"₹ {value.Value:0.00} Cr" : "--";
+    private static decimal Percent(decimal? actual, decimal? required) => actual.HasValue && required is > 0m ? actual.Value / required.Value * 100m : 0m;
+    private static string MonthsText(DateTime start, DateTime end)
+    {
+        var months = (end.Year - start.Year) * 12 + end.Month - start.Month + 1;
+        return $"{months} {(months == 1 ? "month" : "months")}";
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        Loading = true;
+        try
+        {
+            using var response = await Http.GetAsync(ListEndpoint);
+            if (!response.IsSuccessStatusCode)
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                Error = $"Sales Tracking eligibility API returned HTTP {(int)response.StatusCode}. " +
+                    "Check the login role and assigned State/Region/Headquarters in the server-side tracking scope. " +
+                    (string.IsNullOrWhiteSpace(body) ? "" : body[..Math.Min(body.Length, 350)]);
+                return;
+            }
+            // Same JSON response contract used by the working SalesAudit.razor list.
+            var items = await response.Content.ReadFromJsonAsync<List<AuditRow>>();
+            Rows.Clear();
+            if (items is not null)
+                Rows.AddRange(items.Where(x => x.Csr2Id > 0));
+        }
+        catch (Exception ex) { Error = "Unable to load Sales Audit list: " + ex.Message; }
+        finally { Loading = false; }
+    }
+}

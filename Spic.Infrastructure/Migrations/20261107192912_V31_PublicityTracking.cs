@@ -281,28 +281,21 @@ namespace Spic.Infrastructure.Migrations
                 table: "PublicityRequests",
                 column: "Status");
 
-            // Material master + page catalogue rows (by Key, idempotent; ids are never fixed).
+            // Material master rows (by Name, idempotent; ids are never fixed). PublicityRequest /
+            // PublicityReview need no page-catalogue row: RemovePagePermissionInfrastructure (2026-10-15)
+            // retired the database-driven "Pages" table in favour of plain PagePermission enum members
+            // (Userinfo.cs), so a page key is just an enum member + RoleAccess token, nothing to seed here.
             migrationBuilder.Sql(@"
 INSERT INTO ""PublicityMaterialTypes"" (""Name"",""Code"",""IsActive"",""SortOrder"")
 SELECT v.n, v.c, TRUE, v.o FROM (VALUES ('Poster','POSTER',1),('Banner','BANNER',2),('Leaflet','LEAFLET',3),('Brochure','BROCHURE',4),
  ('Standee','STANDEE',5),('Wall Painting','WALL',6),('Calendar','CALENDAR',7),('Danglers','DANGLER',8)) AS v(n,c,o)
 WHERE NOT EXISTS (SELECT 1 FROM ""PublicityMaterialTypes"" m WHERE m.""Name"" = v.n);
-
-SELECT setval(pg_get_serial_sequence('""Pages""', 'Id'), GREATEST((SELECT COALESCE(MAX(""Id""), 0) FROM ""Pages"") + 1, nextval(pg_get_serial_sequence('""Pages""', 'Id'))), false);
-INSERT INTO ""Pages"" (""CreatedAt"",""CreatedBy"",""HasActions"",""IsActive"",""Key"",""Module"",""Name"",""SortOrder"",""UpdatedAt"",""UpdatedBy"")
-SELECT TIMESTAMP '2024-01-01 00:00:00', 'System', TRUE, TRUE, 'PublicityRequest', 'Publicity', 'Publicity Material Request', 200, TIMESTAMP '2024-01-01 00:00:00', 'System'
-WHERE NOT EXISTS (SELECT 1 FROM ""Pages"" WHERE ""Key"" = 'PublicityRequest');
-INSERT INTO ""Pages"" (""CreatedAt"",""CreatedBy"",""HasActions"",""IsActive"",""Key"",""Module"",""Name"",""SortOrder"",""UpdatedAt"",""UpdatedBy"")
-SELECT TIMESTAMP '2024-01-01 00:00:00', 'System', TRUE, TRUE, 'PublicityReview', 'Publicity', 'Publicity Review & Dispatch', 201, TIMESTAMP '2024-01-01 00:00:00', 'System'
-WHERE NOT EXISTS (SELECT 1 FROM ""Pages"" WHERE ""Key"" = 'PublicityReview');
 ");
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.Sql(@"DELETE FROM ""Pages"" WHERE ""Key"" IN ('PublicityRequest','PublicityReview');");
-
             migrationBuilder.DropTable(
                 name: "PublicityAcknowledgements");
 

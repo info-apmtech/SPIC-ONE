@@ -21,23 +21,33 @@ public sealed class PublicityApi : ApiClientBase
     // ---- who is asking ----------------------------------------------------------------------
 
     public AppRole? Role => Login.UserRole;
-    public bool IsDispatcher => Role is AppRole.MDAdmin or AppRole.MDHOD or AppRole.Admin or AppRole.SuperAdmin or AppRole.CorporateAdmin;
-    public bool IsApprover => Role is AppRole.RM or AppRole.SMD or AppRole.SMM or AppRole.MDAdmin or AppRole.MDHOD or AppRole.Admin or AppRole.SuperAdmin;
+    /// <summary>ADMIN-MD CS is a CommonRole user identified by Designation name, not a dedicated
+    /// AppRole (AppRole.MDAdmin is still honoured too - same split as PublicityController).</summary>
+    public bool IsAdminMdCs => Role == AppRole.MDAdmin ||
+        (Role == AppRole.CommonRole && Login.DesignationName is "ADMIN MD CS" or "ADMIN-MD CS");
+    /// <summary>DGM-MD CS: CommonRole + that designation (AppRole.MDHOD still honoured too).</summary>
+    public bool IsDgmMdCs => Role == AppRole.MDHOD ||
+        (Role == AppRole.CommonRole && Login.DesignationName is "DGM MD CS" or "DGM-MD CS");
+    public bool IsDispatcher => IsAdminMdCs || IsDgmMdCs || Role is AppRole.Admin or AppRole.SuperAdmin or AppRole.CorporateAdmin;
+    public bool IsApprover => Role is AppRole.RM or AppRole.SMD or AppRole.SMM or AppRole.Admin or AppRole.SuperAdmin || IsAdminMdCs || IsDgmMdCs;
     /// <summary>Route root of the signed-in user's pages (also the PageGuard key).</summary>
     public string Home => Login.CanAccess(nameof(PagePermission.PublicityReview)) && (IsApprover || IsDispatcher) ? "/PublicityReview" : "/PublicityRequest";
-    /// <summary>Every role holding the request page may raise one (RM / SMM designs carry "Create New Request").</summary>
-    public bool CanCreate => Login.CanAccess(nameof(PagePermission.PublicityRequest));
+    /// <summary>Anyone in the workflow may raise a request, not only the RMDO (RMD or MDO) - a chain
+    /// role creating its own request skips every stage at or below its own rung (API:
+    /// PublicityController.Submit). Admin/SuperAdmin keep the testing bypass.</summary>
+    public bool CanCreate => Role is AppRole.RMD or AppRole.MDO or AppRole.RM or AppRole.SMD or AppRole.SMM or AppRole.Admin or AppRole.SuperAdmin
+        || IsAdminMdCs || IsDgmMdCs;
     /// <summary>RM, SMD, SMM: the consolidation reviewers (region / state level).</summary>
     public bool IsFieldApprover => Role is AppRole.RM or AppRole.SMD or AppRole.SMM;
     public PublicityStage? MyStage => Role switch
     {
         AppRole.RM => PublicityStage.RmReview, AppRole.SMD => PublicityStage.SmdReview, AppRole.SMM => PublicityStage.SmmReview,
-        AppRole.MDAdmin => PublicityStage.AdminMdCsReview, AppRole.MDHOD => PublicityStage.DgmMdCsReview, _ => null
+        _ => IsAdminMdCs ? PublicityStage.AdminMdCsReview : IsDgmMdCs ? PublicityStage.DgmMdCsReview : null
     };
     public string? MyStageLabel => Role switch
     {
         AppRole.RM => "RM Review", AppRole.SMD => "SMD Review", AppRole.SMM => "SMM Review",
-        AppRole.MDAdmin => "ADMIN-MD CS Review", AppRole.MDHOD => "DGM-MD CS Review", _ => null
+        _ => IsAdminMdCs ? "ADMIN-MD CS Review" : IsDgmMdCs ? "DGM-MD CS Review" : null
     };
 
     // ---- calls ------------------------------------------------------------------------------

@@ -77,20 +77,26 @@
         </NavLink>
     }
 
-    @* Publicity Material Tracking: RMDO requests and the reviewer / MD CS side (page-permission gated). *@
-    @if (loginState.CanSeeMenu(PagePermission.PublicityRequest))
+    @* Publicity Material Tracking: RMDO requests and the reviewer / MD CS side, grouped under one
+       collapsible "Publicity" parent (page-permission gated per child, pure union like DemoDocumentation). *@
+    @if (AnyPublicityAccessible)
     {
-        <NavLink class="@NavLinkClass("Publicity Request")" href="/PublicityRequest">
-            <i class="bi bi-megaphone SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
-            Publicity Request
-        </NavLink>
-    }
-    @if (loginState.CanSeeMenu(PagePermission.PublicityReview))
-    {
-        <NavLink class="@NavLinkClass("Publicity Review")" href="/PublicityReview">
-            <i class="bi bi-clipboard2-check SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
-            Publicity Review
-        </NavLink>
+        <div class="settings-menu-wrapper">
+            <a href="javascript:void(0);"
+               class="nav-link mt-2 @(ShowPublicityExpanded ? "active" : "") @MatchClass("Publicity")"
+               @onclick="TogglePublicityMenu">
+                <i class="bi bi-megaphone SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+                Publicity
+                <i class="bi @(ShowPublicityExpanded ? "bi-chevron-up" : "bi-chevron-down") chevron-icon"></i>
+            </a>
+
+            @if (ShowPublicityExpanded)
+            {
+                <ul class="submenu-list">
+                    @PublicityMenuItems
+                </ul>
+            }
+        </div>
     }
 
     @* SAS Lab portal (version 2) and payments: DESIGNATION only (HasPageStrict, no Admin / CorporateAdmin bypass). *@
@@ -1004,74 +1010,43 @@
         }
     }
 
-    @* The stray comment block below used to leave the guard disabled (the @if line was commented
-       out while the braces stayed live), so Farm Operations rendered for every signed-in user.
-       It is a normal Designation-controlled page now (PagePermission.FarmDashboard). *@
-    @if (loginState.CanSeeMenu(PagePermission.FarmDashboard))
+    @if (loginState.IsAdmin && AnyFarmAccessible)
     {
-        <NavLink class="@NavLinkClass("Farm Operations")" href="/FarmDashboard" Match="NavLinkMatch.Prefix">
-            <i class="bi bi-speedometer2 SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
-            Farm Operations
-        </NavLink>
+        <div class="settings-menu-wrapper">
+            <a href="javascript:void(0);"
+               class="nav-link mt-2 @(ShowSasExpanded ? "active" : "") @MatchClass("SAS")"
+               @onclick="ToggleSasMenu">
+                <i class="bi bi-diagram-3 SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+                SAS
+                <i class="bi @(ShowSasExpanded ? "bi-chevron-up" : "bi-chevron-down") chevron-icon"></i>
+            </a>
+
+            @if (ShowSasExpanded)
+            {
+                <ul class="submenu-list">
+                    <li class="submenu-item">
+                        <a href="javascript:void(0);"
+                           class="@SubmenuLinkClass("Farm")"
+                           @onclick="ToggleFarmMenu">
+                            <i class="bi bi-tree SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+                            Farm
+                            <i class="bi @(ShowFarmExpanded ? "bi-chevron-up" : "bi-chevron-down") chevron-icon"></i>
+                        </a>
+
+                        @if (ShowFarmExpanded)
+                        {
+                            <ul class="submenu-list">
+                                @FarmMenuItems
+                            </ul>
+                        }
+                    </li>
+                </ul>
+            }
+        </div>
     }
-    @* Farm Office: request/track products & rate changes. *@
-    @if (loginState.CanSeeMenu(PagePermission.productRateManagement))
+    else
     {
-        <NavLink class="@NavLinkClass("Product & Rate Management")" href="/ProductRateManagement" Match="NavLinkMatch.Prefix">
-            <i class="bi bi-tags SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
-            Product & Rate Management
-        </NavLink>
-    }
-    @* Farm Admin: approve/reject Farm Office requests. *@
-    @if (loginState.CanSeeMenu(PagePermission.ProductRateApprovals))
-    {
-        <NavLink class="@NavLinkClass("Pending Approvals")" href="/ProductRateApprovals" Match="NavLinkMatch.Prefix">
-            <i class="bi bi-check2-square SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
-            Pending Approvals
-        </NavLink>
-    }
-    @* Farm Admin: master product catalog + rate history. *@
-    @if (loginState.CanSeeMenu(PagePermission.FarmProductMaster))
-    {
-        <NavLink class="@NavLinkClass("Product Master")" href="/FarmProductMaster" Match="NavLinkMatch.Prefix">
-            <i class="bi bi-box-seam SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
-            Product Master
-        </NavLink>
-    }
-    @* Farm Office / Farm Admin: 15-day Inventory / Income / Expense report entry. *@
-    @if (loginState.CanSeeMenu(PagePermission.FifteenDaysEntry))
-    {
-        <NavLink class="@NavLinkClass("15-Day Report")" href="/FifteenDaysEntry" Match="NavLinkMatch.Prefix">
-            <i class="bi bi-journal-text SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
-            15-Day Report
-        </NavLink>
-        <NavLink class="@NavLinkClass("Finance Summary")" href="/FinanceSummary" Match="NavLinkMatch.Prefix">
-            <i class="bi bi-graph-up-arrow SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
-            Finance Summary
-        </NavLink>
-    }
-    @* 15-Day Report drill-downs: each gated by its own PagePermission so a Designation can be
-       granted one summary without the others. *@
-    @if (loginState.CanSeeMenu(PagePermission.InventorySummary))
-    {
-        <NavLink class="@NavLinkClass("Inventory Summary")" href="/InventorySummary" Match="NavLinkMatch.Prefix">
-            <i class="bi bi-boxes SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
-            Inventory Summary
-        </NavLink>
-    }
-    @if (loginState.CanSeeMenu(PagePermission.IncomeSummary))
-    {
-        <NavLink class="@NavLinkClass("Income Summary")" href="/IncomeSummary" Match="NavLinkMatch.Prefix">
-            <i class="bi bi-cash-stack SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
-            Income Summary
-        </NavLink>
-    }
-    @if (loginState.CanSeeMenu(PagePermission.ExpenseSummary))
-    {
-        <NavLink class="@NavLinkClass("Expense Summary")" href="/ExpenseSummary" Match="NavLinkMatch.Prefix">
-            <i class="bi bi-receipt SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
-            Expense Summary
-        </NavLink>
+        @FarmMenuLinks
     }
     @* User Profile - hidden from the left menu for now. Route, page, permission and all
        authorization stay untouched. *@
@@ -1101,7 +1076,20 @@
             Sales Audit
         </NavLink>
     }
-
+    @if (loginState.CanSeeMenu(PagePermission.SalesAudit))
+    {
+        <NavLink class="@NavLinkClass("Dealer Sales Upload")" href="/DealerSalesUpload" Match="NavLinkMatch.All">
+            <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/StockReport.svg" class="SideBariconimg" />
+            Dealer Sales Upload
+        </NavLink>
+    }
+    @if (loginState.CanSeeMenu(PagePermission.SalesTracking))
+    {
+        <NavLink class="@NavLinkClass("Sales Tracking")" href="/SalesTrackingList" Match="NavLinkMatch.All">
+            <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/StockReport.svg" class="SideBariconimg" />
+            Sales Tracking
+        </NavLink>
+    }
     @if (loginState.CanSeeMenu(PagePermission.ExtensionRequests))
     {
         <NavLink class="@NavLinkClass("Extension Requests")" href="/ExtensionRequests" Match="NavLinkMatch.Prefix">
@@ -1168,25 +1156,27 @@
     private bool isSdwaOpen = false;
     private bool isMdPortalOpen = false;
     private bool isSchemesOpen = false;
+    private bool isSasOpen = false;
+    private bool isFarmOpen = false;
     private bool ShowDemoDocumentationExpanded { get; set; }
+    private bool ShowPublicityExpanded { get; set; }
     protected override void OnInitialized()
     {
         isJmdoOpen = IsJmdoSectionActive();
         isSettingsOpen = IsSettingsSectionActive();
         isSubsidyOpen = IsSubsidySectionActive();
         isSdwaOpen = IsSdwaSectionActive();
-        isMdPortalOpen = IsMdPortalSectionActive() || loginState.UserRole is AppRole.RM or AppRole.RMD or AppRole.SMM or AppRole.SMD or AppRole.MO or AppRole.MDO or AppRole.JMDO;
+        isMdPortalOpen = IsMdPortalSectionActive();
         isSchemesOpen = IsSchemesSectionActive();
+        isSasOpen = IsFarmSectionActive();
+        isFarmOpen = IsFarmSectionActive();
         loginState.OnChange += HandleLoginStateChanged;
         SearchState.OnChange += HandleSearchChanged;
     }
 
     private void HandleLoginStateChanged()
     {
-        if (loginState.UserRole is AppRole.RM or AppRole.RMD or AppRole.SMM or AppRole.SMD or AppRole.MO or AppRole.MDO or AppRole.JMDO)
-        {
-            isMdPortalOpen = true;
-        }
+        isMdPortalOpen = IsMdPortalSectionActive();
         InvokeAsync(StateHasChanged);
     }
 
@@ -1216,6 +1206,152 @@
         var match = MatchClass(label);
         return string.IsNullOrEmpty(match) ? "submenu-link" : $"submenu-link {match}";
     }
+
+    private RenderFragment FarmMenuLinks =>
+    @<text>
+        @if (loginState.CanSeeMenu(PagePermission.FarmDashboard))
+        {
+            <NavLink class="@NavLinkClass("Farm Operations")" href="/FarmDashboard" Match="NavLinkMatch.Prefix">
+                <i class="bi bi-speedometer2 SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+                Farm Operations
+            </NavLink>
+        }
+        @if (loginState.CanSeeMenu(PagePermission.productRateManagement))
+        {
+            <NavLink class="@NavLinkClass("Product & Rate Management")" href="/ProductRateManagement" Match="NavLinkMatch.Prefix">
+                <i class="bi bi-tags SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+                Product & Rate Management
+            </NavLink>
+        }
+        @if (loginState.CanSeeMenu(PagePermission.ProductRateApprovals))
+        {
+            <NavLink class="@NavLinkClass("Pending Approvals")" href="/ProductRateApprovals" Match="NavLinkMatch.Prefix">
+                <i class="bi bi-check2-square SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+                Pending Approvals
+            </NavLink>
+        }
+        @if (loginState.CanSeeMenu(PagePermission.FarmProductMaster))
+        {
+            <NavLink class="@NavLinkClass("Product Master")" href="/FarmProductMaster" Match="NavLinkMatch.Prefix">
+                <i class="bi bi-box-seam SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+                Product Master
+            </NavLink>
+        }
+        @if (loginState.CanSeeMenu(PagePermission.FifteenDaysEntry))
+        {
+            <NavLink class="@NavLinkClass("15-Day Report")" href="/FifteenDaysEntry" Match="NavLinkMatch.Prefix">
+                <i class="bi bi-journal-text SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+                15-Day Report
+            </NavLink>
+            <NavLink class="@NavLinkClass("Finance Summary")" href="/FinanceSummary" Match="NavLinkMatch.Prefix">
+                <i class="bi bi-graph-up-arrow SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+                Finance Summary
+            </NavLink>
+        }
+        @if (loginState.CanSeeMenu(PagePermission.InventorySummary))
+        {
+            <NavLink class="@NavLinkClass("Inventory Summary")" href="/InventorySummary" Match="NavLinkMatch.Prefix">
+                <i class="bi bi-boxes SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+                Inventory Summary
+            </NavLink>
+        }
+        @if (loginState.CanSeeMenu(PagePermission.IncomeSummary))
+        {
+            <NavLink class="@NavLinkClass("Income Summary")" href="/IncomeSummary" Match="NavLinkMatch.Prefix">
+                <i class="bi bi-cash-stack SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+                Income Summary
+            </NavLink>
+        }
+        @if (loginState.CanSeeMenu(PagePermission.ExpenseSummary))
+        {
+            <NavLink class="@NavLinkClass("Expense Summary")" href="/ExpenseSummary" Match="NavLinkMatch.Prefix">
+                <i class="bi bi-receipt SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+                Expense Summary
+            </NavLink>
+        }
+    </text>;
+
+    private RenderFragment FarmMenuItems =>
+    @<text>
+        @if (loginState.CanSeeMenu(PagePermission.FarmDashboard))
+        {
+            <li class="submenu-item">
+                <NavLink class="@SubmenuLinkClass("Farm Operations")" href="/FarmDashboard" Match="NavLinkMatch.Prefix">
+                    <i class="bi bi-speedometer2 SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+                    Farm Operations
+                </NavLink>
+            </li>
+        }
+        @if (loginState.CanSeeMenu(PagePermission.productRateManagement))
+        {
+            <li class="submenu-item">
+                <NavLink class="@SubmenuLinkClass("Product & Rate Management")" href="/ProductRateManagement" Match="NavLinkMatch.Prefix">
+                    <i class="bi bi-tags SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+                    Product & Rate Management
+                </NavLink>
+            </li>
+        }
+        @if (loginState.CanSeeMenu(PagePermission.ProductRateApprovals))
+        {
+            <li class="submenu-item">
+                <NavLink class="@SubmenuLinkClass("Pending Approvals")" href="/ProductRateApprovals" Match="NavLinkMatch.Prefix">
+                    <i class="bi bi-check2-square SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+                    Pending Approvals
+                </NavLink>
+            </li>
+        }
+        @if (loginState.CanSeeMenu(PagePermission.FarmProductMaster))
+        {
+            <li class="submenu-item">
+                <NavLink class="@SubmenuLinkClass("Product Master")" href="/FarmProductMaster" Match="NavLinkMatch.Prefix">
+                    <i class="bi bi-box-seam SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+                    Product Master
+                </NavLink>
+            </li>
+        }
+        @if (loginState.CanSeeMenu(PagePermission.FifteenDaysEntry))
+        {
+            <li class="submenu-item">
+                <NavLink class="@SubmenuLinkClass("15-Day Report")" href="/FifteenDaysEntry" Match="NavLinkMatch.Prefix">
+                    <i class="bi bi-journal-text SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+                    15-Day Report
+                </NavLink>
+            </li>
+            <li class="submenu-item">
+                <NavLink class="@SubmenuLinkClass("Finance Summary")" href="/FinanceSummary" Match="NavLinkMatch.Prefix">
+                    <i class="bi bi-graph-up-arrow SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+                    Finance Summary
+                </NavLink>
+            </li>
+        }
+        @if (loginState.CanSeeMenu(PagePermission.InventorySummary))
+        {
+            <li class="submenu-item">
+                <NavLink class="@SubmenuLinkClass("Inventory Summary")" href="/InventorySummary" Match="NavLinkMatch.Prefix">
+                    <i class="bi bi-boxes SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+                    Inventory Summary
+                </NavLink>
+            </li>
+        }
+        @if (loginState.CanSeeMenu(PagePermission.IncomeSummary))
+        {
+            <li class="submenu-item">
+                <NavLink class="@SubmenuLinkClass("Income Summary")" href="/IncomeSummary" Match="NavLinkMatch.Prefix">
+                    <i class="bi bi-cash-stack SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+                    Income Summary
+                </NavLink>
+            </li>
+        }
+        @if (loginState.CanSeeMenu(PagePermission.ExpenseSummary))
+        {
+            <li class="submenu-item">
+                <NavLink class="@SubmenuLinkClass("Expense Summary")" href="/ExpenseSummary" Match="NavLinkMatch.Prefix">
+                    <i class="bi bi-receipt SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+                    Expense Summary
+                </NavLink>
+            </li>
+        }
+    </text>;
 
     // Shared between the flat (JMDO/MDO) and collapsible (every other role) renderings above, so
     // the item list only ever exists once in the markup - edit it here, not in either @if branch.
@@ -1572,6 +1708,62 @@
             || uri == "programmaster";
     }
 
+    private bool AnyFarmAccessible =>
+        loginState.CanSeeMenu(PagePermission.FarmDashboard)
+        || loginState.CanSeeMenu(PagePermission.productRateManagement)
+        || loginState.CanSeeMenu(PagePermission.ProductRateApprovals)
+        || loginState.CanSeeMenu(PagePermission.FarmProductMaster)
+        || loginState.CanSeeMenu(PagePermission.FifteenDaysEntry)
+        || loginState.CanSeeMenu(PagePermission.InventorySummary)
+        || loginState.CanSeeMenu(PagePermission.IncomeSummary)
+        || loginState.CanSeeMenu(PagePermission.ExpenseSummary);
+
+    private bool AnyFarmItemMatches =>
+        SearchState.Matches("Farm Operations")
+        || SearchState.Matches("Product & Rate Management")
+        || SearchState.Matches("Pending Approvals")
+        || SearchState.Matches("Product Master")
+        || SearchState.Matches("15-Day Report")
+        || SearchState.Matches("Finance Summary")
+        || SearchState.Matches("Inventory Summary")
+        || SearchState.Matches("Income Summary")
+        || SearchState.Matches("Expense Summary")
+        || SearchState.Matches("SAS")
+        || SearchState.Matches("Farm");
+
+    private bool ShowSasExpanded => isSasOpen || AnyFarmItemMatches;
+    private bool ShowFarmExpanded => isFarmOpen || AnyFarmItemMatches;
+
+    private void ToggleSasMenu()
+    {
+        isSasOpen = !isSasOpen;
+        if (!isSasOpen)
+            isFarmOpen = false;
+    }
+
+    private void ToggleFarmMenu()
+    {
+        if (!isSasOpen)
+            isSasOpen = true;
+
+        isFarmOpen = !isFarmOpen;
+    }
+
+    private bool IsFarmSectionActive()
+    {
+        var uri = NavManager.ToBaseRelativePath(NavManager.Uri).ToLower();
+        return uri == "farmdashboard"
+            || uri == "productratemanagement"
+            || uri == "productrateapprovals"
+            || uri == "farmproductmaster"
+            || uri == "fifteendaysentry"
+            || uri == "financesummary"
+            || uri == "inventorysummary"
+            || uri == "incomesummary"
+            || uri == "expensesummary"
+            || uri == "fifteendayreportreview";
+    }
+
     private bool AnySchemesAccessible =>
         loginState.CanSeeMenu(PagePermission.SchemeOverview)
         || loginState.CanSeeMenu(PagePermission.AddScheme)
@@ -1640,5 +1832,35 @@
     {
         ShowDemoDocumentationExpanded = !ShowDemoDocumentationExpanded;
     }
-}
 
+    // Publicity group: pure union of its two children's CanSeeMenu, same shape as DemoDocumentation.
+    private bool AnyPublicityAccessible =>
+        loginState.CanSeeMenu(PagePermission.PublicityRequest) || loginState.CanSeeMenu(PagePermission.PublicityReview);
+
+    private RenderFragment PublicityMenuItems =>
+    @<text>
+        @if (loginState.CanSeeMenu(PagePermission.PublicityRequest))
+        {
+            <li class="submenu-item">
+                <NavLink href="/PublicityRequest/new" class="@SubmenuLinkClass("Publicity Request")" Match="NavLinkMatch.All">
+                    <i class="bi bi-megaphone SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+                    Publicity Request
+                </NavLink>
+            </li>
+        }
+        @if (loginState.CanSeeMenu(PagePermission.PublicityReview))
+        {
+            <li class="submenu-item">
+                <NavLink href="/PublicityReview" class="@SubmenuLinkClass("Publicity Review")" Match="NavLinkMatch.All">
+                    <i class="bi bi-clipboard2-check SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+                    Publicity Review
+                </NavLink>
+            </li>
+        }
+    </text>;
+
+    private void TogglePublicityMenu()
+    {
+        ShowPublicityExpanded = !ShowPublicityExpanded;
+    }
+}

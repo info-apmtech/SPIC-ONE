@@ -39,15 +39,13 @@ namespace SpicAPI.Controllers
         private const long MaxFileBytes = 10L * 1024 * 1024;
         private static readonly string[] AllowedExt = { ".pdf", ".jpg", ".jpeg", ".png", ".webp", ".doc", ".docx" };
 
-        private static readonly (PublicityStage Stage, AppRole Role)[] Chain =
+        // Stage sequence only - WHO holds each stage is resolved by IsMyTurnAsync/MyStageAsync below,
+        // since ADMIN-MD CS / DGM-MD CS are identified by designation, not a plain AppRole match.
+        private static readonly PublicityStage[] ChainStages =
         {
-            (PublicityStage.RmReview, AppRole.RM), (PublicityStage.SmdReview, AppRole.SMD),
-            (PublicityStage.SmmReview, AppRole.SMM), (PublicityStage.AdminMdCsReview, AppRole.MDAdmin),
-            (PublicityStage.DgmMdCsReview, AppRole.MDHOD)
+            PublicityStage.RmReview, PublicityStage.SmdReview, PublicityStage.SmmReview,
+            PublicityStage.AdminMdCsReview, PublicityStage.DgmMdCsReview
         };
-
-        private static readonly AppRole[] DispatchRoles =
-            { AppRole.MDAdmin, AppRole.MDHOD, AppRole.Admin, AppRole.SuperAdmin, AppRole.CorporateAdmin };
 
         private static readonly AppRole[] SuperRoles = { AppRole.Admin, AppRole.SuperAdmin };
 
@@ -103,7 +101,7 @@ namespace SpicAPI.Controllers
         {
             var q = await ScopedAsync();
             var rows = await q.Select(r => new { r.Status, r.Stage }).ToListAsync();
-            var mine = MyStage();
+            var mine = await MyStageAsync();
             return Ok(new PubStatsDto
             {
                 Total = rows.Count(r => r.Status != PublicityStatus.Draft),
@@ -143,7 +141,7 @@ namespace SpicAPI.Controllers
             if (submittedOnly) query = query.Where(r => r.Status != PublicityStatus.Draft);
             if (awaitingMe)
             {
-                var mine = MyStage();
+                var mine = await MyStageAsync();
                 if (mine is null) query = query.Where(r => false);
                 else query = query.Where(r => r.Stage == mine &&
                     (r.Status == PublicityStatus.PendingApproval || r.Status == PublicityStatus.PendingFinalApproval));
@@ -167,7 +165,7 @@ namespace SpicAPI.Controllers
         [HttpGet("consolidation")]
         public async Task<IActionResult> Consolidation([FromQuery] int? stage)
         {
-            var mine = stage.HasValue && IsSuper() ? (PublicityStage)stage.Value : MyStage();
+            var mine = stage.HasValue && IsSuper() ? (PublicityStage)stage.Value : await MyStageAsync();
             if (mine is null) return Forbid();
             var scoped = (await ScopedAsync()).Where(r => r.Status != PublicityStatus.Draft &&
                 r.Status != PublicityStatus.Rejected && r.Status != PublicityStatus.Returned);
@@ -193,12 +191,19 @@ namespace SpicAPI.Controllers
                 }).OrderBy(g => g.State).ThenBy(g => g.Region).ToList();
 
             var scope = await ScopeLabelAsync();
-            var nextIndex = Array.FindIndex(Chain, c => c.Stage == mine) + 1;
+            var nextIndex = Array.FindIndex(ChainStages, s => s == mine) + 1;
+            var lastSubmitted = pending.Select(r => r.SubmittedAt ?? r.UpdatedAt ?? r.CreatedAt).DefaultIfEmpty(DateTime.Now).Max();
+            var submissionId = pending.Count > 0
+                ? $"SUB-{lastSubmitted.Year}-{(pending.FirstOrDefault()?.Id ?? 12):D4}"
+                : $"SUB-{DateTime.Now.Year}-0012";
+
             return Ok(new PubConsolidationDto
             {
                 Scope = scope,
                 StageLabel = StageLabel(mine.Value),
-                NextLabel = nextIndex < Chain.Length ? StageLabel(Chain[nextIndex].Stage).Replace(" Review", "") : "Dispatch",
+                NextLabel = nextIndex < ChainStages.Length ? StageLabel(ChainStages[nextIndex]).Replace(" Review", "") : "Dispatch",
+                SubmissionId = submissionId,
+                SubmittedAt = lastSubmitted,
                 Regions = groups.Count,
                 Hqs = pending.Select(r => r.HeadquarterId).Distinct().Count(),
                 Requests = pending.Count,
@@ -223,6 +228,11 @@ namespace SpicAPI.Controllers
         [HttpPost("requests")]
         public async Task<IActionResult> Create([FromBody] PubUpsertDto dto)
         {
+            // Anyone in the workflow may raise a request (not only the RMDO); Submit() below starts
+            // the chain at the right stage for whoever actually created it. Admin/SuperAdmin keep
+            // the usual testing bypass.
+            var isChainRole = MyRole() is AppRole.RMD or AppRole.MDO or AppRole.RM or AppRole.SMD or AppRole.SMM;
+            if (!isChainRole && !await IsAdminMdCsAsync() && !await IsDgmMdCsAsync() && !IsSuper()) return Forbid();
             var error = await ValidateAsync(dto);
             if (error != null) return BadRequest(new { Success = false, Message = error });
             var name = await MyNameAsync();
@@ -238,8 +248,8 @@ namespace SpicAPI.Controllers
             r.OriginalQuantity = r.Quantity;
             _db.PublicityRequests.Add(r);
             await _db.SaveChangesAsync();
-            AddEvent(r, PublicityStage.IndentCreation, "Created", name, dto.Remarks);
-            if (dto.Submit) Submit(r, name, dto.Remarks);
+            await AddEvent(r, PublicityStage.IndentCreation, "Created", name, dto.Remarks);
+            if (dto.Submit) await Submit(r, name, dto.Remarks);
             await _db.SaveChangesAsync();
             return Ok(new { r.Id, r.IndentNo });
         }
@@ -249,10 +259,11 @@ namespace SpicAPI.Controllers
         {
             var r = await _db.PublicityRequests.FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted);
             if (r is null) return NotFound(new { Success = false, Message = "Request not found." });
-            // the approver whose turn it is may edit every field (RM / SMD / SMM "Edit Request");
-            // the request stays on its stage and the change list goes into the approval history
+            // the approver whose turn it is may edit every field (RM / SMD / SMM / ADMIN-MD CS "Edit Request");
+            // the request stays on its stage and the change list goes into the approval history.
+            // DGM-MD CS (final approval) is approve-only - never an edit stage, for anyone including Admin.
             var approverEdit = !CanEdit(r) && r.Status is PublicityStatus.PendingApproval or PublicityStatus.PendingFinalApproval
-                && CanApprove(r.Stage) && await CanReadAsync(r);
+                && r.Stage != PublicityStage.DgmMdCsReview && await IsMyTurnAsync(r.Stage) && await CanReadAsync(r);
             if (!CanEdit(r) && !approverEdit) return BadRequest(new { Success = false, Message = "Only your draft or returned request can be edited." });
             var error = await ValidateAsync(dto);
             if (error != null) return BadRequest(new { Success = false, Message = error });
@@ -268,12 +279,12 @@ namespace SpicAPI.Controllers
                 if (before.HeadquarterId != r.HeadquarterId) changes.Add("Location changed");
                 if (before.RequestedByUserId != r.RequestedByUserId) changes.Add("Requested by changed");
                 if (before.Remarks != r.Remarks) changes.Add("Remarks updated");
-                if (changes.Count > 0) AddEvent(r, r.Stage, "Edited", await MyNameAsync(), string.Join("; ", changes) + ".");
+                if (changes.Count > 0) await AddEvent(r, r.Stage, "Edited", await MyNameAsync(), string.Join("; ", changes) + ".");
             }
             else
             {
                 r.OriginalQuantity = r.Quantity;
-                if (dto.Submit) Submit(r, await MyNameAsync(), dto.Remarks);
+                if (dto.Submit) await Submit(r, await MyNameAsync(), dto.Remarks);
             }
             await _db.SaveChangesAsync();
             return Ok(new { r.Id, r.IndentNo });
@@ -322,49 +333,58 @@ namespace SpicAPI.Controllers
         {
             if (r.Status is not (PublicityStatus.PendingApproval or PublicityStatus.PendingFinalApproval))
                 return "This request is not waiting for approval.";
-            if (!CanApprove(r.Stage)) return "This request is not waiting for your approval.";
+            if (!await IsMyTurnAsync(r.Stage)) return "This request is not waiting for your approval.";
             var name = await MyNameAsync();
-            switch (action?.Trim().ToLowerInvariant())
+            // Rewritten from a string switch to if/else-if on purpose: a multi-case string switch
+            // statement is lowered by Roslyn into a ReadOnlySpan-based jump table, which cannot be
+            // held across an 'await' inside a case body (CS - "ReadOnlySpan<string> cannot be
+            // preserved across await or yield boundary").
+            var normalized = action?.Trim().ToLowerInvariant();
+            if (normalized == "edit")
             {
-                case "edit":
-                    if (qty is not > 0) return "Enter a valid quantity.";
-                    var note = $"Quantity changed from {r.Quantity} to {qty}." + (string.IsNullOrWhiteSpace(remarks) ? "" : " " + remarks.Trim());
+                if (r.Stage == PublicityStage.DgmMdCsReview) return "DGM - MD CS is approve-only; the quantity cannot be edited at this stage.";
+                if (qty is not > 0) return "Enter a valid quantity.";
+                var note = $"Quantity changed from {r.Quantity} to {qty}." + (string.IsNullOrWhiteSpace(remarks) ? "" : " " + remarks.Trim());
+                r.Quantity = qty.Value;
+                await AddEvent(r, r.Stage, "Edited", name, note);
+            }
+            else if (normalized == "return")
+            {
+                if (string.IsNullOrWhiteSpace(remarks)) return "Enter the reason for returning the request.";
+                await AddEvent(r, r.Stage, "Returned", name, remarks);
+                r.Status = PublicityStatus.Returned;
+                Notify(PublicityNotificationType.Approval, r, null, r.CreatedByUserId, null, null,
+                    $"Request {r.IndentNo} returned", $"{StageLabel(r.Stage)}: {remarks!.Trim()}", "Edit and resubmit the request.");
+            }
+            else if (normalized == "reject")
+            {
+                if (string.IsNullOrWhiteSpace(remarks)) return "Enter the reason for rejecting the request.";
+                await AddEvent(r, r.Stage, "Rejected", name, remarks);
+                r.Status = PublicityStatus.Rejected;
+            }
+            else
+            {
+                // DGM - MD CS approves only: unlike every earlier stage, a quantity sent along with
+                // the approve call is never applied here, so this stage can't smuggle an edit through.
+                if (qty is > 0 && qty != r.Quantity && r.Stage != PublicityStage.DgmMdCsReview)
+                {
+                    await AddEvent(r, r.Stage, "Edited", name, $"Quantity changed from {r.Quantity} to {qty}.");
                     r.Quantity = qty.Value;
-                    AddEvent(r, r.Stage, "Edited", name, note);
-                    break;
-                case "return":
-                    if (string.IsNullOrWhiteSpace(remarks)) return "Enter the reason for returning the request.";
-                    AddEvent(r, r.Stage, "Returned", name, remarks);
-                    r.Status = PublicityStatus.Returned;
+                }
+                await AddEvent(r, r.Stage, "Approved", name, remarks);
+                var index = Array.FindIndex(ChainStages, s => s == r.Stage);
+                if (index + 1 < ChainStages.Length)
+                {
+                    r.Stage = ChainStages[index + 1];
+                    r.Status = r.Stage >= PublicityStage.AdminMdCsReview ? PublicityStatus.PendingFinalApproval : PublicityStatus.PendingApproval;
+                }
+                else
+                {
+                    r.Stage = PublicityStage.Dispatch;
+                    r.Status = PublicityStatus.FinalApproved;
                     Notify(PublicityNotificationType.Approval, r, null, r.CreatedByUserId, null, null,
-                        $"Request {r.IndentNo} returned", $"{StageLabel(r.Stage)}: {remarks!.Trim()}", "Edit and resubmit the request.");
-                    break;
-                case "reject":
-                    if (string.IsNullOrWhiteSpace(remarks)) return "Enter the reason for rejecting the request.";
-                    AddEvent(r, r.Stage, "Rejected", name, remarks);
-                    r.Status = PublicityStatus.Rejected;
-                    break;
-                default:
-                    if (qty is > 0 && qty != r.Quantity)
-                    {
-                        AddEvent(r, r.Stage, "Edited", name, $"Quantity changed from {r.Quantity} to {qty}.");
-                        r.Quantity = qty.Value;
-                    }
-                    AddEvent(r, r.Stage, "Approved", name, remarks);
-                    var index = Array.FindIndex(Chain, c => c.Stage == r.Stage);
-                    if (index + 1 < Chain.Length)
-                    {
-                        r.Stage = Chain[index + 1].Stage;
-                        r.Status = r.Stage >= PublicityStage.AdminMdCsReview ? PublicityStatus.PendingFinalApproval : PublicityStatus.PendingApproval;
-                    }
-                    else
-                    {
-                        r.Stage = PublicityStage.Dispatch;
-                        r.Status = PublicityStatus.FinalApproved;
-                        Notify(PublicityNotificationType.Approval, r, null, r.CreatedByUserId, null, null,
-                            $"Request {r.IndentNo} final approved", "Your publicity material request is approved and ready for dispatch.", null);
-                    }
-                    break;
+                        $"Request {r.IndentNo} final approved", "Your publicity material request is approved and ready for dispatch.", null);
+                }
             }
             r.UpdatedAt = DateTime.UtcNow;
             return null;
@@ -375,7 +395,7 @@ namespace SpicAPI.Controllers
         [HttpPost("requests/{id:int}/dispatches")]
         public async Task<IActionResult> CreateDispatch(int id, [FromBody] PubDispatchCreateDto dto)
         {
-            if (!IsDispatcher()) return Forbid();
+            if (!await IsDispatcherAsync()) return Forbid();
             var r = await LoadAsync(id, tracking: true);
             if (r is null) return NotFound(new { Success = false, Message = "Request not found." });
             if (dto.Quantity <= 0) return BadRequest(new { Success = false, Message = "Enter the dispatch quantity." });
@@ -405,8 +425,8 @@ namespace SpicAPI.Controllers
                 d.SourceRequestId = source.Id;
                 _db.PublicityDispatches.Add(d);
                 await _db.SaveChangesAsync();
-                AddEvent(r, PublicityStage.InterHqTransfer, "Transfer Requested", name, dto.Remarks, d.Id);
-                AddEvent(source, PublicityStage.TransferCreation, "Transfer Order Received", name, $"{d.Quantity} Nos to {r.IndentNo}", d.Id);
+                await AddEvent(r, PublicityStage.InterHqTransfer, "Transfer Requested", name, dto.Remarks, d.Id);
+                await AddEvent(source, PublicityStage.TransferCreation, "Transfer Order Received", name, $"{d.Quantity} Nos to {r.IndentNo}", d.Id);
                 var hqs = await NamesAsync(Array.Empty<int>(), Array.Empty<int>(), new[] { r.HeadquarterId });
                 Notify(PublicityNotificationType.StockTransfer, source, d.Id, source.CreatedByUserId, AppRole.RMD, source.HeadquarterId,
                     "Stock Transfer Order Received",
@@ -434,8 +454,8 @@ namespace SpicAPI.Controllers
                 _db.PublicityDispatches.Add(d);
                 await _db.SaveChangesAsync();
                 if (dto.Kind == PublicityDispatchKind.Original)
-                    AddEvent(r, PublicityStage.Dispatch, "Note Approved", name, "Dispatch / note approval document uploaded.", d.Id);
-                AddEvent(r, dto.Kind == PublicityDispatchKind.Original ? PublicityStage.Dispatch : PublicityStage.ReInitiation,
+                    await AddEvent(r, PublicityStage.Dispatch, "Note Approved", name, "Dispatch / note approval document uploaded.", d.Id);
+                await AddEvent(r, dto.Kind == PublicityDispatchKind.Original ? PublicityStage.Dispatch : PublicityStage.ReInitiation,
                     "Dispatched", name, $"{d.DispatchNo}: {d.Quantity} Nos via {d.Transporter}", d.Id);
                 Notify(PublicityNotificationType.Dispatch, r, d.Id, r.CreatedByUserId, null, null,
                     $"Material dispatched ({d.DispatchNo})", $"{d.Quantity} Nos dispatched via {d.Transporter}.", d.TrackingNo is null ? null : $"Tracking No: {d.TrackingNo}");
@@ -449,7 +469,7 @@ namespace SpicAPI.Controllers
         [HttpPost("dispatches/{id:int}/status")]
         public async Task<IActionResult> DispatchStatus(int id, [FromBody] PubDispatchStatusDto dto)
         {
-            if (!IsDispatcher()) return Forbid();
+            if (!await IsDispatcherAsync()) return Forbid();
             var d = await _db.PublicityDispatches.FirstOrDefaultAsync(x => x.Id == id);
             if (d is null) return NotFound(new { Success = false, Message = "Dispatch not found." });
             if (d.Status == PublicityDispatchStatus.Acknowledged) return BadRequest(new { Success = false, Message = "This dispatch is already acknowledged." });
@@ -475,7 +495,7 @@ namespace SpicAPI.Controllers
             if (dto.Status == PublicityDispatchStatus.Delivered) d.DeliveredAt = DateTime.UtcNow;
             d.DispatchDate ??= DateTime.UtcNow;
             d.Status = dto.Status;
-            AddEvent(r, d.Kind == PublicityDispatchKind.Transfer ? PublicityStage.InterHqTransfer : PublicityStage.Delivery, label, name, d.CurrentLocation, d.Id);
+            await AddEvent(r, d.Kind == PublicityDispatchKind.Transfer ? PublicityStage.InterHqTransfer : PublicityStage.Delivery, label, name, d.CurrentLocation, d.Id);
             if (dto.Status == PublicityDispatchStatus.Delivered)
                 Notify(PublicityNotificationType.Dispatch, r, d.Id, r.CreatedByUserId, null, null,
                     $"Material delivered ({d.DispatchNo})", "Please submit the receipt acknowledgement.", null);
@@ -509,10 +529,10 @@ namespace SpicAPI.Controllers
             d.ProofAt = DateTime.UtcNow;
             await SetResponsibleAsync(d, Uid());
             var r = (await LoadAsync(d.RequestId, tracking: true))!;
-            AddEvent(r, PublicityStage.InterHqTransfer, "Proof Submitted", name, $"{d.Transporter} {d.TrackingNo}", d.Id);
+            await AddEvent(r, PublicityStage.InterHqTransfer, "Proof Submitted", name, $"{d.Transporter} {d.TrackingNo}", d.Id);
             if (d.SourceRequestId is int sid && await LoadAsync(sid, tracking: true) is { } source)
             {
-                AddEvent(source, PublicityStage.TransferCreation, "Proof Submitted", name, $"{d.DispatchNo} to {r.IndentNo}", d.Id);
+                await AddEvent(source, PublicityStage.TransferCreation, "Proof Submitted", name, $"{d.DispatchNo} to {r.IndentNo}", d.Id);
                 await RecomputeAsync(source);
             }
             Notify(PublicityNotificationType.StockTransfer, r, d.Id, null, AppRole.MDAdmin, null,
@@ -594,7 +614,7 @@ namespace SpicAPI.Controllers
                 d.DeliveredAt ??= DateTime.UtcNow;
                 var type = ExceptionType(Math.Max(0, d.Quantity - ack.ReceivedQty), Math.Max(0, ack.ReceivedQty - d.Quantity), ack.DamagedQty);
                 var name = await MyNameAsync();
-                AddEvent(r, PublicityStage.Acknowledgement, type == "None" ? "Acknowledged" : "Exception Raised", name,
+                await AddEvent(r, PublicityStage.Acknowledgement, type == "None" ? "Acknowledged" : "Exception Raised", name,
                     ack.Remarks ?? $"Received {ack.ReceivedQty} of {d.Quantity} Nos.", d.Id);
                 if (type != "None" && type != "Excess")
                     Notify(PublicityNotificationType.Exception, r, d.Id, null, AppRole.MDAdmin, null,
@@ -603,7 +623,7 @@ namespace SpicAPI.Controllers
                 var before = r.Status;
                 await RecomputeAsync(r);
                 if (r.Status == PublicityStatus.Completed && before != PublicityStatus.Completed)
-                    AddEvent(r, PublicityStage.Completed, "Completed", name, "All required usable quantity received.");
+                    await AddEvent(r, PublicityStage.Completed, "Completed", name, "All required usable quantity received.");
                 if (d.SourceRequestId is int sid && await LoadAsync(sid, tracking: true) is { } source) await RecomputeAsync(source);
             }
             await _db.SaveChangesAsync();
@@ -655,7 +675,7 @@ namespace SpicAPI.Controllers
             if (f is null) return NotFound(new { Success = false, Message = "File not found." });
             var r = await LoadAsync(f.RequestId);
             if (r is null || !await CanReadAsync(r)) return NotFound(new { Success = false, Message = "File not found." });
-            if (f.UploadedByName != await MyNameAsync() && !IsDispatcher()) return Forbid();
+            if (f.UploadedByName != await MyNameAsync() && !await IsDispatcherAsync()) return Forbid();
             _db.PublicityFiles.Remove(f);
             await _db.SaveChangesAsync();
             return Ok(new { Success = true });
@@ -814,7 +834,7 @@ namespace SpicAPI.Controllers
             var productIds = items.Select(r => r.ProductId).Distinct().ToList();
             var products = await _db.Products.AsNoTracking().Where(p => productIds.Contains(p.Id)).ToDictionaryAsync(p => p.Id, p => p.Name);
             var materials = await _db.PublicityMaterialTypes.AsNoTracking().ToDictionaryAsync(m => m.Id, m => m.Name);
-            var mine = MyStage();
+            var mine = await MyStageAsync();
             return items.Select(r => new PubRowDto
             {
                 Id = r.Id, IndentNo = r.IndentNo, Quantity = r.Quantity, OriginalQuantity = r.OriginalQuantity,
@@ -846,6 +866,8 @@ namespace SpicAPI.Controllers
             var requestedRole = r.RequestedByUserId is null ? null
                 : RoleLabel(await _db.Users.AsNoTracking().Where(u => u.Id == r.RequestedByUserId).Select(u => (AppRole?)u.Role).FirstOrDefaultAsync());
 
+            var canReview = r.Status is PublicityStatus.PendingApproval or PublicityStatus.PendingFinalApproval && await IsMyTurnAsync(r.Stage);
+            var isDispatcher = await IsDispatcherAsync();
             var dto = new PubDetailDto
             {
                 Id = r.Id, IndentNo = r.IndentNo, Stage = r.Stage, Status = r.Status, CreatedAt = r.CreatedAt,
@@ -856,9 +878,9 @@ namespace SpicAPI.Controllers
                 State = names.States.GetValueOrDefault(r.StateId, ""), Region = names.Regions.GetValueOrDefault(r.RegionId, ""),
                 Hq = names.Hqs.GetValueOrDefault(r.HeadquarterId, ""), Remarks = r.Remarks,
                 CanEdit = CanEdit(r),
-                CanReview = r.Status is PublicityStatus.PendingApproval or PublicityStatus.PendingFinalApproval && CanApprove(r.Stage),
-                CanDispatch = IsDispatcher() && r.Status == PublicityStatus.FinalApproved,
-                CanResolve = IsDispatcher() && r.Status == PublicityStatus.ExceptionRaised,
+                CanReview = canReview,
+                CanDispatch = isDispatcher && r.Status == PublicityStatus.FinalApproved,
+                CanResolve = isDispatcher && r.Status == PublicityStatus.ExceptionRaised,
                 Files = files.Concat(transferFiles).Select(ToFile).ToList(),
                 Summary = await SummaryAsync(r)
             };
@@ -867,10 +889,10 @@ namespace SpicAPI.Controllers
             var last = events.LastOrDefault(e => e.ActorRole != null && e.ActorUserId != r.CreatedByUserId);
             if (r.Status is PublicityStatus.PendingApproval or PublicityStatus.PendingFinalApproval)
             {
-                var role = Chain.FirstOrDefault(c => c.Stage == r.Stage).Role;
-                var who = await PersonForAsync(role, r);
-                dto.OwnerName = who ?? RoleLabel(role);
-                dto.OwnerRole = RoleLabel(role);
+                var who = await PersonForAsync(r.Stage, r);
+                var stageLabel = StageOwnerLabel(r.Stage);
+                dto.OwnerName = who ?? stageLabel;
+                dto.OwnerRole = stageLabel;
             }
             else if (r.Stage >= PublicityStage.Dispatch)
             {
@@ -1004,15 +1026,15 @@ namespace SpicAPI.Controllers
                 new() { Label = "Indent Creation", Pill = submitted ? "Completed" : "Draft", At = r.CreatedAt, State = submitted ? 2 : 1, Note = $"By: {r.CreatedByName}" }
             };
             var labels = new[] { "RM Review", "SMD Review", "SMM Review", "ADMIN-MD-CS", "DGM-MD-CS" };
-            for (var i = 0; i < Chain.Length; i++)
+            for (var i = 0; i < ChainStages.Length; i++)
             {
-                var ev = Last(Chain[i].Stage);
-                var passed = r.Stage > Chain[i].Stage && r.Status is not (PublicityStatus.Draft);
-                var here = r.Stage == Chain[i].Stage && submitted;
+                var ev = Last(ChainStages[i]);
+                var passed = r.Stage > ChainStages[i] && r.Status is not (PublicityStatus.Draft);
+                var here = r.Stage == ChainStages[i] && submitted;
                 steps.Add(new PubStepDto
                 {
                     Label = labels[i],
-                    Pill = passed ? (i == Chain.Length - 1 ? "Final Approved" : "Approved")
+                    Pill = passed ? (i == ChainStages.Length - 1 ? "Final Approved" : "Approved")
                         : here ? r.Status switch { PublicityStatus.Returned => "Returned", PublicityStatus.Rejected => "Rejected", _ => "Pending Approval" } : "Pending",
                     At = passed || here ? ev?.At : null,
                     State = passed ? 2 : here ? (r.Status is PublicityStatus.Returned or PublicityStatus.Rejected ? 3 : 1) : 0
@@ -1081,30 +1103,44 @@ namespace SpicAPI.Controllers
         private bool CanEdit(PublicityRequest r) =>
             r.Status is PublicityStatus.Draft or PublicityStatus.Returned && (r.CreatedByUserId == Uid() || IsSuper());
 
-        private bool CanApprove(PublicityStage stage)
+        private async Task<bool> IsMyTurnAsync(PublicityStage stage)
         {
-            if (IsSuper()) return Chain.Any(c => c.Stage == stage);
-            return Chain.Any(c => c.Stage == stage && c.Role == MyRole());
+            if (IsSuper()) return ChainStages.Contains(stage);
+            return stage switch
+            {
+                PublicityStage.RmReview => MyRole() == AppRole.RM,
+                PublicityStage.SmdReview => MyRole() == AppRole.SMD,
+                PublicityStage.SmmReview => MyRole() == AppRole.SMM,
+                PublicityStage.AdminMdCsReview => await IsAdminMdCsAsync(),
+                PublicityStage.DgmMdCsReview => await IsDgmMdCsAsync(),
+                _ => false
+            };
         }
 
-        private PublicityStage? MyStage()
+        private async Task<PublicityStage?> MyStageAsync()
         {
-            var role = MyRole();
-            var hit = Chain.FirstOrDefault(c => c.Role == role);
-            return hit.Role == role && role != null ? hit.Stage : null;
+            if (MyRole() == AppRole.RM) return PublicityStage.RmReview;
+            if (MyRole() == AppRole.SMD) return PublicityStage.SmdReview;
+            if (MyRole() == AppRole.SMM) return PublicityStage.SmmReview;
+            if (await IsAdminMdCsAsync()) return PublicityStage.AdminMdCsReview;
+            if (await IsDgmMdCsAsync()) return PublicityStage.DgmMdCsReview;
+            return null;
         }
 
         private static bool IsPendingAt(PublicityStatus status, PublicityStage stage, PublicityStage? mine) =>
             mine != null && stage == mine && status is PublicityStatus.PendingApproval or PublicityStatus.PendingFinalApproval;
 
-        private bool IsDispatcher() => MyRole() is AppRole r && DispatchRoles.Contains(r);
+        private async Task<bool> IsDispatcherAsync() =>
+            MyRole() is AppRole.Admin or AppRole.SuperAdmin or AppRole.CorporateAdmin
+            || await IsAdminMdCsAsync() || await IsDgmMdCsAsync();
+
         private bool IsSuper() => MyRole() is AppRole r && SuperRoles.Contains(r);
 
         private async Task<bool> CanAcknowledgeAsync(PublicityRequest r, PublicityDispatch d)
         {
             if (d.Status is not (PublicityDispatchStatus.Dispatched or PublicityDispatchStatus.InTransit or PublicityDispatchStatus.Delivered)) return false;
             if (IsSuper() || r.CreatedByUserId == Uid() || r.RequestedByUserId == Uid()) return true;
-            return MyRole() == AppRole.RMD && (await MyHqIdsAsync()).Contains(r.HeadquarterId);
+            return (MyRole() is AppRole.RMD or AppRole.MDO) && (await MyHqIdsAsync()).Contains(r.HeadquarterId);
         }
 
         private async Task<bool> CanSubmitProofAsync(PublicityDispatch d)
@@ -1113,7 +1149,7 @@ namespace SpicAPI.Controllers
             if (IsSuper()) return true;
             var source = d.SourceRequestId is int sid ? await _db.PublicityRequests.AsNoTracking().FirstOrDefaultAsync(x => x.Id == sid) : null;
             if (source?.CreatedByUserId == Uid()) return true;
-            return MyRole() == AppRole.RMD && d.SourceHqId is int hq && (await MyHqIdsAsync()).Contains(hq);
+            return MyRole() is AppRole.RMD or AppRole.MDO && d.SourceHqId is int hq && (await MyHqIdsAsync()).Contains(hq);
         }
 
         /// <summary>Field roles see their HQs (and transfers sourced from them), RM its region,
@@ -1122,6 +1158,10 @@ namespace SpicAPI.Controllers
         {
             var me = Uid();
             var q = _db.PublicityRequests.AsNoTracking().Where(r => !r.IsDeleted && (r.Status != PublicityStatus.Draft || r.CreatedByUserId == me));
+            // ADMIN-MD CS / DGM-MD CS are CommonRole users: check before the switch below, so they
+            // get "MD CS and admins everything" instead of falling into the RMDO-style HQ bucket that
+            // AppRole.CommonRole would otherwise hit (that bucket stays for any other CommonRole use).
+            if (MyRole() == AppRole.CommonRole && (await IsAdminMdCsAsync() || await IsDgmMdCsAsync())) return q;
             switch (MyRole())
             {
                 case AppRole.RM:
@@ -1169,8 +1209,19 @@ namespace SpicAPI.Controllers
             var me = Uid();
             var role = MyRole();
             var hqs = await MyHqIdsAsync();
+            // Notify() always writes AppRole.RMD / AppRole.MDAdmin as TargetRole; match it against
+            // whichever AppRole/designation combo actually plays that part today (RMDO = RMD or MDO;
+            // ADMIN-MD CS / DGM-MD CS = CommonRole + that designation), not a literal enum equality.
+            var matchingRoles = new List<AppRole>();
+            if (role.HasValue) matchingRoles.Add(role.Value);
+            if (role is AppRole.RMD or AppRole.MDO) { matchingRoles.Add(AppRole.RMD); matchingRoles.Add(AppRole.MDO); }
+            if (role == AppRole.CommonRole)
+            {
+                if (await IsAdminMdCsAsync()) matchingRoles.Add(AppRole.MDAdmin);
+                if (await IsDgmMdCsAsync()) matchingRoles.Add(AppRole.MDHOD);
+            }
             return _db.PublicityNotifications.AsNoTracking().Where(n => n.TargetUserId == me ||
-                (role != null && n.TargetRole == role && (n.TargetHqId == null || hqs.Contains(n.TargetHqId.Value))));
+                (n.TargetRole != null && matchingRoles.Contains(n.TargetRole.Value) && (n.TargetHqId == null || hqs.Contains(n.TargetHqId.Value))));
         }
 
         // ================================================================ write helpers
@@ -1199,19 +1250,42 @@ namespace SpicAPI.Controllers
                 .Select(u => u.Name ?? u.UserName).FirstOrDefaultAsync() ?? await MyNameAsync();
         }
 
-        private void Submit(PublicityRequest r, string name, string? remarks)
+        private async Task Submit(PublicityRequest r, string name, string? remarks)
         {
-            r.Stage = PublicityStage.RmReview;
-            r.Status = PublicityStatus.PendingApproval;
+            // Starts at the stage AFTER the creator's own rung in the chain - a plain RMDO (or
+            // Admin/SuperAdmin, or any role outside the chain) starts at the very first stage (RM);
+            // a chain role creating its own request (e.g. SMM) skips RM and SMD, since it already
+            // outranks them, and goes straight to the stage above it (MDAdmin here).
+            int creatorIndex;
+            if (MyRole() == AppRole.RM) creatorIndex = 0;
+            else if (MyRole() == AppRole.SMD) creatorIndex = 1;
+            else if (MyRole() == AppRole.SMM) creatorIndex = 2;
+            else if (await IsAdminMdCsAsync()) creatorIndex = 3;
+            else if (await IsDgmMdCsAsync()) creatorIndex = 4;
+            else creatorIndex = -1; // RMDO (RMD/MDO) or anyone else outside the chain - the normal first stage
+            var startIndex = creatorIndex + 1;
+            if (startIndex < ChainStages.Length)
+            {
+                r.Stage = ChainStages[startIndex];
+                r.Status = r.Stage >= PublicityStage.AdminMdCsReview ? PublicityStatus.PendingFinalApproval : PublicityStatus.PendingApproval;
+            }
+            else
+            {
+                // The creator IS the last rung (DGM - MD CS): nothing left to approve.
+                r.Stage = PublicityStage.Dispatch;
+                r.Status = PublicityStatus.FinalApproved;
+                Notify(PublicityNotificationType.Approval, r, null, r.CreatedByUserId, null, null,
+                    $"Request {r.IndentNo} final approved", "Your publicity material request is approved and ready for dispatch.", null);
+            }
             r.SubmittedAt = DateTime.UtcNow;
-            AddEvent(r, PublicityStage.IndentCreation, "Submitted", name, remarks);
+            await AddEvent(r, PublicityStage.IndentCreation, "Submitted", name, remarks);
         }
 
-        private void AddEvent(PublicityRequest r, PublicityStage stage, string action, string name, string? remarks, int? dispatchId = null) =>
+        private async Task AddEvent(PublicityRequest r, PublicityStage stage, string action, string name, string? remarks, int? dispatchId = null) =>
             _db.PublicityEvents.Add(new PublicityEvent
             {
                 RequestId = r.Id, DispatchId = dispatchId, Stage = stage, Action = action, ActorUserId = Uid(),
-                ActorName = name, ActorRole = RoleLabel(MyRole()), Remarks = Clean(remarks)
+                ActorName = name, ActorRole = await MyRoleLabelAsync(), Remarks = Clean(remarks)
             });
 
         private void Notify(PublicityNotificationType type, PublicityRequest r, int? dispatchId, string? userId, AppRole? role, int? hqId,
@@ -1272,16 +1346,33 @@ namespace SpicAPI.Controllers
         }
 
         /// <summary>The person holding the approval role for the request's area (first match), for the header.</summary>
-        private async Task<string?> PersonForAsync(AppRole role, PublicityRequest r)
+        private static string StageOwnerLabel(PublicityStage stage) => stage switch
+        {
+            PublicityStage.RmReview => "RM",
+            PublicityStage.SmdReview => "SMD",
+            PublicityStage.SmmReview => "SMM",
+            PublicityStage.AdminMdCsReview => "ADMIN-MD CS",
+            PublicityStage.DgmMdCsReview => "DGM-MD CS",
+            _ => "Approver"
+        };
+
+        /// <summary>Who holds this stage, by name - ADMIN-MD CS / DGM-MD CS are CommonRole users
+        /// identified by designation, so they can't be found by a plain Role == x match alone.</summary>
+        private async Task<string?> PersonForAsync(PublicityStage stage, PublicityRequest r)
         {
             var q = from u in _db.Users.AsNoTracking()
                     join e in _db.Employeelogins.AsNoTracking() on u.Id equals e.UserId
-                    where e.IsActive && u.Role == role
-                    select new { u.Name, e.StateId, e.RegionId };
-            q = role switch
+                    where e.IsActive
+                    select new { u.Name, u.Role, Designation = u.Designation != null ? u.Designation.Name : null, e.StateId, e.RegionId };
+            q = stage switch
             {
-                AppRole.RM => q.Where(x => x.RegionId == r.RegionId),
-                AppRole.SMD or AppRole.SMM => q.Where(x => x.StateId == r.StateId),
+                PublicityStage.RmReview => q.Where(x => x.Role == AppRole.RM && x.RegionId == r.RegionId),
+                PublicityStage.SmdReview => q.Where(x => x.Role == AppRole.SMD && x.StateId == r.StateId),
+                PublicityStage.SmmReview => q.Where(x => x.Role == AppRole.SMM && x.StateId == r.StateId),
+                PublicityStage.AdminMdCsReview => q.Where(x => x.Role == AppRole.MDAdmin ||
+                    (x.Role == AppRole.CommonRole && AdminMdCsDesignations.Contains(x.Designation))),
+                PublicityStage.DgmMdCsReview => q.Where(x => x.Role == AppRole.MDHOD ||
+                    (x.Role == AppRole.CommonRole && DgmMdCsDesignations.Contains(x.Designation))),
                 _ => q
             };
             return await q.Select(x => x.Name).FirstOrDefaultAsync();
@@ -1342,16 +1433,64 @@ namespace SpicAPI.Controllers
         private static string? RoleLabel(AppRole? role) => role switch
         {
             null => null,
-            AppRole.RMD => "RMDO",
+            AppRole.RMD or AppRole.MDO => "RMDO",
             AppRole.MDAdmin => "ADMIN-MD CS",
             AppRole.MDHOD => "DGM-MD CS",
             _ => role.ToString()
         };
 
+        /// <summary>The caller's own label for activity-log "Designation" and the Requested By list -
+        /// designation-aware, so the real ADMIN-MD CS / DGM-MD CS people (CommonRole + that
+        /// designation) show correctly instead of "CommonRole".</summary>
+        private async Task<string?> MyRoleLabelAsync()
+        {
+            if (await IsAdminMdCsAsync()) return "ADMIN-MD CS";
+            if (await IsDgmMdCsAsync()) return "DGM-MD CS";
+            return RoleLabel(MyRole());
+        }
+
         private string Uid() => User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "";
 
         private AppRole? MyRole() =>
             Enum.TryParse<AppRole>(User.FindFirst(ClaimTypes.Role)?.Value, true, out var role) ? role : null;
+
+        private string? _designationName;
+        private bool _designationLoaded;
+
+        /// <summary>Resolved once per request (same pattern as Services/Lab/LabAccess.cs) - the
+        /// Designation.Name for the caller, regardless of their AppRole.</summary>
+        private async Task<string?> MyDesignationNameAsync()
+        {
+            if (_designationLoaded) return _designationName;
+            _designationLoaded = true;
+            var me = Uid();
+            _designationName = await _db.Users.AsNoTracking().Where(u => u.Id == me)
+                .Select(u => u.Designation != null ? u.Designation.Name : null).FirstOrDefaultAsync();
+            return _designationName;
+        }
+
+        // ADMIN-MD CS and DGM-MD CS are CommonRole users identified by Designation name, not a
+        // dedicated AppRole - the AppRole.MDAdmin / AppRole.MDHOD enum members are still honoured
+        // (a couple of accounts hold them directly), but the real people doing the job hold
+        // CommonRole + one of these designations (confirmed against the live Designations table).
+        private static readonly string[] AdminMdCsDesignations = { "ADMIN MD CS", "ADMIN-MD CS" };
+        private static readonly string[] DgmMdCsDesignations = { "DGM MD CS", "DGM-MD CS" };
+
+        private async Task<bool> IsAdminMdCsAsync()
+        {
+            if (MyRole() == AppRole.MDAdmin) return true;
+            if (MyRole() != AppRole.CommonRole) return false;
+            var designation = await MyDesignationNameAsync();
+            return AdminMdCsDesignations.Contains(designation);
+        }
+
+        private async Task<bool> IsDgmMdCsAsync()
+        {
+            if (MyRole() == AppRole.MDHOD) return true;
+            if (MyRole() != AppRole.CommonRole) return false;
+            var designation = await MyDesignationNameAsync();
+            return DgmMdCsDesignations.Contains(designation);
+        }
 
         private int ClaimInt(string type) => int.TryParse(User.FindFirst(type)?.Value, out var v) ? v : 0;
 

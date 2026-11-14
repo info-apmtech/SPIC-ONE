@@ -135,13 +135,18 @@ namespace SPIC.Core.Entities
         // Farm Operations approval workflow (2026-10-31): Farm Admin's two pages, separate from
         // productRateManagement (Farm Office's request/catalog page) so the two roles can be
         // granted Entry (request) vs Update (approve/manage) independently. Appended at the END.
-        ProductRateApprovals, FarmProductMaster, InventorySummary, IncomeSummary, ExpenseSummary,
+       
 
         // Publicity Material Tracking (2026-11-08, docs/publicity-tracking-plan.md): RMDO raises and
         // acknowledges (PublicityRequest); approvers and MD CS admins review, dispatch and resolve
         // exceptions (PublicityReview). Appended at the END.
-        [PageModule("Publicity")] PublicityRequest,
-        [PageModule("Publicity")] PublicityReview
+        // No shared PageModule tag: unlike a parent/sub-page module, these two are independent,
+        // mutually-exclusive permissions (RMDO gets Request only; RM/SMD/SMM/ADMIN-MD CS/DGM-MD CS
+        // get Review only - never both), so they must NOT be grouped as a Designation.razor
+        // parent+child pair, where the child never gets its own row and only toggles via the parent.
+        PublicityRequest,
+        PublicityReview,
+        ProductRateApprovals, FarmProductMaster, SalesTracking, InventorySummary, IncomeSummary, ExpenseSummary
     }
 }
                                                                                                                                                                                                                                                                                                                                                                                                                             

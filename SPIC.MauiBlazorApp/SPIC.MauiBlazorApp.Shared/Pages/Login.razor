@@ -80,10 +80,11 @@
             {
                 var token = await SessionStore.GetAsync(SessionKeys.Token);
                 var expirationText = await SessionStore.GetAsync(SessionKeys.Expiration);
+                LoginState.Clock.Restore(await SessionStore.GetAsync(SessionKeys.ServerClockOffset));
 
                 if (!string.IsNullOrWhiteSpace(token)
                     && DateTime.TryParse(expirationText, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var expiration)
-                    && expiration.ToUniversalTime() > DateTime.UtcNow.AddMinutes(1))
+                    && expiration.ToUniversalTime() > LoginState.Clock.UtcNow.AddMinutes(1))
                 {
                     LoginState.Token = token;
                     LoginState.Expiration = expiration;

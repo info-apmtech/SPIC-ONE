@@ -111,6 +111,8 @@ namespace SPIC.Core.DTOs
         public int StateId { get; set; }
         public int RegionId { get; set; }
         public int HeadquartersId { get; set; }
+        public int[]? RegionIds { get; set; }
+        public int[]? HeadquartersIds { get; set; }
         public bool IsActive { get; set; } = true;
 
         public List<SpecialAdminLocationItem>? SpecialAdminLocations { get; set; }

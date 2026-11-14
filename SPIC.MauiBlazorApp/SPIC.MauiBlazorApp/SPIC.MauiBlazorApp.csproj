@@ -8,13 +8,6 @@
     <!-- Allow building with newer Xcode versions than current .NET workload target -->
     <ValidateXcodeVersion>false</ValidateXcodeVersion>
 
-    <!-- Note for MacCatalyst:
-      The default runtime is maccatalyst-x64, except in Release config, in which case the default is maccatalyst-x64;maccatalyst-arm64.
-      When specifying both architectures, use the plural <RuntimeIdentifiers> instead of the singular <RuntimeIdentifier>.
-      The Mac App Store will NOT accept apps with ONLY maccatalyst-arm64 indicated;
-      either BOTH runtimes must be indicated or ONLY macatalyst-x64. -->
-    <!-- For example: <RuntimeIdentifiers>maccatalyst-x64;maccatalyst-arm64</RuntimeIdentifiers> -->
-
     <OutputType>Exe</OutputType>
     <RootNamespace>SPIC.MauiBlazorApp</RootNamespace>
     <UseMaui>true</UseMaui>
@@ -23,12 +16,6 @@
     <EnableDefaultCssItems>false</EnableDefaultCssItems>
     <Nullable>enable</Nullable>
 
-    <!-- Enable XAML source generation for faster build times and improved performance.
-         This generates C# code from XAML at compile time instead of runtime inflation.
-         To disable, remove this line.
-         For individual files, you can override by setting Inflator metadata:
-           <MauiXaml Update="MyPage.xaml" Inflator="Default" /> (reverts to defaults: Runtime for Debug, XamlC for Release)
-           <MauiXaml Update="MyPage.xaml" Inflator="Runtime" /> (force runtime inflation) -->
     <MauiXamlInflator Condition="'$(Configuration)' != 'Release'">SourceGen</MauiXamlInflator>
 
     <!-- Display name -->
@@ -36,25 +23,61 @@
 
     <!-- App Identifier -->
     <ApplicationId>com.apmiot.spicone</ApplicationId>
+  </PropertyGroup>
 
-    <!-- Versions -->
-    <ApplicationDisplayVersion>1.3.2</ApplicationDisplayVersion>
-    <ApplicationVersion>5</ApplicationVersion>
+  <!-- ===== App Versions ===== -->
+  <!-- DEFAULT: Used for macOS/Windows/other platforms -->
+  <PropertyGroup>
+    <ApplicationDisplayVersion>1.4.0</ApplicationDisplayVersion>
+    <ApplicationVersion>7</ApplicationVersion>
 
+    <PackageVersion>1.4.0</PackageVersion>
+  </PropertyGroup>
+
+  <!-- ANDROID: Version 1.4 (Build 6) - Google Play Store -->
+  <PropertyGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">
+    <ApplicationDisplayVersion>1.4</ApplicationDisplayVersion>
+    <ApplicationVersion>6</ApplicationVersion>
+    <EmbedAssembliesIntoApk>true</EmbedAssembliesIntoApk>
+    <AndroidPackageFormat>apk</AndroidPackageFormat>
+    <AndroidUseAapt2>true</AndroidUseAapt2>
+  </PropertyGroup>
+
+  <!-- iOS: Version 1.4.0 (Build 8) - Apple App Store -->
+  <PropertyGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">
+    <ApplicationDisplayVersion>1.4.0</ApplicationDisplayVersion>
+    <ApplicationVersion>8</ApplicationVersion>
+  </PropertyGroup>
+
+  <!-- iOS Release: Ad Hoc Distribution for Device Testing (default) -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Release' And $([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios' And '$(ForAppStore)' != 'true'">
+    <CodesignProvision>SPICONEADHOC</CodesignProvision>
+    <CodesignKey>Apple Distribution: APM TECHNOLOGIES SOLUTIONS PRIVATE LIMITED (L9DG68JHYP)</CodesignKey>
+    <CodesignRequireProvisioningProfile>true</CodesignRequireProvisioningProfile>
+  </PropertyGroup>
+
+  <!-- iOS Release: App Store Distribution -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Release' And $([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios' And '$(ForAppStore)' == 'true'">
+    <CodesignProvision>SPIC ONE App Store</CodesignProvision>
+    <CodesignKey>Apple Distribution: APM TECHNOLOGIES SOLUTIONS PRIVATE LIMITED (L9DG68JHYP)</CodesignKey>
+    <CodesignRequireProvisioningProfile>true</CodesignRequireProvisioningProfile>
+  </PropertyGroup>
+
+  <!-- ===== Platform-Specific Settings ===== -->
+  <PropertyGroup>
     <!-- To develop, package, and publish an app to the Microsoft Store, see: https://aka.ms/MauiTemplateUnpackaged -->
 	  <WindowsPackageType>MSIX</WindowsPackageType>
 
     <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">15.0</SupportedOSPlatformVersion>
-    <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'maccatalyst'">15.0</SupportedOSPlatformVersion>
+    <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'maccatalyst'">17.0</SupportedOSPlatformVersion>
     <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">24.0</SupportedOSPlatformVersion>
     <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</SupportedOSPlatformVersion>
     <TargetPlatformMinVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</TargetPlatformMinVersion>
   </PropertyGroup>
 
   <ItemGroup>
+
     <!-- App Icon -->
-    <!-- The SPIC logo (1024 px, upscaled from the 120 px brand PNG) on the logo's own yellow, so the
-         launcher icon reads as the logo itself; 0.6 keeps the whole disc inside the adaptive-icon mask. -->
     <MauiIcon Include="Resources\AppIcon\appicon.svg" ForegroundFile="Resources\AppIcon\appiconfg.png" ForegroundScale="0.6" Color="#F7DB04" />
 
     <!-- Splash Screen -->
@@ -83,16 +106,14 @@
   <ItemGroup>
     <ProjectReference Include="..\SPIC.MauiBlazorApp.Shared\SPIC.MauiBlazorApp.Shared.csproj" />
   </ItemGroup>
-  <!-- API address. Override per environment at build time:
-         dotnet publish ... -p:SpicApiBaseUrl=https://previewspicapi.apmiot.com/
-       MauiProgram reads it back from the AssemblyMetadata attribute below. -->
+
   <!--<PropertyGroup>
     <SpicApiBaseUrl Condition="'$(SpicApiBaseUrl)' == ''">https://api.spicone.in/</SpicApiBaseUrl>
   </PropertyGroup>-->
 	<!-- Preview / Testing API -->
-	<PropertyGroup>
+	 <PropertyGroup>
 		<SpicApiBaseUrl Condition="'$(SpicApiBaseUrl)' == ''">https://previewspicapi.apmiot.com/</SpicApiBaseUrl>
-	</PropertyGroup>
+	</PropertyGroup> 
 	 <!--Local testing (uncomment when debugging against local SpicAPI):-->
 	<!--<PropertyGroup>
 		<SpicApiBaseUrl Condition="'$(SpicApiBaseUrl)' == ''">http://localhost:7032/</SpicApiBaseUrl>
@@ -105,14 +126,11 @@
     </AssemblyAttribute>
   </ItemGroup>
 
-
-  <!-- ===== Store publishing =====
-       Android: Release builds produce an .aab (what Google Play requires). Signing is
-       switched on only when the keystore variables are present in the environment, so a
-       plain developer build never needs the keystore. See docs/store-publishing.md. -->
   <PropertyGroup Condition="'$(Configuration)' == 'Release' And $([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">
     <AndroidPackageFormats>aab</AndroidPackageFormats>
     <AndroidUseAapt2>true</AndroidUseAapt2>
+    <AndroidLinkTool>r8</AndroidLinkTool>
+    <AndroidEnableProguard>true</AndroidEnableProguard>
   </PropertyGroup>
   <PropertyGroup Condition="'$(SPICONE_ANDROID_KEYSTORE)' != '' And $([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">
     <AndroidKeyStore>true</AndroidKeyStore>
@@ -125,17 +143,15 @@
   <!-- iOS: SecureStorage uses the Keychain, which needs the keychain-access-groups entitlement. -->
   <PropertyGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">
     <CodesignEntitlements>Platforms/iOS/Entitlements.plist</CodesignEntitlements>
-    <CodesignRequireProvisioningProfile>false</CodesignRequireProvisioningProfile>
+    <CodesignKey Condition="'$(RuntimeIdentifier)' == 'ios-arm64'">Apple Development</CodesignKey>
+    <!-- For Release builds, allow automatic provisioning profile selection -->
+    <CodesignProvision Condition="'$(RuntimeIdentifier)' == 'ios-arm64' And '$(Configuration)' != 'Release'">SPICONE</CodesignProvision>
+    <CodesignRequireProvisioningProfile Condition="'$(RuntimeIdentifier)' == 'ios-arm64' And '$(Configuration)' != 'Release'">true</CodesignRequireProvisioningProfile>
+    <CodesignRequireProvisioningProfile Condition="'$(RuntimeIdentifier)' == 'ios-arm64' And '$(Configuration)' == 'Release'">false</CodesignRequireProvisioningProfile>
+    <CodesignRequireProvisioningProfile Condition="'$(RuntimeIdentifier)' != 'ios-arm64' And '$(Configuration)' != 'Release'">false</CodesignRequireProvisioningProfile>
     <_MlaunchWaitForExit Condition="'$(_MlaunchWaitForExit)' == ''">false</_MlaunchWaitForExit>
   </PropertyGroup>
 
-  <!-- iOS Release configuration:
-       - UseInterpreter=true: avoids strict AOT traps on reflection/Blazor/serializers on physical iOS devices
-       - MtouchInterpreter=all: instructs the Mono runtime to interpret assemblies without hitting invalid AOT stubs
-       - UseLlvm=false: disables LLVM code generation that triggers SIGABRT / stack check failure on .NET iOS startup
-       - MtouchLink=SdkOnly: ensures SDK assemblies are linked without stripping application logic
-       - _ExportSymbolsExplicitly=true: prevents Apple linker from stripping runtime entry points
-  -->
   <PropertyGroup Condition="'$(Configuration)' == 'Release' And $([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">
     <UseInterpreter>true</UseInterpreter>
     <MtouchInterpreter>all</MtouchInterpreter>

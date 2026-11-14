@@ -1,0 +1,853 @@
+﻿@page "/DealerSalesUpload"
+@using System
+@using System.Collections.Generic
+@using System.Globalization
+@using System.Net.Http.Headers
+@using System.Net.Http.Json
+@using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.JSInterop
+@inject HttpClient Http
+@inject IJSRuntime JS
+@inject NavigationManager Nav
+
+<PageTitle>Dealer Sales Management · SPIC ONE</PageTitle>
+
+<div class="dsm-page">
+    <section class="dsm-panel">
+        <header class="dsm-header">
+            <div class="dsm-header-title">
+                <h1>Dealer Sales List</h1>
+            </div>
+            <div class="dsm-toolbar-controls">
+                <div class="dsm-search">
+                    <span aria-hidden="true">&#9906;</span>
+                    <input type="search" value="@SearchText" @onchange="OnSearchChanged"
+                           placeholder="Search invoice, dealer or product..." aria-label="Search dealer sales" />
+                </div>
+                <label class="dsm-upload-control @(IsUploading ? "dsm-disabled" : "")">
+                    <span class="dsm-upload-glyph">&#8679;</span>
+                    <span>@(IsUploading ? "Uploading..." : "Bulk Upload")</span>
+                    <InputFile OnChange="OnFileSelected" accept=".xlsx,.xls"
+                               disabled="@(IsUploading || IsLoading)" class="dsm-file-input"
+                               title="Bulk upload SAP dealer sales Excel" />
+                </label>
+            </div>
+        </header>
+
+        @if (IsUploading)
+        {
+            <div class="dsm-message dsm-info" role="status">Validating and importing Excel invoice lines...</div>
+        }
+        @if (!string.IsNullOrWhiteSpace(Error))
+        {
+            <div class="dsm-message dsm-error" role="alert">@Error</div>
+        }
+        @if (!string.IsNullOrWhiteSpace(Success))
+        {
+            <div class="dsm-message dsm-success" role="status">@Success</div>
+        }
+        @if (ValidationErrors.Count > 0)
+        {
+            <div class="dsm-validation">
+                <strong>Upload errors (@ValidationErrors.Count shown)</strong>
+                <div class="dsm-table-scroll">
+                    <table class="dsm-table dsm-validation-table">
+                        <thead>
+                            <tr><th>Excel Row</th><th>Field</th><th>Reason</th></tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var issue in ValidationErrors)
+                            {
+                                <tr>
+                                    <td>@issue.RowNo</td>
+                                    <td>@issue.Field</td>
+                                    <td>@issue.Reason</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        }
+
+        <div class="dsm-toolbar-row">
+            <div class="dsm-export-actions" aria-label="Export actions">
+                <button type="button" class="dsm-export-btn" @onclick="CopyCurrentRowsAsync" disabled="@(IsLoading || Rows.Count == 0)"><i class="bi bi-clipboard"></i> Copy</button>
+                <button type="button" class="dsm-export-btn" @onclick="ExportCsvAsync" disabled="@(IsLoading || TotalRows == 0)"><i class="bi bi-filetype-csv"></i> CSV</button>
+                <button type="button" class="dsm-export-btn" @onclick="ExportExcelAsync" disabled="@(IsLoading || TotalRows == 0)"><i class="bi bi-file-earmark-excel"></i> Excel</button>
+                <button type="button" class="dsm-export-btn" @onclick="ExportPdfAsync" disabled="@(IsLoading || Rows.Count == 0)"><i class="bi bi-file-earmark-pdf"></i> PDF</button>
+                <button type="button" class="dsm-export-btn" @onclick="PrintCurrentAsync" disabled="@(IsLoading || Rows.Count == 0)"><i class="bi bi-printer"></i> Print</button>
+            </div>
+        </div>
+
+        <div class="dsm-table-scroll" id="dealer-sales-print-area">
+            <table class="dsm-table">
+                <thead>
+                    <tr>
+                        <th class="dsm-number">S.No</th>
+                        <th>Billing Date</th>
+                        <th>Billing Document</th>
+                        <th>Dealer Code</th>
+                        <th>Dealer Name</th>
+                        <th>Product Code</th>
+                        <th>Product Name</th>
+                        <th class="dsm-right">Quantity</th>
+                        <th>Unit</th>
+                        <th class="dsm-right">Gross Amount (₹)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (IsLoading)
+                    {
+                        <tr><td colspan="10" class="dsm-empty">Loading dealer sales...</td></tr>
+                    }
+                    else if (Rows.Count == 0)
+                    {
+                        <tr><td colspan="10" class="dsm-empty">@(string.IsNullOrWhiteSpace(SearchText) ? "No sales records yet. Use Bulk Upload to add SAP invoice data." : "No sales records match your search.")</td></tr>
+                    }
+                    else
+                    {
+                        @foreach (var (row, index) in Rows.Select((r, i) => (r, i)))
+                        {
+                            <tr>
+                                <td class="dsm-number">@((Page - 1) * PageSize + index + 1)</td>
+                                <td class="dsm-nowrap">@(row.BillingDate == default ? "" : row.BillingDate.ToString("dd MMM yyyy"))</td>
+                                <td class="dsm-code">@row.BillingDocument</td>
+                                <td class="dsm-code">@row.CustomerNumber</td>
+                                <td>@row.CustomerName</td>
+                                <td class="dsm-code">@row.ProductCode</td>
+                                <td>@row.ProductName</td>
+                                <td class="dsm-right">@row.Quantity.ToString("N3", CultureInfo.InvariantCulture)</td>
+                                <td>@row.UnitOfMeasure</td>
+                                <td class="dsm-right dsm-amount">@row.GrossAmount.ToString("N2", new CultureInfo("en-IN"))</td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        <footer class="dsm-footer">
+            <div class="dsm-page-size">
+                <label for="dsm-page-size">Items Per Page</label>
+                <select id="dsm-page-size" value="@PageSize" @onchange="OnPageSizeChanged" disabled="@IsLoading">
+                    <option value="10">10</option>
+                    <option value="16">16</option>
+                    <option value="25">25</option>
+                    <option value="50">50</option>
+                </select>
+            </div>
+            <div class="dsm-footer-summary">
+                Showing @(TotalRows == 0 ? 0 : (Page - 1) * PageSize + 1) to @Math.Min(Page * PageSize, TotalRows) of @TotalRows records
+                <span class="dsm-total">Gross sales: ₹@TotalGrossAmountRs.ToString("N2", new CultureInfo("en-IN"))</span>
+            </div>
+            <nav class="dsm-paging" aria-label="Dealer sales pagination">
+                <button type="button" disabled="@(IsLoading || Page <= 1)" title="Previous page" @onclick="PreviousPage">&#8249;</button>
+                <span>Page @Page of @TotalPages</span>
+                <button type="button" disabled="@(IsLoading || Page >= TotalPages)" title="Next page" @onclick="NextPage">&#8250;</button>
+            </nav>
+        </footer>
+    </section>
+</div>
+
+<script>
+    window.dealerSalesDownload = function (url) {
+        const a = document.createElement('a');
+        a.href = url;
+        a.target = '_blank';
+        a.rel = 'noopener';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+    };
+
+    window.dealerSalesCopyText = async function (text) {
+        await navigator.clipboard.writeText(text);
+    };
+
+    window.dealerSalesPrintHtml = function (html) {
+        const w = window.open('', '_blank', 'width=1200,height=800');
+        if (!w) return;
+        w.document.open();
+        w.document.write(html);
+        w.document.close();
+        w.focus();
+        setTimeout(() => w.print(), 300);
+    };
+</script>
+
+<style>
+    .dsm-page {
+        padding: 4px 0;
+        background: transparent;
+        min-height: 0;
+        color: #24324b;
+        font-family: inherit;
+    }
+
+    .dsm-panel {
+        background: #fff;
+        border: 0;
+        border-radius: 0;
+        padding: 4px 7px;
+        box-shadow: none;
+    }
+
+    .dsm-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 12px;
+        flex-wrap: wrap;
+    }
+
+        .dsm-header h1 {
+            margin: 0;
+            font-size: 14px;
+            font-weight: 500;
+            color: #1f3552;
+        }
+
+        .dsm-header p {
+            margin: 4px 0 0;
+            color: #738096;
+            font-size: 12px;
+        }
+
+    .dsm-header-actions {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+    }
+
+    .dsm-upload-control {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        background: #1f86d2;
+        color: #fff;
+        font-size: 12px;
+        font-weight: 600;
+        height: 29px;
+        border-radius: 4px;
+        padding: 0 14px;
+        cursor: pointer;
+        overflow: hidden;
+        white-space: nowrap;
+        border: 0;
+    }
+
+        .dsm-upload-control:hover {
+            background: #0f78c5;
+        }
+
+        .dsm-upload-control.dsm-disabled {
+            opacity: .6;
+            pointer-events: none;
+        }
+
+    .dsm-upload-glyph {
+        font-size: 15px;
+        line-height: 1;
+    }
+
+    .dsm-file-input {
+        position: absolute;
+        inset: 0;
+        opacity: 0;
+        cursor: pointer;
+    }
+
+    .dsm-message {
+        border-radius: 4px;
+        padding: 10px 12px;
+        font-size: 12px;
+        margin-bottom: 14px;
+        border: 1px solid transparent;
+    }
+
+    .dsm-info {
+        background: #eaf3fb;
+        border-color: #c9ddf4;
+        color: #22577a;
+    }
+
+    .dsm-success {
+        background: #eaf7ef;
+        border-color: #cfe9d7;
+        color: #25643a;
+    }
+
+    .dsm-error {
+        background: #fff1f1;
+        border-color: #f0cccc;
+        color: #b13b3b;
+    }
+
+    .dsm-validation {
+        border: 1px solid #f0d8a8;
+        background: #fff9e9;
+        border-radius: 6px;
+        padding: 12px;
+        margin-bottom: 14px;
+    }
+
+    .dsm-toolbar-row {
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        margin-bottom: 8px;
+    }
+
+    .dsm-export-actions {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        flex-wrap: wrap;
+    }
+
+    .dsm-export-btn {
+        height: 22px;
+        padding: 0 6px;
+        font-size: 10px;
+        border: 1px solid #cfd6df;
+        border-radius: 3px;
+        background: #fff;
+        color: #4b5a6d;
+        cursor: pointer;
+    }
+
+        .dsm-export-btn:hover {
+            background: #f3f6f9;
+        }
+
+        .dsm-export-btn:disabled {
+            opacity: .55;
+            cursor: not-allowed;
+        }
+
+    .dsm-toolbar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 16px;
+        margin-bottom: 10px;
+        flex-wrap: wrap;
+    }
+
+    .dsm-section-title {
+        font-size: 14px;
+        font-weight: 650;
+        color: #253752;
+    }
+
+    .dsm-search {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        height: 27px;
+        width: 260px;
+        border: 1px solid #d7dee7;
+        border-radius: 5px;
+        padding: 0 11px;
+        background: #fff;
+        color: #96a2b2;
+    }
+
+        .dsm-search input {
+            border: 0;
+            outline: 0;
+            width: 100%;
+            font-size: 12px;
+            color: #24324b;
+            background: transparent;
+        }
+
+    .dsm-table-scroll {
+        overflow: auto;
+        border: 1px solid #d9e1e9;
+        border-radius: 4px;
+        background: #fff;
+    }
+
+    .dsm-table {
+        width: 100%;
+        border-collapse: collapse;
+        min-width: 1100px;
+    }
+
+        .dsm-table th,
+        .dsm-table td {
+            padding: 9px 8px;
+            font-size: 11px;
+            border-bottom: 1px solid #ebeff3;
+            color: #32445e;
+            vertical-align: middle;
+        }
+
+        .dsm-table th {
+            background: #f2f4f6;
+            color: #223652;
+            font-weight: 700;
+            text-align: left;
+            white-space: nowrap;
+        }
+
+        .dsm-table tbody tr:hover {
+            background: #fbfcfd;
+        }
+
+    .dsm-number {
+        width: 55px;
+        text-align: center;
+    }
+
+    .dsm-right {
+        text-align: right;
+    }
+
+    .dsm-code, .dsm-nowrap {
+        white-space: nowrap;
+    }
+
+    .dsm-empty {
+        text-align: center;
+        color: #7a889d;
+        padding: 24px 10px !important;
+    }
+
+    .dsm-amount {
+        font-weight: 600;
+        color: #1d4d73;
+    }
+
+    .dsm-footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+        flex-wrap: wrap;
+        margin-top: 12px;
+    }
+
+    .dsm-page-size,
+    .dsm-footer-summary,
+    .dsm-paging {
+        font-size: 11px;
+        color: #62728a;
+    }
+
+    .dsm-page-size {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+        .dsm-page-size select {
+            height: 26px;
+            min-width: 58px;
+            font-size: 11px;
+            border: 1px solid #d0d8e2;
+            border-radius: 4px;
+            background: #fff;
+            padding: 0 6px;
+        }
+
+    .dsm-footer-summary {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        flex-wrap: wrap;
+    }
+
+    .dsm-total {
+        color: #1f4f77;
+        font-weight: 600;
+    }
+
+    .dsm-paging {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+        .dsm-paging button {
+            width: 24px;
+            height: 24px;
+            border: 1px solid #d2dae3;
+            border-radius: 4px;
+            background: #fff;
+            color: #4d5e75;
+        }
+
+            .dsm-paging button:disabled {
+                opacity: .5;
+            }
+
+    .dsm-header .dsm-toolbar-controls {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+
+    .dsm-toolbar-row {
+        margin-bottom: 8px;
+    }
+
+    .dsm-search {
+        border: 0;
+        background: #f1f4f7;
+    }
+
+    .dsm-table {
+        min-width: 1050px;
+    }
+
+        .dsm-table td {
+            height: 28px;
+        }
+
+        .dsm-table thead th {
+            height: 32px;
+        }
+
+    .dsm-export-btn i {
+        margin-right: 2px;
+    }
+
+    .dsm-footer {
+        margin-top: 10px;
+    }
+
+    @@media (max-width:720px) {
+        .dsm-header .dsm-toolbar-controls {
+            width: 100%;
+        }
+
+        .dsm-header .dsm-search {
+            flex: 1;
+            min-width: 170px;
+        }
+
+            .dsm-header .dsm-search input {
+                width: 100%;
+            }
+    }
+</style>
+
+@code {
+    private bool IsLoading = true;
+    private bool IsUploading;
+    private string? Error;
+    private string? Success;
+    private string SearchText = string.Empty;
+    private int Page = 1;
+    private int PageSize = 16;
+    private int TotalPages = 1;
+    private long TotalRows;
+    private decimal TotalGrossAmountRs;
+    private List<SaleRow> Rows = new();
+    private List<ImportIssue> ValidationErrors = new();
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            IsLoading = true;
+            Error = null;
+            Success = null;
+
+            var url = $"api/dealer-sales?page={Page}&pageSize={PageSize}&search={Uri.EscapeDataString(SearchText ?? string.Empty)}";
+            var response = await Http.GetAsync(url);
+            var body = await response.Content.ReadAsStringAsync();
+            if (!response.IsSuccessStatusCode)
+            {
+                Error = $"Unable to load sales (HTTP {(int)response.StatusCode}): {body}";
+                Rows.Clear();
+                TotalRows = 0;
+                TotalGrossAmountRs = 0;
+                TotalPages = 1;
+                return;
+            }
+
+            var data = System.Text.Json.JsonSerializer.Deserialize<ListResponse>(body, new System.Text.Json.JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            });
+
+            Rows = data?.Rows ?? new();
+            TotalRows = data?.TotalRows ?? 0;
+            TotalGrossAmountRs = data?.TotalGrossAmountRs ?? 0;
+            Page = data?.Page ?? 1;
+            PageSize = data?.PageSize ?? PageSize;
+            TotalPages = Math.Max(1, (int)Math.Ceiling(TotalRows / (double)PageSize));
+        }
+        catch (Exception ex)
+        {
+            Error = "Unable to load dealer sales: " + ex.Message;
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+
+    private async Task OnFileSelected(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file is null) return;
+
+        try
+        {
+            IsUploading = true;
+            Error = null;
+            Success = null;
+            ValidationErrors.Clear();
+
+            await using var stream = file.OpenReadStream(5 * 1024 * 1024);
+            using var content = new MultipartFormDataContent();
+            using var fileContent = new StreamContent(stream);
+            fileContent.Headers.ContentType = new MediaTypeHeaderValue(file.ContentType == "application/octet-stream" ? "application/vnd.ms-excel" : file.ContentType);
+            content.Add(fileContent, "file", file.Name);
+
+            var response = await Http.PostAsync("api/dealer-sales/upload", content);
+            var body = await response.Content.ReadAsStringAsync();
+
+            if (!response.IsSuccessStatusCode)
+            {
+                TryReadUploadErrors(body);
+                Error = $"Upload failed (HTTP {(int)response.StatusCode}): {ReadMessage(body)}";
+                return;
+            }
+
+            var uploadResult = System.Text.Json.JsonSerializer.Deserialize<UploadResult>(body,
+                new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            Page = 1;
+            await LoadAsync();
+            // LoadAsync resets status, so set the final outcome after refreshing.
+            Success = uploadResult is null
+                ? "Upload completed successfully."
+                : $"New records: {uploadResult.ImportedRows} | " +
+                  $"Already imported: {uploadResult.SkippedExistingRows} | " +
+                  $"Repeated in Excel: {uploadResult.SkippedInFileRows}.";
+        }
+        catch (Exception ex)
+        {
+            Error = "Upload failed: " + ex.Message;
+        }
+        finally
+        {
+            IsUploading = false;
+        }
+    }
+
+    private void OnSearchChanged(ChangeEventArgs e)
+    {
+        SearchText = Convert.ToString(e.Value) ?? string.Empty;
+        Page = 1;
+        _ = LoadAsync();
+    }
+
+    private void OnPageSizeChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(Convert.ToString(e.Value), out var value))
+        {
+            PageSize = value;
+            Page = 1;
+            _ = LoadAsync();
+        }
+    }
+
+    private Task PreviousPage()
+    {
+        if (Page > 1)
+        {
+            Page--;
+            return LoadAsync();
+        }
+        return Task.CompletedTask;
+    }
+
+    private Task NextPage()
+    {
+        if (Page < TotalPages)
+        {
+            Page++;
+            return LoadAsync();
+        }
+        return Task.CompletedTask;
+    }
+
+    private async Task CopyCurrentRowsAsync()
+    {
+        var lines = new List<string>
+        {
+            "Billing Date\tBilling Document\tDealer Code\tDealer Name\tProduct Code\tProduct Name\tQuantity\tUnit\tGross Amount"
+        };
+
+        foreach (var row in Rows)
+        {
+            lines.Add(string.Join("\t", new[]
+            {
+                row.BillingDate == default ? "" : row.BillingDate.ToString("dd-MMM-yyyy"),
+                row.BillingDocument,
+                row.CustomerNumber,
+                row.CustomerName,
+                row.ProductCode,
+                row.ProductName,
+                row.Quantity.ToString("0.###", CultureInfo.InvariantCulture),
+                row.UnitOfMeasure,
+                row.GrossAmount.ToString("0.00", CultureInfo.InvariantCulture)
+            }));
+        }
+
+        await JS.InvokeVoidAsync("dealerSalesCopyText", string.Join("\n", lines));
+        Success = "Current page rows copied to clipboard.";
+    }
+
+    private async Task ExportCsvAsync() =>
+        await JS.InvokeVoidAsync("dealerSalesDownload", BuildExportUrl("csv"));
+
+    private async Task ExportExcelAsync() =>
+        await JS.InvokeVoidAsync("dealerSalesDownload", BuildExportUrl("excel"));
+
+    private async Task ExportPdfAsync()
+    {
+        var html = BuildPrintableHtml(true);
+        await JS.InvokeVoidAsync("dealerSalesPrintHtml", html);
+    }
+
+    private async Task PrintCurrentAsync()
+    {
+        var html = BuildPrintableHtml(false);
+        await JS.InvokeVoidAsync("dealerSalesPrintHtml", html);
+    }
+
+    private string BuildExportUrl(string format)
+    {
+        var search = Uri.EscapeDataString(SearchText ?? string.Empty);
+        return Nav.ToAbsoluteUri($"api/dealer-sales/export/{format}?search={search}").ToString();
+    }
+
+    private string BuildPrintableHtml(bool titleAsPdf)
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.Append("<html><head><meta charset='utf-8'><title>")
+          .Append(titleAsPdf ? "Dealer Sales Export" : "Dealer Sales Print")
+          .Append("</title><style>")
+          .Append("body{font-family:Arial,sans-serif;padding:24px;color:#223;}h2{margin:0 0 6px;}p{margin:0 0 14px;color:#667;}table{width:100%;border-collapse:collapse;font-size:12px;}th,td{border:1px solid #cfd8e3;padding:7px 8px;text-align:left;}th{background:#eef3f7;} .r{text-align:right;} .n{white-space:nowrap;} ")
+          .Append("</style></head><body>");
+        sb.Append("<h2>Dealer Sales Management</h2>");
+        sb.Append("<p>Search: ").Append(System.Net.WebUtility.HtmlEncode(string.IsNullOrWhiteSpace(SearchText) ? "All records" : SearchText))
+          .Append(" &nbsp; | &nbsp; Gross sales: ₹").Append(TotalGrossAmountRs.ToString("N2", new CultureInfo("en-IN")))
+          .Append("</p>");
+        sb.Append("<table><thead><tr>")
+          .Append("<th>S.No</th><th>Billing Date</th><th>Billing Document</th><th>Dealer Code</th><th>Dealer Name</th><th>Product Code</th><th>Product Name</th><th>Quantity</th><th>Unit</th><th>Gross Amount</th>")
+          .Append("</tr></thead><tbody>");
+        foreach (var (row, index) in Rows.Select((r, i) => (r, i)))
+        {
+            sb.Append("<tr>")
+              .Append("<td>").Append((Page - 1) * PageSize + index + 1).Append("</td>")
+              .Append("<td class='n'>").Append(System.Net.WebUtility.HtmlEncode(row.BillingDate == default ? "" : row.BillingDate.ToString("dd-MMM-yyyy"))).Append("</td>")
+              .Append("<td>").Append(System.Net.WebUtility.HtmlEncode(row.BillingDocument)).Append("</td>")
+              .Append("<td>").Append(System.Net.WebUtility.HtmlEncode(row.CustomerNumber)).Append("</td>")
+              .Append("<td>").Append(System.Net.WebUtility.HtmlEncode(row.CustomerName)).Append("</td>")
+              .Append("<td>").Append(System.Net.WebUtility.HtmlEncode(row.ProductCode)).Append("</td>")
+              .Append("<td>").Append(System.Net.WebUtility.HtmlEncode(row.ProductName)).Append("</td>")
+              .Append("<td class='r'>").Append(System.Net.WebUtility.HtmlEncode(row.Quantity.ToString("0.###", CultureInfo.InvariantCulture))).Append("</td>")
+              .Append("<td>").Append(System.Net.WebUtility.HtmlEncode(row.UnitOfMeasure)).Append("</td>")
+              .Append("<td class='r'>").Append(System.Net.WebUtility.HtmlEncode(row.GrossAmount.ToString("0.00", new CultureInfo("en-IN")))).Append("</td>")
+              .Append("</tr>");
+        }
+        sb.Append("</tbody></table></body></html>");
+        return sb.ToString();
+    }
+
+    private void TryReadUploadErrors(string body)
+    {
+        try
+        {
+            var model = System.Text.Json.JsonSerializer.Deserialize<UploadErrorResponse>(body, new System.Text.Json.JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            });
+            ValidationErrors = model?.ValidationErrors ?? new();
+        }
+        catch
+        {
+            ValidationErrors.Clear();
+        }
+    }
+
+    private static string? ReadMessage(string body)
+    {
+        try
+        {
+            var model = System.Text.Json.JsonSerializer.Deserialize<MessageOnly>(body, new System.Text.Json.JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            });
+            return model?.Message ?? body;
+        }
+        catch
+        {
+            return body;
+        }
+    }
+
+    private sealed class ListResponse
+    {
+        public long TotalRows { get; set; }
+        public decimal TotalGrossAmountRs { get; set; }
+        public int Page { get; set; }
+        public int PageSize { get; set; }
+        public List<SaleRow> Rows { get; set; } = new();
+    }
+
+    private sealed class SaleRow
+    {
+        public long Id { get; set; }
+        public string BillingDocument { get; set; } = string.Empty;
+        public string Item { get; set; } = string.Empty;
+        public DateTime BillingDate { get; set; }
+        public string CustomerNumber { get; set; } = string.Empty;
+        public string CustomerName { get; set; } = string.Empty;
+        public string ProductCode { get; set; } = string.Empty;
+        public string ProductName { get; set; } = string.Empty;
+        public decimal Quantity { get; set; }
+        public string UnitOfMeasure { get; set; } = string.Empty;
+        public decimal GrossAmount { get; set; }
+    }
+
+    private sealed class ImportIssue
+    {
+        public int RowNo { get; set; }
+        public string Field { get; set; } = string.Empty;
+        public string Reason { get; set; } = string.Empty;
+    }
+
+    private sealed class UploadResult
+    {
+        public int ImportedRows { get; set; }
+        public int SkippedExistingRows { get; set; }
+        public int SkippedInFileRows { get; set; }
+    }
+
+    private sealed class UploadErrorResponse
+    {
+        public string? Message { get; set; }
+        public List<ImportIssue> ValidationErrors { get; set; } = new();
+    }
+
+    private sealed class MessageOnly
+    {
+        public string? Message { get; set; }
+    }
+}

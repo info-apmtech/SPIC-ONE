@@ -2496,6 +2496,12 @@ if (!IsNewDealerFlow)
             _model.PinCode ??= "";
             _model.OfficialContactNumber ??= "";
             _model.WhatsAppNumber ??= "";
+            if (_model.Status == DealerStatus.Terminated)
+            {
+                _model.OfficialContactNumber = string.Empty;
+                _model.WhatsAppNumber = string.Empty;
+                _model.AlternativeNumber = null;
+            }
             _model.AccountHolderName ??= "";
             _model.AccountNumber ??= "";
             _model.Branch ??= "";
@@ -2513,7 +2519,9 @@ if (!IsNewDealerFlow)
 
             if (_isEditMode)
             {
-                response = await Http.PutAsJsonAsync($"api/DealerRegistration/update-with-user/{_model.Id}", _model);
+                response = _model.Status == DealerStatus.Terminated
+                    ? await Http.PutAsJsonAsync($"api/DealerRegistration/{_model.Id}", _model)
+                    : await Http.PutAsJsonAsync($"api/DealerRegistration/update-with-user/{_model.Id}", _model);
             }
             else
             {
@@ -2533,6 +2541,14 @@ if (!IsNewDealerFlow)
                     {
                         dealerId = result.Data.Id;
                         _model.Id = dealerId;
+                        _model.UserTableId = result.Data.UserTableId;
+                    }
+                }
+                else if (_model.Status == DealerStatus.Terminated)
+                {
+                    var result = await response.Content.ReadFromJsonAsync<CreateResponse>();
+                    if (result?.Data?.UserTableId is not null)
+                    {
                         _model.UserTableId = result.Data.UserTableId;
                     }
                 }
@@ -2575,7 +2591,12 @@ if (!IsNewDealerFlow)
                     await Task.WhenAll(uploads);
 
                     if (filesUpdated)
-                        await Http.PutAsJsonAsync($"api/DealerRegistration/update-with-user/{dealerId}", _model);
+                    {
+                        if (_model.Status == DealerStatus.Terminated)
+                            await Http.PutAsJsonAsync($"api/DealerRegistration/{dealerId}", _model);
+                        else
+                            await Http.PutAsJsonAsync($"api/DealerRegistration/update-with-user/{dealerId}", _model);
+                    }
                 }
 
                 _gstFile = null;
