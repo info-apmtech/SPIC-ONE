@@ -1,4 +1,7 @@
 @page "/ExtensionRequests"
+@using System.Net.Http.Json
+@using SPIC.Core.DTOs
+@inject HttpClient Http
 @inject NavigationManager Nav
 
 <PageTitle>Extension Requests · SPIC ONE</PageTitle>
@@ -33,7 +36,7 @@
                             <label class="erl-form-label">Sanction Number</label>
                             <select class="erl-form-select @(string.IsNullOrEmpty(SelectedSanction) ? "" : "erl-has-value")" @bind="SelectedSanction">
                                 <option value="">Select Sanction Number</option>
-                                @foreach (var item in AllRequests.Select(x => x.SanctionNumber).Distinct())
+                                @foreach (var item in AllRequests.Select(x => x.SanctionNumber).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct().OrderBy(x => x))
                                 {
                                     <option value="@item">@item</option>
                                 }
@@ -44,7 +47,7 @@
                             <label class="erl-form-label">Program Type</label>
                             <select class="erl-form-select @(string.IsNullOrEmpty(SelectedProgramType) ? "" : "erl-has-value")" @bind="SelectedProgramType">
                                 <option value="">Select Program Type</option>
-                                @foreach (var item in AllRequests.Select(x => x.ProgramType).Distinct())
+                                @foreach (var item in AllRequests.Select(x => x.ProgramType).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct().OrderBy(x => x))
                                 {
                                     <option value="@item">@item</option>
                                 }
@@ -55,7 +58,7 @@
                             <label class="erl-form-label">Location</label>
                             <select class="erl-form-select @(string.IsNullOrEmpty(SelectedLocation) ? "" : "erl-has-value")" @bind="SelectedLocation">
                                 <option value="">Select Location</option>
-                                @foreach (var item in AllRequests.Select(x => x.Location).Distinct().Order())
+                                @foreach (var item in AllRequests.Select(x => x.Location).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct().OrderBy(x => x))
                                 {
                                     <option value="@item">@item</option>
                                 }
@@ -92,7 +95,7 @@
                             <label class="erl-form-label">Status</label>
                             <select class="erl-form-select @(string.IsNullOrEmpty(SelectedStatus) ? "" : "erl-has-value")" @bind="SelectedStatus">
                                 <option value="">Select Status</option>
-                                @foreach (var state in Enum.GetValues<ExtensionRequestState>())
+                                @foreach (var state in new[] { "Pending", "Approved" })
                                 {
                                     <option value="@state">@state</option>
                                 }
@@ -115,6 +118,18 @@
             }
         </div>
 
+        @if (IsLoading)
+        {
+            <div class="erl-filter-card" role="status" style="padding:16px">Loading extension requests...</div>
+        }
+        else if (!string.IsNullOrWhiteSpace(LoadError))
+        {
+            <div class="erl-filter-card" role="alert" style="padding:16px">
+                @LoadError
+                <button type="button" class="erl-btn erl-btn-solid" @onclick="LoadRequestsAsync">Retry</button>
+            </div>
+        }
+
         <!-- Summary Cards -->
         <div class="erl-stats-grid">
             <div class="erl-stat-card">
@@ -128,7 +143,7 @@
             <div class="erl-stat-card">
                 <div class="erl-stat-text">
                     <p class="erl-stat-title">Pending Request</p>
-                    <h2>@Count(ExtensionRequestState.Pending)</h2>
+                    <h2>@Count("Pending")</h2>
                     <span class="erl-stat-desc">Waiting for your action</span>
                 </div>
                 <div class="erl-stat-icon erl-tone-yellow"><SalesAuditIcon Name="clock" Size="22" StrokeWidth="1.6" /></div>
@@ -136,15 +151,15 @@
             <div class="erl-stat-card">
                 <div class="erl-stat-text">
                     <p class="erl-stat-title">Rejected</p>
-                    <h2>@Count(ExtensionRequestState.Rejected)</h2>
-                    <span class="erl-stat-desc">Request rejected by you</span>
+                    <h2>@Count("Rejected")</h2>
+                    <span class="erl-stat-desc">No rejection status stored in current table</span>
                 </div>
                 <div class="erl-stat-icon erl-tone-red"><SalesAuditIcon Name="clock" Size="22" StrokeWidth="1.6" /></div>
             </div>
             <div class="erl-stat-card">
                 <div class="erl-stat-text">
                     <p class="erl-stat-title">Approved</p>
-                    <h2>@Count(ExtensionRequestState.Approved)</h2>
+                    <h2>@Count("Approved")</h2>
                     <span class="erl-stat-desc">Completed</span>
                 </div>
                 <div class="erl-stat-icon erl-tone-gray"><SalesAuditIcon Name="file-pen" Size="22" StrokeWidth="1.6" /></div>
@@ -182,7 +197,7 @@
                         @if (!PagedList.Any())
                         {
                             <tr>
-                                <td colspan="12" class="erl-empty-cell">No records found</td>
+                                <td colspan="12" class="erl-empty-cell">@(IsLoading ? "Loading..." : "No records found")</td>
                             </tr>
                         }
                         @foreach (var item in PagedList)
@@ -211,8 +226,8 @@
                                         }
                                     </div>
                                 </td>
-                                <td data-label="Required TO (Auto)"><span class="erl-amount">₹ @SalesAuditFormat.Crore(item.RequiredTurnover) Cr</span></td>
-                                <td data-label="Actual Turnover"><span class="erl-amount">₹ @SalesAuditFormat.Crore(item.ActualTurnover) Cr</span></td>
+                                <td data-label="Required TO (Auto)"><span class="erl-amount">@Money(item.RequiredTurnover)</span></td>
+                                <td data-label="Actual Turnover"><span class="erl-amount">@Money(item.ActualTurnover)</span></td>
                                 <td data-label="Request New Date">
                                     <div class="erl-period">
                                         <span class="erl-period-dates">@item.NewEndDate.ToString("dd MMM yyyy")</span>
@@ -232,12 +247,13 @@
                                     </div>
                                 </td>
                                 <td data-label="Document Status">
-                                    <span class="erl-badge erl-badge-@StateTone(item.State)">
+                                    <span class="erl-badge erl-badge-@StateTone(item.Status)">
                                         <span class="erl-badge-dot"></span>
-                                        @item.State
+                                        @item.DocumentStatus
                                     </span>
                                 </td>
                                 <td data-label="Status">
+                                    <span class="erl-badge erl-badge-@StateTone(item.Status)">@item.Status</span>
                                     <button class="erl-action-btn" @onclick="() => Open(item)">View Request</button>
                                 </td>
                             </tr>
@@ -283,12 +299,12 @@
 </div>
 
 @code {
-    private readonly IReadOnlyList<ExtensionRequestRow> AllRequests = ExtensionRequestSamples.All;
-    private List<ExtensionRequestRow> FilteredList = new();
-
+    private List<ExtensionRequestListDto> AllRequests = new();
+    private List<ExtensionRequestListDto> FilteredList = new();
+    private bool IsLoading = true;
+    private string? LoadError;
     private bool FiltersOpen = true;
     private bool DatePickerOpen;
-
     private string SearchText = "";
     private string SelectedSanction = "";
     private string SelectedProgramType = "";
@@ -296,100 +312,99 @@
     private string SelectedStatus = "";
     private DateTime? RequestFrom;
     private DateTime? RequestTo;
-
     private int CurrentPage = 1;
     private int PageSize = 16;
 
-    protected override void OnInitialized() => FilteredList = AllRequests.ToList();
+    protected override async Task OnInitializedAsync() => await LoadRequestsAsync();
 
-    private int Count(ExtensionRequestState state) => AllRequests.Count(r => r.State == state);
+    private async Task LoadRequestsAsync()
+    {
+        IsLoading = true;
+        LoadError = null;
+        try
+        {
+            using var response = await Http.GetAsync("api/SalesAudit/extension/requests");
+            if (response.StatusCode == System.Net.HttpStatusCode.Forbidden)
+                throw new InvalidOperationException("You do not have permission to view extension requests.");
+            response.EnsureSuccessStatusCode();
+            AllRequests = await response.Content.ReadFromJsonAsync<List<ExtensionRequestListDto>>() ?? new();
+            ApplyFilter();
+        }
+        catch (Exception ex)
+        {
+            AllRequests.Clear();
+            FilteredList.Clear();
+            LoadError = ex.Message;
+        }
+        finally { IsLoading = false; }
+    }
 
+    private int Count(string status) => AllRequests.Count(r => r.Status == status);
+    private static string Money(decimal amount) => "₹ " + amount.ToString("N2", System.Globalization.CultureInfo.GetCultureInfo("en-IN"));
     private string RequestRangeText =>
         RequestFrom is null && RequestTo is null
             ? "Select Date Range"
             : $"{RequestFrom?.ToString("dd MMM yyyy") ?? "…"} - {RequestTo?.ToString("dd MMM yyyy") ?? "…"}";
 
-    private IEnumerable<ExtensionRequestRow> SearchedList =>
-        string.IsNullOrWhiteSpace(SearchText)
-            ? FilteredList
-            : FilteredList.Where(x =>
-                x.Id.Contains(SearchText, StringComparison.OrdinalIgnoreCase) ||
-                x.SanctionNumber.Contains(SearchText, StringComparison.OrdinalIgnoreCase) ||
-                x.ProgramName.Contains(SearchText, StringComparison.OrdinalIgnoreCase) ||
-                x.Location.Contains(SearchText, StringComparison.OrdinalIgnoreCase) ||
-                x.RequestedBy.Contains(SearchText, StringComparison.OrdinalIgnoreCase));
+    private IEnumerable<ExtensionRequestListDto> SearchedList =>
+        string.IsNullOrWhiteSpace(SearchText) ? FilteredList : FilteredList.Where(x =>
+            x.Id.ToString().Contains(SearchText, StringComparison.OrdinalIgnoreCase) ||
+            x.SanctionNumber.Contains(SearchText, StringComparison.OrdinalIgnoreCase) ||
+            x.ProgramName.Contains(SearchText, StringComparison.OrdinalIgnoreCase) ||
+            x.Location.Contains(SearchText, StringComparison.OrdinalIgnoreCase) ||
+            x.RequestedBy.Contains(SearchText, StringComparison.OrdinalIgnoreCase));
 
     private int TotalPages => Math.Max(1, (int)Math.Ceiling(SearchedList.Count() / (double)PageSize));
-    private IEnumerable<ExtensionRequestRow> PagedList => SearchedList.Skip((CurrentPage - 1) * PageSize).Take(PageSize);
-
+    private IEnumerable<ExtensionRequestListDto> PagedList => SearchedList.Skip((CurrentPage - 1) * PageSize).Take(PageSize);
     private IEnumerable<int> PageNumbers
     {
         get
         {
             var total = TotalPages;
             if (total <= 7) return Enumerable.Range(1, total);
-
             var pages = new List<int> { 1 };
             var start = Math.Max(2, CurrentPage - 1);
             var end = Math.Min(total - 1, CurrentPage + 1);
-
             if (start > 2) pages.Add(-1);
             for (var i = start; i <= end; i++) pages.Add(i);
             if (end < total - 1) pages.Add(-1);
             pages.Add(total);
-
             return pages;
         }
     }
-
     private void GoToPage(int page) => CurrentPage = Math.Clamp(page, 1, TotalPages);
     private void ResetPage() => CurrentPage = 1;
-
     private void ApplyFilter()
     {
-        FilteredList = AllRequests
-            .Where(x =>
-                (string.IsNullOrEmpty(SelectedSanction) || x.SanctionNumber == SelectedSanction) &&
-                (string.IsNullOrEmpty(SelectedProgramType) || x.ProgramType == SelectedProgramType) &&
-                (string.IsNullOrEmpty(SelectedLocation) || x.Location == SelectedLocation) &&
-                (string.IsNullOrEmpty(SelectedStatus) || x.State.ToString() == SelectedStatus) &&
-                (RequestFrom is null || x.RequestedOn.Date >= RequestFrom.Value.Date) &&
-                (RequestTo is null || x.RequestedOn.Date <= RequestTo.Value.Date))
-            .ToList();
+        FilteredList = AllRequests.Where(x =>
+            (string.IsNullOrEmpty(SelectedSanction) || x.SanctionNumber == SelectedSanction) &&
+            (string.IsNullOrEmpty(SelectedProgramType) || x.ProgramType == SelectedProgramType) &&
+            (string.IsNullOrEmpty(SelectedLocation) || x.Location == SelectedLocation) &&
+            (string.IsNullOrEmpty(SelectedStatus) || x.Status == SelectedStatus) &&
+            (RequestFrom is null || x.RequestedOn.Date >= RequestFrom.Value.Date) &&
+            (RequestTo is null || x.RequestedOn.Date <= RequestTo.Value.Date)).ToList();
         DatePickerOpen = false;
         ResetPage();
     }
-
     private void ClearFilter()
     {
-        SelectedSanction = "";
-        SelectedProgramType = "";
-        SelectedLocation = "";
-        SelectedStatus = "";
-        RequestFrom = null;
-        RequestTo = null;
-        SearchText = "";
+        SelectedSanction = SelectedProgramType = SelectedLocation = SelectedStatus = SearchText = "";
+        RequestFrom = RequestTo = null;
         FilteredList = AllRequests.ToList();
         ResetPage();
     }
-
-    private void Open(ExtensionRequestRow item) => Nav.NavigateTo($"/ExtensionRequestDetails?id={Uri.EscapeDataString(item.Id)}");
-
-    // Calendar months the scheme touches, e.g. 01 Aug - 31 Oct = 3 months.
+    private void Open(ExtensionRequestListDto item) => Nav.NavigateTo($"/ExtensionRequestDetails?id={item.Id}");
     private static string MonthsLabel(DateTime from, DateTime to)
     {
         var months = Math.Max(1, (to.Year - from.Year) * 12 + to.Month - from.Month + 1);
         return months == 1 ? "1 month" : $"{months} months";
     }
-
-    // Extension length in whole 30-day months where possible: 30 days -> "1 month".
     private static string ExtensionLabel(int days) =>
         days >= 30 && days % 30 == 0 ? (days == 30 ? "1 month" : $"{days / 30} months") : $"{days} days";
-
-    private static string StateTone(ExtensionRequestState state) => state switch
+    private static string StateTone(string state) => state switch
     {
-        ExtensionRequestState.Approved => "green",
-        ExtensionRequestState.Rejected => "red",
-        _ => "orange",
+        "Approved" => "green",
+        "Rejected" => "red",
+        _ => "orange"
     };
 }

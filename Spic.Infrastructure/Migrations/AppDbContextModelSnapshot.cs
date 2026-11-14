@@ -9393,6 +9393,59 @@ namespace Spic.Infrastructure.Migrations
                     b.ToTable("SalesAuditDealerSales");
                 });
 
+            modelBuilder.Entity("SPIC.Core.Entities.SalesAuditExtensionRequest", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ApprovedBy")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("ApprovedDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int>("CSRId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime>("NewEndDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime>("PreviousEndDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("RejectedBy")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("RejectedDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("Remarks")
+                        .HasColumnType("text");
+
+                    b.Property<int>("Status")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.HasKey("Id");
+
+                    b.ToTable("SalesAuditExtensionRequests");
+                });
+
             modelBuilder.Entity("SPIC.Core.Entities.SalesAuditMatchedInvoice", b =>
                 {
                     b.Property<long>("Id")

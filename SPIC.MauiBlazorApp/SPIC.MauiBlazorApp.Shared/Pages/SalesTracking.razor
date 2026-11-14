@@ -14,6 +14,203 @@
 <PageTitle>Sales Tracking · SPIC ONE</PageTitle>
 
 <style>
+    .trk-ext-banner {
+        border: 1px solid #f0e1c8;
+        border-radius: 12px;
+        padding: 11px 14px;
+        margin: 10px 0 14px;
+        background: #fffdf9;
+        box-shadow: 0 2px 7px rgba(20,35,30,.035);
+    }
+
+    .trk-ext-approved {
+        background: #f8fdf9;
+        border-color: #c6e5d0;
+    }
+
+    .trk-ext-rejected {
+        background: #fffafa;
+        border-color: #f1c9c9;
+    }
+
+    .trk-ext-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 9px;
+    }
+
+    .trk-ext-heading {
+        display: flex;
+        align-items: center;
+        gap: 11px;
+        min-width: 0;
+    }
+
+    .trk-ext-symbol {
+        color: #f06423;
+        display: flex;
+    }
+
+    .trk-ext-approved .trk-ext-symbol {
+        color: #16834b;
+    }
+
+    .trk-ext-rejected .trk-ext-symbol {
+        color: #ca3535;
+    }
+
+    .trk-ext-title-line {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 9px;
+        color: #e85e28;
+        font-size: 13px;
+    }
+
+    .trk-ext-approved .trk-ext-title-line {
+        color: #137b46;
+    }
+
+    .trk-ext-rejected .trk-ext-title-line {
+        color: #bb3333;
+    }
+
+    .trk-ext-status {
+        border: 1px solid #ffe1c9;
+        border-radius: 20px;
+        background: #fff2e8;
+        padding: 3px 9px;
+        font-size: 10px;
+        font-weight: 600;
+    }
+
+    .trk-ext-approved .trk-ext-status {
+        border-color: #c9e8d5;
+        background: #edf9f0;
+    }
+
+    .trk-ext-rejected .trk-ext-status {
+        border-color: #f2caca;
+        background: #fff0f0;
+    }
+
+    .trk-ext-subtitle {
+        color: #6d7775;
+        font-size: 11px;
+    }
+
+    .trk-ext-action {
+        background: white;
+        border: 1px solid #d9e1de;
+        border-radius: 7px;
+        padding: 7px 12px;
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        color: #68736e;
+        font-size: 12px;
+        cursor: pointer;
+    }
+
+        .trk-ext-action:hover {
+            border-color: #7ba58e;
+            color: #226d48;
+        }
+
+    .trk-ext-grid {
+        display: grid;
+        grid-template-columns: repeat(4,minmax(0,1fr));
+        gap: 0;
+    }
+
+    .trk-ext-stat {
+        min-width: 0;
+        padding: 0 12px;
+        border-right: 1px solid #e5ebe7;
+    }
+
+        .trk-ext-stat:first-child {
+            padding-left: 0;
+        }
+
+        .trk-ext-stat:last-child {
+            border-right: 0;
+        }
+
+    .trk-ext-label {
+        display: block;
+        font-size: 11px;
+        color: #7d8783;
+        margin-bottom: 4px;
+    }
+
+    .trk-ext-stat-value {
+        font-weight: 600;
+        font-size: 12px;
+        display: flex;
+        gap: 6px;
+        align-items: center;
+        flex-wrap: wrap;
+        color: #26332f;
+    }
+
+    .trk-ext-duration {
+        font-size: 10px;
+        color: #268951;
+        background: #e9f7ef;
+        padding: 3px 7px;
+        border-radius: 14px;
+    }
+
+    .trk-ext-extra {
+        display: grid;
+        grid-template-columns: repeat(2,minmax(0,1fr));
+        gap: 8px 16px;
+        padding-top: 14px;
+        margin-top: 14px;
+        border-top: 1px solid #e5ebe7;
+        font-size: 12px;
+        color: #59665f;
+    }
+
+    @@media(max-width:850px) {
+        .trk-ext-grid {
+            grid-template-columns: repeat(2,minmax(0,1fr));
+            row-gap: 15px;
+        }
+
+        .trk-ext-stat:nth-child(2) {
+            border-right: 0;
+        }
+    }
+
+    @@media(max-width:520px) {
+        .trk-ext-head {
+            align-items: flex-start;
+            flex-direction: column;
+        }
+
+        .trk-ext-grid, .trk-ext-extra {
+            grid-template-columns: 1fr;
+        }
+
+        .trk-ext-stat {
+            padding: 0;
+            border-right: 0;
+        }
+
+            .trk-ext-stat + .trk-ext-stat {
+                padding-top: 9px;
+                border-top: 1px solid #eef0ee;
+            }
+    }
+</style>
+
+
+<style>
     /* Monthly progress line chart - self-contained SVG, no extra JS library. */
     .trk-month-chart {
         padding: 9px 10px 6px;
@@ -144,33 +341,6 @@
 
         <SalesAuditStepper CurrentStep="4" TrackingPhase="true" CSR2Id="@CSR2Id" />
 
-        <div class="trk-card" style="padding: 16px; margin: 12px 0;">
-            <h3 class="trk-card-title">Import actual sales achievements (SAP invoice report)</h3>
-            <p>Upload a full .xlsx/.xls invoice snapshot for this confirmed scheme. Only invoice items with valid billing dates and exact product-master names are accepted. Uploading again replaces the previous product achievement snapshot.</p>
-            @if (!TrackingView && IsPlanConfirmed && !IsFinalSubmitted)
-            {
-                <InputFile OnChange="UploadAchievementsAsync" accept=".xlsx,.xls"
-                           disabled="@IsUploadingAchievements" />
-            }
-            else
-            {
-                <p>@(TrackingView ? "Read-only Sales Tracking view. Import is unavailable." : IsFinalSubmitted ? "Final-submitted Sales Audit is locked." : "Confirm the plan in Tab 4 before importing achievements.")</p>
-            }
-            @if (IsUploadingAchievements)
-            {
-                <p role="status">Validating and importing SAP invoice rows...</p>
-            }
-            @if (!string.IsNullOrWhiteSpace(ImportResult))
-            {
-                <div class="alert alert-success" role="status">@ImportResult</div>
-            }
-            @if (!string.IsNullOrWhiteSpace(ImportError))
-            {
-                <div class="alert alert-danger" role="alert">@ImportError</div>
-            }
-        </div>
-
-
         @if (IsLoading)
         {
             <div class="alert alert-info">Loading Sales Tracking...</div>
@@ -254,6 +424,60 @@
                     </div>
                 </div>
             </div>
+
+            @if (LatestExtension is not null)
+            {
+                <!-- Read-only extension summary: data is loaded from the selected CSR2 request. -->
+                <section class="trk-ext-banner trk-ext-@LatestExtension.Status.ToLowerInvariant()" aria-label="Scheme extension request status">
+                    <div class="trk-ext-head">
+                        <div class="trk-ext-heading">
+                            <span class="trk-ext-symbol"><SalesAuditIcon Name="calendar-clock" Size="20" /></span>
+                            <div>
+                                <div class="trk-ext-title-line">
+                                    <strong>Extension Request</strong>
+                                    <span class="trk-ext-status">@ExtensionStatusText</span>
+                                </div>
+                                <span class="trk-ext-subtitle">@ExtensionStatusDescription</span>
+                            </div>
+                        </div>
+                        <button type="button" class="trk-ext-action" @onclick="() => ShowExtensionStatusDetails = !ShowExtensionStatusDetails">
+                            <SalesAuditIcon Name="eye" Size="14" />
+                            @(ShowExtensionStatusDetails ? "Hide Request Status" : "View Request Status")
+                        </button>
+                    </div>
+                    <div class="trk-ext-grid">
+                        <div class="trk-ext-stat">
+                            <span class="trk-ext-label">Requested New End Date</span>
+                            <div class="trk-ext-stat-value">@LatestExtension.NewEndDate.ToString("dd MMM yyyy") <span class="trk-ext-duration">+@Math.Max(0, (LatestExtension.NewEndDate.Date - LatestExtension.PreviousEndDate.Date).Days) Days</span></div>
+                        </div>
+                        <div class="trk-ext-stat">
+                            <span class="trk-ext-label">Requested On</span>
+                            <div class="trk-ext-stat-value"><SalesAuditIcon Name="calendar" Size="14" /> @LatestExtension.RequestedOn.ToString("dd MMM yyyy, HH:mm")</div>
+                        </div>
+                        <div class="trk-ext-stat">
+                            <span class="trk-ext-label">Requested By</span>
+                            <div class="trk-ext-stat-value"><SalesAuditIcon Name="user-round" Size="14" /> @LatestExtension.RequestedBy</div>
+                        </div>
+                        <div class="trk-ext-stat">
+                            <span class="trk-ext-label">Remaining to Target</span>
+                            <div class="trk-ext-stat-value">@SalesAuditFormat.Rupees(Remaining) (@Pct(Math.Max(0m, 100m - AchievementPct))%)</div>
+                        </div>
+                    </div>
+                    @if (ShowExtensionStatusDetails)
+                    {
+                        <div class="trk-ext-extra">
+                            <span><strong>Request ID:</strong> @LatestExtension.RequestId</span>
+                            <span><strong>Previous End Date:</strong> @LatestExtension.PreviousEndDate.ToString("dd MMM yyyy")</span>
+                            <span><strong>Reason:</strong> @LatestExtension.Reason</span>
+                            <span><strong>Remarks:</strong> @(string.IsNullOrWhiteSpace(LatestExtension.Remarks) ? "Not provided" : LatestExtension.Remarks)</span>
+                        </div>
+                    }
+                </section>
+            }
+            else if (!string.IsNullOrWhiteSpace(ExtensionStatusError))
+            {
+                <div class="alert alert-warning" role="status">@ExtensionStatusError</div>
+            }
 
             @if (!HasKpiData)
             {
@@ -581,6 +805,33 @@
                 else
                 {
                     <p class="text-muted small">@(string.IsNullOrWhiteSpace(DealerSalesError) ? "No matched SAP invoice data available." : DealerSalesError)</p>
+                }
+            </div>
+
+            <!-- Import area kept after sales analysis to match the dashboard layout. -->
+            <div class="trk-card" style="padding: 16px; margin: 12px 0;">
+                <h3 class="trk-card-title">Import actual sales achievements (SAP invoice report)</h3>
+                <p>Upload a full .xlsx/.xls invoice snapshot for this confirmed scheme. Only invoice items with valid billing dates and exact product-master names are accepted. Uploading again replaces the previous product achievement snapshot.</p>
+                @if (!TrackingView && IsPlanConfirmed && !IsFinalSubmitted)
+                {
+                    <InputFile OnChange="UploadAchievementsAsync" accept=".xlsx,.xls"
+                               disabled="@IsUploadingAchievements" />
+                }
+                else
+                {
+                    <p>@(TrackingView ? "Read-only Sales Tracking view. Import is unavailable." : IsFinalSubmitted ? "Final-submitted Sales Audit is locked." : "Confirm the plan in Tab 4 before importing achievements.")</p>
+                }
+                @if (IsUploadingAchievements)
+                {
+                    <p role="status">Validating and importing SAP invoice rows...</p>
+                }
+                @if (!string.IsNullOrWhiteSpace(ImportResult))
+                {
+                    <div class="alert alert-success" role="status">@ImportResult</div>
+                }
+                @if (!string.IsNullOrWhiteSpace(ImportError))
+                {
+                    <div class="alert alert-danger" role="alert">@ImportError</div>
                 }
             </div>
 
@@ -968,7 +1219,66 @@
     // A query string or SAP dealer commitment must not fabricate achievements.
     private bool HasData { get; set; }
     private bool HasKpiData => HasData || (Overview?.ActualTurnoverCr ?? 0m) > 0m;
-    private bool IsExtended => false; // No extension backend is connected.
+    // True only when an extension was approved and its scheme period was updated.
+    private bool IsExtended => HasApprovedExtension;
+    private bool HasApprovedExtension;
+    private ExtensionTrackingStatusDto? LatestExtension;
+    private bool ShowExtensionStatusDetails;
+    private string ExtensionStatusError = "";
+
+    private sealed class ExtensionTrackingStatusDto
+    {
+        public int RequestId { get; set; }
+        public int CSRId { get; set; }
+        public DateTime PreviousEndDate { get; set; }
+        public DateTime NewEndDate { get; set; }
+        public DateTime RequestedOn { get; set; }
+        public string RequestedBy { get; set; } = "";
+        public string Status { get; set; } = "";
+        public string Reason { get; set; } = "";
+        public string? Remarks { get; set; }
+        public bool HasApprovedExtension { get; set; }
+    }
+
+    private async Task LoadExtensionStatusAsync(int csr2Id)
+    {
+        LatestExtension = null;
+        HasApprovedExtension = false;
+        ExtensionStatusError = "";
+        try
+        {
+            using var response = await Http.GetAsync($"api/SalesAudit/extension/{csr2Id}/latest");
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound) return;
+            if (!response.IsSuccessStatusCode)
+            {
+                ExtensionStatusError = $"Extension status unavailable (HTTP {(int)response.StatusCode}).";
+                return;
+            }
+            LatestExtension = await response.Content.ReadFromJsonAsync<ExtensionTrackingStatusDto>();
+            HasApprovedExtension = LatestExtension?.HasApprovedExtension ?? false;
+        }
+        catch (Exception ex)
+        {
+            ExtensionStatusError = $"Unable to load extension status: {ex.Message}";
+        }
+    }
+
+    private string ExtensionStatusText => LatestExtension?.Status switch
+    {
+        "Submitted" => "Pending Admin Review",
+        "Approved" => "Approved",
+        "Rejected" => "Rejected",
+        _ => "Unknown"
+    };
+
+    private string ExtensionStatusDescription => LatestExtension?.Status switch
+    {
+        "Submitted" => "You have requested additional time to achieve the target",
+        "Approved" => "The extension was approved and the scheme end date was updated",
+        "Rejected" => "The extension was rejected; the scheme end date was not changed",
+        _ => ""
+    };
+
     private decimal Remaining => Math.Max(0m, RequiredTurnover - ActualTurnover);
     private decimal AchievementPct => Percent(ActualTurnover, RequiredTurnover);
     private int? DaysRemaining => SchemeTo.HasValue
@@ -1013,6 +1323,9 @@
         DealerSalesError = "";
         DealerSalesLoaded = false;
         MatchedDealerSales = null;
+        LatestExtension = null;
+        ShowExtensionStatusDetails = false;
+        ExtensionStatusError = "";
         _cachedMonthlyChartPoints = null;
         MonthlyInvoiceSales = new();
         MonthlyTrendError = "";
@@ -1105,7 +1418,8 @@
             // explicitly includes saved invoice rows.
             await Task.WhenAll(
                 LoadDealerSalesAsync(id, dealers),
-                LoadMonthlyInvoiceSalesAsync(id));
+                LoadMonthlyInvoiceSalesAsync(id),
+                LoadExtensionStatusAsync(id));
             IsLoaded = true;
         }
         catch (Exception ex)

@@ -864,6 +864,11 @@ namespace Spic.Infrastructure.Data
             builder.Entity<DemoTreatment>().HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
             builder.Entity<DemoTreatmentObservation>().HasOne(x => x.DemoTreatment).WithMany(x => x.Observations).HasForeignKey(x => x.DemoTreatmentId).OnDelete(DeleteBehavior.Cascade);
             builder.Entity<DemoTreatmentPhoto>().HasOne(x => x.DemoTreatment).WithMany(x => x.Photos).HasForeignKey(x => x.DemoTreatmentId).OnDelete(DeleteBehavior.Cascade);
+
+            builder.Entity<SalesAuditExtensionRequest>()
+                .Property(x => x.Status)
+                .HasConversion<int>()
+                .HasDefaultValue(SalesAuditExtensionRequestStatus.Submitted);
         }
 
         // User related
@@ -1121,5 +1126,6 @@ namespace Spic.Infrastructure.Data
         public DbSet<SalesAuditDealerMapping> SalesAuditDealerMappings => Set<SalesAuditDealerMapping>();
         public DbSet<SalesAuditDealerSale> SalesAuditDealerSales => Set<SalesAuditDealerSale>();
         public DbSet<SalesAuditMatchedInvoice> SalesAuditMatchedInvoices => Set<SalesAuditMatchedInvoice>();
+        public DbSet<SalesAuditExtensionRequest> SalesAuditExtensionRequests => Set<SalesAuditExtensionRequest>();
     }
 }
