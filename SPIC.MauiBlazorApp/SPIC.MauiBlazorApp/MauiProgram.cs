@@ -84,6 +84,7 @@ namespace SPIC.MauiBlazorApp
 			builder.Services.AddScoped<HelpCatalog>();
 			builder.Services.AddScoped<HelpLanguageState>();
 			builder.Services.AddScoped<HelpPanelState>();
+			builder.Services.AddScoped<HelpApi>();
 			builder.Services.AddScoped<JmdoTrackingClientLoop>();
 
 			// Usage + error telemetry (docs/metrics-telemetry-plan.md): the app / version header on

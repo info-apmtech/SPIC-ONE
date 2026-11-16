@@ -1,6 +1,60 @@
-@* Placeholder until Task 11 adds voice: renders nothing. Kept so the Help pages and panel already
-   reserve the Listen slot under each section title. *@
+@* "Listen": plays the guide section in the chosen language. The clip is made once on the server
+   and reused; the URL carries its key so the device keeps its own copy too. Hidden when the voice
+   is not configured; a failure shows a short note, never an error toast. *@
+@inject HelpApi Api
+
+@if (_enabled)
+{
+    <div class="help-listen">
+        @if (_src is null)
+        {
+            <button type="button" class="help-listen__btn" @onclick="LoadAsync" disabled="@_loading">
+                <i class="bi bi-volume-up" aria-hidden="true"></i>
+                @(_loading ? "Preparing voice…" : "Listen")
+            </button>
+        }
+        else
+        {
+            <audio class="help-listen__audio" controls autoplay preload="auto" src="@_src">
+                Your device cannot play this audio.
+            </audio>
+        }
+        @if (_failed)
+        {
+            <span class="help-muted">The voice isn't available right now.</span>
+        }
+    </div>
+}
 
 @code {
     [Parameter, EditorRequired] public HelpSectionView View { get; set; } = default!;
+
+    private bool _enabled;
+    private bool _loading;
+    private bool _failed;
+    private string? _src;
+    private string? _forKey;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // A different section or language starts over with the Listen button.
+        var key = $"{View.Module}/{View.Section.Id}/{View.Language}";
+        if (key != _forKey)
+        {
+            _forKey = key;
+            _src = null;
+            _failed = false;
+        }
+        _enabled = await Api.VoiceEnabledAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _failed = false;
+        var url = await Api.AudioUrlAsync(View.Module, View.Section.Id, View.Language);
+        _loading = false;
+        if (url is null) _failed = true;
+        else _src = url;
+    }
 }
