@@ -218,18 +218,20 @@ static int Check()
 		routes,
 		ignored,
 		relative => File.Exists(Path.Combine(Repo.ImagesDir, relative.Replace('/', Path.DirectorySeparatorChar))),
-		Enum.GetNames<PagePermission>());
+		Enum.GetNames<PagePermission>(),
+		Repo.DataHelpIds());
 
 	foreach (var group in issues.GroupBy(i => i.Module).OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase))
 	{
 		Console.WriteLine($"[{group.Key}]");
 		foreach (var issue in group.OrderBy(i => i.Kind).ThenBy(i => i.Detail, StringComparer.OrdinalIgnoreCase))
-			Console.WriteLine($"  {issue.Kind,-20} {issue.Detail}");
+			Console.WriteLine($"  {issue.Kind,-20} {issue.Detail}{(issue.Warning ? "  (warning)" : string.Empty)}");
 	}
 
 	var uncovered = issues.Count(i => i.Kind == "uncovered-route");
 	var counted = routes.Count(r => !ignored.Any(x => HelpRoutes.Shape(x) == HelpRoutes.Shape(r)));
 	Console.WriteLine();
-	Console.WriteLine($"Guides: {library.Modules.Count} modules. Screens: {uncovered} uncovered of {counted}. Issues: {issues.Count}.");
-	return issues.Count == 0 ? 0 : 1;
+	var warnings = issues.Count(i => i.Warning);
+	Console.WriteLine($"Guides: {library.Modules.Count} modules. Screens: {uncovered} uncovered of {counted}. Issues: {issues.Count - warnings}. Warnings: {warnings}.");
+	return issues.Any(i => !i.Warning) ? 1 : 0;
 }

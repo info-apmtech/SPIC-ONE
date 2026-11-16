@@ -33,6 +33,14 @@ internal static class Repo
 			.Distinct(StringComparer.OrdinalIgnoreCase)
 			.ToList();
 
+	private static readonly Regex DataHelpAttribute = new(@"data-help=""([^""]+)""", RegexOptions.Compiled);
+
+	/// <summary>Every data-help="…" id in the shared Razor library (tour targets).</summary>
+	public static IReadOnlySet<string> DataHelpIds() =>
+		Directory.EnumerateFiles(SharedDir, "*.razor", SearchOption.AllDirectories)
+			.SelectMany(f => DataHelpAttribute.Matches(File.ReadAllText(f)).Select(m => m.Groups[1].Value))
+			.ToHashSet(StringComparer.Ordinal);
+
 	private static string FindRoot()
 	{
 		var dir = new DirectoryInfo(Directory.GetCurrentDirectory());

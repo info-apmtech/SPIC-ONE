@@ -8,7 +8,11 @@ namespace SPIC.Core.Help
     /// <summary>One finding of the coverage check. <see cref="Kind"/> is one of
     /// uncovered-route, unknown-permission, missing-image, stale-translation,
     /// missing-translation, parse-problem.</summary>
-    public sealed record CoverageIssue(string Kind, string Module, string Detail);
+    public sealed record CoverageIssue(string Kind, string Module, string Detail)
+    {
+        /// <summary>Reported but does not fail the check (e.g. a screen with no phone picture yet).</summary>
+        public bool Warning { get; init; }
+    }
 
     /// <summary>
     /// The checks behind <c>help-tools check</c>, kept here (pure, no file system) so they are tested
@@ -25,7 +29,8 @@ namespace SPIC.Core.Help
             IEnumerable<string> pageRoutes,
             IEnumerable<string> ignoredRoutes,
             Func<string, bool> imageExists,
-            IEnumerable<string> permissionNames)
+            IEnumerable<string> permissionNames,
+            IReadOnlySet<string>? dataHelpIds = null)
         {
             var issues = new List<CoverageIssue>();
             var permissions = new HashSet<string>(permissionNames, StringComparer.OrdinalIgnoreCase);
@@ -37,6 +42,8 @@ namespace SPIC.Core.Help
                 var en = library.English(module)!;
                 foreach (var problem in en.Problems)
                     issues.Add(new CoverageIssue("parse-problem", module, $"en: {problem}"));
+                foreach (var problem in HelpBlocks.Validate(en))
+                    issues.Add(new CoverageIssue("block", module, problem));
 
                 foreach (var s in en.Sections)
                 {
@@ -52,6 +59,7 @@ namespace SPIC.Core.Help
                     }
 
                     CheckImages(module, "en", s, imageExists, issues);
+                    CheckScreen(module, s, imageExists, dataHelpIds, issues);
                 }
 
                 foreach (var lang in library.Config.Languages.Select(l => l.Code).Where(c => !c.Equals("en", StringComparison.OrdinalIgnoreCase)))
@@ -81,6 +89,16 @@ namespace SPIC.Core.Help
                 }
             }
 
+            foreach (var path in library.Paths)
+                foreach (var step in path.Steps)
+                {
+                    var section = library.English(step.Module)?.Sections.FirstOrDefault(x => string.Equals(x.Id, step.Section, StringComparison.OrdinalIgnoreCase));
+                    if (section is null)
+                        issues.Add(new CoverageIssue("path", step.Module, $"path '{path.Id}': {step.Module}/{step.Section} does not exist"));
+                    else if (section.Kind != "screen")
+                        issues.Add(new CoverageIssue("path", step.Module, $"path '{path.Id}': {step.Module}/{step.Section} is a {section.Kind} block, not a screen"));
+                }
+
             foreach (var route in pageRoutes.Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(r => r, StringComparer.OrdinalIgnoreCase))
             {
                 var shape = HelpRoutes.Shape(route);
@@ -100,6 +118,29 @@ namespace SPIC.Core.Help
                 var relative = $"{module}/{path.TrimStart('.', '/')}";
                 if (!imageExists(relative))
                     issues.Add(new CoverageIssue("missing-image", module, $"{lang}: section '{s.Id}' links {path}, which does not exist"));
+            }
+        }
+
+        private static readonly Regex DataHelp = new(@"^\[data-help=""?([^""\]]+)""?\]$", RegexOptions.Compiled);
+
+        private static void CheckScreen(string module, HelpSection s, Func<string, bool> imageExists, IReadOnlySet<string>? dataHelpIds, List<CoverageIssue> issues)
+        {
+            if (s.Screen is not { } m) return;
+            if (m.Image is { } image && !imageExists($"{module}/images/{image}"))
+                issues.Add(new CoverageIssue("missing-image", module, $"section '{s.Id}': screenshot images/{image} does not exist (run help-tools shoot)"));
+            if (m.Image is not null && m.PhoneImage is null)
+                issues.Add(new CoverageIssue("missing-phone-image", module, $"section '{s.Id}': no screenshot-phone yet") { Warning = true });
+            else if (m.PhoneImage is { } phone && !imageExists($"{module}/images/{phone}"))
+                issues.Add(new CoverageIssue("missing-phone-image", module, $"section '{s.Id}': phone screenshot images/{phone} does not exist") { Warning = true });
+
+            if (dataHelpIds is null) return;
+            foreach (var step in m.Tour)
+            {
+                var id = DataHelp.Match(step.Target) is { Success: true } d ? d.Groups[1].Value : null;
+                if (id is null)
+                    issues.Add(new CoverageIssue("tour-target", module, $"section '{s.Id}': tour step {step.N} target '{step.Target}' must be [data-help=id]"));
+                else if (!dataHelpIds.Contains(id))
+                    issues.Add(new CoverageIssue("tour-target", module, $"section '{s.Id}': tour step {step.N} points at data-help \"{id}\", which no page has"));
             }
         }
 

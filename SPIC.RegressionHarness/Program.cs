@@ -61,6 +61,7 @@ internal static class Program
 		HelpV2TranslationTests.Run();
 		HelpMarkdownTests.Run();
 		HelpPathsTests.Run();
+		HelpCoverageV2Tests.Run();
 
 		return Check.Report("Total");
 	}
