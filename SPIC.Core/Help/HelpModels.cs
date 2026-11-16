@@ -22,7 +22,33 @@ namespace SPIC.Core.Help
         IReadOnlyList<string> Designations,
         string Body,
         string? SourceHash,
-        HelpConfidence Confidence);
+        HelpConfidence Confidence)
+    {
+        /// <summary>"screen" (a screen guide) or a block: overview, flow, statuses, roles, faq.</summary>
+        public string Kind { get; init; } = "screen";
+
+        /// <summary>Screenshots, hotspots, tour steps and reading time; set on screen sections.</summary>
+        public HelpScreenMeta? Screen { get; init; }
+    }
+
+    /// <summary>A numbered marker on a screenshot, in % of the image (0–100).</summary>
+    public sealed record HelpHotspot(int N, double X, double Y, double W, double H);
+
+    /// <summary>One guided-tour step: the CSS selector of the element it highlights on the real page.</summary>
+    public sealed record HelpTourStep(int N, string Target);
+
+    /// <summary>Layout data of a screen section. Always taken from the English guide.</summary>
+    public sealed record HelpScreenMeta(
+        string? Image,
+        IReadOnlyList<HelpHotspot> Hotspots,
+        string? PhoneImage,
+        IReadOnlyList<HelpHotspot> PhoneHotspots,
+        IReadOnlyList<HelpTourStep> Tour,
+        int Minutes)
+    {
+        public static readonly HelpScreenMeta Empty =
+            new(null, System.Array.Empty<HelpHotspot>(), null, System.Array.Empty<HelpHotspot>(), System.Array.Empty<HelpTourStep>(), 0);
+    }
 
     /// <summary>
     /// A module's guide in one language. <see cref="Problems"/> lists content mistakes found while
@@ -35,5 +61,24 @@ namespace SPIC.Core.Help
         string Icon,
         int Order,
         IReadOnlyList<HelpSection> Sections,
-        IReadOnlyList<string> Problems);
+        IReadOnlyList<string> Problems)
+    {
+        /// <summary>Banner eyebrow and home grouping (translatable).</summary>
+        public string Category { get; init; } = string.Empty;
+
+        /// <summary>Module accent colour (layout; from English).</summary>
+        public string Color { get; init; } = "#0b6b3a";
+
+        /// <summary>Demo label on the banner's example journey (layout; from English).</summary>
+        public string Example { get; init; } = string.Empty;
+
+        /// <summary>Last guide update, shown on the banner and in What's new.</summary>
+        public System.DateOnly? Updated { get; init; }
+
+        /// <summary>What changed in that update (translatable).</summary>
+        public string Note { get; init; } = string.Empty;
+
+        /// <summary>In a translation: the hash of the English category and note it was made from.</summary>
+        public string? MetaSourceHash { get; init; }
+    }
 }
