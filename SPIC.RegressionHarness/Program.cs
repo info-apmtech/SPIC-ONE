@@ -62,6 +62,7 @@ internal static class Program
 		HelpMarkdownTests.Run();
 		HelpPathsTests.Run();
 		HelpCoverageV2Tests.Run();
+		HelpFeedbackTests.Run();
 
 		return Check.Report("Total");
 	}
