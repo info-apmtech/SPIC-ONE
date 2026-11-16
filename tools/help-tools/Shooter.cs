@@ -22,6 +22,11 @@ internal static class Shooter
 	{
 		var file = JsonSerializer.Deserialize<ShotsFile>(File.ReadAllText(Path.Combine(Repo.Root, "tools", "help-demo", "shots.json")), Json)
 			?? throw new InvalidOperationException("tools/help-demo/shots.json is empty.");
+		// Each module may also list its shots in tools/help-demo/shots/<module>.json: { "shots": [ ... ] }.
+		var extraDir = Path.Combine(Repo.Root, "tools", "help-demo", "shots");
+		if (Directory.Exists(extraDir))
+			foreach (var extra in Directory.EnumerateFiles(extraDir, "*.json").OrderBy(f => f, StringComparer.OrdinalIgnoreCase))
+				file.Shots.AddRange(JsonSerializer.Deserialize<ShotsFile>(File.ReadAllText(extra), Json)?.Shots ?? new List<Shot>());
 		if (!Uri.TryCreate(file.BaseUrl, UriKind.Absolute, out var baseUri) || !baseUri.IsLoopback)
 		{
 			Console.Error.WriteLine($"Refusing to shoot {file.BaseUrl}: screenshots come from the LOCAL web app only (spicone-web-local on localhost).");
