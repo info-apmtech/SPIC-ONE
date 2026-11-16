@@ -8,8 +8,65 @@ return command switch
 {
 	"check" => Check(),
 	"translate" => await Translate(args),
+	"apply-reviews" => ApplyReviews(args),
 	_ => Usage(),
 };
+
+static int ApplyReviews(string[] args)
+{
+	var file = args.Skip(1).FirstOrDefault();
+	if (string.IsNullOrWhiteSpace(file) || !File.Exists(file))
+	{
+		Console.Error.WriteLine("Usage: help-tools apply-reviews <help-corrections-xx-yyyymmdd.json>");
+		return 2;
+	}
+
+	var export = System.Text.Json.JsonSerializer.Deserialize<SPIC.Core.DTOs.HelpReviewExportDto>(
+		File.ReadAllText(file), new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web));
+	if (export is null) { Console.Error.WriteLine("Could not read the corrections file."); return 2; }
+
+	var library = Repo.LoadLibrary();
+	var skippedAll = new List<string>();
+	foreach (var group in export.Corrections.GroupBy(c => (Module: c.Module.ToLowerInvariant(), Lang: c.Language.ToLowerInvariant())))
+	{
+		var en = library.English(group.Key.Module);
+		var translated = library.Raw(group.Key.Module, group.Key.Lang);
+		if (en is null || translated is null)
+		{
+			skippedAll.Add($"{group.Key.Module}/{group.Key.Lang}: no such guide or translation file");
+			continue;
+		}
+		var (text, skipped) = HelpReviewApplier.Apply(en, translated, group);
+		skippedAll.AddRange(skipped);
+		File.WriteAllText(Repo.GuidePath(group.Key.Module, group.Key.Lang), text, new System.Text.UTF8Encoding(false));
+		Console.WriteLine($"{group.Key.Module} / {group.Key.Lang}: {group.Count() - skipped.Count} correction(s) applied");
+	}
+
+	if (skippedAll.Count > 0)
+	{
+		Console.WriteLine();
+		Console.WriteLine("Skipped:");
+		foreach (var s in skippedAll) Console.WriteLine($"  {s}");
+	}
+
+	if (export.Pronunciations.Count > 0)
+	{
+		Console.WriteLine();
+		Console.WriteLine("Pronunciation reports - add the ones you agree with to SPIC.Core/HelpContent/glossary.json:");
+		foreach (var lang in export.Pronunciations.GroupBy(p => p.Language))
+		{
+			Console.WriteLine($"  \"{lang.Key}\": {{");
+			foreach (var p in lang.GroupBy(p => p.Word).Select(g => g.First()))
+				Console.WriteLine($"    \"{p.Word}\": {{ \"keep\": true, \"say\": \"{p.SayAs}\" }},   // {p.ReviewerName}{(string.IsNullOrWhiteSpace(p.Comment) ? "" : ": " + p.Comment)}");
+			Console.WriteLine("  }");
+		}
+	}
+
+	Console.WriteLine();
+	Console.WriteLine("Next: review the diff, run 'help-tools check', commit and release. Corrected sections then show as");
+	Console.WriteLine("'Not reviewed' in /Help/Review until a reviewer approves the new text.");
+	return 0;
+}
 
 static string? Option(string[] args, string name)
 {
@@ -101,6 +158,9 @@ static int Usage()
 		                 Translate new or changed English sections with Claude and check each one
 		                 by back-translation. Needs ANTHROPIC_API_KEY; model from HELP_TOOLS_MODEL
 		                 (default claude-opus-5-5).
+		  apply-reviews <file.json>
+		                 Write native-speaker corrections downloaded from /Help/Review into the
+		                 translation files, and print pronunciation reports as glossary entries.
 		""");
 	return 2;
 }
