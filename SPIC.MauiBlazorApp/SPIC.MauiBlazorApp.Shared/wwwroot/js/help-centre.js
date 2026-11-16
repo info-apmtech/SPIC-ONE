@@ -146,6 +146,20 @@ window.helpCentre = (function () {
         return { found: true };
     }
 
+    // Waits (up to timeoutMs) for the target to appear — a tour may start right after navigating.
+    function tourShowWhenReady(selector, timeoutMs) {
+        return new Promise(resolve => {
+            const started = Date.now();
+            const attempt = () => {
+                let el = null;
+                try { el = selector ? document.querySelector(selector) : null; } catch (e) { el = null; }
+                if ((el && el.getClientRects().length > 0) || Date.now() - started >= timeoutMs) resolve(tourShow(selector));
+                else setTimeout(attempt, 150);
+            };
+            attempt();
+        });
+    }
+
     function tourHide() {
         const spot = document.getElementById('hc-tour-spot');
         if (spot) spot.style.opacity = '0';
@@ -172,6 +186,6 @@ window.helpCentre = (function () {
     return {
         drawFlow, observeToc, observeRead, stop, scrollToId, isNarrow, reducedMotion,
         print: () => window.print(),
-        tour: { show: tourShow, hide: tourHide, bindKeys: tourBindKeys, unbindKeys: tourUnbindKeys }
+        tour: { show: tourShow, showWhenReady: tourShowWhenReady, hide: tourHide, bindKeys: tourBindKeys, unbindKeys: tourUnbindKeys }
     };
 })();

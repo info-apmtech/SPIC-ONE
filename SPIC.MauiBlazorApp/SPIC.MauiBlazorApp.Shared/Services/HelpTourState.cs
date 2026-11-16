@@ -32,17 +32,15 @@ namespace SPIC.MauiBlazorApp.Shared.Services
 
             var here = _nav.ToBaseRelativePath(_nav.Uri);
             var onScreen = screen.Section.Routes.Any(r => HelpRoutes.Matches(r, "/" + here));
-            if (!onScreen)
-            {
-                var route = screen.Section.Routes.FirstOrDefault(r => !HelpRoutes.HasParameters(r));
-                if (route is null) return Task.CompletedTask; // record screens: tour only from "?" on the record
-                _nav.NavigateTo(route);
-            }
+            var route = onScreen ? null : screen.Section.Routes.FirstOrDefault(r => !HelpRoutes.HasParameters(r));
+            if (!onScreen && route is null) return Task.CompletedTask; // record screens: tour only from "?" on the record
 
+            // Set the tour first, so the navigation below lands on the tour's own screen.
             Module = screen.Module;
             SectionId = screen.Section.Id;
             Index = 0;
             Changed?.Invoke();
+            if (route is not null) _nav.NavigateTo(route);
             return Task.CompletedTask;
         }
 
