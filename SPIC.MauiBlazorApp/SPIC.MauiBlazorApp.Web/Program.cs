@@ -74,6 +74,12 @@ builder.Services.AddScoped<LabApi>();
 builder.Services.AddScoped<MetricsApi>();
 builder.Services.AddScoped<JMDOAttendanceApi>();
 builder.Services.AddScoped<JMDOTrackingApi>();
+// Help Desk: guides embedded in SPIC.Core, filtered per user, language remembered per device.
+builder.Services.AddSingleton(SPIC.Core.Help.HelpLibrary.FromEmbedded());
+builder.Services.AddScoped<HelpCatalog>();
+builder.Services.AddScoped<HelpLanguageState>();
+builder.Services.AddScoped<HelpPanelState>();
+builder.Services.AddScoped<HelpApi>();
 builder.Services.AddScoped<JmdoTrackingClientLoop>();
 
 // Usage + error telemetry (docs/metrics-telemetry-plan.md): the app / version header on every API

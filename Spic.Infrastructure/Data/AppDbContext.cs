@@ -296,6 +296,14 @@ namespace Spic.Infrastructure.Data
                 entity.HasIndex(x => x.ConsignmentId);
             });
 
+            // Help Desk translation review (docs/superpowers/specs/2026-11-16-help-desk-design.md §6.9)
+            builder.Entity<HelpReviewItem>(entity =>
+            {
+                entity.HasIndex(x => new { x.Module, x.SectionId, x.Language });
+                entity.HasIndex(x => x.Language);
+                entity.Property(x => x.Kind).HasConversion<string>().HasMaxLength(20);
+            });
+
             // Publicity Material Tracking (docs/publicity-tracking-plan.md)
             builder.Entity<PublicityRequest>(entity =>
             {
@@ -1028,6 +1036,10 @@ namespace Spic.Infrastructure.Data
         public DbSet<PublicityFile> PublicityFiles { get; set; }
         public DbSet<PublicityEvent> PublicityEvents { get; set; }
         public DbSet<PublicityNotification> PublicityNotifications { get; set; }
+
+        //// Help Desk translation review
+        public DbSet<HelpReviewItem> HelpReviewItems { get; set; }
+        public DbSet<HelpReviewer> HelpReviewers { get; set; }
 
         //// JMDO Task Allocation
         public DbSet<JmdoTaskAllocation> JmdoTaskAllocations { get; set; }

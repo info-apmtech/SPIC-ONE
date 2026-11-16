@@ -88,6 +88,11 @@ param webCustomDomains array = []
 @secure()
 param databaseConnectionString string = ''
 
+@description('Help Desk voice: deploy an Azure AI Speech account (S0, pay per character) and give its key to the API.')
+param deploySpeech bool = true
+@description('Region of the Speech account; must offer the en-IN, ta-IN, te-IN, mr-IN and hi-IN neural voices.')
+param speechLocation string = location
+
 // ---------------------------------------------------------------- names
 var envShort = envName == 'prod' ? 'prd' : 'stg'
 var suffix = take(uniqueString(resourceGroup().id), 6)
@@ -106,6 +111,7 @@ var pgName = 'pg-spicone-${envShort}-${suffix}'
 var caeName = 'cae-spicone-${envShort}'
 var apiAppName = 'ca-spicone-api-${envShort}'
 var webAppName = 'ca-spicone-web-${envShort}'
+var speechName = 'spch-spicone-${envShort}-${suffix}'
 
 var pgAdminLogin = 'spicadmin'
 var pgDatabaseName = 'spicone'
@@ -445,6 +451,28 @@ resource secretIfmsConnection 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = i
   properties: { value: ifmsConnectionString }
 }
 
+// ---------------------------------------------------------------- Help Desk voice (Azure AI Speech)
+// Text to speech for the Help Desk Listen button. The API generates each clip once and saves it
+// under Uploads/Help/audio, so this is billed only for new or changed guide text.
+resource speech 'Microsoft.CognitiveServices/accounts@2024-10-01' = if (deploySpeech) {
+  name: speechName
+  location: speechLocation
+  tags: tags
+  kind: 'SpeechServices'
+  sku: { name: 'S0' }
+  properties: {
+    customSubDomainName: speechName
+    publicNetworkAccess: 'Enabled'
+  }
+}
+
+resource secretHelpSpeechKey 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = if (deploySpeech) {
+  parent: kv
+  name: 'help-speech-key'
+  // Deployed only together with the Speech account (same condition), so it always exists here.
+  properties: { value: speech!.listKeys().key1 }
+}
+
 // ---------------------------------------------------------------- container apps environment
 resource cae 'Microsoft.App/managedEnvironments@2024-03-01' = {
   name: caeName
@@ -522,6 +550,15 @@ var apiEnvIfms = concat(
   empty(ifmsConnectionString) ? [] : [{ name: 'ConnectionStrings__IfmsConnection', secretRef: 'ifms-connection' }],
   empty(dataExplorerPassword) ? [] : [{ name: 'DataExplorer__Password', secretRef: 'data-explorer-password' }]
 )
+var apiSecretsHelp = deploySpeech
+  ? [{ name: 'help-speech-key', keyVaultUrl: '${kv.properties.vaultUri}secrets/help-speech-key', identity: uai.id }]
+  : []
+var apiEnvHelp = deploySpeech
+  ? [
+      { name: 'Help__SpeechKey', secretRef: 'help-speech-key' }
+      { name: 'Help__SpeechRegion', value: speechLocation }
+    ]
+  : []
 
 resource apiApp 'Microsoft.App/containerApps@2024-03-01' = if (deployApps) {
   name: apiAppName
@@ -546,7 +583,7 @@ resource apiApp 'Microsoft.App/containerApps@2024-03-01' = if (deployApps) {
       registries: [
         { server: acr.properties.loginServer, identity: uai.id }
       ]
-      secrets: concat(apiSecretsBase, apiSecretsIfms)
+      secrets: concat(apiSecretsBase, apiSecretsIfms, apiSecretsHelp)
     }
     template: {
       containers: [
@@ -554,7 +591,7 @@ resource apiApp 'Microsoft.App/containerApps@2024-03-01' = if (deployApps) {
           name: 'api'
           image: apiImage
           resources: { cpu: json(apiCpu), memory: apiMemory }
-          env: concat(apiEnvBase, apiEnvIfms)
+          env: concat(apiEnvBase, apiEnvIfms, apiEnvHelp)
           probes: probes
           volumeMounts: [
             { volumeName: 'uploads', mountPath: '/app/Uploads' }
@@ -715,5 +752,6 @@ output logAnalyticsName string = law.name
 output appInsightsName string = appInsights.name
 output apiAppName string = apiAppName
 output webAppName string = webAppName
+output speechName string = deploySpeech ? speechName : ''
 output apiFqdn string = deployApps ? apiApp.properties.configuration.ingress.fqdn : ''
 output webFqdn string = deployApps ? webApp.properties.configuration.ingress.fqdn : ''

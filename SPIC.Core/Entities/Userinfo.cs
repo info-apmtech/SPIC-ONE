@@ -146,7 +146,10 @@ namespace SPIC.Core.Entities
         // parent+child pair, where the child never gets its own row and only toggles via the parent.
         PublicityRequest,
         PublicityReview,
-        ProductRateApprovals, FarmProductMaster, SalesTracking, InventorySummary, IncomeSummary, ExpenseSummary
+        ProductRateApprovals, FarmProductMaster, SalesTracking, InventorySummary, IncomeSummary, ExpenseSummary,
+        // Help Desk (2026-11-16): native speakers who check machine-translated guides at /Help/Review.
+        // Appended at the END.
+        HelpTranslationReview
     }
 }
                                                                                                                                                                                                                                                                                                                                                                                                                             

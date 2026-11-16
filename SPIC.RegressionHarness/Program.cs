@@ -35,6 +35,22 @@ internal static class Program
 		Console.WriteLine();
 		MultiRegionHqTests.Run();
 		SessionClockTests.Run();
+		Console.WriteLine();
+
+		// PageGuard's route decision (RouteAccess), shared with the Help Desk.
+		RouteAccessTests.Run();
+		Console.WriteLine();
+
+		// Help Desk: guide format, library, visibility, coverage, translation, voice, review.
+		HelpParserTests.Run();
+		HelpLibraryTests.Run();
+		HelpCatalogTests.Run();
+		HelpCoverageTests.Run();
+		HelpTranslationTests.Run();
+		HelpSpeechTests.Run();
+		HelpReviewStatusTests.Run();
+		HelpReviewApplierTests.Run();
+		HelpImportTests.Run();
 
 		return Check.Report("Total");
 	}

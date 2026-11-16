@@ -1,0 +1,181 @@
+@page "/Help/Review"
+@page "/Help/Review/{Lang}"
+@* Translation review for native speakers (spec §6.9). Access is decided by the API
+   (HelpTranslationReview grant or Admin, limited to the reviewer's languages). *@
+@using SPIC.Core.DTOs
+@using SPIC.Core.Help
+@inject HelpApi Api
+@inject HelpLibrary Library
+@inject IJSRuntime JS
+@inject NavigationManager Nav
+
+<PageHeader Title="Translation Review" Subtitle="Check the machine-translated Help Desk guides" BackHref="/Help" BackLabel="Help Desk" />
+
+<div class="help-page">
+    @if (_loading)
+    {
+        <p class="help-muted">Loading…</p>
+    }
+    else if (_access is null || !_access.IsReviewer)
+    {
+        <div class="help-empty">
+            <i class="bi bi-lock" aria-hidden="true"></i>
+            <p>You don't have translation review access. Ask an administrator to add Help translation review to your designation.</p>
+        </div>
+    }
+    else
+    {
+        <nav class="help-tabs" aria-label="Languages">
+            @foreach (var code in _access.Languages)
+            {
+                <a class="help-tab @(code == _lang && !_showReviewers ? "is-active" : null)" href="@($"/Help/Review/{code}")">@NativeName(code)</a>
+            }
+            @if (_access.IsAdmin)
+            {
+                <button type="button" class="help-tab @(_showReviewers ? "is-active" : null)" @onclick="ShowReviewersAsync">Reviewers</button>
+            }
+        </nav>
+
+        @if (_showReviewers)
+        {
+            @if (_reviewers is null || _reviewers.Count == 0)
+            {
+                <p class="help-muted">No user has a designation with Help translation review yet. Grant it in the Designation screen first.</p>
+            }
+            else
+            {
+                <ul class="help-reviewers">
+                    @foreach (var r in _reviewers)
+                    {
+                        <li>
+                            <div><strong>@r.Name</strong> <span class="help-muted">@r.DesignationName</span></div>
+                            <div class="help-reviewers__langs">
+                                @foreach (var code in AllLanguages)
+                                {
+                                    <label><input type="checkbox" checked="@(_reviewerLangs[r.UserId].Contains(code))" @onchange="e => Toggle(r.UserId, code, e)" /> @NativeName(code)</label>
+                                }
+                                <button type="button" class="help-btn" @onclick="() => SaveReviewerAsync(r.UserId)">Save</button>
+                            </div>
+                            <small class="help-muted">No language ticked means all languages.</small>
+                        </li>
+                    }
+                </ul>
+            }
+        }
+        else if (_rows is not null)
+        {
+            <div class="help-review-head">
+                <p class="help-review-progress">Approved <strong>@_rows.Count(r => r.State == HelpReviewState.Approved)</strong> of <strong>@_rows.Count</strong> translated sections</p>
+                <button type="button" class="help-btn" @onclick="DownloadCorrectionsAsync"><i class="bi bi-download" aria-hidden="true"></i> Download corrections</button>
+            </div>
+
+            @if (_rows.Count == 0)
+            {
+                <p class="help-muted">There is nothing translated in this language yet.</p>
+            }
+            else
+            {
+                <div class="help-review">
+                    <ul class="help-review-list">
+                        @foreach (var row in _rows)
+                        {
+                            <li>
+                                <button type="button" class="help-review-row @(IsSelected(row) ? "is-active" : null)" @onclick="() => _selected = row">
+                                    <span class="help-review-row__title">@row.Title</span>
+                                    <span class="help-review-row__meta">
+                                        @ModuleTitle(row.Module)
+                                        <span class="help-chip help-chip--@row.State.ToString().ToLowerInvariant()">@StateText(row.State)</span>
+                                        @if (row.Confidence == "low") { <span class="help-chip help-chip--low">Check first</span> }
+                                    </span>
+                                </button>
+                            </li>
+                        }
+                    </ul>
+                    <div class="help-review-detail">
+                        @if (_selected is null)
+                        {
+                            <p class="help-muted">Choose a section to review. Sections marked "Check first" may have lost meaning in translation.</p>
+                        }
+                        else
+                        {
+                            <ReviewSectionPanel Module="@_selected.Module" SectionId="@_selected.SectionId" Lang="@_lang" OnSaved="ReloadRowsAsync" />
+                        }
+                    </div>
+                </div>
+            }
+        }
+    }
+</div>
+
+@code {
+    [Parameter] public string? Lang { get; set; }
+
+    private bool _loading = true;
+    private HelpReviewAccessDto? _access;
+    private string _lang = string.Empty;
+    private List<HelpReviewRowDto>? _rows;
+    private HelpReviewRowDto? _selected;
+    private bool _showReviewers;
+    private List<HelpReviewerDto>? _reviewers;
+    private readonly Dictionary<string, HashSet<string>> _reviewerLangs = new();
+
+    private IEnumerable<string> AllLanguages => Library.Config.Languages.Select(l => l.Code).Where(c => c != "en");
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _access ??= await Api.ReviewAccessAsync();
+        _loading = false;
+        if (_access is null || !_access.IsReviewer || _access.Languages.Count == 0) return;
+
+        var wanted = Lang?.ToLowerInvariant();
+        _lang = wanted is not null && _access.Languages.Contains(wanted) ? wanted : _access.Languages[0];
+        _showReviewers = false;
+        _selected = null;
+        await ReloadRowsAsync();
+    }
+
+    private async Task ReloadRowsAsync()
+    {
+        var keep = _selected;
+        _rows = await Api.ReviewListAsync(_lang) ?? new List<HelpReviewRowDto>();
+        _selected = keep is null ? null : _rows.FirstOrDefault(r => r.Module == keep.Module && r.SectionId == keep.SectionId);
+    }
+
+    private bool IsSelected(HelpReviewRowDto row) => _selected is not null && _selected.Module == row.Module && _selected.SectionId == row.SectionId;
+
+    private string NativeName(string code) => Library.Config.Languages.FirstOrDefault(l => l.Code == code)?.Native ?? code;
+
+    private string ModuleTitle(string module) => Library.English(module)?.Title ?? module;
+
+    private static string StateText(HelpReviewState state) => state switch
+    {
+        HelpReviewState.Approved => "Approved",
+        HelpReviewState.NeedsCorrection => "Correction sent",
+        _ => "Not reviewed",
+    };
+
+    private async Task DownloadCorrectionsAsync()
+    {
+        var export = await Api.ReviewExportAsync(_lang);
+        if (export is null) return;
+        var json = System.Text.Json.JsonSerializer.Serialize(export, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web) { WriteIndented = true });
+        var name = $"help-corrections-{_lang}-{DateTime.Now:yyyyMMdd}.json";
+        await JS.InvokeVoidAsync("downloadFileFromBytes", name, "application/json", Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(json)));
+    }
+
+    private async Task ShowReviewersAsync()
+    {
+        _showReviewers = true;
+        _reviewers = await Api.ReviewersAsync() ?? new List<HelpReviewerDto>();
+        _reviewerLangs.Clear();
+        foreach (var r in _reviewers) _reviewerLangs[r.UserId] = new HashSet<string>(r.Languages);
+    }
+
+    private void Toggle(string userId, string code, ChangeEventArgs e)
+    {
+        if (e.Value is true) _reviewerLangs[userId].Add(code);
+        else _reviewerLangs[userId].Remove(code);
+    }
+
+    private Task SaveReviewerAsync(string userId) => Api.SetReviewerLanguagesAsync(userId, _reviewerLangs[userId].ToList());
+}

@@ -75,6 +75,15 @@ Not yet in the app: Digital Library (4 features), SAS (8 features), Specialty Pr
 Service Portal, Sales Portal, Farmer Portal, Publicity, Compliance, Imports, Industrial
 Products, the cross-module dashboards.
 
+## Help Desk rule (2026-11-16)
+
+> When you add or change a screen, add or update its section in
+> `SPIC.Core/HelpContent/<module>/guide.en.md` in the same change, run
+> `help-tools translate`, and run `help-tools check` before merging.
+> Screenshots use demo data only.
+
+How to write guides and use the tools: `docs/help-desk.md`.
+
 ## Digital Library implementation log
 
 - 2026-09-20: landing page `/DigitalLibrary` built from the Figma frame (hero with assistant
