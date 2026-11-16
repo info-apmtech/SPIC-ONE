@@ -43,6 +43,7 @@ internal static class GuestHousePermissionTests
 		OwnershipCheckStillGuardsCancellation();
 		FrontOfficeAndMasterFiltersAreUntouched();
 		DesktopAndMobileMenusMatch();
+		CancelBookingMenuEntryStartsFromMyBookings();
 	}
 
 	// ---- helpers ------------------------------------------------------------------------------
@@ -336,6 +337,50 @@ internal static class GuestHousePermissionTests
 			desktop.Contains("SearchState.Matches(\"Book a Room\")") && desktop.Contains("SearchState.Matches(\"My Bookings\")"));
 		Check.That("NavMenu: search highlight classes use the new labels",
 			desktop.Contains("SubmenuLinkClass(\"Book a Room\")") && desktop.Contains("SubmenuLinkClass(\"My Bookings\")"));
+	}
+
+	// "Cancel Booking" in the menus: /CancelBooking needs ?bookingId=, so the entry opens My Bookings, where the
+	// user picks their own booking. It lives in the same MyBookings-gated block as "My Bookings".
+	private static void CancelBookingMenuEntryStartsFromMyBookings()
+	{
+		var shared = new[] { "SPIC.MauiBlazorApp", "SPIC.MauiBlazorApp.Shared" };
+		var desktop = File.ReadAllText(RepoFile(shared.Concat(new[] { "Layout", "NavMenu.razor" }).ToArray()));
+		var mobile = File.ReadAllText(RepoFile(shared.Concat(new[] { "Components", "Shell", "MobileSidebar.razor" }).ToArray()));
+
+		foreach (var (name, text) in new[] { ("NavMenu", desktop), ("MobileSidebar", mobile) })
+		{
+			var start = text.IndexOf("CanSeeMenu(PagePermission.MyBookings))", StringComparison.Ordinal);
+			var next = start < 0 ? -1 : text.IndexOf("@if (", start, StringComparison.Ordinal);
+			var block = start >= 0 && next > start ? text[start..next] : string.Empty;
+
+			Check.That($"{name}: My Bookings and Cancel Booking share the MyBookings-only block",
+				block.Contains("My Bookings") && block.Contains("Cancel Booking") && !block.Contains("||"));
+			Check.That($"{name}: Cancel Booking opens /MyBookings, never /CancelBooking without a booking",
+				block.Contains("href=\"/MyBookings\"") && !text.Contains("href=\"/CancelBooking\""));
+			Check.That($"{name}: /CancelBooking keeps the SDWA section open",
+				text.Contains("uri == \"cancelbooking\"") && text.Contains("uri.StartsWith(\"cancelbooking?\")"));
+		}
+
+		Check.That("NavMenu: menu search knows Cancel Booking",
+			desktop.Contains("SearchState.Matches(\"Cancel Booking\")") && desktop.Contains("SubmenuLinkClass(\"Cancel Booking\")"));
+
+		var cancelPage = File.ReadAllText(RepoFile(shared.Concat(new[] { "Pages", "CancelBooking.razor" }).ToArray()));
+		var myBookingsPage = File.ReadAllText(RepoFile(shared.Concat(new[] { "Pages", "MyBookings.razor" }).ToArray()));
+		Check.That("CancelBooking still needs a bookingId (so a bare menu link would be invalid)",
+			cancelPage.Contains("Name = \"bookingId\"") && cancelPage.Contains("No booking selected."));
+		Check.That("My Bookings opens the existing cancel flow for the selected booking",
+			myBookingsPage.Contains("/CancelBooking?bookingId={bookingId}"));
+
+		// Permission behaviour for both entries and the direct route.
+		var with = Login(AppRole.RM, "MyBookings.View");
+		var without = Login(AppRole.RM, "GuestHouseBooking.View,GuestHouse.View");
+		Check.That("With MyBookings: both entries and /CancelBooking are available",
+			with.CanSeeMenu(PagePermission.MyBookings) && CanOpen(with, "MyBookings") && CanOpen(with, "CancelBooking"));
+		Check.That("Without MyBookings: neither entry is shown and both routes are blocked",
+			!without.CanSeeMenu(PagePermission.MyBookings) && !CanOpen(without, "MyBookings") && !CanOpen(without, "CancelBooking"));
+		Check.That("Booking and Master permissions stay independent of the new entries",
+			Login(AppRole.RM, "MyBookings.View").CanSeeMenu(PagePermission.GuestHouseBooking) == false
+			&& Login(AppRole.RM, "MyBookings.View").CanSeeMenu(PagePermission.GuestHouse) == false);
 	}
 
 	// An @if (... <permission> ...) block followed, within a few lines, by the NavLink to <href>.
