@@ -1,4 +1,8 @@
-@page "/RequestExtension"
+@page "/RequestExtension/{CSRId:int}"
+@using System.Net.Http.Json
+@using System.Globalization
+@using SPIC.Core.DTOs
+@inject HttpClient Http
 @inject NavigationManager Nav
 @inject IJSRuntime JS
 
@@ -19,12 +23,21 @@
             </button>
         </div>
 
-        @if (Submitted is null)
+        @if (IsLoading)
+        {
+            <div class="rex-banner" role="status">Loading scheme information...</div>
+        }
+        else if (!string.IsNullOrWhiteSpace(LoadError))
+        {
+            <div class="rex-banner" role="alert">@LoadError</div>
+            <button type="button" class="rex-btn rex-btn-back" @onclick="BackToTracking">Back to Sales Tracking</button>
+        }
+        else if (Scheme is not null && Submitted is null)
         {
             <!-- Info banner -->
             <div class="rex-banner">
                 <SalesAuditIcon Name="info" Size="16" />
-                <span>Please provide the details below to request an extension. Your request will be sent to Admin for review.</span>
+                <span>Please provide the details below to request an extension. Submitting will create an extension request for approval. The scheme end date will not change.</span>
             </div>
 
             <!-- Scheme Information -->
@@ -91,9 +104,9 @@
                     </div>
 
                     <div class="rex-form-group rex-span-2">
-                        <label class="rex-form-label" for="rex-remarks">Remarks / Explanation</label>
+                        <label class="rex-form-label" for="rex-remarks">Remarks / Explanation (Optional)</label>
                         <textarea id="rex-remarks" class="rex-textarea @(ShowErrors && RemarksError is not null ? "rex-invalid" : "")" rows="3"
-                                  maxlength="@RemarksMax" placeholder="Enter detailed explanation for requesting extension.."
+                                  maxlength="@RemarksMax" placeholder="Optional: add an explanation for the extension request"
                                   @bind="Remarks" @bind:event="oninput"></textarea>
                         @if (ShowErrors && RemarksError is not null)
                         {
@@ -101,11 +114,16 @@
                         }
                         else
                         {
-                            <span class="rex-help">Provide clear justification for the extension request.</span>
+                            <span class="rex-help">Optional. Maximum 500 characters.</span>
                         }
                     </div>
                 </div>
             </div>
+
+            @if (!string.IsNullOrWhiteSpace(SubmitError))
+            {
+                <div class="rex-banner" role="alert">@SubmitError</div>
+            }
 
             <!-- Footer actions -->
             <div class="rex-footer">
@@ -115,7 +133,7 @@
                 </button>
                 <div class="rex-footer-right">
                     <button type="button" class="rex-btn rex-btn-back" @onclick="BackToTracking">Close</button>
-                    <button type="button" class="rex-btn rex-btn-primary" @onclick="Submit">
+                    <button type="button" class="rex-btn rex-btn-primary" disabled="@IsSubmitting" @onclick="Submit">
                         Submit Extension Request
                         <SalesAuditIcon Name="chevrons-right" Size="16" />
                     </button>
@@ -129,29 +147,28 @@
                 <span class="rex-success-icon">
                     <SalesAuditIcon Name="badge-check" Size="34" StrokeWidth="1.8" />
                 </span>
-                <h2 class="rex-success-title">Extension Request Submitted</h2>
-                <p class="rex-success-lead">Your extension request has been submitted for Admin approval.</p>
+                <h2 class="rex-success-title">@(IsExistingPending ? "Extension Request Pending Approval" : "Extension Request Submitted")</h2>
+                <p class="rex-success-lead">@(IsExistingPending ? "A request is already awaiting approval for this CSR." : "Your extension request was saved successfully and is awaiting approval.")</p>
                 <p class="rex-success-text">
-                    The audit record status has been updated to Extension Requested. You will be notified
-                    once the Admin reviews your request.
+                    The Sales Audit scheme end date remains unchanged until a separate approval workflow is implemented.
                 </p>
 
                 <dl class="rex-summary">
                     <div class="rex-summary-cell"><dt>Request ID</dt><dd class="rex-green">@Submitted.RequestId</dd></div>
                     <div class="rex-summary-cell"><dt>Request Date</dt><dd>@Submitted.RequestDate.ToString("d MMM yyyy")</dd></div>
-                    <div class="rex-summary-cell"><dt>Current Scheme Period</dt><dd>@SchemeStart.ToString("dd MMM yyyy") - @CurrentEnd.ToString("dd MMM yyyy")</dd></div>
-                    <div class="rex-summary-cell"><dt>Request New End Date</dt><dd>@SchemeStart.ToString("dd MMM yyyy") - @Submitted.NewEndDate.ToString("d MMM yyyy")</dd></div>
+                    <div class="rex-summary-cell"><dt>Current Scheme Period</dt><dd>@Scheme!.SchemeFrom.ToString("dd MMM yyyy") - @Submitted.PreviousEndDate.ToString("dd MMM yyyy")</dd></div>
+                    <div class="rex-summary-cell"><dt>Request New End Date</dt><dd>@Scheme!.SchemeFrom.ToString("dd MMM yyyy") - @Submitted.NewEndDate.ToString("d MMM yyyy")</dd></div>
                     <div class="rex-summary-cell"><dt>Reason</dt><dd>@Submitted.Reason</dd></div>
-                    <div class="rex-summary-cell"><dt>Status</dt><dd><span class="rex-status-pill"><span class="rex-dot"></span>Extension Requested</span></dd></div>
+                    <div class="rex-summary-cell"><dt>Status</dt><dd><span class="rex-status-pill"><span class="rex-dot"></span>Pending Approval</span></dd></div>
                     <div class="rex-summary-remarks"><dt>Remarks</dt><dd>@Submitted.Remarks</dd></div>
                 </dl>
 
                 <div class="rex-success-actions">
-                    <button type="button" class="rex-btn rex-btn-soft" @onclick="@(() => Nav.NavigateTo("/SalesTracking?extension=pending"))">
+                    <button type="button" class="rex-btn rex-btn-soft" @onclick="GoToExtensionRequests">
                         <SalesAuditIcon Name="eye" Size="16" />
                         View My Request
                     </button>
-                    <button type="button" class="rex-btn rex-btn-primary" @onclick="BackToList">
+                    <button type="button" class="rex-btn rex-btn-primary" @onclick="GoToSalesTrackingList">
                         Go to Sales Audit List
                         <SalesAuditIcon Name="arrow-right" Size="16" />
                     </button>
@@ -163,83 +180,114 @@
 </div>
 
 @code {
-    // ---- Scheme being extended (sample data, same program as the Sales Tracking dashboard) ----
-    private readonly DateTime SchemeStart = new(2026, 8, 1);
-    private readonly DateTime CurrentEnd = new(2026, 10, 31);
+    [Parameter] public int CSRId { get; set; }
 
-    private const decimal RequiredTurnover = 2_20_00_000m;
-    private const decimal ActualTurnover = 1_35_00_000m;
-
-    private record InfoTile(string Label, string Value, string Tone);
-
-    private List<InfoTile> InfoTiles => new()
-    {
-        new("Program Name", "Dealers Meet - State Level", "purple"),
-        new("Sanction Number", "CSR/2024/TN/0847", "green"),
-        new("Current Scheme Period", $"{SchemeStart:dd MMM yyyy} - {CurrentEnd:dd MMM yyyy}", "blue"),
-        new("Required Turnover (TO)", $"₹ {SalesAuditFormat.Crore(RequiredTurnover)} Cr", "purple"),
-        new("Actual Turnover Achieved", $"₹ {SalesAuditFormat.Crore(ActualTurnover)} Cr", "blue"),
-        new("Balance to Target", $"₹ {SalesAuditFormat.Crore(Math.Max(0, RequiredTurnover - ActualTurnover))} Cr", "red"),
-    };
-
-    private static readonly string[] Reasons =
-    {
-        "Market Condition",
-        "Weather / Crop Season Delay",
-        "Stock Availability",
-        "Dealer Onboarding Delay",
-        "Other",
-    };
-
-    // ---- Form ----
-    private const int RemarksMin = 10;
-    private const int RemarksMax = 500;
-
+    private SchemeExtensionInfoDto? Scheme;
+    private ExtensionRequestReceiptDto? Submitted;
+    private bool IsLoading = true;
+    private bool IsSubmitting;
+    private bool IsExistingPending;
+    private bool ShowErrors;
+    private string? LoadError;
+    private string? SubmitError;
     private DateTime? NewEndDate;
     private string Reason = "";
     private string Remarks = "";
-    private bool ShowErrors;
+    private const int RemarksMax = 500;
 
-    private string? DateError =>
-        NewEndDate is null ? "Select the new end date."
-        : NewEndDate <= CurrentEnd ? $"The new end date must be after {CurrentEnd:dd MMM yyyy}."
-        : null;
+    private static readonly string[] Reasons =
+    {
+        "Market Condition", "Weather / Crop Season Delay", "Stock Availability",
+        "Dealer Onboarding Delay", "Other"
+    };
 
-    private string? ReasonError => string.IsNullOrEmpty(Reason) ? "Select a reason for the extension." : null;
+    private record InfoTile(string Label, string Value, string Tone);
+    private static string Money(decimal amount) => "₹ " + amount.ToString("N2", CultureInfo.GetCultureInfo("en-IN"));
+    private List<InfoTile> InfoTiles => Scheme is null ? new() : new()
+    {
+        new("Program Name", Scheme.ProgramName, "purple"),
+        new("Sanction Number", Scheme.SanctionNumber, "green"),
+        new("Current Scheme Period", $"{Scheme.SchemeFrom:dd MMM yyyy} - {Scheme.SchemeTo:dd MMM yyyy}", "blue"),
+        new("Required Turnover (TO)", Money(Scheme.RequiredTurnover), "purple"),
+        new("Actual Turnover Achieved", Money(Scheme.ActualTurnover), "blue"),
+        new("Balance to Target", Money(Math.Max(0m, Scheme.RequiredTurnover - Scheme.ActualTurnover)), "red"),
+    };
 
-    private string? RemarksError =>
-        Remarks.Trim().Length < RemarksMin ? $"Enter at least {RemarksMin} characters explaining the request." : null;
+    private DateTime CurrentEnd => Scheme?.SchemeTo ?? DateTime.MaxValue;
+    private string? DateError => NewEndDate is null ? "Select the new end date."
+        : NewEndDate.Value.Date <= CurrentEnd.Date ? $"The new end date must be after {CurrentEnd:dd MMM yyyy}." : null;
+    private string? ReasonError => !Reasons.Contains(Reason) ? "Select a valid extension reason." : null;
+    private string? RemarksError => Remarks.Trim().Length > RemarksMax
+        ? $"Remarks cannot exceed {RemarksMax} characters." : null;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        Scheme = null;
+        Submitted = null;
+        IsExistingPending = false;
+        LoadError = null;
+        IsLoading = true;
+        try
+        {
+            if (CSRId <= 0) throw new InvalidOperationException("Invalid Sales Audit ID.");
+            using var response = await Http.GetAsync($"api/SalesAudit/extension/{CSRId}");
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                throw new InvalidOperationException("The selected Sales Audit record was not found.");
+            if (response.StatusCode == System.Net.HttpStatusCode.Forbidden)
+                throw new InvalidOperationException("You do not have permission to view this Sales Audit record.");
+            response.EnsureSuccessStatusCode();
+            Scheme = await response.Content.ReadFromJsonAsync<SchemeExtensionInfoDto>()
+                ?? throw new InvalidOperationException("Scheme information was empty.");
+
+            // An existing unapproved request is shown instead of a new submission form.
+            using var pendingResponse = await Http.GetAsync($"api/SalesAudit/extension/{CSRId}/pending");
+            if (pendingResponse.IsSuccessStatusCode)
+            {
+                Submitted = await pendingResponse.Content.ReadFromJsonAsync<ExtensionRequestReceiptDto>()
+                    ?? throw new InvalidOperationException("Pending extension information was empty.");
+                IsExistingPending = true;
+            }
+            else if (pendingResponse.StatusCode != System.Net.HttpStatusCode.NotFound)
+            {
+                pendingResponse.EnsureSuccessStatusCode();
+            }
+        }
+        catch (Exception ex) { LoadError = ex.Message; }
+        finally { IsLoading = false; }
+    }
 
     private void SetNewEndDate(ChangeEventArgs e)
     {
-        NewEndDate = DateTime.TryParse(e.Value?.ToString(), System.Globalization.CultureInfo.InvariantCulture,
-                         System.Globalization.DateTimeStyles.None, out var date)
-            ? date
-            : null;
+        NewEndDate = DateTime.TryParseExact(e.Value?.ToString(), "yyyy-MM-dd",
+            CultureInfo.InvariantCulture, DateTimeStyles.None, out var date) ? date : null;
     }
-
-    // ---- Submission (not persisted yet; the save call is wired with the API) ----
-    private record SubmittedRequest(string RequestId, DateTime RequestDate, DateTime NewEndDate, string Reason, string Remarks);
-
-    private SubmittedRequest? Submitted;
 
     private async Task Submit()
     {
+        if (Scheme is null || IsSubmitting || IsExistingPending || Submitted is not null) return;
         ShowErrors = true;
+        SubmitError = null;
         if (DateError is not null || ReasonError is not null || RemarksError is not null) return;
-
-        Submitted = new SubmittedRequest(
-            RequestId: $"EXT - {DateTime.Today.Year} - 00021",
-            RequestDate: DateTime.Today,
-            NewEndDate: NewEndDate!.Value,
-            Reason: Reason,
-            Remarks: Remarks.Trim());
-
-        // The confirmation replaces the form; bring it into view from the footer button.
-        try { await JS.InvokeVoidAsync("scrollPageToTop"); } catch (JSException) { }
+        IsSubmitting = true;
+        try
+        {
+            var payload = new CreateExtensionRequestDto(NewEndDate!.Value.Date, Reason, Remarks.Trim());
+            using var response = await Http.PostAsJsonAsync($"api/SalesAudit/extension/{CSRId}", payload);
+            if (response.StatusCode == System.Net.HttpStatusCode.Conflict)
+                throw new InvalidOperationException("An extension request may already be pending for this CSR. Reload the page to view it.");
+            if (response.StatusCode == System.Net.HttpStatusCode.Forbidden)
+                throw new InvalidOperationException("You do not have permission to request an extension.");
+            response.EnsureSuccessStatusCode();
+            Submitted = await response.Content.ReadFromJsonAsync<ExtensionRequestReceiptDto>()
+                ?? throw new InvalidOperationException("The server did not return the saved request details.");
+            try { await JS.InvokeVoidAsync("scrollPageToTop"); } catch (JSException) { }
+        }
+        catch (Exception ex) { SubmitError = ex.Message; }
+        finally { IsSubmitting = false; }
     }
 
-    private void BackToTracking() => Nav.NavigateTo("/SalesTracking");
-
+    private void BackToTracking() => Nav.NavigateTo($"/SalesTracking?CSRId={CSRId}");
     private void BackToList() => Nav.NavigateTo("/SalesAudit");
+    private void GoToExtensionRequests() => Nav.NavigateTo("/ExtensionRequests");
+    private void GoToSalesTrackingList() => Nav.NavigateTo("/SalesTrackingList");
 }

@@ -52,12 +52,116 @@ public sealed class SalesAuditWorkflowController : ControllerBase
                       select c2.Id).AnyAsync(HttpContext.RequestAborted);
     }
 
+
+    // GET-only access. Retains the original owner eligibility and the same
+    // server-derived geography used by SalesAuditController.tracking/eligible.
+    // NEVER call from a POST/PUT/PATCH/DELETE endpoint.
+    private async Task<bool> CanReadTrackingAsync(int csr2Id)
+    {
+        if (csr2Id <= 0) return false;
+        if (await CanEditAsync(csr2Id)) return true;
+
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrWhiteSpace(userId)) return false;
+        var ct = HttpContext.RequestAborted;
+        var employee = await _db.Set<EmployeeRegistration.Employeelogin>()
+            .AsNoTracking().FirstOrDefaultAsync(x => x.IsActive && x.UserId == userId, ct);
+        if (employee is null) return false;
+
+        // Match the supported role resolution in the tracking list controller.
+        static string Normalize(object? value) =>
+            (Convert.ToString(value, CultureInfo.InvariantCulture) ?? "").Trim().ToUpperInvariant();
+        static bool Supported(string value) => value is
+            "RM" or "RMM" or "SMM" or "SMDO" or "SMD";
+        var role = "";
+        foreach (var name in new[] { "AppRole", "Role", "UserRole", "RoleName", "EmployeeRole" })
+        {
+            var prop = employee.GetType().GetProperty(name,
+                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance |
+                System.Reflection.BindingFlags.IgnoreCase);
+            var value = Normalize(prop?.GetValue(employee));
+            if (Supported(value)) { role = value; break; }
+        }
+        if (role.Length == 0 && User.Identity?.IsAuthenticated == true)
+        {
+            foreach (var claim in User.Claims.Where(c =>
+                c.Type == ClaimTypes.Role || c.Type == "role" || c.Type == "roles" ||
+                c.Type == "AppRole" || c.Type == "app_role" || c.Type == "designation_role"))
+            {
+                var value = Normalize(claim.Value);
+                if (Supported(value)) { role = value; break; }
+            }
+        }
+        var scope = role switch
+        {
+            "RM" or "RMM" => "RegionId",
+            "SMM" => "HeadquartersId",
+            "SMDO" or "SMD" => "StateId",
+            _ => ""
+        };
+        if (scope.Length == 0) return false;
+
+        var names = scope switch
+        {
+            "RegionId" => new[] { "RegionIds", "RegionId" },
+            "HeadquartersId" => new[] { "HeadquartersIds", "HeadquartersId", "HQId" },
+            _ => new[] { "StateIds", "StateId" }
+        };
+        var assigned = new HashSet<int>();
+        foreach (var name in names)
+        {
+            var prop = employee.GetType().GetProperty(name,
+                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance |
+                System.Reflection.BindingFlags.IgnoreCase);
+            var value = prop?.GetValue(employee);
+            if (value is null) continue;
+            if (value is System.Collections.IEnumerable sequence && value is not string)
+            {
+                foreach (var item in sequence)
+                    if (int.TryParse(Convert.ToString(item, CultureInfo.InvariantCulture), out var id) && id > 0)
+                        assigned.Add(id);
+            }
+            else if (int.TryParse(Convert.ToString(value, CultureInfo.InvariantCulture), out var id) && id > 0)
+                assigned.Add(id);
+        }
+        if (assigned.Count == 0) return false;
+
+        var eligiblePrograms = (_options.EligibleProgramIds ?? Array.Empty<int>())
+            .Where(x => x > 0).Distinct().ToArray();
+        var record = await (from c2 in _db.Set<CSR2>().AsNoTracking()
+                            join c1 in _db.Set<CSR1>().AsNoTracking() on c2.CSR1Id equals c1.Id
+                            where c2.Id == csr2Id && c2.Status == CSR2Status.Approved &&
+                                  c1.Status == CSR1Status.Approved && c1.IsActive &&
+                                  (eligiblePrograms.Length == 0 || eligiblePrograms.Contains(c1.ProgramId))
+                            select new { c1.HeadquarterId }).SingleOrDefaultAsync(ct);
+        if (record?.HeadquarterId is not int hqId || hqId <= 0) return false;
+        if (scope == "HeadquartersId") return assigned.Contains(hqId);
+
+        // The same PostgreSQL master hierarchy as tracking/eligible.
+        foreach (var assignedId in assigned)
+        {
+            if (scope == "RegionId")
+            {
+                if (await _db.Database.SqlQuery<int>($@"
+                    SELECT h.""Id"" AS ""Value"" FROM ""Headquarters"" h
+                    WHERE h.""Id"" = {hqId} AND h.""RegionId"" = {assignedId}")
+                    .AnyAsync(ct)) return true;
+            }
+            else if (await _db.Database.SqlQuery<int>($@"
+                    SELECT h.""Id"" AS ""Value"" FROM ""Headquarters"" h
+                    INNER JOIN ""Regions"" r ON h.""RegionId"" = r.""Id""
+                    WHERE h.""Id"" = {hqId} AND r.""StateId"" = {assignedId}")
+                    .AnyAsync(ct)) return true;
+        }
+        return false;
+    }
+
     // CSR-2-linked, read-only overview; values come from actual source records.
     [HttpGet("overview")]
     public async Task<IActionResult> Overview([FromQuery] int csr2Id)
     {
         if (csr2Id <= 0) return BadRequest("Valid csr2Id is required.");
-        if (!await CanEditAsync(csr2Id)) return Forbid();
+        if (!await CanReadTrackingAsync(csr2Id)) return Forbid();
         var info = await (from c2 in _db.Set<CSR2>().AsNoTracking()
                           join c1 in _db.Set<CSR1>().AsNoTracking() on c2.CSR1Id equals c1.Id
                           join pm in _db.Set<ProgramMaster>().AsNoTracking() on c1.ProgramId equals pm.Id
@@ -244,7 +348,7 @@ public sealed class SalesAuditWorkflowController : ControllerBase
     [HttpGet("details")]
     public async Task<IActionResult> Details([FromQuery] int csr2Id)
     {
-        if (!await CanEditAsync(csr2Id)) return Forbid();
+        if (!await CanReadTrackingAsync(csr2Id)) return Forbid();
         var program = await (from c2 in _db.Set<CSR2>().AsNoTracking()
                              join c1 in _db.Set<CSR1>().AsNoTracking() on c2.CSR1Id equals c1.Id
                              join p in _db.Set<ProgramMaster>().AsNoTracking() on c1.ProgramId equals p.Id
@@ -416,7 +520,7 @@ public sealed class SalesAuditWorkflowController : ControllerBase
     [HttpGet("dealer-mapping")]
     public async Task<IActionResult> GetDealerMapping([FromQuery] int csr2Id)
     {
-        if (!await CanEditAsync(csr2Id)) return Forbid();
+        if (!await CanReadTrackingAsync(csr2Id)) return Forbid();
         var ct = HttpContext.RequestAborted;
         var audit = await _db.Set<SalesAuditRecord>().AsNoTracking()
             .Where(x => x.CSR2Id == csr2Id)
@@ -995,7 +1099,7 @@ public sealed class SalesAuditWorkflowController : ControllerBase
     public async Task<IActionResult> GetMappedSapSales([FromQuery] int csr2Id, [FromQuery] bool excludeSaved = false)
     {
         if (csr2Id <= 0) return BadRequest(new { message = "Valid csr2Id required." });
-        if (!await CanEditAsync(csr2Id)) return Forbid();
+        if (!await CanReadTrackingAsync(csr2Id)) return Forbid();
         var ct = HttpContext.RequestAborted;
         var audit = await _db.Set<SalesAuditRecord>().AsNoTracking()
             .Where(x => x.CSR2Id == csr2Id)
