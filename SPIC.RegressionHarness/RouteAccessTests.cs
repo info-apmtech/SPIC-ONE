@@ -35,6 +35,13 @@ internal static class RouteAccessTests
 		Expect("LabAnalystReachesTestEntry", TestLogin.As(AppRole.CommonRole, "LabTestEntry.View"), "/Lab/TestEntry/5", true, null);
 		Expect("DataExplorerDeniedToOthers", TestLogin.As(AppRole.RMD, "PublicityRequest.View"), "/DataExplorer", false, Landing);
 		Expect("AbsoluteUrlAndQueryAreIgnored", TestLogin.As(AppRole.RMD, "PublicityRequest.View"), "https://app.example/PublicityRequest/new?x=1#top", true, null);
+
+		// Help Desk (2026-11-16): open to every signed-in user who has a designation - including
+		// designation-only roles such as Lab staff - but a user with NO designation still goes to
+		// /Welcome, exactly as for every other feature page.
+		Expect("AnyDesignatedUserOpensHelp", TestLogin.As(AppRole.MDO, "PublicityRequest.View"), "/Help", true, null);
+		Expect("DesignationOnlyRoleOpensHelp", TestLogin.As(AppRole.CommonRole, "LabTestEntry.View"), "/Help/lab", true, null);
+		Expect("NoDesignationUserIsSentToWelcomeFromHelp", TestLogin.As(AppRole.MDO, ""), "/Help", false, "/Welcome");
 	}
 
 	private static void Expect(string name, LoginState login, string url, bool allowed, string? redirect)

@@ -39,8 +39,15 @@ namespace SPIC.MauiBlazorApp.Shared.Services
             // designation permission: it is not a PagePermission member and appears in no RoleAccess.
             // A user with no designation is redirected to /Welcome by the no-designation branch below.
             // Listed without the leading slash.
-            LoginState.DefaultLandingPath.TrimStart('/')
+            LoginState.DefaultLandingPath.TrimStart('/'),
+            // Help Desk (2026-11-16): every signed-in user with a designation, every role, including
+            // the designation-only ones (Lab staff, CommonRole, SpecialAdmin) that skip the open-to-all
+            // pages. The guides themselves are filtered per user by HelpCatalog. Users with no
+            // designation are still sent to /Welcome (see HelpRoute in the no-designation branch).
+            HelpRoute
         };
+
+        private const string HelpRoute = "Help";
 
         // Shell hub pages (phone tab bar / top bar destinations). Each hub only LINKS to pages the
         // user can already open (every link is filtered by LoginState.CanAccess), so they are open to
@@ -153,6 +160,7 @@ namespace SPIC.MauiBlazorApp.Shared.Services
 
                 bool isInfra = AlwaysOpen.Contains(firstSegment)
                                && !firstSegment.Equals("Dashboard", StringComparison.OrdinalIgnoreCase)
+                               && !firstSegment.Equals(HelpRoute, StringComparison.OrdinalIgnoreCase)
                                && !isDefaultLanding;
 
                 if (!isWelcome && !isDealerDash && !isInfra && !isDirectorSchemeApproval && !isDataExplorerAuthorized)

@@ -1,0 +1,31 @@
+@* Language selector for the Help Desk. Shows each language in its own script. *@
+@implements IDisposable
+@inject HelpLanguageState Lang
+
+<label class="help-lang @(Compact ? "help-lang--compact" : null)">
+    <i class="bi bi-translate" aria-hidden="true"></i>
+    <span class="visually-hidden">Help language</span>
+    <select value="@Lang.Current" @onchange="OnChange" aria-label="Help language">
+        @foreach (var l in Lang.Languages)
+        {
+            <option value="@l.Code">@l.Native</option>
+        }
+    </select>
+</label>
+
+@code {
+    [Parameter] public bool Compact { get; set; }
+
+    protected override void OnInitialized() => Lang.Changed += OnLangChanged;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender) await Lang.LoadAsync();
+    }
+
+    private Task OnChange(ChangeEventArgs e) => Lang.SetAsync(e.Value?.ToString() ?? string.Empty);
+
+    private void OnLangChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Lang.Changed -= OnLangChanged;
+}
