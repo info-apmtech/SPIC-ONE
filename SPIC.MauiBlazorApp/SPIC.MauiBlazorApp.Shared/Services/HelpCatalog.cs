@@ -11,7 +11,23 @@ namespace SPIC.MauiBlazorApp.Shared.Services
     /// <param name="MachineTranslated">Translated text that no reviewer has approved yet.</param>
     public sealed record HelpSectionView(string Module, HelpSection Section, string Language, bool IsFallbackEnglish, bool MachineTranslated);
 
-    public sealed record HelpModuleView(string Module, string Title, string Icon, int Order, IReadOnlyList<HelpSectionView> Sections);
+    public sealed record HelpModuleView(string Module, string Title, string Icon, int Order, IReadOnlyList<HelpSectionView> Sections)
+    {
+        /// <summary>The localized guide (category, colour, example, updated, note).</summary>
+        public HelpGuide Guide { get; init; } = null!;
+
+        /// <summary>The screen sections the user can open, in guide order.</summary>
+        public IReadOnlyList<HelpSectionView> Screens => Sections.Where(s => s.Section.Kind == "screen").ToList();
+
+        /// <summary>The module's block of a kind (overview, flow, statuses, roles, faq), or null.</summary>
+        public HelpSectionView? Block(string kind) => Sections.FirstOrDefault(s => s.Section.Kind == kind);
+
+        /// <summary>The overview's lead paragraph: the text under the banner title.</summary>
+        public string Lead => Block("overview") is { } o ? HelpBlocks.Lead(o.Section.Body) : string.Empty;
+    }
+
+    /// <summary>"Your path" for the signed-in user: steps limited to screens they can open.</summary>
+    public sealed record HelpPathView(string Title, IReadOnlyList<(HelpPathStep Step, HelpSectionView Section)> Steps);
 
     public sealed record HelpSearchHit(HelpSectionView Section, string Snippet);
 
@@ -65,8 +81,11 @@ namespace SPIC.MauiBlazorApp.Shared.Services
 
             var approved = ApprovedKeys(lang) ?? NoneApproved;
             var english = string.Equals(lang, "en", StringComparison.OrdinalIgnoreCase);
+            // Blocks (overview, flow, roles…) follow the module: shown only when a screen is.
+            var anyScreen = guide.Sections.Any(s => s.Kind == "screen" && IsVisible(s));
+            if (!anyScreen) return null;
             var sections = guide.Sections
-                .Where(IsVisible)
+                .Where(s => s.Kind != "screen" || IsVisible(s))
                 .Select(s =>
                 {
                     var fallback = !english && s.Confidence == HelpConfidence.Source;
@@ -78,7 +97,7 @@ namespace SPIC.MauiBlazorApp.Shared.Services
                 })
                 .ToList();
 
-            return sections.Count == 0 ? null : new HelpModuleView(guide.Module, guide.Title, guide.Icon, guide.Order, sections);
+            return new HelpModuleView(guide.Module, guide.Title, guide.Icon, guide.Order, sections) { Guide = guide };
         }
 
         /// <summary>
@@ -103,8 +122,8 @@ namespace SPIC.MauiBlazorApp.Shared.Services
             var first = FirstSegment(path);
             if (first.Length == 0) return null;
             return modules
-                .FirstOrDefault(m => m.Sections.Any(s => s.Section.Routes.Any(r => FirstSegment(r) == first)))
-                ?.Sections.FirstOrDefault();
+                .FirstOrDefault(m => m.Screens.Any(s => s.Section.Routes.Any(r => FirstSegment(r) == first)))
+                ?.Screens.FirstOrDefault();
         }
 
         public IReadOnlyList<HelpSearchHit> Search(string query, string lang)
@@ -117,7 +136,7 @@ namespace SPIC.MauiBlazorApp.Shared.Services
             {
                 foreach (var s in module.Sections)
                 {
-                    var text = HelpMarkdown.ToSpeech(s.Section.Title, s.Section.Body).Replace('\n', ' ');
+                    var text = HelpBlocks.SpeechText(s.Section).Replace('\n', ' ');
                     var at = text.IndexOf(q, StringComparison.CurrentCultureIgnoreCase);
                     if (at < 0) continue;
                     hits.Add(new HelpSearchHit(s, Snippet(text, at)));
@@ -126,6 +145,56 @@ namespace SPIC.MauiBlazorApp.Shared.Services
             }
             return hits;
         }
+
+        /// <summary>FAQ items marked popular, from modules the user can see.</summary>
+        public IReadOnlyList<(string Module, HelpFaqItem Item)> PopularFaq(string lang, int max = 6) =>
+            VisibleModules(lang)
+                .SelectMany(m => m.Block("faq") is { } faq
+                    ? HelpBlocks.Faq(faq.Section, new List<string>()).Where(f => f.Popular).Select(f => (m.Module, f))
+                    : Enumerable.Empty<(string, HelpFaqItem)>())
+                .Take(max)
+                .ToList();
+
+        /// <summary>The first path for the user's designation or role, keeping only steps they can open; null if none.</summary>
+        public HelpPathView? PathFor(string lang)
+        {
+            if (!_login.IsLoggedIn) return null;
+            var path = _library.Paths.FirstOrDefault(p =>
+                p.Designations.Any(d => SameName(d, _login.DesignationName)) || p.Roles.Any(r => SameName(r, _login.UserRole?.ToString())));
+            if (path is null) return null;
+
+            var modules = VisibleModules(lang).ToDictionary(m => m.Module, StringComparer.OrdinalIgnoreCase);
+            var steps = new List<(HelpPathStep, HelpSectionView)>();
+            foreach (var step in path.Steps)
+                if (modules.TryGetValue(step.Module, out var m) && m.Screens.FirstOrDefault(s => SameName(s.Section.Id, step.Section)) is { } view)
+                    steps.Add((step, view));
+            return steps.Count == 0 ? null : new HelpPathView(path.TitleIn(lang), steps);
+        }
+
+        /// <summary>Latest guide updates among the modules the user can see.</summary>
+        public IReadOnlyList<HelpWhatsNewItem> WhatsNew(string lang, int max = 5) =>
+            HelpWhatsNew.From(VisibleModules(lang).Select(m => m.Guide), max);
+
+        /// <summary>The roles-block card for the user: designation match first, then role. Null when none.</summary>
+        public string? MyRoleCard(HelpModuleView module)
+        {
+            if (module.Block("roles") is not { } roles) return null;
+            var cards = HelpBlocks.Roles(roles.Section, new List<string>());
+            return (cards.FirstOrDefault(c => c.Designations.Any(d => SameName(d, _login.DesignationName)))
+                    ?? cards.FirstOrDefault(c => c.Roles.Any(r => SameName(r, _login.UserRole?.ToString()))))?.Id;
+        }
+
+        /// <summary>The flow lane for the user: designation match first, then role. Null when none.</summary>
+        public string? MyLane(HelpModuleView module)
+        {
+            if (module.Block("flow") is not { } flow) return null;
+            var lanes = HelpBlocks.Flow(flow.Section, new List<string>()).Lanes;
+            return (lanes.FirstOrDefault(l => l.Designations.Any(d => SameName(d, _login.DesignationName)))
+                    ?? lanes.FirstOrDefault(l => l.Roles.Any(r => SameName(r, _login.UserRole?.ToString()))))?.Id;
+        }
+
+        private static bool SameName(string? a, string? b) =>
+            !string.IsNullOrWhiteSpace(a) && string.Equals(a.Trim(), b?.Trim(), StringComparison.OrdinalIgnoreCase);
 
         private bool IsVisible(HelpSection s)
         {
