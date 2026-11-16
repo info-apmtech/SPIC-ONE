@@ -151,5 +151,7 @@ internal static class HelpLibraryTests
 	{
 		var lib = HelpLibrary.FromEmbedded();
 		Check.Equal("embedded config lists five languages", 5, lib.Config.Languages.Count);
+		foreach (var module in new[] { "publicity", "sas-sample-collection", "lab" })
+			Check.That($"embedded pilot guide '{module}' loads", lib.Modules.Contains(module), string.Join(",", lib.Modules));
 	}
 }
