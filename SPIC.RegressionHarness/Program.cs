@@ -60,6 +60,7 @@ internal static class Program
 		HelpBlocksTests.Run();
 		HelpV2TranslationTests.Run();
 		HelpMarkdownTests.Run();
+		HelpPathsTests.Run();
 
 		return Check.Report("Total");
 	}

@@ -46,6 +46,11 @@ namespace SPIC.Core.Help
                     LoadGlossary(text);
                     continue;
                 }
+                if (path.Equals("paths.json", StringComparison.OrdinalIgnoreCase))
+                {
+                    Paths = JsonSerializer.Deserialize<HelpPathsFile>(text, Json)?.Paths?.Select(HelpPath.Clean).ToList() ?? new List<HelpPath>();
+                    continue;
+                }
 
                 // <module>/guide.<lang>.md
                 var parts = path.Split('/');
@@ -70,6 +75,12 @@ namespace SPIC.Core.Help
         public static HelpLibrary FromEmbedded() => Embedded.Value;
 
         public HelpConfig Config { get; }
+
+        /// <summary>The "Still stuck?" contacts, or null when not configured.</summary>
+        public HelpSupport? Support => Config.Support;
+
+        /// <summary>"Your path" per role or designation (paths.json).</summary>
+        public IReadOnlyList<HelpPath> Paths { get; } = Array.Empty<HelpPath>();
 
         /// <summary>Modules that have an English guide.</summary>
         public IReadOnlyList<string> Modules { get; }
