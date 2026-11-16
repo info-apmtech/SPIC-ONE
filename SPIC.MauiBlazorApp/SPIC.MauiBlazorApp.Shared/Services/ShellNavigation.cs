@@ -492,6 +492,7 @@ public static class ShellNavigation
         //      Not a PagePermission (RouteAccess opens /Help), so the Rule replaces CanSeeMenu.
         //      More-sheet only, so it never takes a bottom-tab or rail slot. Appended at the END. ----
         new("Help", "Help Desk", "bi-question-circle", "/Help", "Help") { MoreOnly = true, Rule = s => s.IsLoggedIn },
+        new("HelpReview", "Translation Review", "bi-translate", "/Help/Review", nameof(PagePermission.HelpTranslationReview)) { MoreOnly = true },
     };
 
     // ---------------------------------------------------------------------------------------------

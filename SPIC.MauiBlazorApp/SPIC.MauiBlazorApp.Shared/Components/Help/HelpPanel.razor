@@ -4,6 +4,7 @@
 @inject NavigationManager Nav
 @inject HelpCatalog Catalog
 @inject HelpLanguageState Lang
+@inject HelpApi Api
 
 <div class="help-panel-backdrop" @onclick="Close"></div>
 <aside class="help-panel" role="dialog" aria-modal="true" aria-label="Help for this screen">
@@ -39,9 +40,16 @@
 
     protected override void OnInitialized()
     {
+        Catalog.ApprovedKeys = Api.Approved;
         Lang.Changed += OnLangChanged;
         Nav.LocationChanged += OnLocationChanged;
         Load();
+    }
+
+    // Reviewer approvals for the chosen language (loaded once per session, quietly).
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (await Api.EnsureApprovedAsync(Lang.Current)) { Load(); StateHasChanged(); }
     }
 
     private void Load() => _section = Catalog.ForPath(Nav.Uri, Lang.Current);

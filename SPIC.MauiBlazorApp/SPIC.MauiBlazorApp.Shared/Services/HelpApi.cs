@@ -57,6 +57,56 @@ public sealed class HelpApi : ApiClientBase
         }
     }
 
+    // ------------------------------------------------------------------ review
+
+    private readonly Dictionary<string, IReadOnlySet<string>> _approved = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly IReadOnlySet<string> NoneApproved = new HashSet<string>();
+
+    /// <summary>Approved "module/sectionId" keys for a language, from the cache (empty until loaded).
+    /// Plugged into HelpCatalog.ApprovedKeys.</summary>
+    public IReadOnlySet<string> Approved(string lang) =>
+        _approved.TryGetValue(lang, out var set) ? set : NoneApproved;
+
+    /// <summary>Loads the approved keys for a language once per session (quietly). True when newly loaded.</summary>
+    public async Task<bool> EnsureApprovedAsync(string lang, CancellationToken ct = default)
+    {
+        if (string.Equals(lang, "en", StringComparison.OrdinalIgnoreCase) || _approved.ContainsKey(lang) || !Login.IsLoggedIn) return false;
+        try
+        {
+            var response = await Http.GetAsync(Url($"review/approved/{Uri.EscapeDataString(lang)}"), ct);
+            if (!response.IsSuccessStatusCode) return false;
+            var keys = await response.Content.ReadFromJsonAsync<List<string>>(Json, ct) ?? new List<string>();
+            _approved[lang] = new HashSet<string>(keys, StringComparer.OrdinalIgnoreCase);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    public Task<SPIC.Core.DTOs.HelpReviewAccessDto?> ReviewAccessAsync(CancellationToken ct = default) =>
+        GetAsync<SPIC.Core.DTOs.HelpReviewAccessDto>("review/access", "review access", ct);
+
+    public Task<List<SPIC.Core.DTOs.HelpReviewRowDto>?> ReviewListAsync(string lang, CancellationToken ct = default) =>
+        GetAsync<List<SPIC.Core.DTOs.HelpReviewRowDto>>($"review/{Uri.EscapeDataString(lang)}", "translations to review", ct);
+
+    public async Task<bool> SubmitReviewAsync(SPIC.Core.DTOs.HelpReviewSubmitDto dto, CancellationToken ct = default)
+    {
+        var ok = await SendAsync(HttpMethod.Post, "review", dto, "save the review", ct);
+        if (ok) _approved.Remove(dto.Language); // approvals changed: reload next time
+        return ok;
+    }
+
+    public Task<SPIC.Core.DTOs.HelpReviewExportDto?> ReviewExportAsync(string lang, CancellationToken ct = default) =>
+        GetAsync<SPIC.Core.DTOs.HelpReviewExportDto>($"review/export/{Uri.EscapeDataString(lang)}", "corrections", ct);
+
+    public Task<List<SPIC.Core.DTOs.HelpReviewerDto>?> ReviewersAsync(CancellationToken ct = default) =>
+        GetAsync<List<SPIC.Core.DTOs.HelpReviewerDto>>("review/reviewers", "reviewers", ct);
+
+    public Task<bool> SetReviewerLanguagesAsync(string userId, IReadOnlyList<string> languages, CancellationToken ct = default) =>
+        SendAsync(HttpMethod.Put, $"review/reviewers/{Uri.EscapeDataString(userId)}", new SPIC.Core.DTOs.HelpReviewerUpdateDto(languages), "save the reviewer's languages", ct);
+
     private sealed record VoiceStatus(bool Enabled);
 
     private sealed record ClipKey(string Key);

@@ -116,7 +116,8 @@ namespace SpicAPI.Controllers
                 CreatedAtUtc = DateTime.UtcNow,
             });
             await _db.SaveChangesAsync();
-            return NoContent();
+            // A JSON body (not 204): the client's ApiClientBase.SendAsync reads one.
+            return Ok(new { Success = true });
         }
 
         /// <summary>Open corrections (against the current English, not yet in the file) and pronunciation
@@ -190,7 +191,7 @@ namespace SpicAPI.Controllers
             row.Languages = string.Join(",", languages);
             row.UpdatedAtUtc = DateTime.UtcNow;
             await _db.SaveChangesAsync();
-            return NoContent();
+            return Ok(new { Success = true });
         }
 
         // =====================================================================

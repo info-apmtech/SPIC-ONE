@@ -4,6 +4,7 @@
 @implements IDisposable
 @inject HelpCatalog Catalog
 @inject HelpLanguageState Lang
+@inject HelpApi Api
 
 <PageHeader Title="@(_view?.Title ?? "Help Desk")" Subtitle="Help Desk" BackHref="/Help" BackLabel="All guides">
     <Actions>
@@ -53,9 +54,19 @@
     private HelpModuleView? _view;
     private HelpSectionView? _current;
 
-    protected override void OnInitialized() => Lang.Changed += OnLangChanged;
+    protected override void OnInitialized()
+    {
+        Catalog.ApprovedKeys = Api.Approved;
+        Lang.Changed += OnLangChanged;
+    }
 
     protected override void OnParametersSet() => Load();
+
+    // Reviewer approvals for the chosen language (loaded once per session, quietly).
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (await Api.EnsureApprovedAsync(Lang.Current)) { Load(); StateHasChanged(); }
+    }
 
     private void Load()
     {

@@ -3,6 +3,7 @@
 @implements IDisposable
 @inject HelpCatalog Catalog
 @inject HelpLanguageState Lang
+@inject HelpApi Api
 
 <PageHeader Title="Help Desk" Subtitle="How to use each screen, for your role" ShowBack="false">
     <Actions>
@@ -70,8 +71,15 @@
 
     protected override void OnInitialized()
     {
+        Catalog.ApprovedKeys = Api.Approved;
         Lang.Changed += OnLangChanged;
         Load();
+    }
+
+    // Reviewer approvals for the chosen language (loaded once per session, quietly).
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (await Api.EnsureApprovedAsync(Lang.Current)) { Load(); StateHasChanged(); }
     }
 
     private void Load() => _modules = Catalog.VisibleModules(Lang.Current);

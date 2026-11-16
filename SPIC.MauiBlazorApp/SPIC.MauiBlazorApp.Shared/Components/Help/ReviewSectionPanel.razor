@@ -1,0 +1,120 @@
+@* One translated section for a native-speaker reviewer: English and the translation side by side,
+   the translation's voice, and Approve / Suggest correction / Report pronunciation. *@
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
+@using SPIC.Core.Help
+@inject HelpApi Api
+@inject HelpLibrary Library
+
+@if (_english is null || _translated is null)
+{
+    <p class="help-muted">This section has no current translation.</p>
+}
+else
+{
+    <div class="help-review-compare">
+        <section class="help-review-col">
+            <h3 class="help-review-col__label">English</h3>
+            <h2 class="help-section__title">@_english.Title</h2>
+            <div class="help-section__text">@((MarkupString)HelpMarkdown.ToHtml(_english.Body, HelpSectionBody.ImageBase(Module)))</div>
+        </section>
+        <section class="help-review-col">
+            <h3 class="help-review-col__label">@LanguageName</h3>
+            <h2 class="help-section__title">@_translated.Title</h2>
+            <ListenButton View="@(new HelpSectionView(Module, _translated, Lang, false, true))" />
+            <div class="help-section__text">@((MarkupString)HelpMarkdown.ToHtml(_translated.Body, HelpSectionBody.ImageBase(Module)))</div>
+        </section>
+    </div>
+
+    <div class="help-review-actions">
+        <button type="button" class="help-btn help-btn--primary" disabled="@_busy" @onclick="ApproveAsync">
+            <i class="bi bi-check2-circle" aria-hidden="true"></i> Approve
+        </button>
+        <button type="button" class="help-btn" disabled="@_busy" @onclick="@(() => _mode = _mode == Mode.Correct ? Mode.None : Mode.Correct)">
+            <i class="bi bi-pencil" aria-hidden="true"></i> Suggest correction
+        </button>
+        <button type="button" class="help-btn" disabled="@_busy" @onclick="@(() => _mode = _mode == Mode.Pronounce ? Mode.None : Mode.Pronounce)">
+            <i class="bi bi-megaphone" aria-hidden="true"></i> Report pronunciation
+        </button>
+        @if (_saved is not null)
+        {
+            <span class="help-review-saved"><i class="bi bi-check-lg" aria-hidden="true"></i> @_saved</span>
+        }
+    </div>
+
+    @if (_mode == Mode.Correct)
+    {
+        <div class="help-review-form">
+            <label>Title<input class="form-control" @bind="_title" /></label>
+            <label>Text<textarea class="form-control" rows="12" @bind="_body"></textarea></label>
+            <label>Comment (optional)<input class="form-control" @bind="_comment" /></label>
+            <button type="button" class="help-btn help-btn--primary" disabled="@_busy" @onclick="SendCorrectionAsync">Send correction</button>
+        </div>
+    }
+    else if (_mode == Mode.Pronounce)
+    {
+        <div class="help-review-form">
+            <label>Word that sounds wrong<input class="form-control" @bind="_word" /></label>
+            <label>How it should be said<input class="form-control" @bind="_sayAs" /></label>
+            <label>Comment (optional)<input class="form-control" @bind="_comment" /></label>
+            <button type="button" class="help-btn help-btn--primary" disabled="@_busy" @onclick="SendPronunciationAsync">Send report</button>
+        </div>
+    }
+}
+
+@code {
+    [Parameter, EditorRequired] public string Module { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public string SectionId { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public string Lang { get; set; } = string.Empty;
+    [Parameter] public EventCallback OnSaved { get; set; }
+
+    private enum Mode { None, Correct, Pronounce }
+
+    private HelpSection? _english;
+    private HelpSection? _translated;
+    private Mode _mode;
+    private bool _busy;
+    private string? _saved;
+    private string _title = string.Empty, _body = string.Empty, _comment = string.Empty, _word = string.Empty, _sayAs = string.Empty;
+    private string? _forKey;
+
+    private string LanguageName => Library.Config.Languages.FirstOrDefault(l => l.Code == Lang)?.Native ?? Lang;
+
+    protected override void OnParametersSet()
+    {
+        var key = $"{Module}/{SectionId}/{Lang}";
+        if (key == _forKey) return;
+        _forKey = key;
+        _english = Library.English(Module)?.Sections.FirstOrDefault(s => s.Id == SectionId);
+        _translated = Library.Localized(Module, Lang)?.Sections.FirstOrDefault(s => s.Id == SectionId && s.Confidence != HelpConfidence.Source);
+        _mode = Mode.None;
+        _saved = null;
+        _title = _translated?.Title ?? string.Empty;
+        _body = _translated?.Body ?? string.Empty;
+        _comment = _word = _sayAs = string.Empty;
+    }
+
+    private Task ApproveAsync() => SubmitAsync(HelpReviewKind.Approval, "Approved.");
+
+    private Task SendCorrectionAsync() => SubmitAsync(HelpReviewKind.Correction, "Correction sent. A developer will apply it.");
+
+    private Task SendPronunciationAsync() => SubmitAsync(HelpReviewKind.Pronunciation, "Pronunciation reported.");
+
+    private async Task SubmitAsync(HelpReviewKind kind, string done)
+    {
+        _busy = true;
+        _saved = null;
+        var ok = await Api.SubmitReviewAsync(new HelpReviewSubmitDto(
+            Module, SectionId, Lang, kind,
+            kind == HelpReviewKind.Correction ? _title : null,
+            kind == HelpReviewKind.Correction ? _body : null,
+            string.IsNullOrWhiteSpace(_comment) ? null : _comment,
+            kind == HelpReviewKind.Pronunciation ? _word : null,
+            kind == HelpReviewKind.Pronunciation ? _sayAs : null));
+        _busy = false;
+        if (!ok) return;
+        _saved = done;
+        _mode = Mode.None;
+        await OnSaved.InvokeAsync();
+    }
+}
