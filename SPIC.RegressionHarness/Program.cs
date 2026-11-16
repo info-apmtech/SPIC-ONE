@@ -50,6 +50,7 @@ internal static class Program
 		HelpSpeechTests.Run();
 		HelpReviewStatusTests.Run();
 		HelpReviewApplierTests.Run();
+		HelpImportTests.Run();
 
 		return Check.Report("Total");
 	}

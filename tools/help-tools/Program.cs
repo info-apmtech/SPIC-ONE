@@ -9,8 +9,43 @@ return command switch
 	"check" => Check(),
 	"translate" => await Translate(args),
 	"apply-reviews" => ApplyReviews(args),
+	"import" => Import(args),
 	_ => Usage(),
 };
+
+static int Import(string[] args)
+{
+	var file = args.Skip(1).FirstOrDefault();
+	var module = Option(args, "--module");
+	var lang = Option(args, "--lang");
+	if (string.IsNullOrWhiteSpace(file) || !File.Exists(file) || string.IsNullOrWhiteSpace(module) || string.IsNullOrWhiteSpace(lang))
+	{
+		Console.Error.WriteLine("Usage: help-tools import <translated-guide.md> --module <module> --lang <ta|te|mr|hi>");
+		return 2;
+	}
+
+	var library = Repo.LoadLibrary();
+	var en = library.English(module);
+	if (en is null) { Console.Error.WriteLine($"No English guide for module '{module}'."); return 2; }
+	if (!library.Config.Languages.Any(l => l.Code.Equals(lang, StringComparison.OrdinalIgnoreCase)) || lang.Equals("en", StringComparison.OrdinalIgnoreCase))
+	{
+		Console.Error.WriteLine($"'{lang}' is not a translation language in help.config.json.");
+		return 2;
+	}
+
+	var draft = HelpGuideParser.Parse(module, lang, File.ReadAllText(file));
+	var result = HelpTranslationImport.Build(en, draft, lang);
+	if (result.Problems.Count > 0)
+	{
+		Console.WriteLine($"{module} / {lang}: not imported, {result.Problems.Count} problem(s):");
+		foreach (var p in result.Problems) Console.WriteLine($"  {p}");
+		return 1;
+	}
+
+	File.WriteAllText(Repo.GuidePath(module, lang), result.Text, new System.Text.UTF8Encoding(false));
+	Console.WriteLine($"{module} / {lang}: imported {en.Sections.Count} sections into guide.{lang}.md");
+	return 0;
+}
 
 static int ApplyReviews(string[] args)
 {
@@ -158,6 +193,10 @@ static int Usage()
 		                 Translate new or changed English sections with Claude and check each one
 		                 by back-translation. Needs ANTHROPIC_API_KEY; model from HELP_TOOLS_MODEL
 		                 (default claude-opus-5-5).
+		  import <file.md> --module m --lang ta|te|mr|hi
+		                 Bring in a translation made outside 'translate' (a copy of guide.en.md with
+		                 titles and bodies translated). Checks every section is there and on-screen
+		                 names in **bold** stayed English, then writes it stamped like 'translate'.
 		  apply-reviews <file.json>
 		                 Write native-speaker corrections downloaded from /Help/Review into the
 		                 translation files, and print pronunciation reports as glossary entries.

@@ -65,11 +65,13 @@ designations:
 ```
 dotnet run --project tools/help-tools -- check
 dotnet run --project tools/help-tools -- translate [--module m] [--lang ta|te|mr|hi]
+dotnet run --project tools/help-tools -- import <translated.md> --module m --lang ta|te|mr|hi
 dotnet run --project tools/help-tools -- apply-reviews <help-corrections-xx.json>
 ```
 
 - `check` lists screens without a guide, stale or missing translations, unknown permissions and missing screenshots.
 - `translate` re-translates only sections whose English changed (needs `ANTHROPIC_API_KEY`).
+- `import` brings in a translation made by hand or by someone else, after checking every section is there and on-screen names stayed English.
 - `apply-reviews` writes native-speaker corrections downloaded from `/Help/Review` into the translation files.
 
 ## After deploying guide changes
