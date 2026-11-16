@@ -39,6 +39,10 @@ internal static class Program
 
 		// PageGuard's route decision (RouteAccess), shared with the Help Desk.
 		RouteAccessTests.Run();
+		Console.WriteLine();
+
+		// Help Desk: guide format, library, visibility, coverage, translation, voice, review.
+		HelpParserTests.Run();
 
 		return Check.Report("Total");
 	}
