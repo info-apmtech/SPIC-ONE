@@ -55,55 +55,6 @@
         }
     }
 
-        
-        // ============================================================
-        // PAGE PERMISSION RESOLUTION
-        // ============================================================
-
-        // Sales Audit child pages use the same page permission
-        // as the parent Sales Audit page.
-        //
-        // IMPORTANT:
-        // This does not bypass authorization.
-        // The user must have access to SalesAudit.
-        // API-level CSR-2 ownership and eligibility checks remain active.
-
-        var permissionKey = firstSegment.ToLowerInvariant() switch
-        {
-            // Sales Audit workflow
-            "auditoverview" => nameof(PagePermission.SalesAudit),
-            "salesplan" => nameof(PagePermission.SalesAudit),
-            "dealermapping" => nameof(PagePermission.SalesAudit),
-            "salesauditdetails" => nameof(PagePermission.SalesAudit),
-            "salestracking" => nameof(PagePermission.SalesAudit),
-            "planreview" => nameof(PagePermission.SalesAudit),
-            "salestrackinglist" => nameof(PagePermission.SalesAudit),
-            "periodendreview" => nameof(PagePermission.SalesAudit),
-            "requestextension" => nameof(PagePermission.SalesAudit),
-            "extensionrequestdetails" => nameof(PagePermission.SalesAudit), 
-            "extensionrequests" => nameof(PagePermission.SalesAudit),
-            "extensionstatusdrawer" => nameof(PagePermission.SalesAudit),
-            // Existing permission resolution for all other pages
-            _ => ShellNavigation.ResolvePermissionKey(firstSegment)
-        };
-
-        // Designation-only keys use the strict check; everything else CanAccess with the segment
-        // fallback. Guest House booking / My Bookings routes answer only to their own key (see
-        // ShellNavigation.IsRoutePermitted).
-        bool allowed = ShellNavigation.IsRoutePermitted(LoginState, permissionKey, firstSegment);
-
-        // Preserve existing authorization redirect.
-        if (!allowed && !isDirectorSchemeApproval)
-        {
-            Nav.NavigateTo(
-                LoginState.LandingPage,
-                replace: true
-            );
-
-            return;
-        }
-
-    }
     public void Dispose()
     {
         Nav.LocationChanged -= OnLocationChanged;

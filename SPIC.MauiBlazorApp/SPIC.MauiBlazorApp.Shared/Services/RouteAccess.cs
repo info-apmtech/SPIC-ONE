@@ -338,23 +338,19 @@ namespace SPIC.MauiBlazorApp.Shared.Services
                 "salestracking" => nameof(PagePermission.SalesAudit),
                 "planreview" => nameof(PagePermission.SalesAudit),
                 "salestrackinglist" => nameof(PagePermission.SalesAudit),
+                "periodendreview" => nameof(PagePermission.SalesAudit),
+                "requestextension" => nameof(PagePermission.SalesAudit),
+                "extensionrequestdetails" => nameof(PagePermission.SalesAudit),
+                "extensionrequests" => nameof(PagePermission.SalesAudit),
+                "extensionstatusdrawer" => nameof(PagePermission.SalesAudit),
                 // Existing permission resolution for all other pages
                 _ => ShellNavigation.ResolvePermissionKey(firstSegment)
             };
 
-            // Preserve existing designation-only permission checks.
-            bool allowed =
-                SPIC.MauiBlazorApp.Shared.Services.LoginState
-                    .DesignationOnlyPages.Contains(permissionKey)
-                ? LoginState.HasPageStrict(permissionKey)
-                : (
-                    LoginState.CanAccess(permissionKey)
-                    ||
-                    (
-                        permissionKey != firstSegment
-                        && LoginState.CanAccess(firstSegment)
-                    )
-                );
+            // Designation-only keys use the strict check; everything else CanAccess with the segment
+            // fallback. Guest House booking / My Bookings routes answer only to their own key (see
+            // ShellNavigation.IsRoutePermitted).
+            bool allowed = ShellNavigation.IsRoutePermitted(LoginState, permissionKey, firstSegment);
 
             // Preserve existing authorization redirect.
             if (!allowed && !isDirectorSchemeApproval)
