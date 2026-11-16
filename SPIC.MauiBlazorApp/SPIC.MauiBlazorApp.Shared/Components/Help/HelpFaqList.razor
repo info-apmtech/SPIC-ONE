@@ -1,0 +1,40 @@
+@* Problems and answers: tap a question to open its answer. *@
+@using SPIC.Core.Help
+
+@foreach (var f in HelpBlocks.Faq(Section, new List<string>()))
+{
+    var open = _open.Contains(f.Id);
+    <button type="button" class="hc-q @(open ? "is-open" : null)" aria-expanded="@(open ? "true" : "false")" @onclick="() => Toggle(f.Id)">
+        <span class="hc-q__i"><i class="bi bi-question-lg" aria-hidden="true"></i></span>
+        <span>@f.Question</span>
+        <i class="bi bi-chevron-down" aria-hidden="true"></i>
+    </button>
+    @if (open)
+    {
+        <div class="hc-a">@((MarkupString)Inline(f.Answer))</div>
+    }
+}
+
+@code {
+    [Parameter, EditorRequired] public HelpSection Section { get; set; } = default!;
+
+    private readonly HashSet<string> _open = new();
+
+    protected override void OnInitialized()
+    {
+        // The first answer starts open, as in the mockup.
+        var first = HelpBlocks.Faq(Section, new List<string>()).FirstOrDefault();
+        if (first is not null) _open.Add(first.Id);
+    }
+
+    private void Toggle(string id)
+    {
+        if (!_open.Remove(id)) _open.Add(id);
+    }
+
+    private static string Inline(string text)
+    {
+        var html = HelpMarkdown.ToHtml(text ?? string.Empty, string.Empty);
+        return html.StartsWith("<p>") && html.EndsWith("</p>") ? html[3..^4] : html;
+    }
+}

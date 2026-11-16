@@ -1,0 +1,143 @@
+@* One screen guide: the real screenshot with numbered markers, the matching steps, then the rest of
+   the guide text (tips, fields table, problems). Markers are placed in % so they stay on target at
+   any width; on a phone the phone picture is used when there is one. *@
+@using SPIC.Core.Help
+
+@{
+    var meta = View.Section.Screen ?? HelpScreenMeta.Empty;
+    var usePhone = Phone && meta.PhoneImage is not null;
+    var image = usePhone ? meta.PhoneImage : meta.Image ?? meta.PhoneImage;
+    var spots = usePhone ? meta.PhoneHotspots : (meta.Image is not null ? meta.Hotspots : meta.PhoneHotspots);
+    var active = spots.FirstOrDefault(h => h.N == _active);
+}
+
+<section class="hc-sg" id="@Anchor">
+    <div class="hc-sgh">
+        <div class="hc-sgh__n">@Number</div>
+        <div class="hc-sgh__t">
+            <h3>@View.Section.Title</h3>
+            @if (View.MachineTranslated) { <span class="hc-mt"><i class="bi bi-robot" aria-hidden="true"></i> Machine translated</span> }
+            else if (View.IsFallbackEnglish) { <span class="hc-mt"><i class="bi bi-translate" aria-hidden="true"></i> Shown in English</span> }
+        </div>
+        <div class="hc-sgh__acts">
+            @if (meta.Minutes > 0) { <span class="hc-chip"><i class="bi bi-clock" aria-hidden="true"></i> @meta.Minutes min</span> }
+            @if (meta.Tour.Count > 0)
+            {
+                @if (OpenHref is not null && !RecordOnly)
+                {
+                    <button type="button" class="hc-btn hc-btn--sm" @onclick="OnTour"><i class="bi bi-play-circle" aria-hidden="true"></i> Tour</button>
+                }
+                else
+                {
+                    <span class="hc-tournote"><i class="bi bi-info-circle" aria-hidden="true"></i> Open a record to take this tour</span>
+                }
+            }
+            @ListenContent
+            @if (OpenHref is { } href)
+            {
+                <a class="hc-btn hc-btn--pri hc-btn--sm" href="@href">Open screen <i class="bi bi-box-arrow-up-right" aria-hidden="true"></i></a>
+            }
+        </div>
+    </div>
+
+    <div class="hc-sb @(image is null ? "hc-sb--noimg" : null)">
+        @if (image is not null)
+        {
+            <div>
+                <div class="hc-frame">
+                    <div class="hc-fbar"><s></s><s></s><s></s><div class="hc-url">@(View.Section.Routes.FirstOrDefault() ?? string.Empty)</div></div>
+                    <div class="hc-shot">
+                        <img src="@($"{HelpSectionBody.ImageBase(View.Module)}/images/{image}")" alt="@View.Section.Title" loading="lazy" />
+                        @if (active is not null)
+                        {
+                            <div class="hc-ring" style="@Box(active)"></div>
+                        }
+                        @foreach (var h in spots)
+                        {
+                            var n = h.N;
+                            <button type="button" class="hc-hs @(n == _active ? "is-on" : null)" style="@Point(h)" @onclick="() => _active = n" aria-label="@($"Step {n}")">@n</button>
+                        }
+                    </div>
+                </div>
+            </div>
+        }
+        @if (_steps.Count > 0)
+        {
+            <div class="hc-steps">
+                @for (var i = 0; i < _steps.Count; i++)
+                {
+                    var n = i + 1;
+                    <button type="button" class="hc-step @(n == _active ? "is-on" : null)" @onclick="() => _active = n">
+                        <span class="hc-step__n">@n</span>
+                        <span>@((MarkupString)Inline(_steps[i]))</span>
+                    </button>
+                }
+            </div>
+        }
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(_rest))
+    {
+        <div class="hc-body">@((MarkupString)HelpMarkdown.ToHtml(_rest, HelpSectionBody.ImageBase(View.Module)))</div>
+    }
+</section>
+
+@code {
+    [Parameter, EditorRequired] public HelpSectionView View { get; set; } = default!;
+    [Parameter] public int Number { get; set; }
+    /// <summary>Phone layout (narrow page or the MAUI app): prefer the phone picture.</summary>
+    [Parameter] public bool Phone { get; set; }
+    [Parameter] public EventCallback OnTour { get; set; }
+    [Parameter] public RenderFragment? ListenContent { get; set; }
+
+    public string Anchor => $"hc-s-{View.Section.Id}";
+
+    private int _active = 1;
+    private List<string> _steps = new();
+    private string _rest = string.Empty;
+
+    /// <summary>The first route without parameters (a screen that opens on its own), or null.</summary>
+    private string? OpenHref => View.Section.Routes.FirstOrDefault(r => !HelpRoutes.HasParameters(r));
+
+    /// <summary>Every route needs a record id: the tour can only run from "?" on that record.</summary>
+    private bool RecordOnly => View.Section.Routes.Count > 0 && View.Section.Routes.All(HelpRoutes.HasParameters);
+
+    protected override void OnParametersSet()
+    {
+        _steps = HelpSteps.Of(View.Section.Body).ToList();
+        _rest = WithoutSteps(View.Section.Body);
+        if (_active > Math.Max(1, _steps.Count)) _active = 1;
+    }
+
+    private static string Box(HelpHotspot h) =>
+        FormattableString.Invariant($"left:{h.X}%;top:{h.Y}%;width:{h.W}%;height:{h.H}%");
+
+    private static string Point(HelpHotspot h) =>
+        FormattableString.Invariant($"left:{h.X}%;top:{h.Y}%");
+
+    // The body without its first numbered list (those steps are shown as cards).
+    private static string WithoutSteps(string body)
+    {
+        var lines = (body ?? string.Empty).Replace("\r\n", "\n").Split('\n');
+        var output = new List<string>();
+        var state = 0; // 0 before the list, 1 inside it, 2 after
+        foreach (var line in lines)
+        {
+            var numbered = System.Text.RegularExpressions.Regex.IsMatch(line, @"^\s*\d+\.\s+");
+            if (state == 0 && numbered) { state = 1; continue; }
+            if (state == 1)
+            {
+                if (numbered || line.Trim().Length == 0) continue;
+                state = 2;
+            }
+            output.Add(line);
+        }
+        return string.Join("\n", output).Trim();
+    }
+
+    private static string Inline(string text)
+    {
+        var html = HelpMarkdown.ToHtml(text ?? string.Empty, string.Empty);
+        return html.StartsWith("<p>") && html.EndsWith("</p>") ? html[3..^4] : html;
+    }
+}

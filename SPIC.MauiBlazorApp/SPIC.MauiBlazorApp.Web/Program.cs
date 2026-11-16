@@ -79,6 +79,7 @@ builder.Services.AddSingleton(SPIC.Core.Help.HelpLibrary.FromEmbedded());
 builder.Services.AddScoped<HelpCatalog>();
 builder.Services.AddScoped<HelpLanguageState>();
 builder.Services.AddScoped<HelpProgressState>();
+builder.Services.AddScoped<HelpTourState>();
 builder.Services.AddScoped<HelpPanelState>();
 builder.Services.AddScoped<HelpApi>();
 builder.Services.AddScoped<JmdoTrackingClientLoop>();
