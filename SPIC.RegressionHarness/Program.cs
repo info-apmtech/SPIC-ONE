@@ -44,6 +44,7 @@ internal static class Program
 		// Help Desk: guide format, library, visibility, coverage, translation, voice, review.
 		HelpParserTests.Run();
 		HelpLibraryTests.Run();
+		HelpCatalogTests.Run();
 
 		return Check.Report("Total");
 	}
