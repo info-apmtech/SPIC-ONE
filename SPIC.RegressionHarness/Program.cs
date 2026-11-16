@@ -35,6 +35,10 @@ internal static class Program
 		Console.WriteLine();
 		MultiRegionHqTests.Run();
 		SessionClockTests.Run();
+		Console.WriteLine();
+
+		// PageGuard's route decision (RouteAccess), shared with the Help Desk.
+		RouteAccessTests.Run();
 
 		return Check.Report("Total");
 	}
