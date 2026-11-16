@@ -268,11 +268,28 @@ namespace SpicAPI.Controllers
                 else if (role == "MDO" || role == "JMDO" || role == "MO")
                 {
                     var hqIds = ClaimIntList("spic:hq_ids");
+                    var hasMoState = int.TryParse(stateClaim, out var moStateId) && moStateId > 0;
+
+                    // Existing/imported dealer rows can predate HQ assignment and carry HQ 0.
+                    // They are not owned by any other HQ, so keep them visible to an MO only
+                    // inside the MO's own State. A dealer explicitly assigned to a different
+                    // (non-zero) HQ is still excluded.
                     if (hqIds != null)
-                        query = hqIds.Count > 0 ? query.Where(x => hqIds.Contains(x.HQ)) : query.Where(x => false);
+                    {
+                        if (hqIds.Count == 0)
+                            query = query.Where(x => false);
+                        else
+                            query = hasMoState
+                                ? query.Where(x => hqIds.Contains(x.HQ) || (x.HQ == 0 && x.StateId == moStateId))
+                                : query.Where(x => hqIds.Contains(x.HQ));
+                    }
                     else if (int.TryParse(hqClaim, out var claimHqId) && claimHqId > 0)
-                        query = query.Where(x => x.HQ == claimHqId);
-                    else if (int.TryParse(stateClaim, out var moStateId) && moStateId > 0)
+                    {
+                        query = hasMoState
+                            ? query.Where(x => x.HQ == claimHqId || (x.HQ == 0 && x.StateId == moStateId))
+                            : query.Where(x => x.HQ == claimHqId);
+                    }
+                    else if (hasMoState)
                         query = query.Where(x => x.StateId == moStateId);
                     else
                         query = query.Where(x => false);
