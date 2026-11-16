@@ -40,6 +40,11 @@
         </div>
     </div>
 
+    @if (!string.IsNullOrWhiteSpace(_intro))
+    {
+        <div class="hc-body hc-intro">@((MarkupString)HelpMarkdown.ToHtml(_intro, HelpSectionBody.ImageBase(View.Module)))</div>
+    }
+
     <div class="hc-sb @(image is null ? "hc-sb--noimg" : null)">
         @if (image is not null)
         {
@@ -94,6 +99,7 @@
 
     private int _active = 1;
     private List<string> _steps = new();
+    private string _intro = string.Empty;
     private string _rest = string.Empty;
 
     /// <summary>The first route without parameters (a screen that opens on its own), or null.</summary>
@@ -105,7 +111,7 @@
     protected override void OnParametersSet()
     {
         _steps = HelpSteps.Of(View.Section.Body).ToList();
-        _rest = WithoutSteps(View.Section.Body);
+        (_intro, _rest) = AroundSteps(View.Section.Body);
         if (_active > Math.Max(1, _steps.Count)) _active = 1;
     }
 
@@ -115,11 +121,13 @@
     private static string Point(HelpHotspot h) =>
         FormattableString.Invariant($"left:{h.X}%;top:{h.Y}%");
 
-    // The body without its first numbered list (those steps are shown as cards).
-    private static string WithoutSteps(string body)
+    // The text before the first numbered list (the intro) and after it (tips, fields, problems);
+    // the list itself is shown as step cards.
+    private static (string Intro, string After) AroundSteps(string body)
     {
         var lines = (body ?? string.Empty).Replace("\r\n", "\n").Split('\n');
-        var output = new List<string>();
+        var intro = new List<string>();
+        var rest = new List<string>();
         var state = 0; // 0 before the list, 1 inside it, 2 after
         foreach (var line in lines)
         {
@@ -130,9 +138,9 @@
                 if (numbered || line.Trim().Length == 0) continue;
                 state = 2;
             }
-            output.Add(line);
+            (state == 0 ? intro : rest).Add(line);
         }
-        return string.Join("\n", output).Trim();
+        return (string.Join("\n", intro).Trim(), string.Join("\n", rest).Trim());
     }
 
     private static string Inline(string text)

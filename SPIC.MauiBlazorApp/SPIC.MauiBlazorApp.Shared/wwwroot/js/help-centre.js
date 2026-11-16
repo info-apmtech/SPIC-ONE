@@ -137,8 +137,13 @@ window.helpCentre = (function () {
             card.classList.remove('is-center');
             const cw = card.offsetWidth, ch = card.offsetHeight;
             let top = r.bottom + 18;
-            if (top + ch > window.innerHeight - 12) top = Math.max(12, r.top - ch - 18);
-            const left = Math.min(Math.max(r.left, 12), window.innerWidth - cw - 12);
+            let left = Math.min(Math.max(r.left, 12), window.innerWidth - cw - 12);
+            if (top + ch > window.innerHeight - 12) top = r.top - ch - 18;
+            if (top < 12) {
+                // The target fills the screen (a long table): put the card in the bottom corner.
+                top = window.innerHeight - ch - 16;
+                left = window.innerWidth - cw - 16;
+            }
             card.style.top = top + 'px';
             card.style.left = left + 'px';
             card.focus();
