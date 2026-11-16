@@ -263,9 +263,12 @@ public static class ShellNavigation
             // Same conversion as SDWADashboard: Dealer role bypass -> PagePermission grant.
             Rule = s => s.CanSeeMenu(PagePermission.WelfareSchemes)
         },
-        new("GuestHouse", "Guest House", "bi-building", "/GuestHouse", nameof(PagePermission.GuestHouse))
+        // Book a Room is its own permission (GuestHouseBooking). PagePermission.GuestHouse now belongs only to
+        // Guest House Master (the GuestHouseMaster entry below). Every booking route alias in RouteAliases
+        // resolves through THIS entry, so the whole booking flow follows this one key.
+        new("GuestHouse", "Book a Room", "bi-building", "/GuestHouse", nameof(PagePermission.GuestHouseBooking))
         {
-            ShortLabel = "Guest House", Group = GroupGuestHouse
+            ShortLabel = "Book a Room", Group = GroupGuestHouse
         },
         new("MyBookings", "My Bookings", "bi-calendar-check-fill", "/MyBookings", nameof(PagePermission.MyBookings))
         {
@@ -644,7 +647,7 @@ public static class ShellNavigation
         ["WellfareApplication"] = "WelfareSchemes",
         ["SchemeOverview"] = "WelfareSchemes",
         ["Schemes"] = "WelfareSchemes",
-        // guest house booking flow
+        // guest house booking flow: resolves via the "GuestHouse" entry to PagePermission.GuestHouseBooking
         ["GuestHouseBooking"] = "GuestHouse",
         ["Rooms"] = "GuestHouse",
         ["RoomDetails"] = "GuestHouse",
@@ -652,7 +655,7 @@ public static class ShellNavigation
         ["GuestBooking"] = "GuestHouse",
         ["Payment"] = "GuestHouse",
         ["BookingPreview"] = "GuestHouse",
-        // my bookings
+        // my bookings and the owner's own cancellation: PagePermission.MyBookings
         ["BookingDetails"] = "MyBookings",
         ["CancelBooking"] = "MyBookings",
         ["CancelledBookingDetails"] = "MyBookings",
@@ -736,6 +739,33 @@ public static class ShellNavigation
     /// (e.g. CancelBooking -> MyBookings, RefundStatus -> MyBookings) and returns that
     /// parent destination's PermissionKey, falling back to the segment itself.
     /// </summary>
+    /// <summary>
+    /// The route-level decision PageGuard makes once the route's permission key is resolved:
+    /// designation-only keys use the strict designation check, every other key uses CanAccess, with a
+    /// legacy fallback that also tries the raw first segment as a key.
+    /// <para>
+    /// The Guest House booking flow (<see cref="PagePermission.GuestHouseBooking"/>) and My Bookings
+    /// (<see cref="PagePermission.MyBookings"/>) answer ONLY to their own key: the fallback would
+    /// otherwise test the segment "GuestHouse" - the Guest House MASTER key - and open the booking
+    /// routes for a designation that holds only the Master permission.
+    /// </para>
+    /// </summary>
+    public static bool IsRoutePermitted(LoginState state, string permissionKey, string firstSegment)
+    {
+        if (LoginState.DesignationOnlyPages.Contains(permissionKey))
+            return state.HasPageStrict(permissionKey);
+
+        if (state.CanAccess(permissionKey))
+            return true;
+
+        bool ownKeyOnly = permissionKey == nameof(PagePermission.GuestHouseBooking)
+            || permissionKey == nameof(PagePermission.MyBookings);
+
+        return !ownKeyOnly
+            && permissionKey != firstSegment
+            && state.CanAccess(firstSegment);
+    }
+
     public static string ResolvePermissionKey(string segment)
     {
         if (string.IsNullOrWhiteSpace(segment)) return string.Empty;
