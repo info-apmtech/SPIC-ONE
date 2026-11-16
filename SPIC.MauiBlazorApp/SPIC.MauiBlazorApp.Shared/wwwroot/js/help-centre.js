@@ -87,9 +87,12 @@ window.helpCentre = (function () {
             entries.forEach(en => {
                 const id = en.target.id;
                 if (done.has(id)) return;
-                if (en.isIntersecting) {
+                clearTimeout(timers[id]);
+                // Counts only while a good part of the section (or of the screen) shows, for ms in a row.
+                const seen = en.intersectionRatio >= 0.35 || en.intersectionRect.height >= window.innerHeight * 0.5;
+                if (en.isIntersecting && seen) {
                     timers[id] = setTimeout(() => { done.add(id); dotnetRef.invokeMethodAsync('OnSectionRead', id); }, ms);
-                } else clearTimeout(timers[id]);
+                }
             });
         }, { threshold: 0.35 });
         ids.map(i => document.getElementById(i)).filter(Boolean).forEach(e => io.observe(e));
@@ -100,9 +103,10 @@ window.helpCentre = (function () {
         if (observers[key]) { try { observers[key](); } catch (e) { } delete observers[key]; }
     }
 
-    function scrollToId(id) {
+    // instant: a deep link jumps straight there; a menu tap scrolls smoothly.
+    function scrollToId(id, instant) {
         const el = document.getElementById(id);
-        if (el) el.scrollIntoView({ behavior: reducedMotion() ? 'auto' : 'smooth', block: 'start' });
+        if (el) el.scrollIntoView({ behavior: instant || reducedMotion() ? 'auto' : 'smooth', block: 'start' });
     }
 
     function isNarrow() {
@@ -173,6 +177,9 @@ window.helpCentre = (function () {
     function tourBindKeys(dotnetRef) {
         tourUnbindKeys();
         tourKeys = e => {
+            // Arrow keys inside the language list or a text box belong to that control.
+            const tag = (e.target && e.target.tagName || '').toLowerCase();
+            if (e.key !== 'Escape' && (tag === 'select' || tag === 'input' || tag === 'textarea')) return;
             if (e.key === 'Escape') dotnetRef.invokeMethodAsync('OnTourEnd');
             else if (e.key === 'ArrowRight') dotnetRef.invokeMethodAsync('OnTourNext');
             else if (e.key === 'ArrowLeft') dotnetRef.invokeMethodAsync('OnTourBack');

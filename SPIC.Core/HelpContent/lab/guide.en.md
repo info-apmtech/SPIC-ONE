@@ -234,7 +234,7 @@ tour: 1 > [data-help=lab-at-cards] | 2 > [data-help=lab-at-search] | 3 > [data-h
 screenshot: analysis-tracking.png
 hotspots: 1 @ 3.7,13.6,92.5,21.5 | 2 @ 16.1,39.1,78.2,5.3 | 3 @ 76.5,39.1,17.8,5.3 | 4 @ 5.7,46,88.6,54 | 5 @ 5.7,46,88.6,54
 screenshot-phone: analysis-tracking.phone.jpg
-hotspots-phone: 1 @ 6.2,7.4,87.7,27.5 | 2 @ 10,39.1,80,6.8 | 3 @ 10,42.8,80,3 | 4 @ 2,2,8,4 | 5 @ 2,2,8,4
+hotspots-phone: 1 @ 6.2,7.4,87.7,27.5 | 2 @ 10,39.1,80,6.8 | 3 @ 10,42.8,80,3 | 4 @ - | 5 @ -
 
 **What this screen is for**
 The **Analysis Tracking** screen lists every batch so you can follow it from creation to completed analysis and spot batches that are late.
@@ -341,7 +341,7 @@ tour: 1 > [data-help=lab-bl-cards] | 2 > [data-help=lab-bl-filters] | 3 > [data-
 screenshot: analyst-batch-list.png
 hotspots: 1 @ 2.2,9.8,95.5,17.9 | 2 @ 2.2,30.1,95.5,34.9 | 3 @ 75.2,69.6,20.6,4.8 | 4 @ 4.2,76.1,91.6,23.9
 screenshot-phone: analyst-batch-list.phone.jpg
-hotspots-phone: 1 @ 3.1,5.8,93.8,16.9 | 2 @ 3.1,23.7,93.8,3.5 | 3 @ 6.9,31.2,86.2,3 | 4 @ 2,2,8,4
+hotspots-phone: 1 @ 3.1,5.8,93.8,16.9 | 2 @ 3.1,23.7,93.8,3.5 | 3 @ 6.9,31.2,86.2,3 | 4 @ -
 
 **What this screen is for**
 The **Test Value Entry** screen lists the batches assigned to you. Start or continue entering test values from here.

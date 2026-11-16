@@ -159,10 +159,26 @@ static async Task<int> Translate(string[] args)
 			else if (await translator.TranslateAsync(lang, library.GlossaryFor(lang.Code), en.Title, string.Empty) is { } gt)
 				result[HelpGuideWriter.GuideTitleKey] = gt;
 
+			// Category and note: keep an existing translation with the hash it was made from (stale stays stale).
+			var hashes = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+			if (existing is not null && (!string.IsNullOrWhiteSpace(existing.Category) || !string.IsNullOrWhiteSpace(existing.Note)))
+			{
+				if (!string.IsNullOrWhiteSpace(existing.Category)) result[HelpGuideWriter.CategoryKey] = (existing.Category, string.Empty, HelpConfidence.Ok);
+				if (!string.IsNullOrWhiteSpace(existing.Note)) result[HelpGuideWriter.NoteKey] = (existing.Note, string.Empty, HelpConfidence.Ok);
+				hashes[HelpGuideWriter.MetaKey] = existing.MetaSourceHash ?? "missing";
+			}
+
 			int ok = 0, low = 0;
 			foreach (var id in todo)
 			{
 				var s = en.Sections.First(x => x.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
+				if (s.Kind != "screen")
+				{
+					// Blocks have layout lines the model must not change: translate them outside and use 'import'.
+					Console.WriteLine($"    {id}: {s.Kind} block, skipped (translate it outside and use 'import')");
+					failures.Add($"{module}/{lang.Code}/{id} ({s.Kind} block: use import)");
+					continue;
+				}
 				Console.WriteLine($"    {id}");
 				var translated = await translator.TranslateAsync(lang, library.GlossaryFor(lang.Code), s.Title, s.Body);
 				if (translated is null) { failures.Add($"{module}/{lang.Code}/{id}"); continue; }
@@ -170,7 +186,10 @@ static async Task<int> Translate(string[] args)
 				if (translated.Value.Confidence == HelpConfidence.Low) low++; else ok++;
 			}
 
-			File.WriteAllText(Repo.GuidePath(module, lang.Code), HelpGuideWriter.Write(en, lang.Code, result), new System.Text.UTF8Encoding(false));
+			// Sections kept from the existing file keep their own source hash.
+			foreach (var t in existing?.Sections ?? Array.Empty<HelpSection>())
+				if (!todo.Contains(t.Id, StringComparer.OrdinalIgnoreCase)) hashes[t.Id] = t.SourceHash;
+			File.WriteAllText(Repo.GuidePath(module, lang.Code), HelpGuideWriter.Write(en, lang.Code, result, hashes), new System.Text.UTF8Encoding(false));
 			Console.WriteLine($"  wrote guide.{lang.Code}.md: {ok} ok, {low} low confidence, {todo.Count - ok - low} failed");
 		}
 	}

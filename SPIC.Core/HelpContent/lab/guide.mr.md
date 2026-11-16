@@ -4,36 +4,175 @@ title: SAS माती परीक्षण लॅब
 icon: bi-eyedropper
 order: 60
 language: mr
+category: माती परीक्षण
+note: लॅबचा प्रवाह, स्थिती आणि मार्गदर्शक टूरसह नवीन रूप
+meta-source-hash: 3e2288cb66a7506f
 ---
 
 ::: section overview
-title: माती परीक्षण लॅब कशी चालते
-routes: /Lab
+title: हा मॉड्युल तुमच्यासाठी काय करतो
+routes: 
 for: 
 roles: 
 designations: 
-source-hash: d196c24e61d998d8
+kind: overview
+source-hash: f1de7a25d0e196a5
 confidence: ok
 
-**हा मॉड्युल कशासाठी आहे**
 लॅब पोर्टल मातीच्या आणि पाण्याच्या प्रत्येक नमुन्याचा मागोवा ठेवते: नमुना लॅबला पोहोचल्याच्या दिवसापासून शेतकऱ्याला रिपोर्ट मिळेपर्यंत. प्रत्येक व्यक्तीला फक्त तिच्या कामाच्या स्क्रीन दिसतात.
 
-## एका consignment चा प्रवास
+- receive | icon: bi-box-arrow-in-down | color: #0d9488
+  title: घ्या आणि बॅच बनवा
+  text: कोऑर्डिनेटर प्रत्येक पार्सल घेतात आणि नमुन्यांच्या बॅच बनवून ॲनालिस्टला देतात.
+- test | icon: bi-eyedropper | color: #7c3aed
+  title: तपासा आणि आकडे टाका
+  text: ॲनालिस्ट तपासणीचे आकडे टाइप करतात. निकाल आणि सल्ला सिस्टम आपोआप काढते.
+- report | icon: bi-file-earmark-pdf | color: #16a34a
+  title: अनेक भाषांमध्ये रिपोर्ट
+  text: पूर्ण झालेल्या बॅचमधून प्रत्येक नमुन्यासाठी एक रिपोर्ट मिळतो, इंग्रजी आणि भारतीय भाषांमध्ये.
+:::
 
-1. फील्ड कर्मचारी शेतकऱ्यांकडून नमुने गोळा करतात आणि ते **consignment** (पार्सल) म्हणून कुरिअरने लॅबला पाठवतात. रस्त्यात असताना त्यावर **In Transit** दिसते.
-2. पार्सल पोहोचल्यावर लॅब कोऑर्डिनेटर **Mark received** दाबतात. consignment **Batch Pending** होते.
-3. कोऑर्डिनेटर एक किंवा जास्त Batch Pending consignment एका **batch** (बॅच) मध्ये टाकतात आणि ती एका लॅब ॲनालिस्टला देतात. बॅच **Taken for Analysis** होते.
-4. ॲनालिस्ट बॅच उघडतात, प्रत्येक नमुन्याचे तपासणीचे आकडे टाकतात आणि **Submit Values** दाबतात. सिस्टम निकाल, स्थिती आणि शिफारस आपोआप काढते.
-5. सगळे नमुने सबमिट झाल्यावर कोऑर्डिनेटर **Complete Batch** दाबतात. यामुळे आकडे लॉक होतात आणि प्रत्येक नमुन्यासाठी एक रिपोर्ट तयार होतो.
-6. रिपोर्ट PDF किंवा Excel मध्ये, इंग्रजी आणि भारतीय भाषांमध्ये डाउनलोड करून शेतकऱ्याला देता येतात. शेतकरीही ॲपमध्ये रिपोर्ट डाउनलोड करू शकतो.
+::: section flow
+title: consignment लॅबमध्ये कशी पुढे जाते
+routes: 
+for: 
+roles: 
+designations: 
+kind: flow
+source-hash: 998b226207ae8a8b
+confidence: ok
 
-## कोण काय करते
+प्रत्येक ओळ एक रोल आहे आणि प्रत्येक बॉक्स एक टप्पा आहे. तिथे काय होते ते पाहण्यासाठी टप्पा टॅप करा.
 
-- **Lab coordinator**: consignment घेतात, बॅच बनवतात, ॲनालिस्ट नेमतात, बॅच पूर्ण करतात, लॅब रिपोर्ट डाउनलोड करतात.
-- **Lab analyst**: त्यांना दिलेल्या बॅचसाठी तपासणीचे आकडे टाकतात आणि नमुन्यांचे रिपोर्ट डाउनलोड करतात.
-- **Lab admin**: **Lab Tracking** वर सगळ्या बॅच पाहतात. या स्क्रीनवर फक्त पाहता येते.
+- field | type: lane | color: #64748b | roles: MDO, JMDO
+  title: फील्ड कर्मचारी
+  sub: MDO · JMDO
+- coordinator | type: lane | color: #0d9488
+  title: लॅब कोऑर्डिनेटर
+  sub: घेतात आणि बॅच बनवतात
+- analyst | type: lane | color: #7c3aed
+  title: लॅब ॲनालिस्ट
+  sub: तपासणीचे आकडे टाकतात
+- farmer | type: lane | color: #16a34a | roles: Farmer
+  title: शेतकरी
+  sub: रिपोर्ट मिळतो
+- send | lane: field | col: 1 | icon: bi-truck | color: #64748b | next: receive
+  title: पार्सल पाठवा
+  status: In Transit
+  text: फील्ड कर्मचारी नमुने consignment (पार्सल) म्हणून कुरिअरने लॅबला पाठवतात.
+- receive | lane: coordinator | col: 2 | icon: bi-box-arrow-in-down | color: #0d9488 | next: batch | screen: receive-consignments
+  title: मिळाले अशी नोंद करा
+  status: Batch Pending
+  text: पार्सल पोहोचल्यावर कोऑर्डिनेटर **Mark received** दाबतात.
+- batch | lane: coordinator | col: 3 | icon: bi-collection | color: #ea580c | next: test | screen: create-batch
+  title: बॅच बनवा
+  status: Taken for Analysis
+  text: कोऑर्डिनेटर consignment एकत्र करून बॅच बनवतात आणि ती एका ॲनालिस्टला देतात.
+- test | lane: analyst | col: 4 | icon: bi-eyedropper | color: #7c3aed | next: complete | screen: enter-test-values
+  title: तपासणीचे आकडे टाका
+  status: Auto Result Ready
+  text: ॲनालिस्ट प्रत्येक नमुन्याचे आकडे टाइप करतात आणि **Submit Values** दाबतात. निकाल, स्थिती आणि सल्ला आपोआप भरतात.
+- complete | lane: coordinator | col: 5 | icon: bi-patch-check | color: #2563eb | next: report | screen: batch-details
+  title: बॅच पूर्ण करा
+  status: Report Generated
+  text: कोऑर्डिनेटर **Complete Batch** दाबतात. आकडे लॉक होतात आणि प्रत्येक नमुन्यासाठी एक रिपोर्ट तयार होतो.
+- report | lane: farmer | col: 6 | icon: bi-file-earmark-arrow-down | color: #16a34a
+  title: शेतकऱ्याला रिपोर्ट
+  status: Completed
+  text: शेतकऱ्यासाठी रिपोर्ट PDF किंवा Excel म्हणून डाउनलोड केला जातो. शेतकरीही तो ॲपमध्ये डाउनलोड करू शकतो.
+:::
 
-> तुमच्या पदामध्ये (designation) लॅब पेजेस असतील तरच लॅबच्या स्क्रीन उघडतात. Admin ला सुद्धा हे लागते. लॅबचा मेनू दिसत नसेल तर तुमच्या ॲडमिनिस्ट्रेटरला विचारा.
+::: section statuses
+title: तुम्हाला दिसणारी प्रत्येक स्थिती
+routes: 
+for: 
+roles: 
+designations: 
+kind: statuses
+source-hash: 670249fe2e3bdb4d
+confidence: ok
+
+- in-transit | color: #64748b
+  label: In Transit
+  text: पार्सल लॅबकडे येत आहे.
+- batch-pending | color: #d97706
+  label: Batch Pending
+  text: मिळाले आहे, बॅचमध्ये टाकण्याची वाट पाहत आहे.
+- batch-created | color: #0891b2
+  label: Batch Created
+  text: बॅचमध्ये आहे, अजून ॲनालिस्ट नेमलेला नाही.
+- taken | color: #ea580c
+  label: Taken for Analysis
+  text: ॲनालिस्टला दिले आहे.
+- pending-entry | color: #d97706
+  label: Pending Entry
+  text: ॲनालिस्टने अजून आकडे टाकलेले नाहीत.
+- in-progress | color: #7c3aed
+  label: In Progress
+  text: काही आकडे सेव्ह झाले आहेत.
+- auto-result | color: #2563eb
+  label: Auto Result Ready
+  text: सगळे आकडे सबमिट झाले; निकाल काढले गेले आहेत.
+- report | color: #16a34a
+  label: Report Generated
+  text: बॅच पूर्ण झाली आणि रिपोर्ट तयार आहेत.
+- delayed | color: #dc2626
+  label: Delayed
+  text: 5 दिवसांपेक्षा जास्त झाले, तरी तपासणी पूर्ण झाली नाही.
+:::
+
+::: section roles
+title: कोण काय करते
+routes: 
+for: 
+roles: 
+designations: 
+kind: roles
+source-hash: a82220da9f08df6e
+confidence: ok
+
+तुमचा रोल जुळला की तुमचे कार्ड ठळक दिसते.
+
+- coordinator | color: #0d9488
+  title: लॅब कोऑर्डिनेटर
+  - consignment घ्या
+  - बॅच बनवा आणि ॲनालिस्ट नेमा
+  - बॅच पूर्ण करा आणि रिपोर्ट डाउनलोड करा
+- analyst | color: #7c3aed
+  title: लॅब ॲनालिस्ट
+  - तुमच्या बॅचसाठी तपासणीचे आकडे टाका
+  - नमुन्यांचे रिपोर्ट डाउनलोड करा
+- admin | color: #2563eb | roles: Admin
+  title: लॅब ॲडमिन
+  - Lab Tracking वर सगळ्या बॅच पाहा
+  - फक्त पाहता येते
+- field | color: #64748b | roles: MDO, JMDO
+  title: फील्ड कर्मचारी
+  - नमुने लॅबला पाठवा
+:::
+
+::: section faq
+title: अडचणी आणि उत्तरे
+routes: 
+for: 
+roles: 
+designations: 
+kind: faq
+source-hash: d8c921211d44aab6
+confidence: ok
+
+- no-lab-menu | popular: true
+  q: मला लॅबचा मेनू दिसत नाही
+  a: तुमच्या पदामध्ये (designation) लॅब पेजेस असतील तरच लॅबच्या स्क्रीन उघडतात. Admin ला सुद्धा हे लागते. तुमच्या ॲडमिनिस्ट्रेटरला विचारा.
+- no-receive
+  q: Mark received बटण दिसत नाही
+  a: फक्त कोऑर्डिनेटरच consignment घेऊ शकतात, आणि ते सुद्धा फक्त **In Transit** असलेल्या.
+- delayed | popular: true
+  q: ॲनालिस्टने काम संपवले तरी बॅचवर Delayed दिसते
+  a: सगळे नमुने सबमिट होऊन तपासणी पूर्ण होईपर्यंत ती Delayed च राहते.
+- edit-values
+  q: सबमिट केल्यावर मी आकडा बदलू शकतो का?
+  a: हो. नमुन्यावर **Edit Values** दाबा. बॅच पूर्ण होईपर्यंतच हे चालते.
 :::
 
 ::: section coordinator-dashboard
@@ -42,13 +181,14 @@ routes: /Lab
 for: 
 roles: 
 designations: 
-source-hash: 17d85f22de7e96da
+screenshot: coordinator-dashboard.png
+screenshot-phone: coordinator-dashboard.phone.jpg
+minutes: 1
+source-hash: edeeb0d1e27dd744
 confidence: ok
 
 **ही स्क्रीन कशासाठी आहे**
 **Lab Coordinator Dashboard** वर लॅबचे थोडक्यात चित्र दिसते: किती consignment आल्या, किती अजून बॅचची वाट पाहत आहेत आणि तपासणी किती पुढे गेली आहे. कोऑर्डिनेटरनी **Lab** उघडले की ॲप हा डॅशबोर्ड दाखवते. ॲनालिस्टना त्याऐवजी त्यांच्या स्वतःच्या डॅशबोर्डवर नेले जाते.
-
-## पायऱ्या
 
 1. वरची कार्डे पाहा: **Total Consignments Received**, **Pending Batch Creation**, **Total Batches Created**, **Taken for Analysis**, **Analysis Completed**, **Completed Batches** आणि **Reports Generated**.
 2. **Recent Consignments** टेबलमध्ये शेवटच्या पाच consignment त्यांच्या **Status** सह (**Batch Pending** किंवा **Batch Created**) दिसतात.
@@ -70,13 +210,14 @@ routes: /Lab/Consignments, /Lab/Consignments/{id}
 for: 
 roles: 
 designations: 
-source-hash: fc856d94c96b8437
+screenshot: receive-consignments.png
+screenshot-phone: receive-consignments.phone.jpg
+minutes: 2
+source-hash: 93cb533d61543543
 confidence: ok
 
 **ही स्क्रीन कशासाठी आहे**
 **Consignment Details** स्क्रीनवर लॅबला पाठवलेल्या सगळ्या consignment दिसतात. पार्सल मिळाले अशी नोंद करण्यासाठी आणि त्यात काय आहे ते तपासण्यासाठी ही स्क्रीन वापरा.
-
-## पायऱ्या
 
 1. वरची कार्डे पाहा: **Total Consignments**, **Pending Batch Creation**, **Batched Consignments**, **Water Samples** आणि **Soil Samples**.
 2. consignment शोधण्यासाठी सर्च बॉक्समध्ये consignment नंबर किंवा AWB नंबर टाइप करा, किंवा **All Statuses** मध्ये एक स्थिती निवडा.
@@ -101,13 +242,12 @@ routes: /Lab/Consignments, /Lab/Consignments/{id}
 for: 
 roles: 
 designations: 
-source-hash: 90ca666972940c84
+minutes: 2
+source-hash: dcc40dda2df92781
 confidence: ok
 
 **ही स्क्रीन कशासाठी आहे**
 बॅच म्हणजे एक ॲनालिस्ट एकत्र तपासतो अशा नमुन्यांचा गट. एका बॅचमध्ये अनेक consignment असू शकतात. तुम्ही बॅच **Consignment Details** लिस्टमधून बनवता.
-
-## पायऱ्या
 
 1. **Consignment Details** उघडा. बॅचची वाट पाहणाऱ्या consignment च पाहण्यासाठी **All Statuses** मध्ये **Batch Pending** निवडा.
 2. बॅचमध्ये हव्या असलेल्या प्रत्येक consignment च्या सुरुवातीच्या बॉक्सवर टिक करा. सर्वात वरचा बॉक्स पेजवरच्या सगळ्या Batch Pending ओळींवर टिक करतो.
@@ -136,23 +276,31 @@ routes: /Lab/Analysis
 for: 
 roles: 
 designations: 
-source-hash: eb674502e680b760
+screenshot: analysis-tracking.png
+hotspots: 1 @ 3.7,13.6,92.5,21.5 | 2 @ 16.1,39.1,78.2,5.3 | 3 @ 76.5,39.1,17.8,5.3 | 4 @ 5.7,46,88.6,54 | 5 @ 5.7,46,88.6,54
+screenshot-phone: analysis-tracking.phone.jpg
+hotspots-phone: 1 @ 6.2,7.4,87.7,27.5 | 2 @ 10,39.1,80,6.8 | 3 @ 10,42.8,80,3 | 4 @ 2,2,8,4 | 5 @ 2,2,8,4
+tour: 1 > [data-help=lab-at-cards] | 2 > [data-help=lab-at-search] | 3 > [data-help=lab-at-status] | 4 > [data-help=lab-at-table] | 5 > [data-help=lab-at-table]
+minutes: 2
+source-hash: 38d1f11b380940ea
 confidence: ok
 
 **ही स्क्रीन कशासाठी आहे**
 **Analysis Tracking** स्क्रीनवर सगळ्या बॅच दिसतात. त्यामुळे बॅच बनल्यापासून तपासणी पूर्ण होईपर्यंत तिचा मागोवा घेता येतो आणि उशीर झालेल्या बॅच ओळखता येतात.
 
-## पायऱ्या
-
 1. वरची कार्डे पाहा: **Total Batches**, **Created**, **Taken for Analysis**, **Analysis Completed**, **Completed** आणि **Delayed Analysis**.
 2. सर्च बॉक्समध्ये बॅच नंबर, consignment नंबर किंवा ॲनालिस्टचे नाव टाइप करा.
 3. **All Statuses** मध्ये स्थिती निवडा. उशीर झालेल्या बॅचच पाहण्यासाठी **Delayed** निवडा.
-4. **Analysis Days** कॉलम वाचा:
-- **Pending** (पिवळा): तपासणी सुरू झालेली नाही.
-- दिवसांचा हिरवा आकडा: तपासणी वेळेवर चालू आहे.
-- दिवसांचा लाल आकडा: बॅचला उशीर झाला आहे (साधारणपणे 5 दिवसांपेक्षा जास्त झाले आणि पूर्ण झाली नाही).
-5. **Batch Details** उघडण्यासाठी बॅच नंबर किंवा डोळ्याचा आयकॉन टॅप करा.
-6. जास्त बॅच पाहण्यासाठी खालचे पेज नंबर वापरा, किंवा प्रत्येक पेजवर किती ओळी दिसाव्यात ते बदला.
+4. कोणत्या बॅच वेळेवर आहेत ते पाहण्यासाठी **Analysis Days** कॉलम वाचा (खालचे टेबल पाहा).
+5. **Batch Details** उघडण्यासाठी बॅच नंबर किंवा डोळ्याचा आयकॉन टॅप करा. जास्त बॅच पाहण्यासाठी खालचे पेज नंबर वापरा.
+
+## Analysis Days चा अर्थ
+
+| काय दिसते | अर्थ |
+|---|---|
+| **Pending** (पिवळा) | तपासणी सुरू झालेली नाही. |
+| दिवसांचा हिरवा आकडा | तपासणी वेळेवर चालू आहे. |
+| दिवसांचा लाल आकडा | बॅचला उशीर झाला आहे (साधारणपणे 5 दिवसांपेक्षा जास्त झाले आणि पूर्ण झाली नाही). |
 
 ## नेहमीच्या अडचणी
 
@@ -166,13 +314,12 @@ routes: /Lab/Analysis/{id}
 for: 
 roles: 
 designations: 
-source-hash: ad50ad4baaed5137
+minutes: 2
+source-hash: 16c6bd2291162e28
 confidence: ok
 
 **ही स्क्रीन कशासाठी आहे**
 **Batch Details** स्क्रीनवर एका बॅचची सगळी माहिती दिसते: तिचे नमुने, तपासणीचे घटक (parameters), कागदपत्रे आणि इतिहास. कोऑर्डिनेटर इथेच ॲनालिस्ट नेमतात आणि बॅच पूर्ण करतात.
-
-## पायऱ्या
 
 1. वरच्या पट्टीवर **Batch No.**, **Consignment No.**, **Total Samples**, **Assigned Date**, **Current Status** आणि **Analysis Days** दिसतात.
 2. टॅब वापरा: **Overview** (प्रगती, नमुन्यांचा सारांश, टाइमलाइन), **Samples**, **Parameters**, **Documents** आणि **Activity Log**.
@@ -196,13 +343,14 @@ routes: /Lab/Reports
 for: 
 roles: 
 designations: 
-source-hash: 4669cdab3bbe7c4e
+screenshot: lab-reports.png
+screenshot-phone: lab-reports.phone.jpg
+minutes: 2
+source-hash: bbe4683cfa84f8af
 confidence: ok
 
 **ही स्क्रीन कशासाठी आहे**
 **Lab Reports** स्क्रीनवर बॅच पूर्ण झाल्यावर तयार झालेले रिपोर्ट दिसतात. इथून तुम्ही रिपोर्टचा तपशील उघडू शकता आणि शेतकरी वाचतो त्या भाषेत तो PDF किंवा Excel म्हणून डाउनलोड करू शकता.
-
-## पायऱ्या
 
 1. वरची कार्डे पाहा: **Total Reports**, **Batch Reports**, **Sample Reports**, **Generated Today** आणि **Downloads Completed**.
 2. लिस्ट छोटी करण्यासाठी **Filters** दाबा. **From** आणि **To** तारखा, **State**, **Sample Type** किंवा **Financial Year** निवडा, मग **Apply Filters** दाबा. ते काढण्यासाठी **Clear All** दाबा.
@@ -226,13 +374,14 @@ routes: /Lab/Analyst
 for: 
 roles: 
 designations: 
-source-hash: 976c980ff899d680
+screenshot: analyst-dashboard.png
+screenshot-phone: analyst-dashboard.phone.jpg
+minutes: 1
+source-hash: 84e531434d1c8d93
 confidence: ok
 
 **ही स्क्रीन कशासाठी आहे**
 **Lab Analyst Dashboard** वर तुम्हाला दिलेले काम आणि आधी काय करायचे ते दिसते. ॲनालिस्टनी **Lab** उघडले की ॲप ही स्क्रीन दाखवते.
-
-## पायऱ्या
 
 1. वरची कार्डे पाहा: **Assigned Batches**, **Pending Value Entry** (आकड्यांची वाट पाहणारे नमुने), **Auto Result Ready** (ज्यांचा निकाल काढला गेला आहे असे नमुने), **Reports Generated** (या आर्थिक वर्षातले) आणि **Previous FY Reports**.
 2. **Today's Work Priority** तपासा:
@@ -254,23 +403,31 @@ routes: /Lab/TestEntry
 for: 
 roles: 
 designations: 
-source-hash: 3ec8fc5442d5b1f7
+screenshot: analyst-batch-list.png
+hotspots: 1 @ 2.2,9.8,95.5,17.9 | 2 @ 2.2,30.1,95.5,34.9 | 3 @ 75.2,69.6,20.6,4.8 | 4 @ 4.2,76.1,91.6,23.9
+screenshot-phone: analyst-batch-list.phone.jpg
+hotspots-phone: 1 @ 3.1,5.8,93.8,16.9 | 2 @ 3.1,23.7,93.8,3.5 | 3 @ 6.9,31.2,86.2,3 | 4 @ 2,2,8,4
+tour: 1 > [data-help=lab-bl-cards] | 2 > [data-help=lab-bl-filters] | 3 > [data-help=lab-bl-search] | 4 > [data-help=lab-bl-table]
+minutes: 2
+source-hash: 42bf99c9e09c8175
 confidence: ok
 
 **ही स्क्रीन कशासाठी आहे**
 **Test Value Entry** स्क्रीनवर तुम्हाला दिलेल्या बॅच दिसतात. तपासणीचे आकडे टाकायला इथून सुरुवात करा किंवा पुढे चालू ठेवा.
 
-## पायऱ्या
-
 1. वरची कार्डे पाहा: **Assigned Batches**, **Pending Value Entry**, **Auto Result Ready** आणि **Report Generated**.
 2. लिस्ट छोटी करण्यासाठी **Filters** उघडा आणि **Date Range**, **Sample Type**, **Status**, **Priority**, **Financial Year** किंवा **Assigned By** निवडा. **Apply Filters** दाबा. ते काढण्यासाठी **Clear All** दाबा.
 3. सर्च बॉक्समध्ये बॅच किंवा consignment नंबर टाइप करा.
-4. **Assigned Batch List** मध्ये **Pending Entries**, **Completed Entries**, **Priority** आणि **Status** तपासा. **High** प्राधान्यतेच्या बॅच आधी करा.
-5. बॅच उघडण्यासाठी ओळ, किंवा **Action** कॉलममधला आयकॉन टॅप करा. आयकॉनचा अर्थ:
-- **Start entry**: स्थिती **Pending Entry**, अजून काहीही टाकलेले नाही.
-- **Continue entry**: स्थिती **In Progress**, काही आकडे सेव्ह झाले आहेत.
-- **Preview results**: स्थिती **Auto Result Ready**, सगळे आकडे सबमिट झाले आहेत.
-- **View**: स्थिती **Report Generated**, बॅच बंद झाली आहे.
+4. **Assigned Batch List** मध्ये **Pending Entries**, **Completed Entries**, **Priority** आणि **Status** तपासा. **High** प्राधान्यतेच्या बॅच आधी करा. बॅच उघडण्यासाठी ओळ, किंवा **Action** कॉलममधला आयकॉन टॅप करा.
+
+## Action आयकॉनचा अर्थ
+
+| आयकॉन | हा कधी दिसतो |
+|---|---|
+| **Start entry** | स्थिती **Pending Entry**, अजून काहीही टाकलेले नाही. |
+| **Continue entry** | स्थिती **In Progress**, काही आकडे सेव्ह झाले आहेत. |
+| **Preview results** | स्थिती **Auto Result Ready**, सगळे आकडे सबमिट झाले आहेत. |
+| **View** | स्थिती **Report Generated**, बॅच बंद झाली आहे. |
 
 ## नेहमीच्या अडचणी
 
@@ -284,13 +441,12 @@ routes: /Lab/TestEntry/{id}
 for: 
 roles: 
 designations: 
-source-hash: 0543541df7d26c4a
+minutes: 4
+source-hash: d752cb5b39f927f4
 confidence: ok
 
 **ही स्क्रीन कशासाठी आहे**
 **Sample-wise Entry** वर तुम्ही बॅचमधल्या प्रत्येक नमुन्याचे तपासणीचे आकडे टाइप करता. सिस्टम सामान्य रेंज, निकाल, स्थिती आणि शिफारस आपोआप भरते.
-
-## पायऱ्या
 
 1. वरचा **Batch Summary** तपासा.
 2. **Samples in this Batch** मध्ये ज्या नमुन्यावर काम करायचे त्याचा आयकॉन टॅप करा, किंवा **Next pending sample** दाबा.
@@ -322,13 +478,12 @@ routes: /Lab/TestEntry/Reports, /Lab/TestEntry/Reports/Previous
 for: 
 roles: 
 designations: 
-source-hash: 40645f32067eb759
+minutes: 2
+source-hash: f0ab8dbc77d485c5
 confidence: ok
 
 **ही स्क्रीन कशासाठी आहे**
 **Test Reports** स्क्रीनवर या आर्थिक वर्षातल्या (एप्रिल ते मार्च) तुमच्या प्रत्येक बॅचचा रिपोर्ट सारांश दिसतो. **Previous FY Reports** मध्ये मागच्या वर्षांचे तसेच दिसते.
-
-## पायऱ्या
 
 1. वरची कार्डे पाहा: **Total Batches**, **Total Sample Reports**, **Reports Generated Today** आणि **Downloads Completed**.
 2. जुने रिपोर्ट पाहण्यासाठी **Previous FY Reports** दाबा. परत येण्यासाठी **Current FY Reports** दाबा.
@@ -350,13 +505,12 @@ routes: /Lab/TestEntry/Reports/{id}
 for: 
 roles: 
 designations: 
-source-hash: 683ffbc338437756
+minutes: 2
+source-hash: 8c8efa3d44f215ee
 confidence: ok
 
 **ही स्क्रीन कशासाठी आहे**
 **Batch Report Details** मध्ये एका बॅचमधल्या प्रत्येक नमुन्याचा रिपोर्ट दिसतो. प्रत्येक नमुन्याचा त्याच्या शेतकऱ्यासाठी वेगळा रिपोर्ट असतो. इथे तुम्ही रिपोर्ट पाहता, डाउनलोड करता आणि प्रिंट झाले अशी नोंद करता.
-
-## पायऱ्या
 
 1. कार्डे पाहा: **Total Samples**, **Soil Samples**, **Water Samples**, **Reports Generated** आणि **Downloads Completed**.
 2. **Batch Information** तपासा: बॅच, consignment, State, Region, **Head Quarters**, **Date of Dispatch** आणि **Financial Year**.
@@ -383,13 +537,12 @@ routes: /Lab/Tracking
 for: 
 roles: 
 designations: 
-source-hash: dde8a3beb72cd9d3
+minutes: 2
+source-hash: 4713e37bae159d20
 confidence: ok
 
 **ही स्क्रीन कशासाठी आहे**
 **Lab Tracking** मध्ये ॲडमिनला लॅबमधल्या सगळ्या बॅच दिसतात. consignment, बॅच आणि तपासणीची प्रगती पाहण्यासाठी हे वापरा. इथे तुम्ही काहीही बदलू शकत नाही.
-
-## पायऱ्या
 
 1. वरची कार्डे पाहा: **Total Batches**, **Batch Created**, **Taken for analysis** आणि **Analysis Completed**.
 2. एकच टप्पा पाहण्यासाठी टॅब वापरा: **All Batches**, **Batch Created**, **Taken for Analysis** किंवा **Analysis Completed**. प्रत्येक टॅबवर त्याचा आकडा दिसतो.
@@ -411,13 +564,12 @@ routes: /Lab/Tracking/{id}
 for: 
 roles: 
 designations: 
-source-hash: afb705e77b16edb3
+minutes: 1
+source-hash: 56cb817a9b7e82f1
 confidence: ok
 
 **ही स्क्रीन कशासाठी आहे**
 बॅचच्या दृश्यात ॲडमिनला एका बॅचची पूर्ण कहाणी एकाच पेजवर दिसते: नमुने कुठून आले, कुरिअर, बॅच, तपासणीची प्रगती आणि टाइमलाइन. इथे फक्त पाहता येते.
-
-## पायऱ्या
 
 1. वरच्या पट्टीवर **Batch No.**, **Consignment No.**, **Test Samples**, **Samples**, **Assigned To (Analyst)**, **Batch Created On** आणि **Last Updated** दिसतात.
 2. **Source Details** मध्ये नमुने कोणी गोळा केले, त्यांचा **Mobile No.**, **Location** आणि **Collection Date** दिसतात.

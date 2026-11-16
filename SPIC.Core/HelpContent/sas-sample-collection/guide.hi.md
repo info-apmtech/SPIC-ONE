@@ -4,43 +4,185 @@ title: मिट्टी के सैंपल का कलेक्शन
 icon: bi-droplet
 order: 50
 language: hi
+category: मिट्टी की जाँच
+note: नया रूप, साथ में सैंपल का सफ़र, स्टेटस और गाइडेड टूर
+meta-source-hash: 91cc9c6288b84a36
 ---
 
 ::: section overview
-title: मिट्टी के सैंपल का कलेक्शन कैसे होता है
-routes: /SampleCollection
+title: यह मॉड्यूल आपके लिए क्या करता है
+routes: 
 for: 
 roles: 
 designations: 
-source-hash: 690edb1b53c94744
+kind: overview
+source-hash: 722480765e5f4cad
 confidence: ok
 
-**यह स्क्रीन किस काम की है**
-SPIC किसान के खेत की मिट्टी और पानी की जाँच ज़िले की लैब में करता है। ऐप हर सैंपल को खेत से लेकर किसान की रिपोर्ट तक ट्रैक करता है। हर कलेक्शन इन्हीं स्टेप्स से गुज़रता है।
+SPIC किसान के खेत की मिट्टी और पानी की जाँच ज़िले की लैब में करता है। ऐप हर सैंपल को खेत से लेकर किसान की रिपोर्ट तक ट्रैक करता है, ताकि सबको दिखे कि सैंपल अभी कहाँ है।
 
-## स्टेप्स
+- collect | icon: bi-droplet | color: #0d9488
+  title: खेत में सैंपल लेना
+  text: MDO या JMDO किसान और सैंपल की जानकारी दर्ज करता है।
+- pay | icon: bi-qr-code | color: #d97706
+  title: भुगतान और मंज़ूरी
+  text: पेड सैंपल का भुगतान UPI या किसी दूसरे तरीके से होता है, फिर उसे मंज़ूरी मिलती है और Finance उसकी जाँच करता है।
+- report | icon: bi-file-earmark-text | color: #7c3aed
+  title: किसान के लिए लैब रिपोर्ट
+  text: लैब सैंपल की जाँच करती है और किसान रिपोर्ट तमिल या अंग्रेज़ी में डाउनलोड करता है।
+:::
 
-1. **Collect.** (सैंपल लेना) फ़ील्ड अधिकारी (MDO या JMDO) **New Sample Collection** खोलता है, किसान चुनता है और एक या ज़्यादा सैंपल जोड़ता है।
-2. **Pay.** (भुगतान) **Paid Sample** के लिए भुगतान ज़रूरी है। अधिकारी UPI या कोई दूसरा भुगतान दर्ज करता है और रसीद की फ़ोटो अपलोड करता है। **Free Sample** में यह स्टेप नहीं होता।
-3. **Approve.** (मंज़ूरी) मंज़ूरी देने वाला भुगतान और रसीद जाँचता है। फिर Finance जाँचता है कि पैसा मिल गया है।
-4. **लैब को भेजना।** अधिकारी सैंपल कूरियर से भेजता है और ट्रैकिंग नंबर भरता है। इसे कंसाइनमेंट कहते हैं।
-5. **Test.** (जाँच) लैब सैंपल लेती है और उनकी जाँच करती है।
-6. **Report.** (रिपोर्ट) किसान ऐप में रिपोर्ट देखता है और उसे तमिल या अंग्रेज़ी में डाउनलोड कर सकता है।
+::: section flow
+title: सैंपल कैसे आगे बढ़ता है, और कौन क्या करता है
+routes: 
+for: 
+roles: 
+designations: 
+kind: flow
+source-hash: 8e557635907c2edf
+confidence: ok
 
-## स्टेटस का मतलब
+हर लाइन एक रोल है और हर बॉक्स एक स्टेप है। फ़्री सैंपल में भुगतान वाले स्टेप नहीं होते। किसी स्टेप पर टैप करके देखें कि वहाँ क्या होता है।
 
-- **Draft**: सेव है, अभी सबमिट नहीं हुआ।
-- **Pending Payment**: भुगतान दर्ज होने का इंतज़ार है।
-- **Pending Approval**: भुगतान दर्ज हो गया, मंज़ूरी का इंतज़ार है।
-- **Ready consignment**: लैब भेजने के लिए तैयार।
-- **Dispatched**, **In Transit**, **Delivered to Lab**: लैब के रास्ते में।
-- **In Progress**: लैब में जाँच चल रही है।
-- **Completed**: नतीजे आ गए हैं।
+- officer | type: lane | color: #0d9488 | roles: MDO, JMDO
+  title: फ़ील्ड अधिकारी
+  sub: MDO · JMDO
+- approver | type: lane | color: #ea580c | roles: Admin, CorporateAdmin
+  title: मंज़ूरी देने वाला
+  sub: भुगतान की मंज़ूरी
+- finance | type: lane | color: #2563eb
+  title: Finance
+  sub: भुगतान की जाँच
+- lab | type: lane | color: #7c3aed
+  title: लैब
+  sub: ज़िले की लैब
+- farmer | type: lane | color: #16a34a | roles: Farmer
+  title: किसान
+  sub: सैंपल का मालिक
+- collect | lane: officer | col: 1 | icon: bi-droplet | color: #64748b | next: pay | screen: collect-sample
+  title: सैंपल लें
+  status: Draft
+  text: किसान चुनें, मिट्टी या पानी का हर सैंपल जोड़ें और सेव करें। फ़्री सैंपल सीधे कंसाइनमेंट में जाता है।
+- pay | lane: officer | col: 2 | icon: bi-qr-code | color: #d97706 | next: approve | screen: record-payment
+  title: भुगतान दर्ज करें
+  status: Pending Payment
+  text: किसान QR कोड स्कैन करके भुगतान करता है। अधिकारी ट्रांज़ैक्शन की जानकारी भरता है और रसीद अपलोड करता है।
+- approve | lane: approver | col: 3 | icon: bi-patch-check | color: #ea580c | next: send, verify | return: pay | screen: approve-payments
+  title: भुगतान मंज़ूर करें
+  status: Pending Approval
+  text: मंज़ूरी देने वाला रकम और रसीद जाँचता है, फिर उसे मंज़ूर करके Finance को भेजता है, या वापस लौटा देता है।
+- send | lane: officer | col: 4 | icon: bi-truck | color: #0d9488 | next: test | screen: send-consignment
+  title: लैब को भेजें
+  status: Dispatched
+  text: अधिकारी सैंपल कूरियर को देता है और ट्रैकिंग नंबर दर्ज करता है। इसे कंसाइनमेंट कहते हैं।
+- verify | lane: finance | col: 4 | icon: bi-bank | color: #2563eb | screen: verify-payments
+  title: पैसे की जाँच
+  status: Finance Verified
+  text: Finance पक्का करता है कि पैसा खाते में आ गया है, या mismatch (मेल नहीं खाया) मार्क करता है।
+- test | lane: lab | col: 5 | icon: bi-eyedropper | color: #7c3aed | next: report
+  title: सैंपल की जाँच
+  status: In Progress
+  text: लैब पार्सल लेती है, हर सैंपल की जाँच करती है और नतीजे जारी करती है।
+- report | lane: farmer | col: 6 | icon: bi-file-earmark-arrow-down | color: #16a34a | screen: farmer-my-reports
+  title: रिपोर्ट डाउनलोड करें
+  status: Completed
+  text: किसान ऐप में रिपोर्ट देखता है और उसे तमिल या अंग्रेज़ी में डाउनलोड करता है।
+:::
 
-## आम दिक्कतें
+::: section statuses
+title: हर स्टेटस जो आपको दिख सकता है
+routes: 
+for: 
+roles: 
+designations: 
+kind: statuses
+source-hash: 0771c49c0ffc8c78
+confidence: ok
 
-- मेन्यू में **Sample Collection** नहीं दिख रहा: आपके पद (designation) में यह पेज नहीं है। अपने एडमिनिस्ट्रेटर से पूछें।
-- JMDO यूज़र्स को यह मेन्यू में नहीं दिखता। इसकी जगह इसे अपने **Soil Sample** टास्क से खोलें।
+- draft | color: #64748b
+  label: Draft
+  text: सेव है, अभी सबमिट नहीं हुआ।
+- pending-payment | color: #d97706
+  label: Pending Payment
+  text: भुगतान दर्ज होने का इंतज़ार है।
+- pending-approval | color: #ea580c
+  label: Pending Approval
+  text: भुगतान दर्ज हो गया, मंज़ूरी का इंतज़ार है।
+- ready | color: #0891b2
+  label: Ready consignment
+  text: लैब भेजने के लिए तैयार।
+- dispatched | color: #0d9488
+  label: Dispatched
+  text: कूरियर को दे दिया गया।
+- in-transit | color: #0d9488
+  label: In Transit
+  text: लैब के रास्ते में।
+- delivered | color: #2563eb
+  label: Delivered to Lab
+  text: पार्सल लैब पहुँच गया है।
+- in-progress | color: #7c3aed
+  label: In Progress
+  text: लैब में जाँच चल रही है।
+- completed | color: #16a34a
+  label: Completed
+  text: नतीजे आ गए हैं।
+:::
+
+::: section roles
+title: कौन क्या करता है
+routes: 
+for: 
+roles: 
+designations: 
+kind: roles
+source-hash: 9c070a1e6fc377cf
+confidence: ok
+
+आपका कार्ड हाइलाइट होता है। आपको सिर्फ़ वही स्क्रीन दिखती हैं जो आपका रोल इस्तेमाल करता है।
+
+- officer | color: #0d9488 | roles: MDO, JMDO
+  title: MDO, JMDO
+  - सैंपल लेना
+  - भुगतान दर्ज करना
+  - कंसाइनमेंट लैब को भेजना
+- approver | color: #ea580c | roles: Admin, CorporateAdmin
+  title: मंज़ूरी देने वाला
+  - भुगतान मंज़ूर करना या लौटाना
+  - कंसाइनमेंट आगे बढ़ाना
+  - लैब के नतीजे भरना
+- finance | color: #2563eb
+  title: Finance
+  - मिले हुए पैसे की जाँच करना
+  - mismatch (मेल नहीं खाया) मार्क करना
+- farmer | color: #16a34a | roles: Farmer
+  title: किसान
+  - अपने सैंपल देखना
+  - अपनी रिपोर्ट डाउनलोड करना
+  - अपने भुगतान देखना
+:::
+
+::: section faq
+title: दिक्कतें और जवाब
+routes: 
+for: 
+roles: 
+designations: 
+kind: faq
+source-hash: b121292d9fb622a2
+confidence: ok
+
+- no-menu | popular: true
+  q: मुझे मेन्यू में Sample Collection नहीं दिख रहा
+  a: आपके पद (designation) में यह पेज नहीं है। अपने एडमिनिस्ट्रेटर से पूछें। JMDO यूज़र इसे इसकी जगह **Soil Sample** टास्क से खोलते हैं।
+- payment-rejected | popular: true
+  q: मेरा भुगतान रिजेक्ट हो गया। अब क्या करूँ?
+  a: जानकारी वाले पेज पर कारण के साथ **Payment rejected** दिखता है। उसे ठीक करें और फिर से **Record payment** पर टैप करें।
+- not-ready
+  q: लिखा आ रहा है "This collection is not ready to send"
+  a: भुगतान अभी दर्ज या मंज़ूर नहीं हुआ है। फ़्री सैंपल तुरंत भेजे जा सकते हैं।
+- report-language
+  q: मुझे रिपोर्ट तमिल में कैसे मिलेगी?
+  a: **Download PDF** के बगल वाले छोटे तीर पर टैप करें और तमिल या अंग्रेज़ी चुनें।
 :::
 
 ::: section collection-list
@@ -49,22 +191,26 @@ routes: /SampleCollection
 for: 
 roles: 
 designations: 
-source-hash: 53f4f23e337f18d1
+screenshot: collection-list.png
+hotspots: 1 @ 2.2,68.5,95.5,15.1 | 2 @ 73.7,88,22.4,4.8 | 3 @ 2.2,30.7,95.5,35.4 | 4 @ 3.8,94.7,92.3,5.3 | 5 @ 62.1,1.9,8.1,4.8 | 6 @ 79.2,1.9,18.5,4.8
+screenshot-phone: collection-list.phone.jpg
+hotspots-phone: 1 @ 3.1,40.6,93.8,24.4 | 2 @ 6.4,69.4,87.2,3.2 | 3 @ 3.1,36,93.8,3.2 | 4 @ 2,2,8,4 | 5 @ 15.3,4.3,10.2,3 | 6 @ 39.7,4.3,48.8,3
+tour: 1 > [data-help=sc-tiles] | 2 > [data-help=sc-search] | 3 > [data-help=sc-filters] | 4 > [data-help=sc-table] | 5 > [data-help=sc-excel] | 6 > [data-help=sc-new]
+minutes: 2
+source-hash: 01315bd944ae112a
 confidence: ok
 
 **यह स्क्रीन किस काम की है**
 **Sample Collection** पेज पर वे सारे कलेक्शन दिखते हैं जो आप देख सकते हैं, उनके भुगतान और लैब स्टेटस के साथ। कोई कलेक्शन ढूँढने और उसकी जानकारी खोलने के लिए इसका इस्तेमाल करें।
 
-## स्टेप्स
+ऊपर के कार्ड में गिनती दिखती है: **Total Samples**, **Free Samples**, **Paid Samples**, **Lab Level** और **Ready to Submit**।
 
-1. मेन्यू से **Sample Collection** खोलें।
-2. ऊपर के कार्ड में गिनती दिखती है: **Total Samples**, **Free Samples**, **Paid Samples**, **Lab Level** और **Ready to Submit**।
-3. सिर्फ़ उन्हीं कलेक्शन को देखने के लिए **Pending Payment** या **Draft** जैसी रंगीन टाइल पर टैप करें। सब देखने के लिए फिर से टैप करें।
-4. खोजने के लिए **Search collections...** में किसान का नाम या कलेक्शन ID टाइप करें।
-5. और विकल्पों के लिए **Filters** खोलें, **Date Range**, **Location**, **Payment Type**, **Payment Status** या **Status** चुनें, फिर **Apply Filters** पर टैप करें। इन्हें हटाने के लिए **Clear All** पर टैप करें।
-6. कलेक्शन खोलने के लिए आँख वाले आइकन पर (या फ़ोन पर कार्ड पर) टैप करें।
-7. स्क्रीन पर दिख रही लिस्ट डाउनलोड करने के लिए **Excel** या **PDF** पर टैप करें।
-8. नया स्टेटस देखने के लिए **Refresh Data** पर टैप करें।
+1. सिर्फ़ उन्हीं कलेक्शन को देखने के लिए **Pending Payment** या **Draft** जैसी रंगीन टाइल पर टैप करें। सब देखने के लिए फिर से टैप करें।
+2. खोजने के लिए **Search collections...** में किसान का नाम या कलेक्शन ID टाइप करें।
+3. और विकल्पों के लिए **Filters** खोलें, **Date Range**, **Location**, **Payment Type**, **Payment Status** या **Status** चुनें, फिर **Apply Filters** पर टैप करें। इन्हें हटाने के लिए **Clear All** पर टैप करें।
+4. कलेक्शन खोलने के लिए आँख वाले आइकन पर (या फ़ोन पर कार्ड पर) टैप करें।
+5. स्क्रीन पर दिख रही लिस्ट डाउनलोड करने के लिए **Excel** या **PDF** पर टैप करें। नया स्टेटस देखने के लिए **Refresh Data** पर टैप करें।
+6. सैंपल लेना शुरू करने के लिए **New Sample Collection** पर टैप करें।
 
 ## आम दिक्कतें
 
@@ -80,24 +226,27 @@ routes: /SampleCollection/new
 for: SampleCollection.Entry
 roles: MDO, JMDO, Admin, CorporateAdmin
 designations: 
-source-hash: 4807aa811490f90c
+screenshot: collect-sample.png
+hotspots: 1 @ 66,1.9,31.8,5 | 2 @ 4,34.7,29.7,7.8 | 3 @ 35.2,81.7,29.7,8 | 4 @ 78.7,100,17.2,0 | 5 @ 81.8,100,16,0
+screenshot-phone: collect-sample.phone.jpg
+hotspots-phone: 1 @ 3.1,4.6,93.8,3.2 | 2 @ 6.9,33.7,86.2,8.5 | 3 @ 6.9,100,86.2,0 | 4 @ 6.9,100,86.2,0 | 5 @ 43.8,92.1,52.1,3
+tour: 1 > [data-help=sc-paytype] | 2 > [data-help=sc-farmer] | 3 > [data-help=sc-soil] | 4 > [data-help=sc-add] | 5 > [data-help=sc-save]
+minutes: 4
+source-hash: 3ae93abc0337f008
 confidence: ok
 
 **यह स्क्रीन किस काम की है**
 किसानों से लिए गए सैंपल दर्ज करने के लिए **New Sample Collection** का इस्तेमाल करें। एक कलेक्शन में कई किसानों के सैंपल हो सकते हैं।
 
-## स्टेप्स
+इसे **Sample Collection** पेज पर **New Sample Collection** से खोलें। JMDO: **Tasks Allocation** में **Soil Sample** कार्ड पर **Start** पर टैप करें, या किसी टास्क के **Quick actions** में **Soil Sample Collection** पर टैप करें।
 
-1. **Sample Collection** पर **New Sample Collection** पर टैप करें। JMDO: **Tasks Allocation** में **Soil Sample** कार्ड पर **Start** पर टैप करें, या किसी टास्क के **Quick actions** में **Soil Sample Collection** पर टैप करें।
-2. ऊपर **Free Sample** या **Paid Sample** चुनें।
-3. **Farmer Name** में कम से कम दो अक्षर टाइप करें और किसान चुनें। अगर किसान नया है, तो **New Farmer** पर टैप करें।
-4. पेड सैंपल के लिए **Paid Sample Category** में **Farmer** या **NGO** चुनें।
-5. **Soil Sample** और **Water Sample** को **Yes** या **No** करें।
-6. **Crop 1**, **Crop 2** चुनें और ज़रूरत हो तो **Remarks** लिखें।
-7. **Add Another Sample** पर टैप करें। सैंपल अपनी रकम के साथ **Sample Added (Preview)** में दिखता है।
-8. हर सैंपल के लिए यही दोहराएँ। किसी लाइन को बदलने के लिए पेंसिल, या हटाने के लिए डस्टबिन इस्तेमाल करें।
-9. बाद में पूरा करने के लिए **Save Draft** पर टैप करें, या **Sample Summary** देखने के लिए **Save and Continue** पर टैप करें।
-10. समरी जाँचें और **Continue to payment** (पेड) या **Continue to consignment** (फ़्री) पर टैप करें।
+1. ऊपर **Free Sample** या **Paid Sample** चुनें।
+2. **Farmer Name** में कम से कम दो अक्षर टाइप करें और किसान चुनें। अगर किसान नया है, तो **New Farmer** पर टैप करें। पेड सैंपल के लिए **Paid Sample Category** में **Farmer** या **NGO** चुनें।
+3. **Soil Sample** और **Water Sample** को **Yes** या **No** करें। **Crop 1**, **Crop 2** चुनें और ज़रूरत हो तो **Remarks** लिखें।
+4. **Add Another Sample** पर टैप करें। सैंपल अपनी रकम के साथ **Sample Added (Preview)** में दिखता है। हर सैंपल के लिए यही दोहराएँ; पेंसिल से लाइन बदलती है और डस्टबिन से हटती है।
+5. बाद में पूरा करने के लिए **Save Draft** पर टैप करें, या **Save and Continue** पर। **Sample Summary** जाँचें और **Continue to payment** (पेड) या **Continue to consignment** (फ़्री) पर टैप करें।
+
+> Tip: एक कलेक्शन में कई किसानों के सैंपल हो सकते हैं।
 
 ## फ़ील्ड का मतलब
 
@@ -119,13 +268,12 @@ routes: /SampleCollection/new, /SampleCollection/view/{id}
 for: SampleCollection.Update
 roles: MDO, JMDO, Admin, CorporateAdmin
 designations: 
-source-hash: 1e935425e9054d62
+minutes: 2
+source-hash: 2699d934a7f0674d
 confidence: ok
 
 **यह स्क्रीन किस काम की है**
 **Save Draft** से सेव किया गया कलेक्शन **Draft** ही रहता है। जब तक आप सबमिट नहीं करते, कुछ भी भुगतान या लैब तक नहीं जाता। आप इसे फिर से खोलकर पूरा कर सकते हैं।
-
-## स्टेप्स
 
 1. **Sample Collection** खोलें और **Draft** टाइल पर टैप करें।
 2. आँख वाले आइकन से कलेक्शन खोलें।
@@ -149,13 +297,12 @@ routes: /SampleCollection/payment/{id}
 for: 
 roles: MDO, JMDO, Admin, CorporateAdmin
 designations: 
-source-hash: 67de9290d8256a0c
+minutes: 3
+source-hash: c5b827bf8559be23
 confidence: ok
 
 **यह स्क्रीन किस काम की है**
 **Payments** स्क्रीन पर दिखता है कि कितना पैसा लेना है, किसान के स्कैन करने के लिए UPI QR कोड, और भुगतान की जानकारी व रसीद भरने का फ़ॉर्म।
-
-## स्टेप्स
 
 1. **Continue to payment** के बाद **Payments** स्क्रीन खुलती है। आप कलेक्शन की जानकारी वाले पेज पर **Record payment** पर टैप करके भी इसे खोल सकते हैं।
 2. **Total Amount to Collect** देखें। सैंपल देखने के लिए **View Sample Summary** पर टैप करें।
@@ -188,13 +335,12 @@ routes: /SampleCollection/consignment/{id}, /SampleCollection/submitted/{id}
 for: 
 roles: MDO, JMDO, Admin, CorporateAdmin
 designations: 
-source-hash: 1820125bf239140d
+minutes: 3
+source-hash: de0b21e8f58ece6a
 confidence: ok
 
 **यह स्क्रीन किस काम की है**
 जब कलेक्शन फ़्री हो या उसका भुगतान मंज़ूर हो जाए, तो आप सैंपल पैक करके कूरियर को देते हैं। **Upload Consignment** कूरियर की जानकारी और फ़ोटो दर्ज करता है, ताकि लैब को पता रहे कि क्या आ रहा है।
-
-## स्टेप्स
 
 1. कलेक्शन खोलें और **Upload consignment** पर टैप करें। फ़्री सैंपल में **Continue to consignment** से यह सीधे खुल जाता है।
 2. **Courier Details** में **Courier Service** चुनें और **Tracking Number (AWB)** टाइप करें।
@@ -224,13 +370,14 @@ routes: /SampleCollection/view/{id}
 for: 
 roles: 
 designations: 
-source-hash: c0ff9ecbae88fe84
+screenshot: collection-details.png
+screenshot-phone: collection-details.phone.jpg
+minutes: 2
+source-hash: 0b6c9585e9bd5ccc
 confidence: ok
 
 **यह स्क्रीन किस काम की है**
 **Sample Collection Details** में एक कलेक्शन की पूरी जानकारी दिखती है: भुगतान, कूरियर, लैब के नतीजे और इतिहास। फ़ील्ड स्टाफ़, डीलर और मैनेजर यहाँ प्रगति देख सकते हैं।
-
-## स्टेप्स
 
 1. **Sample Collection** खोलें और किसी कलेक्शन पर आँख वाले आइकन पर टैप करें।
 2. ऊपर की लाइन में कलेक्शन ID, **Paid Sample** या **Free Sample**, और मौजूदा स्टेटस दिखता है।
@@ -259,13 +406,12 @@ routes: /SampleCollection/view/{id}, /ConsignmentHistory/view/{id}
 for: 
 roles: Admin, CorporateAdmin
 designations: 
-source-hash: 71850d4b14d9d073
+minutes: 3
+source-hash: 16838640fb4dadb0
 confidence: ok
 
 **यह स्क्रीन किस काम की है**
 एडमिनिस्ट्रेटर कलेक्शन की जानकारी वाले पेज पर भुगतान जाँच सकते हैं, कंसाइनमेंट को अगले स्टेज पर ले जा सकते हैं, और लैब के नतीजे टाइप कर सकते हैं।
-
-## स्टेप्स
 
 ### कलेक्शन पर भुगतान मंज़ूर करें
 
@@ -299,13 +445,14 @@ routes: /ConsignmentHistory, /ConsignmentHistory/view/{id}
 for: 
 roles: 
 designations: 
-source-hash: c0eb73648ebf3b77
+screenshot: consignment-history.png
+screenshot-phone: consignment-history.phone.jpg
+minutes: 2
+source-hash: c4455c0c6e2c1ab2
 confidence: ok
 
 **यह स्क्रीन किस काम की है**
 **Consignment History** में लैब को भेजे गए सैंपल के हर पार्सल की लिस्ट है, कूरियर, ट्रैकिंग नंबर और मौजूदा स्टेटस के साथ।
-
-## स्टेप्स
 
 1. मेन्यू से **Consignment History** खोलें।
 2. कार्ड में **Total Consignments**, **Total Consignment Sent**, **Total Samples**, **Delivered** और **Pending** दिखते हैं।
@@ -335,13 +482,14 @@ routes: /Sas/MySamples, /SampleCollection/view/{id}
 for: 
 roles: Farmer
 designations: 
-source-hash: fa5d1d2f177d288c
+screenshot: farmer-my-samples.png
+screenshot-phone: farmer-my-samples.phone.jpg
+minutes: 2
+source-hash: eac7ad7b8677316c
 confidence: ok
 
 **यह स्क्रीन किस काम की है**
 **My Samples** में मिट्टी या पानी का वह हर सैंपल दिखता है जो आपके MO अधिकारी ने आपसे लिया, और यह भी कि हर सैंपल अभी कहाँ है।
-
-## स्टेप्स
 
 1. मेन्यू से **My Samples** खोलें।
 2. हर कार्ड पर सैंपल नंबर, कंसाइनमेंट, सैंपल लेने वाला अधिकारी, तारीख और फ़सल दिखती है।
@@ -371,13 +519,14 @@ routes: /Sas/MyReports
 for: 
 roles: Farmer
 designations: 
-source-hash: 810f0b093cade052
+screenshot: farmer-my-reports.png
+screenshot-phone: farmer-my-reports.phone.jpg
+minutes: 2
+source-hash: 40b826ab2246cad3
 confidence: ok
 
 **यह स्क्रीन किस काम की है**
 **My Reports** में वे जाँच रिपोर्ट दिखती हैं जो लैब ने आपके सैंपल के लिए बनाईं। आप हर रिपोर्ट तमिल या अंग्रेज़ी में डाउनलोड कर सकते हैं।
-
-## स्टेप्स
 
 1. मेन्यू से **My Reports** खोलें।
 2. कार्ड में **Total Reports**, **Ready to Download**, **Downloaded** और **Under Process** दिखते हैं।
@@ -405,13 +554,12 @@ routes: /Sas/Payments, /Sas/Payments/{id}
 for: 
 roles: Farmer
 designations: 
-source-hash: 41753a10de9d41d6
+minutes: 2
+source-hash: f07974a161df2664
 confidence: ok
 
 **यह स्क्रीन किस काम की है**
 **Payments** में आपके पेड मिट्टी सैंपल के लिए किए गए भुगतान दिखते हैं, और यह भी कि SPIC ने उन्हें मंज़ूर किया है और पैसा मिला है या नहीं। यहाँ आप सिर्फ़ देखते हैं; कुछ भरना नहीं है।
-
-## स्टेप्स
 
 1. मेन्यू से **Payments** खोलें।
 2. कार्ड में **Total Paid Samples**, **Finance Verified**, **Approval Pending** और **Payment Issues** दिखते हैं।
@@ -438,13 +586,12 @@ routes: /Sas/Payments, /Sas/Payments/{id}
 for: SasPaymentApproval.View
 roles: 
 designations: 
-source-hash: 4a8d8dd3f9015aa4
+minutes: 3
+source-hash: 2c0a5e7b4b9a51d2
 confidence: ok
 
 **यह स्क्रीन किस काम की है**
 **Payment Approval** में वे भुगतान दिखते हैं जो फ़ील्ड अधिकारियों ने पेड सैंपल के लिए दर्ज किए। आप हर रसीद और रकम जाँचते हैं, फिर उसे मंज़ूर करके Finance को भेजते हैं, या अधिकारी को वापस भेज देते हैं।
-
-## स्टेप्स
 
 1. मेन्यू से **Payment Approval** खोलें।
 2. **Pending Admin Approval** टैब पर टैप करें।
@@ -474,13 +621,12 @@ routes: /Sas/Payments, /Sas/Payments/{id}, /Sas/Payments/History
 for: SasPaymentVerification.View
 roles: 
 designations: 
-source-hash: ec36e4e58f4e4b58
+minutes: 3
+source-hash: 788890513e2baf14
 confidence: ok
 
 **यह स्क्रीन किस काम की है**
 **Payment Verification** में वे भुगतान दिखते हैं जो मंज़ूरी देने वाले ने Finance को भेजे हैं। आप पक्का करते हैं कि पैसा खाते में आ गया है। **Payment History** में वह हर भुगतान रहता है जिसका काम आप पूरा कर चुके हैं।
-
-## स्टेप्स
 
 1. मेन्यू से **Payment Verification** खोलें।
 2. **Pending Verification** टैब पर टैप करें।

@@ -169,7 +169,7 @@
                         <div class="hc-faqbox">
                             @foreach (var (module, item) in _faq)
                             {
-                                <a href="@($"/Help/{module}")"><span class="hc-q__i"><i class="bi bi-question-lg" aria-hidden="true"></i></span>@item.Question<span class="hc-m">@_modules.First(x => x.Module == module).Title</span></a>
+                                <a href="@FaqHref(module, item.Id)"><span class="hc-q__i"><i class="bi bi-question-lg" aria-hidden="true"></i></span>@item.Question<span class="hc-m">@_modules.First(x => x.Module == module).Title</span></a>
                             }
                         </div>
                     </div>
@@ -248,6 +248,11 @@
         tours.AddRange(_modules.SelectMany(m => m.Screens).Where(HasOwnTour));
         _tours = tours.Where(HasOwnTour).DistinctBy(s => (s.Module, s.Section.Id)).Take(3).ToList();
     }
+
+    private string FaqHref(string module, string itemId) =>
+        _modules.FirstOrDefault(m => m.Module == module)?.Block("faq") is { } faq
+            ? $"/Help/{module}/{faq.Section.Id}?item={Uri.EscapeDataString(itemId)}"
+            : $"/Help/{module}";
 
     private static bool HasOwnTour(HelpSectionView s) =>
         s.Section.Screen is { Tour.Count: > 0 } && s.Section.Routes.Any(r => !HelpRoutes.HasParameters(r));

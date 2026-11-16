@@ -118,7 +118,8 @@ internal static class Shooter
 
 		// The page body only (no app menu or top bar), from its top to the bottom of the viewport.
 		var box = await page.Locator(".main-content").First.BoundingBoxAsync() ?? new LocatorBoundingBoxResult { X = 0, Y = 0, Width = viewport.Width, Height = viewport.Height };
-		var maxHeight = kind == "phone" ? 1500 : viewport.Height;
+		// Tall enough to include the tour targets further down (tables), but not the whole page.
+		var maxHeight = kind == "phone" ? 1500 : 1400;
 		var clip = new Clip
 		{
 			X = (float)box.X,
@@ -126,7 +127,8 @@ internal static class Shooter
 			Width = (float)Math.Min(box.Width, viewport.Width - box.X),
 			Height = (float)Math.Min(Math.Max(box.Height, 200), maxHeight - box.Y),
 		};
-		if (kind == "phone") await page.SetViewportSizeAsync(viewport.Width, (int)(clip.Y + clip.Height));
+		await page.SetViewportSizeAsync(viewport.Width, (int)(clip.Y + clip.Height));
+		await page.WaitForTimeoutAsync(400);
 
 		var fileName = kind == "phone" ? $"{shot.Section}.phone.jpg" : $"{shot.Section}.png";
 		var dir = Path.Combine(Repo.ImagesDir, shot.Module, "images");
@@ -147,18 +149,24 @@ internal static class Shooter
 			foreach (var step in tour)
 			{
 				var r = await page.Locator(step.Target).First.BoundingBoxAsync();
-				double x = 2, y = 2, w = 8, h = 4;
-				if (r is not null)
+				// Missing, hidden at this size, or outside the picture: no marker rather than a wrong one.
+				var inside = r is not null && r.Width > 0 && r.Height > 0
+					&& r.Y < clip.Y + clip.Height - 4 && r.Y + r.Height > clip.Y + 4
+					&& r.X < clip.X + clip.Width - 4 && r.X + r.Width > clip.X + 4;
+				if (!inside)
 				{
-					x = Clamp((r.X - clip.X) / clip.Width * 100);
-					y = Clamp((r.Y - clip.Y) / clip.Height * 100);
-					w = Clamp(r.Width / clip.Width * 100, 100 - x);
-					h = Clamp(r.Height / clip.Height * 100, 100 - y);
+					Console.WriteLine($"    warning: {shot.Section} ({kind}) step {step.N}: {step.Target} is not in the picture, no marker");
+					spots.Add($"{step.N} @ -");
+					continue;
 				}
+				var x = Clamp((r!.X - clip.X) / clip.Width * 100);
+				var y = Clamp((r.Y - clip.Y) / clip.Height * 100);
+				var w = Clamp(r.Width / clip.Width * 100, 100 - x);
+				var h = Clamp(r.Height / clip.Height * 100, 100 - y);
 				spots.Add(string.Create(CultureInfo.InvariantCulture, $"{step.N} @ {Round(x)},{Round(y)},{Round(w)},{Round(h)}"));
 			}
 		}
-		if (kind == "phone") await page.SetViewportSizeAsync(viewport.Width, viewport.Height);
+		await page.SetViewportSizeAsync(viewport.Width, viewport.Height);
 		return (fileName, spots);
 	}
 

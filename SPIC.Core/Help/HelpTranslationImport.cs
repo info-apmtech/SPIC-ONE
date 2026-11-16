@@ -63,12 +63,26 @@ namespace SPIC.Core.Help
                 var isBlock = s.Kind != "screen";
                 if (isBlock)
                 {
-                    var enIds = HelpBlocks.Items(s.Body).Select(i => i.Id).ToList();
-                    var draftIds = HelpBlocks.Items(d.Body).Select(i => i.Id).ToList();
+                    var enItems = HelpBlocks.Items(s.Body);
+                    var draftProblems = new List<string>();
+                    var draftItems = HelpBlocks.Items(d.Body, draftProblems);
+                    problems.AddRange(draftProblems.Select(p => $"{s.Id}: {p}"));
+                    var enIds = enItems.Select(i => i.Id).ToList();
+                    var draftIds = draftItems.Select(i => i.Id).ToList();
                     foreach (var missing in enIds.Where(id => !draftIds.Contains(id, StringComparer.OrdinalIgnoreCase)))
                         problems.Add($"{s.Id}: item {missing} missing");
                     foreach (var extra in draftIds.Where(id => !enIds.Contains(id, StringComparer.OrdinalIgnoreCase)))
                         problems.Add($"{s.Id}: item {extra} is not in English");
+                    // Every English text field must be translated under its English key (title:, text:, q: ...).
+                    foreach (var en in enItems)
+                    {
+                        var di = draftItems.FirstOrDefault(x => string.Equals(x.Id, en.Id, StringComparison.OrdinalIgnoreCase));
+                        if (di is null) continue;
+                        foreach (var field in en.Text.Keys.Where(k => !di.Text.TryGetValue(k, out var v) || string.IsNullOrWhiteSpace(v)))
+                            problems.Add($"{s.Id}: item {en.Id} has no '{field}:' line");
+                        if (en.Bullets.Count != di.Bullets.Count)
+                            problems.Add($"{s.Id}: item {en.Id} has {di.Bullets.Count} bullet(s), English has {en.Bullets.Count}");
+                    }
                 }
 
                 // Blocks: check only their text (lead, fields, bullets), never their layout lines.

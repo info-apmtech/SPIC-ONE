@@ -32,7 +32,13 @@ namespace SPIC.Core.Help
     }
 
     /// <summary>A numbered marker on a screenshot, in % of the image (0–100).</summary>
-    public sealed record HelpHotspot(int N, double X, double Y, double W, double H);
+    public sealed record HelpHotspot(int N, double X, double Y, double W, double H)
+    {
+        /// <summary>"N @ -": the step's element is not in the picture, so no marker is drawn.</summary>
+        public static HelpHotspot None(int n) => new(n, -1, -1, 0, 0);
+
+        public bool HasMarker => X >= 0 && Y >= 0;
+    }
 
     /// <summary>One guided-tour step: the CSS selector of the element it highlights on the real page.</summary>
     public sealed record HelpTourStep(int N, string Target);

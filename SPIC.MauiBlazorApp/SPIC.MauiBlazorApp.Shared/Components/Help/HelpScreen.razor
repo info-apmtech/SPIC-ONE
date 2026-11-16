@@ -8,7 +8,7 @@
     var usePhone = Phone && meta.PhoneImage is not null;
     var image = usePhone ? meta.PhoneImage : meta.Image ?? meta.PhoneImage;
     var spots = usePhone ? meta.PhoneHotspots : (meta.Image is not null ? meta.Hotspots : meta.PhoneHotspots);
-    var active = spots.FirstOrDefault(h => h.N == _active);
+    var active = spots.FirstOrDefault(h => h.N == _active && h.HasMarker);
 }
 
 <section class="hc-sg" id="@Anchor">
@@ -57,7 +57,7 @@
                         {
                             <div class="hc-ring" style="@Box(active)"></div>
                         }
-                        @foreach (var h in spots)
+                        @foreach (var h in spots.Where(s => s.HasMarker))
                         {
                             var n = h.N;
                             <button type="button" class="hc-hs @(n == _active ? "is-on" : null)" style="@Point(h)" @onclick="() => _active = n" aria-label="@($"Step {n}")">@n</button>

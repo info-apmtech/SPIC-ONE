@@ -95,7 +95,13 @@ namespace SPIC.Core.Help
             _glossary.TryGetValue(lang, out var terms) ? terms : Array.Empty<HelpGlossaryTerm>();
 
         /// <summary>The guide in <paramref name="lang"/>, falling back to English per section; null for an unknown module.</summary>
-        public HelpGuide? Localized(string module, string lang)
+        public HelpGuide? Localized(string module, string lang) =>
+            // The library never changes after loading, so each (module, language) is merged once.
+            _localized.GetOrAdd((module.ToLowerInvariant(), (lang ?? "en").ToLowerInvariant()), key => Localize(key.Module, key.Lang));
+
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<(string Module, string Lang), HelpGuide?> _localized = new();
+
+        private HelpGuide? Localize(string module, string lang)
         {
             var en = English(module);
             if (en is null) return null;

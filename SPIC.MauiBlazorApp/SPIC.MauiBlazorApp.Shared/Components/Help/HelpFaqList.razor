@@ -18,13 +18,17 @@
 @code {
     [Parameter, EditorRequired] public HelpSection Section { get; set; } = default!;
 
+    /// <summary>The item to open first (from a home-page link); otherwise the first answer.</summary>
+    [Parameter] public string? OpenItem { get; set; }
+
     private readonly HashSet<string> _open = new();
 
     protected override void OnInitialized()
     {
         // The first answer starts open, as in the mockup.
         var first = HelpBlocks.Faq(Section, new List<string>()).FirstOrDefault();
-        if (first is not null) _open.Add(first.Id);
+        if (!string.IsNullOrWhiteSpace(OpenItem)) _open.Add(OpenItem);
+        else if (first is not null) _open.Add(first.Id);
     }
 
     private void Toggle(string id)

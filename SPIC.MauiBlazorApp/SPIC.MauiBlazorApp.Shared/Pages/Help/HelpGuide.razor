@@ -154,11 +154,11 @@
                         <div class="hc-kick">Problems</div>
                         <h2>@faq.Section.Title</h2>
                         <HelpMtFlag View="faq" />
-                        <HelpFaqList Section="faq.Section" />
+                        <HelpFaqList Section="faq.Section" OpenItem="@Item" />
                     </section>
                 }
 
-                <HelpFeedbackBox Module="@_view.Module" Language="@Lang.Current" />
+                <HelpFeedbackBox @key="_view.Module" Module="@_view.Module" Language="@Lang.Current" />
 
                 @{
                     var all = Catalog.VisibleModules(Lang.Current);
@@ -207,6 +207,9 @@
     [Parameter] public string Module { get; set; } = string.Empty;
     [Parameter] public string? Section { get; set; }
 
+    /// <summary>An FAQ item to open (links from the home page's popular questions).</summary>
+    [SupplyParameterFromQuery(Name = "item")] public string? Item { get; set; }
+
     private HelpModuleView? _view;
     private IReadOnlySet<string> _read = new HashSet<string>();
     private string? _tocOn;
@@ -223,7 +226,7 @@
         Lang.Changed += OnLangChanged;
         Progress.Changed += OnProgressChanged;
         _isWeb = string.Equals(FormFactor.GetFormFactor(), "Web", StringComparison.OrdinalIgnoreCase);
-        _phone = !_isWeb;
+        _phone = false; // decided by the page width after the first render (phones, narrow windows)
     }
 
     protected override void OnParametersSet() => _view = Catalog.Module(Module, Lang.Current);
@@ -236,7 +239,7 @@
             _read = await Progress.ReadAsync();
             try
             {
-                _phone = !_isWeb || await JS.InvokeAsync<bool>("helpCentre.isNarrow");
+                _phone = await JS.InvokeAsync<bool>("helpCentre.isNarrow");
                 _reducedMotion = await JS.InvokeAsync<bool>("helpCentre.reducedMotion");
                 _jsReady = true;
             }
@@ -255,7 +258,7 @@
             var screenIds = _view.Screens.Select(s => $"hc-s-{s.Section.Id}").ToArray();
             await JS.InvokeVoidAsync("helpCentre.observeToc", "toc", TocIds().ToArray(), _self);
             await JS.InvokeVoidAsync("helpCentre.observeRead", "read", screenIds, _self, 5000);
-            if (!string.IsNullOrWhiteSpace(Section)) await JS.InvokeVoidAsync("helpCentre.scrollToId", $"hc-s-{Section}");
+            if (!string.IsNullOrWhiteSpace(Section)) await JS.InvokeVoidAsync("helpCentre.scrollToId", AnchorFor(Section), true);
         }
     }
 
@@ -274,6 +277,21 @@
     }
 
     private string? On(string id) => id == _tocOn ? "is-on" : null;
+
+    // Where /Help/{module}/{section} scrolls to: a screen's own block, or the block's place on the page.
+    private string AnchorFor(string section)
+    {
+        var kind = _view?.Sections.FirstOrDefault(s => string.Equals(s.Section.Id, section, StringComparison.OrdinalIgnoreCase))?.Section.Kind ?? "screen";
+        return kind switch
+        {
+            "overview" => "hc-overview",
+            "flow" => "hc-flow",
+            "statuses" => _view?.Block("flow") is not null ? "hc-flow" : "hc-statuses",
+            "roles" => "hc-roles",
+            "faq" => "hc-faq",
+            _ => $"hc-s-{section}",
+        };
+    }
 
     private string? SupportHours(HelpSupport support) =>
         support.Hours is null ? null

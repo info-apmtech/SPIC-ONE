@@ -190,6 +190,11 @@ namespace SPIC.Core.Help
             foreach (var part in text.Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
             {
                 var at = part.IndexOf('@');
+                if (at > 0 && part.Substring(at + 1).Trim() == "-" && int.TryParse(part.Substring(0, at).Trim(), out var none))
+                {
+                    list.Add(HelpHotspot.None(none)); // the step's element is not in the picture
+                    continue;
+                }
                 var nums = at > 0
                     ? part.Substring(at + 1).Split(',', StringSplitOptions.TrimEntries)
                     : Array.Empty<string>();

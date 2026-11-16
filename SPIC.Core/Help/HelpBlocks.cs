@@ -210,6 +210,29 @@ namespace SPIC.Core.Help
             return lines;
         }
 
+        /// <summary>
+        /// Readable Markdown of a section for reviewers: a screen's body as it is; a block's lead and,
+        /// per item, its text fields and bullets (no layout lines).
+        /// </summary>
+        public static string ReviewMarkdown(HelpSection s)
+        {
+            if (s.Kind == "screen") return s.Body;
+            var sb = new StringBuilder();
+            var lead = Lead(s.Body);
+            if (lead.Length > 0) sb.Append(lead).Append("\n\n");
+            foreach (var item in Items(s.Body))
+            {
+                var values = item.Text.Values.Where(v => v.Trim().Length > 0).ToList();
+                if (values.Count > 0)
+                    sb.Append("**").Append(values[0].Replace("**", string.Empty)).Append("**")
+                      .Append(values.Count > 1 ? " — " + string.Join(" — ", values.Skip(1)) : string.Empty)
+                      .Append("\n\n");
+                foreach (var b in item.Bullets) sb.Append("- ").Append(b).Append('\n');
+                if (item.Bullets.Count > 0) sb.Append('\n');
+            }
+            return sb.ToString().TrimEnd();
+        }
+
         // ---------- typed views ----------
 
         public static IReadOnlyList<HelpOverviewCard> Overview(HelpSection s, List<string> problems) =>

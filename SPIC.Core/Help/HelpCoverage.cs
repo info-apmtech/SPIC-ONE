@@ -126,6 +126,8 @@ namespace SPIC.Core.Help
         private static void CheckScreen(string module, HelpSection s, Func<string, bool> imageExists, IReadOnlySet<string>? dataHelpIds, List<CoverageIssue> issues)
         {
             if (s.Screen is not { } m) return;
+            foreach (var h in m.Hotspots.Concat(m.PhoneHotspots).Where(h => h.HasMarker && (h.W <= 0 || h.H <= 0 || h.Y >= 100)))
+                issues.Add(new CoverageIssue("hotspot", module, $"section '{s.Id}': hotspot {h.N} has no size or sits on the picture's edge; use 'N @ -' for no marker") { Warning = true });
             if (m.Image is { } image && !imageExists($"{module}/images/{image}"))
                 issues.Add(new CoverageIssue("missing-image", module, $"section '{s.Id}': screenshot images/{image} does not exist (run help-tools shoot)"));
             if (m.Image is not null && m.PhoneImage is null)

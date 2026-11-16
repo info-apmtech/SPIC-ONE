@@ -54,13 +54,17 @@ namespace SPIC.Core.Help
             sb.Append("icon: ").Append(english.Icon).Append('\n');
             sb.Append("order: ").Append(english.Order).Append('\n');
             sb.Append("language: ").Append(language).Append('\n');
-            if (english.Category.Length > 0 || english.Note.Length > 0)
+            var hasCategory = translated.TryGetValue(CategoryKey, out var tc) && !string.IsNullOrWhiteSpace(tc.Title);
+            var hasNote = translated.TryGetValue(NoteKey, out var tn) && !string.IsNullOrWhiteSpace(tn.Title);
+            if (hasCategory || hasNote)
             {
-                var category = translated.TryGetValue(CategoryKey, out var tc) && !string.IsNullOrWhiteSpace(tc.Title) ? tc.Title : english.Category;
-                var note = translated.TryGetValue(NoteKey, out var tn) && !string.IsNullOrWhiteSpace(tn.Title) ? tn.Title : english.Note;
-                sb.Append("category: ").Append(OneLine(category)).Append('\n');
-                sb.Append("note: ").Append(OneLine(note)).Append('\n');
-                sb.Append("meta-source-hash: ").Append(HelpHash.Of(english.Category, english.Note)).Append('\n');
+                sb.Append("category: ").Append(OneLine(hasCategory ? tc.Title : english.Category)).Append('\n');
+                sb.Append("note: ").Append(OneLine(hasNote ? tn.Title : english.Note)).Append('\n');
+                // A kept (possibly older) translation keeps its own hash, so it stays visibly stale.
+                var metaHash = sourceHashes is not null && sourceHashes.TryGetValue(MetaKey, out var keptMeta) && !string.IsNullOrWhiteSpace(keptMeta)
+                    ? keptMeta
+                    : HelpHash.Of(english.Category, english.Note);
+                sb.Append("meta-source-hash: ").Append(metaHash).Append('\n');
             }
             sb.Append("---\n");
 
@@ -94,6 +98,9 @@ namespace SPIC.Core.Help
         public const string CategoryKey = "_category";
         public const string NoteKey = "_note";
 
+        /// <summary>sourceHashes key for the meta-source-hash of a kept category/note translation.</summary>
+        public const string MetaKey = "_meta";
+
         private static void AppendScreenMeta(StringBuilder sb, HelpScreenMeta? m)
         {
             if (m is null) return;
@@ -106,7 +113,9 @@ namespace SPIC.Core.Help
         }
 
         private static string Spots(IReadOnlyList<HelpHotspot> spots) =>
-            string.Join(" | ", spots.Select(h => string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{h.N} @ {h.X},{h.Y},{h.W},{h.H}")));
+            string.Join(" | ", spots.Select(h => h.HasMarker
+                ? string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{h.N} @ {h.X},{h.Y},{h.W},{h.H}")
+                : $"{h.N} @ -"));
 
         private static string OneLine(string s) => s.Replace("\r", " ").Replace("\n", " ").Trim();
 
