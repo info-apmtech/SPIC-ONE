@@ -36,11 +36,16 @@ public sealed class HelpApi : ApiClientBase
     /// caches it until the text changes, and the access token so an &lt;audio&gt; tag can play it.
     /// Null when the voice is unavailable.
     /// </summary>
-    public async Task<string?> AudioUrlAsync(string module, string sectionId, string lang, CancellationToken ct = default)
+    public async Task<string?> AudioUrlAsync(string module, string sectionId, string lang, CancellationToken ct = default) =>
+        await AudioUrlAsync(module, sectionId, lang, null, ct);
+
+    /// <summary>As above; with <paramref name="step"/> the clip of that one tour step.</summary>
+    public async Task<string?> AudioUrlAsync(string module, string sectionId, string lang, int? step, CancellationToken ct = default)
     {
         try
         {
             var path = $"audio/{Uri.EscapeDataString(module)}/{Uri.EscapeDataString(sectionId)}/{Uri.EscapeDataString(lang)}";
+            if (step is { } n) path += $"/step/{n}";
             var response = await Http.GetAsync(Url("audio/key/" + path["audio/".Length..]), ct);
             if (!response.IsSuccessStatusCode) return null;
             var key = (await response.Content.ReadFromJsonAsync<ClipKey>(Json, ct))?.Key;

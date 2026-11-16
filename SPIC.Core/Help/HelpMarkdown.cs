@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Net;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -38,10 +39,18 @@ namespace SPIC.Core.Help
                 html.Append("</").Append(openList).Append('>');
                 openList = null;
             }
+            var calloutOpen = false;
             void CloseNote()
             {
                 if (!inNote) return;
-                FlushParagraph();
+                if (calloutOpen)
+                {
+                    // A callout's text sits inline after its label, not in a <p>.
+                    if (paragraph.Count > 0) html.Append(' ').Append(Inline(string.Join(" ", paragraph), imageBase));
+                    paragraph.Clear();
+                    calloutOpen = false;
+                }
+                else FlushParagraph();
                 html.Append("</div>");
                 inNote = false;
             }
@@ -53,21 +62,62 @@ namespace SPIC.Core.Help
                 openList = kind;
             }
 
+            var table = new List<string>();
+            void FlushTable()
+            {
+                if (table.Count == 0) return;
+                var rows = table.Where(r => !IsTableSeparator(r)).Select(Cells).ToList();
+                var hasHeader = table.Count > 1 && IsTableSeparator(table[1]);
+                html.Append("<table class=\"hc-fields\">");
+                for (var r = 0; r < rows.Count; r++)
+                {
+                    var cell = hasHeader && r == 0 ? "th" : "td";
+                    html.Append("<tr>");
+                    foreach (var c in rows[r]) html.Append('<').Append(cell).Append('>').Append(Inline(c, imageBase)).Append("</").Append(cell).Append('>');
+                    html.Append("</tr>");
+                }
+                html.Append("</table>");
+                table.Clear();
+            }
+
             foreach (var raw in (body ?? string.Empty).Replace("\r\n", "\n").Split('\n'))
             {
                 var line = raw.Trim();
+                if (line.StartsWith('|'))
+                {
+                    if (table.Count == 0) { FlushParagraph(); CloseList(); CloseNote(); }
+                    table.Add(line);
+                    continue;
+                }
+                FlushTable();
+
                 if (line.Length == 0)
                 {
-                    FlushParagraph();
+                    if (inNote) CloseNote(); else FlushParagraph();
                     CloseList();
-                    CloseNote();
                     continue;
                 }
 
                 if (line.StartsWith("> ", StringComparison.Ordinal) || line == ">")
                 {
-                    if (!inNote) { FlushParagraph(); CloseList(); html.Append("<div class=\"help-note\">"); inNote = true; }
-                    paragraph.Add(line.TrimStart('>').Trim());
+                    var text = line.TrimStart('>').Trim();
+                    if (!inNote)
+                    {
+                        FlushParagraph(); CloseList();
+                        var callout = Callout(text);
+                        if (callout is { } c)
+                        {
+                            html.Append("<div class=\"hc-callout ").Append(c.Css).Append("\"><b>").Append(c.Label).Append("</b>");
+                            text = c.Text;
+                            paragraph.Add(text);
+                            inNote = true;
+                            calloutOpen = true;
+                            continue;
+                        }
+                        html.Append("<div class=\"help-note\">");
+                        inNote = true;
+                    }
+                    paragraph.Add(text);
                     continue;
                 }
                 CloseNote();
@@ -104,21 +154,52 @@ namespace SPIC.Core.Help
                 }
             }
 
-            FlushParagraph();
+            FlushTable();
+            if (inNote) CloseNote(); else FlushParagraph();
             CloseList();
-            CloseNote();
             return html.ToString();
         }
+
+        /// <summary>"Tip: …" and "Careful: …" (fixed English keywords, also in translations).</summary>
+        private static (string Css, string Label, string Text)? Callout(string text)
+        {
+            if (text.StartsWith("Tip:", StringComparison.Ordinal)) return ("hc-tip", "Tip", text[4..].Trim());
+            if (text.StartsWith("Careful:", StringComparison.Ordinal)) return ("hc-warn", "Careful", text[8..].Trim());
+            return null;
+        }
+
+        private static bool IsTableSeparator(string line) =>
+            line.Trim().Trim('|').Split('|').All(c => c.Trim().Length > 0 && c.Trim().All(ch => ch is '-' or ':'));
+
+        private static List<string> Cells(string line) =>
+            line.Trim().Trim('|').Split('|').Select(c => c.Trim()).ToList();
 
         /// <summary>Plain text for the voice: title first, Markdown marks and images removed,
         /// numbered steps read as "Step 1.".</summary>
         public static string ToSpeech(string title, string body)
         {
             var lines = new List<string> { EndSentence(Plain(title ?? string.Empty)) };
-            foreach (var raw in (body ?? string.Empty).Replace("\r\n", "\n").Split('\n'))
+            var all = (body ?? string.Empty).Replace("\r\n", "\n").Split('\n');
+            for (var i = 0; i < all.Length; i++)
             {
-                var line = Image.Replace(raw.Trim(), string.Empty).Trim();
+                var line = Image.Replace(all[i].Trim(), string.Empty).Trim();
                 if (line.Length == 0) continue;
+
+                if (line.StartsWith('|'))
+                {
+                    // Table: skip the separator and the header row; read "label: text." per row.
+                    if (IsTableSeparator(line)) continue;
+                    if (i + 1 < all.Length && all[i + 1].Trim().StartsWith('|') && IsTableSeparator(all[i + 1])) continue;
+                    var cells = Cells(line).Select(Plain).Where(c => c.Length > 0).ToList();
+                    if (cells.Count > 0) lines.Add(EndSentence(cells.Count == 1 ? cells[0] : cells[0] + ": " + string.Join(", ", cells.Skip(1))));
+                    continue;
+                }
+
+                if (line.StartsWith('>') && Callout(line.TrimStart('>').Trim()) is { } callout)
+                {
+                    lines.Add(callout.Label + ". " + EndSentence(Plain(callout.Text)));
+                    continue;
+                }
 
                 if (Ordered.Match(line) is { Success: true } m)
                     line = $"Step {m.Groups[1].Value}. {m.Groups[2].Value}";
