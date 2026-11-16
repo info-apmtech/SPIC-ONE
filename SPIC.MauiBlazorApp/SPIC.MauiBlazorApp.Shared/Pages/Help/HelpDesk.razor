@@ -1,0 +1,90 @@
+@page "/Help"
+@* Help Desk home: the guides this user's role can use, grouped by module, with search. *@
+@implements IDisposable
+@inject HelpCatalog Catalog
+@inject HelpLanguageState Lang
+@inject HelpApi Api
+
+<PageHeader Title="Help Desk" Subtitle="How to use each screen, for your role" ShowBack="false">
+    <Actions>
+        <HelpLanguagePicker />
+    </Actions>
+</PageHeader>
+
+<div class="help-page">
+    <label class="help-search">
+        <i class="bi bi-search" aria-hidden="true"></i>
+        <input type="search"
+               placeholder="Search the guides"
+               aria-label="Search the guides"
+               value="@_query"
+               @oninput="e => _query = e.Value?.ToString() ?? string.Empty" />
+    </label>
+
+    @if (!string.IsNullOrWhiteSpace(_query))
+    {
+        var hits = Catalog.Search(_query, Lang.Current);
+        @if (hits.Count == 0)
+        {
+            <p class="help-muted">No guide mentions "@_query".</p>
+        }
+        else
+        {
+            <ul class="help-hits">
+                @foreach (var hit in hits)
+                {
+                    <li>
+                        <a href="@($"/Help/{hit.Section.Module}/{hit.Section.Section.Id}")">
+                            <strong>@hit.Section.Section.Title</strong>
+                            <span>@hit.Snippet</span>
+                        </a>
+                    </li>
+                }
+            </ul>
+        }
+    }
+    else if (_modules.Count == 0)
+    {
+        <div class="help-empty">
+            <i class="bi bi-journal-x" aria-hidden="true"></i>
+            <p>There are no guides for your role yet. Use <a href="/ContactUs">Contact Us</a> if you need help.</p>
+        </div>
+    }
+    else
+    {
+        <div class="help-grid">
+            @foreach (var m in _modules)
+            {
+                <a class="help-card" href="@($"/Help/{m.Module}")">
+                    <i class="bi @m.Icon help-card__icon" aria-hidden="true"></i>
+                    <span class="help-card__title">@m.Title</span>
+                    <span class="help-card__count">@m.Sections.Count @(m.Sections.Count == 1 ? "guide" : "guides")</span>
+                </a>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private string _query = string.Empty;
+    private IReadOnlyList<HelpModuleView> _modules = Array.Empty<HelpModuleView>();
+
+    protected override void OnInitialized()
+    {
+        Catalog.ApprovedKeys = Api.Approved;
+        Lang.Changed += OnLangChanged;
+        Load();
+    }
+
+    // Reviewer approvals for the chosen language (loaded once per session, quietly).
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (await Api.EnsureApprovedAsync(Lang.Current)) { Load(); StateHasChanged(); }
+    }
+
+    private void Load() => _modules = Catalog.VisibleModules(Lang.Current);
+
+    private void OnLangChanged() => InvokeAsync(() => { Load(); StateHasChanged(); });
+
+    public void Dispose() => Lang.Changed -= OnLangChanged;
+}

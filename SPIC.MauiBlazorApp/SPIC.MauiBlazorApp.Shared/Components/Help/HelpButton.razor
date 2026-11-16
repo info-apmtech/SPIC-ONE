@@ -1,0 +1,21 @@
+@* Top-bar "?" button, on every page for signed-in users: opens the guide for the current screen.
+   The panel itself is rendered by HelpPanelHost at the layout root (see HelpPanelState). *@
+@implements IDisposable
+@inject HelpPanelState Panel
+
+<button type="button"
+        class="icon-btn help-topbar-btn"
+        title="Help for this screen"
+        aria-label="Help for this screen"
+        aria-expanded="@(Panel.IsOpen ? "true" : "false")"
+        @onclick="Panel.Toggle">
+    <i class="bi bi-question-circle" aria-hidden="true"></i>
+</button>
+
+@code {
+    protected override void OnInitialized() => Panel.Changed += OnChanged;
+
+    private void OnChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Panel.Changed -= OnChanged;
+}

@@ -8,6 +8,7 @@ using Microsoft.OpenApi;
 using Spic.Infrastructure.Data;
 using Spic.Infrastructure.Services;
 using Spic.Infrastructure.Services.Assistant;
+using Spic.Infrastructure.Services.Help;
 using Spic.Infrastructure.Services.Lab;
 using Spic.Infrastructure.Services.LabReports;
 using Spic.Infrastructure.Services.Payments;
@@ -137,6 +138,21 @@ builder.Services.AddScoped<IAssistantProvider>(sp =>
         ? sp.GetRequiredService<AnthropicAssistantProvider>()
         : sp.GetRequiredService<KeywordAssistantProvider>();
 });
+// Help Desk voice (docs/superpowers/specs/2026-11-16-help-desk-design.md §6.6). Guides are embedded
+// in SPIC.Core; clips are generated once by Azure AI Speech (Help__SpeechKey / Help__SpeechRegion,
+// from Key Vault in Azure) and saved under Uploads/Help/audio, which is Azure Files in production.
+// With no key the Listen button is hidden.
+builder.Services.Configure<HelpSpeechOptions>(builder.Configuration.GetSection(HelpSpeechOptions.SectionName));
+builder.Services.AddSingleton(SPIC.Core.Help.HelpLibrary.FromEmbedded());
+builder.Services.AddSingleton<ISpeechSynthesizer, AzureSpeechSynthesizer>();
+builder.Services.AddSingleton(sp =>
+{
+    var options = sp.GetRequiredService<IOptions<HelpSpeechOptions>>().Value;
+    var root = string.IsNullOrWhiteSpace(options.AudioCacheRoot)
+        ? Path.Combine(builder.Environment.ContentRootPath, "Uploads", "Help", "audio")
+        : options.AudioCacheRoot;
+    return new HelpAudioCache(root, sp.GetRequiredService<ISpeechSynthesizer>());
+});
 // Contact Us enquiry email. Options bind to the SAME "Alerts:Email" section that
 // SPIC.Ifms.Automation uses, so both apps share one SMTP configuration/pattern.
 builder.Services.Configure<ContactUsMailOptions>(
@@ -224,6 +240,8 @@ builder.Services.AddAuthentication(options =>
                  path.StartsWithSegments("/api/Community/file") ||
                  path.StartsWithSegments("/api/Sas/file") ||
                  path.StartsWithSegments("/api/Publicity/file") ||
+                 // Help Desk voice clips played by an <audio> tag.
+                 path.StartsWithSegments("/api/Help/audio") ||
                  // SAS lab reports: api/Lab/reports/{id}/pdf|xlsx and api/Lab/batches/{id}/report/download
                  (path.StartsWithSegments("/api/Lab") && path.Value is string labPath &&
                   (labPath.EndsWith("/pdf", StringComparison.OrdinalIgnoreCase) ||

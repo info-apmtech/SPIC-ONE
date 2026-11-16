@@ -1,0 +1,40 @@
+@* One guide section: title, translation notes, the rendered guide text and screenshots, and a
+   link to the screen it explains. Guide text is HTML-encoded by HelpMarkdown before rendering. *@
+@using SPIC.Core.Help
+
+<article class="help-section">
+    <h2 class="help-section__title">@View.Section.Title</h2>
+
+    @if (View.MachineTranslated)
+    {
+        <p class="help-flag help-flag--mt"><i class="bi bi-robot" aria-hidden="true"></i> Machine translated - a reviewer has not checked this yet.</p>
+    }
+    else if (View.IsFallbackEnglish)
+    {
+        <p class="help-flag"><i class="bi bi-translate" aria-hidden="true"></i> Not yet translated - shown in English.</p>
+    }
+
+    @ChildContent
+
+    <div class="help-section__text">
+        @((MarkupString)HelpMarkdown.ToHtml(View.Section.Body, ImageBase(View.Module)))
+    </div>
+
+    @if (ShowOpenLink && OpenHref is { } href)
+    {
+        <a class="help-link" href="@href"><i class="bi bi-box-arrow-up-right" aria-hidden="true"></i> Open this screen</a>
+    }
+</article>
+
+@code {
+    [Parameter, EditorRequired] public HelpSectionView View { get; set; } = default!;
+    [Parameter] public bool ShowOpenLink { get; set; } = true;
+
+    /// <summary>Extra content under the title (the Listen button).</summary>
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    public static string ImageBase(string module) => $"_content/SPIC.MauiBlazorApp.Shared/help/{module}";
+
+    // Only a route without parameters can be opened directly.
+    private string? OpenHref => View.Section.Routes.FirstOrDefault(r => !HelpRoutes.HasParameters(r));
+}

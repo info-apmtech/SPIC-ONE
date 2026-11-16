@@ -1,0 +1,81 @@
+@page "/Help/{Module}"
+@page "/Help/{Module}/{Section}"
+@* One module's guide: its sections for this user (left / top) and the chosen section. *@
+@implements IDisposable
+@inject HelpCatalog Catalog
+@inject HelpLanguageState Lang
+@inject HelpApi Api
+
+<PageHeader Title="@(_view?.Title ?? "Help Desk")" Subtitle="Help Desk" BackHref="/Help" BackLabel="All guides">
+    <Actions>
+        <HelpLanguagePicker />
+    </Actions>
+</PageHeader>
+
+<div class="help-page">
+    @if (_view is null)
+    {
+        <div class="help-empty">
+            <i class="bi bi-lock" aria-hidden="true"></i>
+            <p>This guide isn't available for your role.</p>
+            <a class="help-link" href="/Help">Back to the Help Desk</a>
+        </div>
+    }
+    else
+    {
+        <div class="help-guide">
+            <nav class="help-toc" aria-label="Guides in @_view.Title">
+                @foreach (var s in _view.Sections)
+                {
+                    <a class="help-toc__item @(s == _current ? "is-active" : null)"
+                       href="@($"/Help/{_view.Module}/{s.Section.Id}")"
+                       aria-current="@(s == _current ? "page" : null)">
+                        @s.Section.Title
+                    </a>
+                }
+            </nav>
+
+            @if (_current is not null)
+            {
+                <div class="help-guide__content">
+                    <HelpSectionBody View="_current">
+                        <ListenButton View="_current" />
+                    </HelpSectionBody>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public string Module { get; set; } = string.Empty;
+    [Parameter] public string? Section { get; set; }
+
+    private HelpModuleView? _view;
+    private HelpSectionView? _current;
+
+    protected override void OnInitialized()
+    {
+        Catalog.ApprovedKeys = Api.Approved;
+        Lang.Changed += OnLangChanged;
+    }
+
+    protected override void OnParametersSet() => Load();
+
+    // Reviewer approvals for the chosen language (loaded once per session, quietly).
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (await Api.EnsureApprovedAsync(Lang.Current)) { Load(); StateHasChanged(); }
+    }
+
+    private void Load()
+    {
+        _view = Catalog.Module(Module, Lang.Current);
+        _current = _view?.Sections.FirstOrDefault(s => string.Equals(s.Section.Id, Section, StringComparison.OrdinalIgnoreCase))
+                   ?? _view?.Sections.FirstOrDefault();
+    }
+
+    private void OnLangChanged() => InvokeAsync(() => { Load(); StateHasChanged(); });
+
+    public void Dispose() => Lang.Changed -= OnLangChanged;
+}

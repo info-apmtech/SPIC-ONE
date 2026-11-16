@@ -1,0 +1,69 @@
+@* The "?" panel: the guide section for the screen the user is on. A side panel on desktop and
+   tablet, a bottom sheet on phones (Help.css). Closes on navigation. *@
+@implements IDisposable
+@inject NavigationManager Nav
+@inject HelpCatalog Catalog
+@inject HelpLanguageState Lang
+@inject HelpApi Api
+
+<div class="help-panel-backdrop" @onclick="Close"></div>
+<aside class="help-panel" role="dialog" aria-modal="true" aria-label="Help for this screen">
+    <header class="help-panel__head">
+        <strong><i class="bi bi-question-circle" aria-hidden="true"></i> Help</strong>
+        <HelpLanguagePicker Compact="true" />
+        <button type="button" class="help-panel__close" @onclick="Close" aria-label="Close help">
+            <i class="bi bi-x-lg" aria-hidden="true"></i>
+        </button>
+    </header>
+
+    <div class="help-panel__body">
+        @if (_section is null)
+        {
+            <p class="help-muted">There is no guide for this screen yet.</p>
+            <a class="help-link" href="/Help" @onclick="Close">Open the Help Desk</a>
+        }
+        else
+        {
+            <HelpSectionBody View="_section" ShowOpenLink="false">
+                <ListenButton View="_section" />
+            </HelpSectionBody>
+            <a class="help-link" href="@($"/Help/{_section.Module}/{_section.Section.Id}")">Full page</a>
+            <a class="help-link" href="/Help">All guides</a>
+        }
+    </div>
+</aside>
+
+@code {
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private HelpSectionView? _section;
+
+    protected override void OnInitialized()
+    {
+        Catalog.ApprovedKeys = Api.Approved;
+        Lang.Changed += OnLangChanged;
+        Nav.LocationChanged += OnLocationChanged;
+        Load();
+    }
+
+    // Reviewer approvals for the chosen language (loaded once per session, quietly).
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (await Api.EnsureApprovedAsync(Lang.Current)) { Load(); StateHasChanged(); }
+    }
+
+    private void Load() => _section = Catalog.ForPath(Nav.Uri, Lang.Current);
+
+    private void OnLangChanged() => InvokeAsync(() => { Load(); StateHasChanged(); });
+
+    private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e) =>
+        InvokeAsync(Close);
+
+    private Task Close() => OnClose.InvokeAsync();
+
+    public void Dispose()
+    {
+        Lang.Changed -= OnLangChanged;
+        Nav.LocationChanged -= OnLocationChanged;
+    }
+}
