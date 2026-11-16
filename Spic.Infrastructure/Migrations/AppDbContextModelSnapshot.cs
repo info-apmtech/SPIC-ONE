@@ -9423,9 +9423,8 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<DateTime>("PreviousEndDate")
                         .HasColumnType("timestamp without time zone");
 
-                    b.Property<string>("Reason")
-                        .IsRequired()
-                        .HasColumnType("text");
+                    b.Property<int>("Reason")
+                        .HasColumnType("integer");
 
                     b.Property<string>("RejectedBy")
                         .HasColumnType("text");

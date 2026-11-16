@@ -34,7 +34,23 @@ public sealed class SalesAuditController : ControllerBase
     }
 
 
-    // Read-only extension request list for authorized administrators.
+    // Used by PeriodEndReview UI. Role is resolved from the authenticated login,
+    // never from a user-supplied query string or request body.
+    [HttpGet("current-extension-role")]
+    public async Task<IActionResult> GetCurrentExtensionRole()
+    {
+        if (User.Identity?.IsAuthenticated != true) return Unauthorized();
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrWhiteSpace(userId)) return Unauthorized();
+
+        var employee = await _db.Set<Employeelogin>().AsNoTracking()
+            .FirstOrDefaultAsync(x => x.IsActive && x.UserId == userId,
+                HttpContext.RequestAborted);
+        var role = employee is null ? string.Empty : ResolveTrackingRole(employee, User);
+        return Ok(new { canRequestExtension = role == AppRole.SMM.ToString().ToUpperInvariant() });
+    }
+
+    // Read-only extension request list for AVP and existing Admin/SuperAdmin reviewers.
     // No updates to SalesAuditRecords or SalesAuditExtensionRequests.
     [HttpGet("extension/requests")]
     public async Task<IActionResult> GetExtensionRequests()
@@ -46,22 +62,23 @@ public sealed class SalesAuditController : ControllerBase
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (string.IsNullOrWhiteSpace(userId)) return Unauthorized();
 
-        bool isAdmin = User.IsInRole("Admin") || User.IsInRole("SuperAdmin") ||
+        bool canReviewExtension = User.IsInRole("Admin") || User.IsInRole("SuperAdmin") || User.IsInRole(AppRole.AVP.ToString()) ||
             User.Claims.Any(c =>
                 (c.Type == ClaimTypes.Role || c.Type == "role" || c.Type == "roles" ||
                  c.Type == "AppRole" || c.Type == "app_role") &&
                 (string.Equals(c.Value, "Admin", StringComparison.OrdinalIgnoreCase) ||
-                 string.Equals(c.Value, "SuperAdmin", StringComparison.OrdinalIgnoreCase)));
+                 string.Equals(c.Value, "SuperAdmin", StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(c.Value, AppRole.AVP.ToString(), StringComparison.OrdinalIgnoreCase)));
 
         // Compatibility for deployments that keep the validated role on Employeelogin.
-        if (!isAdmin)
+        if (!canReviewExtension)
         {
             var employee = await _db.Set<Employeelogin>().AsNoTracking()
                 .FirstOrDefaultAsync(x => x.IsActive && x.UserId == userId, HttpContext.RequestAborted);
             if (employee is not null)
-                isAdmin = ResolveTrackingRole(employee, User) is "ADMIN" or "SUPERADMIN";
+                canReviewExtension = ResolveTrackingRole(employee, User) is "ADMIN" or "SUPERADMIN" or "AVP";
         }
-        if (!isAdmin) return Forbid();
+        if (!canReviewExtension) return Forbid();
 
         // Left joins preserve extension records even when their audit or program is missing.
         var rows = await (
@@ -193,7 +210,7 @@ public sealed class SalesAuditController : ControllerBase
     }
 
     // GET by extension request primary key (not CSR2Id); details must never read sample rows.
-    // This endpoint is read-only and uses the same Admin/SuperAdmin policy as the list.
+    // This endpoint is read-only and uses the same AVP/Admin/SuperAdmin policy as the list.
     [HttpGet("extension/requests/{requestId:int}")]
     public async Task<IActionResult> GetExtensionRequestDetails(int requestId)
     {
@@ -201,20 +218,21 @@ public sealed class SalesAuditController : ControllerBase
         if (User.Identity?.IsAuthenticated != true) return Unauthorized();
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (string.IsNullOrWhiteSpace(userId)) return Unauthorized();
-        bool isAdmin = User.IsInRole("Admin") || User.IsInRole("SuperAdmin") ||
+        bool canReviewExtension = User.IsInRole("Admin") || User.IsInRole("SuperAdmin") || User.IsInRole(AppRole.AVP.ToString()) ||
             User.Claims.Any(c =>
                 (c.Type == ClaimTypes.Role || c.Type == "role" || c.Type == "roles" ||
                  c.Type == "AppRole" || c.Type == "app_role") &&
                 (string.Equals(c.Value, "Admin", StringComparison.OrdinalIgnoreCase) ||
-                 string.Equals(c.Value, "SuperAdmin", StringComparison.OrdinalIgnoreCase)));
-        if (!isAdmin)
+                 string.Equals(c.Value, "SuperAdmin", StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(c.Value, AppRole.AVP.ToString(), StringComparison.OrdinalIgnoreCase)));
+        if (!canReviewExtension)
         {
             var employee = await _db.Set<Employeelogin>().AsNoTracking()
                 .FirstOrDefaultAsync(x => x.IsActive && x.UserId == userId, HttpContext.RequestAborted);
             if (employee is not null)
-                isAdmin = ResolveTrackingRole(employee, User) is "ADMIN" or "SUPERADMIN";
+                canReviewExtension = ResolveTrackingRole(employee, User) is "ADMIN" or "SUPERADMIN" or "AVP";
         }
-        if (!isAdmin) return Forbid();
+        if (!canReviewExtension) return Forbid();
 
         var item = await (
             from ext in _db.Set<SalesAuditExtensionRequest>().AsNoTracking()
@@ -275,7 +293,7 @@ public sealed class SalesAuditController : ControllerBase
             required, actual,
             required > 0m ? actual / required * 100m : 0m,
             item.DocumentStatus ?? "Not Started",
-            item.Reason, item.Remarks, DisplayReviewer(item.ApprovedBy), item.ApprovedDate,
+            item.Reason.GetLabel(), item.Remarks, DisplayReviewer(item.ApprovedBy), item.ApprovedDate,
             ExtensionStatusLabel(item.Status))
         {
             RejectedBy = DisplayReviewer(item.RejectedBy),
@@ -295,23 +313,24 @@ public sealed class SalesAuditController : ControllerBase
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (string.IsNullOrWhiteSpace(userId)) return Unauthorized();
 
-        // Explicit Admin-only WRITE authorization. Do not reuse tracking GET permission.
+        // AVP and existing Admin/SuperAdmin review permission. Do not reuse tracking GET permission.
         // Role claims are trusted only through the server's authentication middleware.
-        bool isAdmin = User.IsInRole("Admin") || User.IsInRole("SuperAdmin") ||
+        bool canReviewExtension = User.IsInRole("Admin") || User.IsInRole("SuperAdmin") || User.IsInRole(AppRole.AVP.ToString()) ||
             User.Claims.Any(c =>
                 (c.Type == ClaimTypes.Role || c.Type == "role" || c.Type == "roles" ||
                  c.Type == "AppRole" || c.Type == "app_role") &&
                 (string.Equals(c.Value, "Admin", StringComparison.OrdinalIgnoreCase) ||
-                 string.Equals(c.Value, "SuperAdmin", StringComparison.OrdinalIgnoreCase)));
-        if (!isAdmin)
+                 string.Equals(c.Value, "SuperAdmin", StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(c.Value, AppRole.AVP.ToString(), StringComparison.OrdinalIgnoreCase)));
+        if (!canReviewExtension)
         {
             var employee = await _db.Set<Employeelogin>().AsNoTracking()
                 .FirstOrDefaultAsync(x => x.IsActive && x.UserId == userId,
                     HttpContext.RequestAborted);
             if (employee is not null)
-                isAdmin = ResolveTrackingRole(employee, User) is "ADMIN" or "SUPERADMIN";
+                canReviewExtension = ResolveTrackingRole(employee, User) is "ADMIN" or "SUPERADMIN" or "AVP";
         }
-        if (!isAdmin) return Forbid();
+        if (!canReviewExtension) return Forbid();
 
         // SERIALIZABLE ensures competing approvals/revisions cannot silently overwrite
         // each other. Both changes commit or neither does.
@@ -386,21 +405,22 @@ public sealed class SalesAuditController : ControllerBase
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (string.IsNullOrWhiteSpace(userId)) return Unauthorized();
 
-        // Same Admin/SuperAdmin authorization as the approval write endpoint.
-        bool isAdmin = User.IsInRole("Admin") || User.IsInRole("SuperAdmin") ||
+        // Same AVP/Admin/SuperAdmin authorization as the approval write endpoint.
+        bool canReviewExtension = User.IsInRole("Admin") || User.IsInRole("SuperAdmin") || User.IsInRole(AppRole.AVP.ToString()) ||
             User.Claims.Any(c =>
                 (c.Type == ClaimTypes.Role || c.Type == "role" || c.Type == "roles" ||
                  c.Type == "AppRole" || c.Type == "app_role") &&
                 (string.Equals(c.Value, "Admin", StringComparison.OrdinalIgnoreCase) ||
-                 string.Equals(c.Value, "SuperAdmin", StringComparison.OrdinalIgnoreCase)));
-        if (!isAdmin)
+                 string.Equals(c.Value, "SuperAdmin", StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(c.Value, AppRole.AVP.ToString(), StringComparison.OrdinalIgnoreCase)));
+        if (!canReviewExtension)
         {
             var employee = await _db.Set<Employeelogin>().AsNoTracking()
                 .FirstOrDefaultAsync(x => x.IsActive && x.UserId == userId, HttpContext.RequestAborted);
             if (employee is not null)
-                isAdmin = ResolveTrackingRole(employee, User) is "ADMIN" or "SUPERADMIN";
+                canReviewExtension = ResolveTrackingRole(employee, User) is "ADMIN" or "SUPERADMIN" or "AVP";
         }
-        if (!isAdmin) return Forbid();
+        if (!canReviewExtension) return Forbid();
 
         await using var transaction = await _db.Database.BeginTransactionAsync(
             IsolationLevel.Serializable, HttpContext.RequestAborted);
@@ -548,7 +568,7 @@ public sealed class SalesAuditController : ControllerBase
             requestedOn = latest.CreatedDate,
             requestedBy = displayName,
             status = latest.Status.ToString(),
-            reason = latest.Reason,
+            reason = latest.Reason.GetLabel(),
             remarks = latest.Remarks,
             hasApprovedExtension
         });
@@ -561,15 +581,16 @@ public sealed class SalesAuditController : ControllerBase
         if (csr2Id <= 0) return BadRequest(new { message = "Invalid CSR2 ID." });
         if (!await CanReadSalesAuditRecordAsync(csr2Id)) return Forbid();
 
+        // Materialize before formatting enum to preserve EF Core SQL translation.
         var pending = await _db.Set<SalesAuditExtensionRequest>().AsNoTracking()
             .Where(x => x.CSRId == csr2Id && x.Status == SalesAuditExtensionRequestStatus.Submitted)
             .OrderByDescending(x => x.Id)
-            .Select(x => new ExtensionRequestReceiptDto(
-                x.Id, x.CreatedDate, x.PreviousEndDate,
-                x.NewEndDate, x.Reason, x.Remarks))
             .FirstOrDefaultAsync(HttpContext.RequestAborted);
 
-        return pending is null ? NotFound() : Ok(pending);
+        if (pending is null) return NotFound();
+        return Ok(new ExtensionRequestReceiptDto(
+            pending.Id, pending.CreatedDate, pending.PreviousEndDate,
+            pending.NewEndDate, pending.Reason.GetLabel(), pending.Remarks));
     }
 
     [HttpPost("extension/{csr2Id:int}")]
@@ -580,12 +601,13 @@ public sealed class SalesAuditController : ControllerBase
 
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (string.IsNullOrWhiteSpace(userId)) return Unauthorized();
-        // Explicit WRITE authorization. Never rely on CanViewTrackingRecordAsync for mutation.
+        // SMM is the only role permitted to create extension requests.
+        // CanRequestExtensionAsync retains its existing record/geography checks.
         if (!await CanRequestExtensionAsync(csr2Id, userId)) return Forbid();
 
         if (input.NewEndDate == default || input.NewEndDate.TimeOfDay != TimeSpan.Zero)
             return BadRequest(new { message = "Provide a valid date without a time component." });
-        if (input.Reason is null || !ExtensionReasons.Contains(input.Reason))
+        if (!ExtensionReasonHelper.TryParseLabel(input.Reason, out var reasonId))
             return BadRequest(new { message = "Select a valid extension reason." });
         var remarks = input.Remarks?.Trim() ?? "";
         if (remarks.Length > 500)
@@ -630,7 +652,7 @@ public sealed class SalesAuditController : ControllerBase
             NewEndDate = input.NewEndDate.Date,
             CreatedBy = userId,
             CreatedDate = DateTime.UtcNow,
-            Reason = input.Reason,
+            Reason = reasonId,
             Remarks = remarks,
             Status = SalesAuditExtensionRequestStatus.Submitted
         };
@@ -659,7 +681,7 @@ public sealed class SalesAuditController : ControllerBase
 
         return Ok(new ExtensionRequestReceiptDto(
             extension.Id, extension.CreatedDate, extension.PreviousEndDate,
-            extension.NewEndDate, extension.Reason, extension.Remarks));
+            extension.NewEndDate, extension.Reason.GetLabel(), extension.Remarks));
     }
 
     private static bool HasPostgresSqlState(Exception ex, string sqlState)
@@ -670,12 +692,6 @@ public sealed class SalesAuditController : ControllerBase
         return false;
     }
 
-    private static readonly HashSet<string> ExtensionReasons = new(StringComparer.Ordinal)
-    {
-        "Market Condition", "Weather / Crop Season Delay", "Stock Availability",
-        "Dealer Onboarding Delay", "Other"
-    };
-
     // Write permission: active owner OR explicitly supported tracking role within its
     // actual server-side geographic scope. This does not alter other write endpoints.
     private async Task<bool> CanRequestExtensionAsync(int csr2Id, string userId)
@@ -683,6 +699,9 @@ public sealed class SalesAuditController : ControllerBase
         var employee = await _db.Set<Employeelogin>().AsNoTracking()
             .FirstOrDefaultAsync(x => x.IsActive && x.UserId == userId, HttpContext.RequestAborted);
         if (employee is null) return false;
+        // Exact AppRole.SMM login-role check; no other role or ownership bypass.
+        var role = ResolveTrackingRole(employee, User);
+        if (role != AppRole.SMM.ToString().ToUpperInvariant()) return false;
 
         var programIds = (_options.EligibleProgramIds ?? Array.Empty<int>())
             .Where(x => x > 0).Distinct().ToArray();
@@ -693,36 +712,11 @@ public sealed class SalesAuditController : ControllerBase
                          select new { c1.ResponsiblePersonId, c1.ProgramId, c1.HeadquarterId })
             .FirstOrDefaultAsync(HttpContext.RequestAborted);
         if (row is null || (programIds.Length > 0 && !programIds.Contains(row.ProgramId))) return false;
+        // Preserve existing owner and SMM geography checks, but only after SMM role validation.
         if (row.ResponsiblePersonId == userId) return true;
         if (!row.HeadquarterId.HasValue) return false;
-
-        var role = ResolveTrackingRole(employee, User);
-        var hqId = row.HeadquarterId.Value;
-        if (role is "SMM")
-            return ReadIds(employee, "HeadquartersIds", "HeadquartersId", "HQId").Contains(hqId);
-        if (role is "RM" or "RMM")
-        {
-            var assigned = ReadIds(employee, "RegionIds", "RegionId");
-            if (assigned.Count == 0) return false;
-            var ids = assigned.ToArray();
-            var matched = await _db.Database.SqlQuery<int>($@"
-                SELECT h.""RegionId"" AS ""Value"" FROM ""Headquarters"" AS h
-                WHERE h.""Id"" = {hqId}").ToListAsync(HttpContext.RequestAborted);
-            return matched.Any(ids.Contains);
-        }
-        if (role is "SMDO" or "SMD")
-        {
-            var assigned = ReadIds(employee, "StateIds", "StateId");
-            if (assigned.Count == 0) return false;
-            var ids = assigned.ToArray();
-            var matched = await _db.Database.SqlQuery<int>($@"
-                SELECT r.""StateId"" AS ""Value"" FROM ""Headquarters"" AS h
-                INNER JOIN ""Regions"" AS r ON r.""Id"" = h.""RegionId""
-                WHERE h.""Id"" = {hqId}").ToListAsync(HttpContext.RequestAborted);
-            return matched.Any(ids.Contains);
-        }
-        // Admin/SuperAdmin extensions require a separate explicit business approval rule.
-        return false;
+        return ReadIds(employee, "HeadquartersIds", "HeadquartersId", "HQId")
+            .Contains(row.HeadquarterId.Value);
     }
 
     // Existing Sales Audit endpoint: unchanged. This endpoint intentionally
@@ -1087,7 +1081,7 @@ public sealed class SalesAuditController : ControllerBase
             (Convert.ToString(value, CultureInfo.InvariantCulture) ?? "").Trim().ToUpperInvariant();
 
         static bool Supported(string value) => value is
-            "RM" or "RMM" or "SMM" or "SMDO" or "SMD" or "ADMIN" or "SUPERADMIN";
+            "RM" or "RMM" or "SMM" or "SMDO" or "SMD" or "ADMIN" or "SUPERADMIN" or "AVP";
 
         foreach (var propertyName in new[] { "AppRole", "Role", "UserRole", "RoleName", "EmployeeRole" })
         {
