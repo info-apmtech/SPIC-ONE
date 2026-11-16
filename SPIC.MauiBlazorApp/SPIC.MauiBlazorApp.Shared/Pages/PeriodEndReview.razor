@@ -237,6 +237,8 @@
                         </ul>
                         <button type="button"
                                 class="perv-option-btn perv-option-btn-orange"
+                                disabled="@(!CanRequestExtension)"
+                                title="@(CanRequestExtension ? "Request Extension" : "Only SMM can request an extension")"
                                 @onclick="GoToRequestExtension">
                             Request Extension
                             <SalesAuditIcon Name="chevrons-right" Size="16" />
@@ -302,6 +304,12 @@
     private bool IsLoading;
     private bool IsLoaded;
     private string Error = "";
+    private bool CanRequestExtension;
+
+    private sealed class ExtensionRoleDto
+    {
+        public bool CanRequestExtension { get; set; }
+    }
 
     private decimal Balance => Math.Max(0m, RequiredTurnover - ActualTurnover);
     private decimal AchievementPct => RequiredTurnover <= 0m ? 0m : ActualTurnover / RequiredTurnover * 100m;
@@ -327,6 +335,7 @@
         IsLoading = true;
         IsLoaded = false;
         Error = "";
+        CanRequestExtension = false; // Fail closed while verifying the active login.
         if (CSR2Id is null or <= 0)
         {
             Error = "Missing CSR2 ID. Open Period-End Review from Sales Tracking.";
@@ -337,6 +346,16 @@
         try
         {
             int id = CSR2Id.Value;
+            // UI permission comes from the server-validated login/AppRole.
+            // Any failed lookup leaves Request Extension disabled.
+            using (var roleResponse = await Http.GetAsync("api/SalesAudit/current-extension-role"))
+            {
+                if (roleResponse.IsSuccessStatusCode)
+                {
+                    var roleInfo = await roleResponse.Content.ReadFromJsonAsync<ExtensionRoleDto>();
+                    CanRequestExtension = roleInfo?.CanRequestExtension == true;
+                }
+            }
             // Both GETs enforce the existing server-side record-level read scope.
             // Keep values from these existing APIs instead of creating a new source of truth.
             using var overviewResponse = await Http.GetAsync($"api/SalesAudit/overview?csr2Id={id}");
@@ -389,7 +408,7 @@
 
     private void GoToRequestExtension()
     {
-        if (CSR2Id.HasValue && CSR2Id.Value > 0)
+        if (CanRequestExtension && CSR2Id.HasValue && CSR2Id.Value > 0)
         {
             Nav.NavigateTo($"/RequestExtension/{CSR2Id.Value}");
         }
