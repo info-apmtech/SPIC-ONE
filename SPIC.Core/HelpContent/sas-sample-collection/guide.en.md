@@ -161,6 +161,10 @@ title: Find and track your sample collections
 routes: /SampleCollection
 minutes: 2
 tour: 1 > [data-help=sc-tiles] | 2 > [data-help=sc-search] | 3 > [data-help=sc-filters] | 4 > [data-help=sc-table] | 5 > [data-help=sc-excel] | 6 > [data-help=sc-new]
+screenshot: collection-list.png
+hotspots: 1 @ 2.2,68.5,95.5,15.1 | 2 @ 73.7,88,22.4,4.8 | 3 @ 2.2,30.7,95.5,35.4 | 4 @ 3.8,94.7,92.3,5.3 | 5 @ 62.1,1.9,8.1,4.8 | 6 @ 79.2,1.9,18.5,4.8
+screenshot-phone: collection-list.phone.jpg
+hotspots-phone: 1 @ 3.1,40.6,93.8,24.4 | 2 @ 6.4,69.4,87.2,3.2 | 3 @ 3.1,36,93.8,3.2 | 4 @ 2,2,8,4 | 5 @ 15.3,4.3,10.2,3 | 6 @ 39.7,4.3,48.8,3
 
 **What this screen is for**
 The **Sample Collection** page lists every collection you can see, with its payment and lab status. Use it to find a collection and open its details.
@@ -189,6 +193,10 @@ for: SampleCollection.Entry
 roles: MDO, JMDO, Admin, CorporateAdmin
 minutes: 4
 tour: 1 > [data-help=sc-paytype] | 2 > [data-help=sc-farmer] | 3 > [data-help=sc-soil] | 4 > [data-help=sc-add] | 5 > [data-help=sc-save]
+screenshot: collect-sample.png
+hotspots: 1 @ 66,1.9,31.8,5 | 2 @ 4,34.7,29.7,7.8 | 3 @ 35.2,81.7,29.7,8 | 4 @ 78.7,100,17.2,0 | 5 @ 81.8,100,16,0
+screenshot-phone: collect-sample.phone.jpg
+hotspots-phone: 1 @ 3.1,4.6,93.8,3.2 | 2 @ 6.9,33.7,86.2,8.5 | 3 @ 6.9,100,86.2,0 | 4 @ 6.9,100,86.2,0 | 5 @ 43.8,92.1,52.1,3
 
 **What this screen is for**
 Use **New Sample Collection** to record the samples you take from farmers. One collection can hold samples from several farmers.
@@ -312,6 +320,8 @@ When a collection is free or its payment is approved, you pack the samples and h
 title: Read a sample collection's details
 routes: /SampleCollection/view/{id}
 minutes: 2
+screenshot: collection-details.png
+screenshot-phone: collection-details.phone.jpg
 
 **What this screen is for**
 **Sample Collection Details** shows everything about one collection: payment, courier, lab results and history. Field staff, dealers and managers can follow progress here.
@@ -376,6 +386,8 @@ Administrators can review a payment on the collection details page, move a consi
 title: Track consignments sent to the lab
 routes: /ConsignmentHistory, /ConsignmentHistory/view/{id}
 minutes: 2
+screenshot: consignment-history.png
+screenshot-phone: consignment-history.phone.jpg
 
 **What this screen is for**
 **Consignment History** lists every parcel of samples sent to the lab, with courier, tracking number and current status.
@@ -407,6 +419,8 @@ title: See your soil samples (farmer)
 routes: /Sas/MySamples, /SampleCollection/view/{id}
 roles: Farmer
 minutes: 2
+screenshot: farmer-my-samples.png
+screenshot-phone: farmer-my-samples.phone.jpg
 
 **What this screen is for**
 **My Samples** shows every soil or water sample your MO officer collected from you, and where each one is now.
@@ -438,6 +452,8 @@ title: Download your soil test report (farmer)
 routes: /Sas/MyReports
 roles: Farmer
 minutes: 2
+screenshot: farmer-my-reports.png
+screenshot-phone: farmer-my-reports.phone.jpg
 
 **What this screen is for**
 **My Reports** lists the test reports the lab made for your samples. You can download each report in Tamil or English.

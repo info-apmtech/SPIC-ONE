@@ -166,6 +166,10 @@ title: See and manage my requests
 routes: /PublicityRequest
 minutes: 2
 tour: 1 > [data-help=pub-cards] | 2 > [data-help=pub-search] | 3 > [data-help=pub-filters] | 4 > [data-help=pub-table] | 5 > [data-help=pub-export] | 6 > [data-help=pub-new]
+screenshot: requester-list.png
+hotspots: 1 @ 2.2,12.2,95.5,33.6 | 2 @ 61.6,81.1,24.3,5.1 | 3 @ 2.2,48.2,95.5,27.9 | 4 @ 4.2,87.9,91.6,12.1 | 5 @ 86.9,81.2,8.9,4.8 | 6 @ 80.7,1.9,17,4.8
+screenshot-phone: requester-list.phone.jpg
+hotspots-phone: 1 @ 3.1,9.9,93.8,35.4 | 2 @ 6.9,86.1,59.1,3 | 3 @ 3.1,46.3,93.8,35.1 | 4 @ 6.9,90,86.2,10 | 5 @ 68.5,86.2,24.5,2.8 | 6 @ 17.4,5.4,46.7,2.8
 
 **What this screen is for**
 The **My Publicity Material Request** screen shows every request for your HQ, with counts at the top and a table below.
@@ -191,6 +195,10 @@ title: Raise a publicity request
 routes: /PublicityRequest/new, /PublicityRequest/edit/{id}
 minutes: 3
 tour: 1 > [data-help=pub-material] | 2 > [data-help=pub-qty] | 3 > [data-help=pub-design] | 4 > [data-help=pub-location] | 5 > [data-help=pub-submit]
+screenshot: raise-request.png
+hotspots: 1 @ 4.2,20.2,21.5,8.5 | 2 @ 50.9,20.2,21.5,8.5 | 3 @ 4.2,30.4,91.6,20.7 | 4 @ 2.2,73.6,95.5,19.1 | 5 @ 2.2,95,95.5,4.8
+screenshot-phone: raise-request.phone.jpg
+hotspots-phone: 1 @ 6.9,15.5,86.2,4.9 | 2 @ 6.9,27.4,86.2,4.9 | 3 @ 6.9,39.2,86.2,14.7 | 4 @ 3.1,66.1,93.8,23.6 | 5 @ 0,87.5,100,8.4
 
 **What this screen is for**
 Use the **Create Publicity Material Request** screen to ask for publicity material for your HQ. You can save it as a draft and send it later.
@@ -224,6 +232,8 @@ Use the **Create Publicity Material Request** screen to ask for publicity materi
 title: Track my request
 routes: /PublicityRequest/{id}
 minutes: 2
+screenshot: track-request.png
+screenshot-phone: track-request.phone.jpg
 
 **What this screen is for**
 The **My Publicity Material Request Details** screen shows everything about one request: where it is now, who approved it, the dispatch and the documents.
@@ -316,6 +326,10 @@ title: My publicity notifications
 routes: /PublicityRequest/notifications
 minutes: 1
 tour: 1 > [data-help=pub-notif-tabs] | 2 > [data-help=pub-notif-list] | 3 > [data-help=pub-notif-list] | 4 > [data-help=pub-notif-readall] | 5 > [data-help=pub-notif-back]
+screenshot: requester-notifications.png
+hotspots: 1 @ 4.2,14.7,91.6,7 | 2 @ 4.2,23.6,91.6,76.4 | 3 @ 4.2,23.6,91.6,76.4 | 4 @ 84.5,1.9,13.3,4.8 | 5 @ 68.7,1.9,15.1,4.8
+screenshot-phone: requester-notifications.phone.jpg
+hotspots-phone: 1 @ 6.9,11,86.2,3.7 | 2 @ 6.9,15.8,86.2,84.2 | 3 @ 6.9,15.8,86.2,84.2 | 4 @ 46.4,5.4,36.4,2.8 | 5 @ 3.1,5.4,41.3,2.8
 
 **What this screen is for**
 The **Notifications** screen lists alerts about your requests: returns, dispatches, exceptions and stock transfer orders. Open it from the list page with **Notifications**.
@@ -336,6 +350,8 @@ The **Notifications** screen lists alerts about your requests: returns, dispatch
 title: See requests sent for my review
 routes: /PublicityReview
 minutes: 2
+screenshot: reviewer-list.png
+screenshot-phone: reviewer-list.phone.jpg
 
 **What this screen is for**
 Approvers and MD CS staff use this list to see requests from their area. The title is **Submitted Requests** (for RM it is **My Publicity Material Request**).
@@ -407,6 +423,8 @@ The **Edit Publicity Material Request** screen lets the approver whose turn it i
 title: Approve many requests together
 routes: /PublicityReview/consolidation
 minutes: 3
+screenshot: consolidation.png
+screenshot-phone: consolidation.phone.jpg
 
 **What this screen is for**
 The consolidation screen shows every request waiting at your level, grouped by region, so you can approve them all in one step. RM sees the region, SMD and SMM see the state, ADMIN-MD CS sees all India. DGM-MD CS does not use this screen.

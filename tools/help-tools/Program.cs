@@ -10,6 +10,8 @@ return command switch
 	"translate" => await Translate(args),
 	"apply-reviews" => ApplyReviews(args),
 	"import" => Import(args),
+	"shoot" => await Shooter.RunAsync(Option(args, "--module"), Option(args, "--section"),
+		!args.Contains("--phone-only"), !args.Contains("--desktop-only")),
 	_ => Usage(),
 };
 
@@ -197,6 +199,10 @@ static int Usage()
 		                 Bring in a translation made outside 'translate' (a copy of guide.en.md with
 		                 titles and bodies translated). Checks every section is there and on-screen
 		                 names in **bold** stayed English, then writes it stamped like 'translate'.
+		  shoot [--module m] [--section id] [--desktop-only|--phone-only]
+		                 Photograph guide screens from the LOCAL web app as local test users
+		                 (tools/help-demo/shots.json), save them under wwwroot/help/<module>/images
+		                 and write screenshot/hotspots keys (hotspots from the tour targets).
 		  apply-reviews <file.json>
 		                 Write native-speaker corrections downloaded from /Help/Review into the
 		                 translation files, and print pronunciation reports as glossary entries.
