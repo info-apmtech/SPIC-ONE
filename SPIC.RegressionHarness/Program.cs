@@ -45,6 +45,7 @@ internal static class Program
 		HelpParserTests.Run();
 		HelpLibraryTests.Run();
 		HelpCatalogTests.Run();
+		HelpCoverageTests.Run();
 
 		return Check.Report("Total");
 	}
