@@ -49,6 +49,10 @@ namespace SPIC.Core.Help
             var translated = new Dictionary<string, (string Title, string Body, HelpConfidence Confidence)>(StringComparer.OrdinalIgnoreCase);
             if (!string.IsNullOrWhiteSpace(draft.Title) && !string.Equals(draft.Title, draft.Module, StringComparison.OrdinalIgnoreCase))
                 translated[HelpGuideWriter.GuideTitleKey] = (draft.Title, string.Empty, HelpConfidence.Ok);
+            if (!string.IsNullOrWhiteSpace(draft.Category))
+                translated[HelpGuideWriter.CategoryKey] = (draft.Category, string.Empty, HelpConfidence.Ok);
+            if (!string.IsNullOrWhiteSpace(draft.Note))
+                translated[HelpGuideWriter.NoteKey] = (draft.Note, string.Empty, HelpConfidence.Ok);
 
             foreach (var s in english.Sections)
             {
@@ -56,11 +60,25 @@ namespace SPIC.Core.Help
                 if (d is null) { problems.Add($"{s.Id}: section missing"); continue; }
                 if (string.IsNullOrWhiteSpace(d.Title) || string.IsNullOrWhiteSpace(d.Body)) { problems.Add($"{s.Id}: empty title or body"); continue; }
 
-                var draftBolds = new HashSet<string>(Bold.Matches(d.Body).Select(m => m.Groups[1].Value.Trim()), StringComparer.Ordinal);
-                foreach (var name in ScreenNames(s.Body).Where(n => !draftBolds.Contains(n)))
+                var isBlock = s.Kind != "screen";
+                if (isBlock)
+                {
+                    var enIds = HelpBlocks.Items(s.Body).Select(i => i.Id).ToList();
+                    var draftIds = HelpBlocks.Items(d.Body).Select(i => i.Id).ToList();
+                    foreach (var missing in enIds.Where(id => !draftIds.Contains(id, StringComparer.OrdinalIgnoreCase)))
+                        problems.Add($"{s.Id}: item {missing} missing");
+                    foreach (var extra in draftIds.Where(id => !enIds.Contains(id, StringComparer.OrdinalIgnoreCase)))
+                        problems.Add($"{s.Id}: item {extra} is not in English");
+                }
+
+                // Blocks: check only their text (lead, fields, bullets), never their layout lines.
+                var draftText = isBlock ? string.Join("\n", HelpBlocks.TextLines(d with { Kind = s.Kind })) : d.Body;
+                var englishText = isBlock ? string.Join("\n", HelpBlocks.TextLines(s)) : s.Body;
+                var draftBolds = new HashSet<string>(Bold.Matches(draftText).Select(m => m.Groups[1].Value.Trim()), StringComparer.Ordinal);
+                foreach (var name in ScreenNames(englishText).Where(n => !draftBolds.Contains(n)))
                     problems.Add($"{s.Id}: **{name}** must stay in English");
 
-                translated[s.Id] = (d.Title, d.Body, HelpConfidence.Ok);
+                translated[s.Id] = (d.Title, isBlock ? HelpBlocks.MergeLayout(s.Body, d.Body) : d.Body, HelpConfidence.Ok);
             }
 
             foreach (var extra in draft.Sections.Where(d => !english.Sections.Any(s => string.Equals(s.Id, d.Id, StringComparison.OrdinalIgnoreCase))))

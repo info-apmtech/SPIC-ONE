@@ -58,6 +58,7 @@ internal static class Program
 		HelpImportTests.Run();
 		HelpParserV2Tests.Run();
 		HelpBlocksTests.Run();
+		HelpV2TranslationTests.Run();
 
 		return Check.Report("Total");
 	}

@@ -54,6 +54,14 @@ namespace SPIC.Core.Help
             sb.Append("icon: ").Append(english.Icon).Append('\n');
             sb.Append("order: ").Append(english.Order).Append('\n');
             sb.Append("language: ").Append(language).Append('\n');
+            if (english.Category.Length > 0 || english.Note.Length > 0)
+            {
+                var category = translated.TryGetValue(CategoryKey, out var tc) && !string.IsNullOrWhiteSpace(tc.Title) ? tc.Title : english.Category;
+                var note = translated.TryGetValue(NoteKey, out var tn) && !string.IsNullOrWhiteSpace(tn.Title) ? tn.Title : english.Note;
+                sb.Append("category: ").Append(OneLine(category)).Append('\n');
+                sb.Append("note: ").Append(OneLine(note)).Append('\n');
+                sb.Append("meta-source-hash: ").Append(HelpHash.Of(english.Category, english.Note)).Append('\n');
+            }
             sb.Append("---\n");
 
             foreach (var s in english.Sections)
@@ -67,6 +75,8 @@ namespace SPIC.Core.Help
                 sb.Append("for: ").Append(string.Join(", ", s.For)).Append('\n');
                 sb.Append("roles: ").Append(string.Join(", ", s.Roles)).Append('\n');
                 sb.Append("designations: ").Append(string.Join(", ", s.Designations)).Append('\n');
+                if (s.Kind != "screen") sb.Append("kind: ").Append(s.Kind).Append('\n');
+                AppendScreenMeta(sb, s.Screen);
                 var hash = sourceHashes is not null && sourceHashes.TryGetValue(s.Id, out var kept) && !string.IsNullOrWhiteSpace(kept)
                     ? kept
                     : HelpHash.Of(s.Title, s.Body);
@@ -79,6 +89,24 @@ namespace SPIC.Core.Help
 
             return sb.ToString();
         }
+
+        /// <summary>Front-matter keys for the translated category and update note.</summary>
+        public const string CategoryKey = "_category";
+        public const string NoteKey = "_note";
+
+        private static void AppendScreenMeta(StringBuilder sb, HelpScreenMeta? m)
+        {
+            if (m is null) return;
+            if (m.Image is not null) sb.Append("screenshot: ").Append(m.Image).Append('\n');
+            if (m.Hotspots.Count > 0) sb.Append("hotspots: ").Append(Spots(m.Hotspots)).Append('\n');
+            if (m.PhoneImage is not null) sb.Append("screenshot-phone: ").Append(m.PhoneImage).Append('\n');
+            if (m.PhoneHotspots.Count > 0) sb.Append("hotspots-phone: ").Append(Spots(m.PhoneHotspots)).Append('\n');
+            if (m.Tour.Count > 0) sb.Append("tour: ").Append(string.Join(" | ", m.Tour.Select(t => $"{t.N} > {t.Target}"))).Append('\n');
+            if (m.Minutes > 0) sb.Append("minutes: ").Append(m.Minutes).Append('\n');
+        }
+
+        private static string Spots(IReadOnlyList<HelpHotspot> spots) =>
+            string.Join(" | ", spots.Select(h => string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{h.N} @ {h.X},{h.Y},{h.W},{h.H}")));
 
         private static string OneLine(string s) => s.Replace("\r", " ").Replace("\n", " ").Trim();
 

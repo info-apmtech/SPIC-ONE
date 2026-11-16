@@ -98,17 +98,26 @@ namespace SPIC.Core.Help
             {
                 if (!byId.TryGetValue(source.Id, out var t)) return source;
                 if (!string.Equals(t.SourceHash, HelpHash.Of(source.Title, source.Body), StringComparison.OrdinalIgnoreCase)) return source;
+                // Kind and screen meta stay English (source with ...); blocks also keep English layout lines.
                 return source with
                 {
                     Title = string.IsNullOrWhiteSpace(t.Title) ? source.Title : t.Title,
-                    Body = t.Body,
+                    Body = source.Kind == "screen" ? t.Body : HelpBlocks.MergeLayout(source.Body, t.Body),
                     SourceHash = t.SourceHash,
                     Confidence = t.Confidence,
                 };
             }).ToList();
 
             var translatedTitle = translated.Title != module ? translated.Title : en.Title;
-            return en with { Language = lang, Title = translatedTitle, Sections = sections };
+            var metaCurrent = string.Equals(translated.MetaSourceHash, HelpHash.Of(en.Category, en.Note), StringComparison.OrdinalIgnoreCase);
+            return en with
+            {
+                Language = lang,
+                Title = translatedTitle,
+                Sections = sections,
+                Category = metaCurrent && !string.IsNullOrWhiteSpace(translated.Category) ? translated.Category : en.Category,
+                Note = metaCurrent && !string.IsNullOrWhiteSpace(translated.Note) ? translated.Note : en.Note,
+            };
         }
 
         private void LoadGlossary(string text)
