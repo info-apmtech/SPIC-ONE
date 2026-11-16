@@ -35,8 +35,8 @@ namespace SpicAPI.Controllers
         //  Read: approvals (every signed-in user) and the reviewer's list
         // =====================================================================
 
-        /// <summary>"module/sectionId" of every currently approved section in a language - the Help
-        /// pages hide the "Machine translated" note for these.</summary>
+        /// <summary>Approval keys (module/sectionId/translationHash) of every currently approved section in a
+        /// language - the Help pages hide the "Machine translated" note only for text with that hash.</summary>
         [HttpGet("approved/{lang}")]
         public async Task<IActionResult> Approved(string lang)
         {
@@ -45,7 +45,7 @@ namespace SpicAPI.Controllers
             var keys = new List<string>();
             foreach (var (module, en, tr) in TranslatedSections(lang))
                 if (HelpReviewStatus.StateOf(en, tr, ItemsOf(items, module, tr.Id)) == HelpReviewState.Approved)
-                    keys.Add($"{module}/{tr.Id}");
+                    keys.Add(HelpReviewStatus.ApprovalKey(module, tr.Id, HelpHash.Of(tr.Title, tr.Body)));
             return Ok(keys);
         }
 
@@ -88,6 +88,13 @@ namespace SpicAPI.Controllers
                 .FirstOrDefault(x => x.Module.Equals(dto.Module, StringComparison.OrdinalIgnoreCase)
                                      && x.Translated.Id.Equals(dto.SectionId, StringComparison.OrdinalIgnoreCase));
             if (match.Translated is null) return BadRequest(Fail("This section has no current translation to review."));
+            if (!Enum.IsDefined(dto.Kind)) return BadRequest(Fail("Unknown review action."));
+            if (dto.SuggestedBody is { Length: > 20000 }) return BadRequest(Fail("The corrected text is too long."));
+
+            // A review only counts for the text the reviewer actually saw (an app build older or newer
+            // than the API bundles different guide text).
+            if (!HelpReviewStatus.SameText(dto.ShownSourceHash, dto.ShownTranslationHash, match.English, match.Translated))
+                return StatusCode(409, Fail("This guide was updated since you opened it. Update the app or reload the page, then review it again."));
 
             switch (dto.Kind)
             {

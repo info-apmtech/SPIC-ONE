@@ -36,10 +36,14 @@ namespace SPIC.Core.Help
     {
         public const string GuideTitleKey = "_title";
 
+        /// <param name="sourceHashes">Section id → the source-hash to keep for sections copied unchanged
+        /// from an existing file (so a stale section stays visibly stale). Sections not listed get the
+        /// current English hash - only pass new or corrected translations without one.</param>
         public static string Write(
             HelpGuide english,
             string language,
-            IReadOnlyDictionary<string, (string Title, string Body, HelpConfidence Confidence)> translated)
+            IReadOnlyDictionary<string, (string Title, string Body, HelpConfidence Confidence)> translated,
+            IReadOnlyDictionary<string, string?>? sourceHashes = null)
         {
             var sb = new StringBuilder();
             var title = translated.TryGetValue(GuideTitleKey, out var gt) && !string.IsNullOrWhiteSpace(gt.Title) ? gt.Title : english.Title;
@@ -63,7 +67,10 @@ namespace SPIC.Core.Help
                 sb.Append("for: ").Append(string.Join(", ", s.For)).Append('\n');
                 sb.Append("roles: ").Append(string.Join(", ", s.Roles)).Append('\n');
                 sb.Append("designations: ").Append(string.Join(", ", s.Designations)).Append('\n');
-                sb.Append("source-hash: ").Append(HelpHash.Of(s.Title, s.Body)).Append('\n');
+                var hash = sourceHashes is not null && sourceHashes.TryGetValue(s.Id, out var kept) && !string.IsNullOrWhiteSpace(kept)
+                    ? kept
+                    : HelpHash.Of(s.Title, s.Body);
+                sb.Append("source-hash: ").Append(hash).Append('\n');
                 sb.Append("confidence: ").Append(t.Confidence == HelpConfidence.Low ? "low" : "ok").Append('\n');
                 sb.Append('\n');
                 sb.Append(SafeBody(t.Body)).Append('\n');

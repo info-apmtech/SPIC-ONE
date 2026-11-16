@@ -20,11 +20,16 @@ namespace SPIC.Core.Help
         {
             var skipped = new List<string>();
             var result = new Dictionary<string, (string Title, string Body, HelpConfidence Confidence)>(StringComparer.OrdinalIgnoreCase);
+            // Untouched sections keep the source-hash they had, so a stale one stays stale.
+            var keptHashes = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
 
             if (!string.IsNullOrWhiteSpace(translated.Title) && translated.Title != translated.Module)
                 result[HelpGuideWriter.GuideTitleKey] = (translated.Title, string.Empty, HelpConfidence.Ok);
             foreach (var t in translated.Sections)
+            {
                 result[t.Id] = (t.Title, t.Body, t.Confidence);
+                keptHashes[t.Id] = t.SourceHash ?? "missing";
+            }
 
             var newest = corrections
                 .Where(c => string.Equals(c.Module, english.Module, StringComparison.OrdinalIgnoreCase)
@@ -46,9 +51,10 @@ namespace SPIC.Core.Help
                     continue;
                 }
                 result[source.Id] = (string.IsNullOrWhiteSpace(c.SuggestedTitle) ? source.Title : c.SuggestedTitle, c.SuggestedBody, HelpConfidence.Ok);
+                keptHashes.Remove(source.Id); // corrected against the current English: stamp the current hash
             }
 
-            return (HelpGuideWriter.Write(english, translated.Language, result), skipped);
+            return (HelpGuideWriter.Write(english, translated.Language, result, keptHashes), skipped);
         }
     }
 }

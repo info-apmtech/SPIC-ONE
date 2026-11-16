@@ -22,6 +22,18 @@ internal static class HelpReviewStatusTests
 		EnglishChangeResetsApproval();
 		CorrectionPendingUntilFileMatches();
 		AppliedCorrectionWithoutApprovalIsNotReviewed();
+		ReviewMustMatchDisplayedText();
+	}
+
+	// Final review (Important 4): a review counts only for the exact text the reviewer saw.
+	private static void ReviewMustMatchDisplayedText()
+	{
+		var shownSource = HelpHash.Of(English.Title, English.Body);
+		var shownTranslation = HelpHash.Of(Tamil.Title, Tamil.Body);
+		Check.That("same text matches", HelpReviewStatus.SameText(shownSource, shownTranslation, English, Tamil));
+		var newer = Tamil with { Body = "புதிய உரை." };
+		Check.That("server has newer translation: no match", !HelpReviewStatus.SameText(shownSource, shownTranslation, English, newer));
+		Check.That("missing hashes: no match", !HelpReviewStatus.SameText(null, null, English, Tamil));
 	}
 
 	private static HelpSection Section(string title, string body) =>

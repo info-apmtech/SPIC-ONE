@@ -42,7 +42,11 @@ namespace SPIC.MauiBlazorApp.Shared.Services
 
         public HelpLibrary Library => _library;
 
-        /// <summary>"module/sectionId" keys a reviewer has approved for a language (set from the API).</summary>
+        public static string ApprovalKey(string module, string sectionId, string translationHash) =>
+            HelpReviewStatus.ApprovalKey(module, sectionId, translationHash);
+
+        /// <summary>Approval keys (<see cref="ApprovalKey"/>: module/sectionId/translationHash) a reviewer
+        /// has approved for a language (set from the API).</summary>
         public Func<string, IReadOnlySet<string>> ApprovedKeys { get; set; } = _ => NoneApproved;
 
         public IReadOnlyList<HelpModuleView> VisibleModules(string lang) =>
@@ -66,7 +70,10 @@ namespace SPIC.MauiBlazorApp.Shared.Services
                 .Select(s =>
                 {
                     var fallback = !english && s.Confidence == HelpConfidence.Source;
-                    var machine = !english && !fallback && !approved.Contains($"{guide.Module}/{s.Id}");
+                    // Approved only for the exact translated text shown here (an older app build may
+                    // carry older text than the one a reviewer approved).
+                    var machine = !english && !fallback
+                                  && !approved.Contains(ApprovalKey(guide.Module, s.Id, HelpHash.Of(s.Title, s.Body)));
                     return new HelpSectionView(guide.Module, s, lang, fallback, machine);
                 })
                 .ToList();
@@ -82,10 +89,16 @@ namespace SPIC.MauiBlazorApp.Shared.Services
         public HelpSectionView? ForPath(string path, string lang)
         {
             var modules = VisibleModules(lang);
-            foreach (var module in modules)
-                foreach (var s in module.Sections)
-                    if (s.Section.Routes.Any(r => HelpRoutes.Matches(r, path)))
-                        return s;
+
+            // The most specific match wins: /PublicityReview/consolidation beats /PublicityReview/{id}.
+            var best = modules
+                .SelectMany(m => m.Sections)
+                .Select(s => (Section: s, Score: s.Section.Routes.Where(r => HelpRoutes.Matches(r, path)).Select(HelpRoutes.LiteralSegments).DefaultIfEmpty(-1).Max()))
+                .Where(x => x.Score >= 0)
+                .OrderByDescending(x => x.Score)
+                .Select(x => x.Section)
+                .FirstOrDefault();
+            if (best is not null) return best;
 
             var first = FirstSegment(path);
             if (first.Length == 0) return null;
@@ -116,6 +129,7 @@ namespace SPIC.MauiBlazorApp.Shared.Services
 
         private bool IsVisible(HelpSection s)
         {
+            if (!_login.IsLoggedIn) return false; // RouteAccess allows everything when signed out
             var dataExplorerId = _config["DataExplorer:AuthorizedEmployeeId"];
             if (!s.Routes.Any(r => RouteAccess.CanOpen(_login, HelpRoutes.Sample(r), dataExplorerId))) return false;
 

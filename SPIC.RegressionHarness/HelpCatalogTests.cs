@@ -41,6 +41,20 @@ internal static class HelpCatalogTests
 
 		Courier docket number goes here.
 		:::
+
+		::: section review-one
+		title: Review one request
+		routes: /PublicityReview/{id}
+
+		Open one request.
+		:::
+
+		::: section consolidation
+		title: Approve many requests together
+		routes: /PublicityReview/consolidation
+
+		Tick several requests.
+		:::
 		""";
 
 	public static void Run()
@@ -55,7 +69,52 @@ internal static class HelpCatalogTests
 		QuestionButtonFallsBackToModuleThenNull();
 		SearchOnlyReturnsVisibleSections();
 		NonEnglishIsMachineTranslatedUntilApproved();
+		LiteralRouteBeatsParameterRoute();
+		AppSchemeUrlFromIosFindsSection();
+		ApprovalOfOtherTextDoesNotHideNote();
+		SignedOutUserSeesNothing();
 	}
+
+	// Final review (Important 1): /PublicityReview/consolidation must not open the {id} section listed before it.
+	private static void LiteralRouteBeatsParameterRoute()
+	{
+		var catalog = Catalog(TestLogin.As(AppRole.RM, "PublicityReview.View", "RM"));
+		Check.Equal("? on a literal route prefers it over a {id} sibling", "consolidation",
+			catalog.ForPath("/PublicityReview/consolidation", "en")?.Section.Id);
+		Check.Equal("? on a numeric id still opens the {id} section", "review-one",
+			catalog.ForPath("/PublicityReview/42", "en")?.Section.Id);
+	}
+
+	// Final review (Important 2): BlazorWebView on iOS / MacCatalyst uses app://0.0.0.1/...
+	private static void AppSchemeUrlFromIosFindsSection()
+	{
+		var catalog = Catalog(TestLogin.As(AppRole.RMD, "PublicityRequest.View,PublicityRequest.Entry"));
+		Check.Equal("? works on an app:// URL", "raise-request",
+			catalog.ForPath("app://0.0.0.1/PublicityRequest/new", "en")?.Section.Id);
+	}
+
+	// Final review (Important 4): an approval of different translated text must not hide the note.
+	private static void ApprovalOfOtherTextDoesNotHideNote()
+	{
+		var en = HelpGuideParser.Parse("publicity", "en", Publicity);
+		var review = en.Sections.Single(s => s.Id == "review");
+		var tamil = $"""
+			::: section review
+			title: மதிப்பாய்வு
+			source-hash: {HelpHash.Of(review.Title, review.Body)}
+
+			கோரிக்கையைத் திறக்கவும்.
+			:::
+			""";
+		var catalog = Catalog(TestLogin.As(AppRole.RM, "PublicityReview.View", "RM"), Library(("help/publicity/guide.ta.md", tamil)));
+		catalog.ApprovedKeys = _ => new HashSet<string> { HelpCatalog.ApprovalKey("publicity", "review", "0000000000000000") };
+		var section = catalog.VisibleModules("ta").Single().Sections.Single(s => s.Section.Id == "review");
+		Check.That("approval of older translated text keeps the note", section.MachineTranslated);
+	}
+
+	// Final review (minor 15): a signed-out state must not list route-only sections.
+	private static void SignedOutUserSeesNothing() =>
+		Check.Equal("signed-out user sees no guides", 0, Catalog(TestLogin.SignedOut()).VisibleModules("en").Count);
 
 	private static HelpLibrary Library(params (string, string)[] extra)
 	{
@@ -81,11 +140,11 @@ internal static class HelpCatalogTests
 	}
 
 	private static void ReviewerWithoutMdCsDoesNotSeeDispatch() =>
-		Check.Equal("RM reviewer sees review, not dispatch", "review",
+		Check.Equal("RM reviewer sees review sections, not dispatch", "review,review-one,consolidation",
 			Ids(Catalog(TestLogin.As(AppRole.RM, "PublicityReview.View", "RM"))));
 
 	private static void MdCsAdminSeesDispatch() =>
-		Check.Equal("ADMIN-MD CS sees review and dispatch", "review,dispatch",
+		Check.Equal("ADMIN-MD CS sees review and dispatch", "review,dispatch,review-one,consolidation",
 			Ids(Catalog(TestLogin.As(AppRole.MDAdmin, "PublicityReview.View", "ADMIN-MD CS"))));
 
 	private static void QuestionButtonFindsSectionForEditUrl()
@@ -99,7 +158,7 @@ internal static class HelpCatalogTests
 	{
 		var catalog = Catalog(TestLogin.As(AppRole.MDAdmin, "PublicityReview.View", "ADMIN-MD CS"));
 		Check.Equal("? on an unguided page of a guided module opens that module", "review",
-			catalog.ForPath("/PublicityReview/consolidation", "en")?.Section.Id);
+			catalog.ForPath("/PublicityReview/77/history/all", "en")?.Section.Id);
 		Check.That("? on an unrelated page finds nothing", catalog.ForPath("/StockReport", "en") is null);
 	}
 
@@ -127,14 +186,15 @@ internal static class HelpCatalogTests
 		var catalog = Catalog(TestLogin.As(AppRole.RM, "PublicityReview.View", "RM"),
 			Library(("help/publicity/guide.ta.md", tamil)));
 
-		var section = catalog.VisibleModules("ta").Single().Sections.Single();
+		var section = catalog.VisibleModules("ta").Single().Sections.Single(s => s.Section.Id == "review");
 		Check.That("Tamil section is machine translated by default", section.MachineTranslated && !section.IsFallbackEnglish);
 
-		catalog.ApprovedKeys = _ => new HashSet<string> { "publicity/review" };
-		var approved = catalog.VisibleModules("ta").Single().Sections.Single();
+		var shownTamil = HelpGuideParser.Parse("publicity", "ta", tamil).Sections.Single();
+		catalog.ApprovedKeys = _ => new HashSet<string> { HelpCatalog.ApprovalKey("publicity", "review", HelpHash.Of(shownTamil.Title, shownTamil.Body)) };
+		var approved = catalog.VisibleModules("ta").Single().Sections.Single(s => s.Section.Id == "review");
 		Check.That("approved Tamil section is not labelled", !approved.MachineTranslated);
 
-		var english = catalog.VisibleModules("en").Single().Sections.Single();
+		var english = catalog.VisibleModules("en").Single().Sections.Single(s => s.Section.Id == "review");
 		Check.That("English is never labelled", !english.MachineTranslated && !english.IsFallbackEnglish);
 	}
 }

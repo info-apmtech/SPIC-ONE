@@ -52,18 +52,26 @@ public sealed class HelpAudioCache
         {
             if (File.Exists(path)) return path;
 
-            var audio = await _synthesizer.SynthesizeAsync(ssml, ct);
+            // Once this request holds the gate it finishes the clip for everyone waiting, even if its
+            // own caller has gone away - so no cancellation token past this point.
+            var audio = await _synthesizer.SynthesizeAsync(ssml, CancellationToken.None);
+            if (audio is null || audio.Length == 0)
+                throw new InvalidOperationException("The speech service returned no audio."); // never cache an empty clip
+
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             var temp = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
-            await File.WriteAllBytesAsync(temp, audio, ct);
             try
             {
+                await File.WriteAllBytesAsync(temp, audio, CancellationToken.None);
                 File.Move(temp, path, overwrite: false);
             }
             catch (IOException) when (File.Exists(path))
             {
                 // Another API instance (shared Azure Files mount) saved it first.
-                File.Delete(temp);
+            }
+            finally
+            {
+                if (File.Exists(temp)) File.Delete(temp);
             }
             return path;
         }

@@ -8,7 +8,9 @@ namespace SPIC.Core.DTOs
     /// <summary>One translated section in a reviewer's list.</summary>
     public sealed record HelpReviewRowDto(string Module, string SectionId, string Title, HelpReviewState State, string Confidence);
 
-    /// <summary>A reviewer's action. The server recomputes both text hashes itself.</summary>
+    /// <summary>A reviewer's action. <see cref="ShownSourceHash"/> / <see cref="ShownTranslationHash"/>
+    /// are the hashes of the text the reviewer was shown; the server rejects the review (409) when
+    /// they differ from its own files.</summary>
     public sealed record HelpReviewSubmitDto(
         string Module,
         string SectionId,
@@ -18,7 +20,9 @@ namespace SPIC.Core.DTOs
         string? SuggestedBody,
         string? Comment,
         string? Word,
-        string? SayAs);
+        string? SayAs,
+        string? ShownSourceHash,
+        string? ShownTranslationHash);
 
     /// <summary>A correction not yet in the translation file (download for help-tools apply-reviews).</summary>
     public sealed record HelpCorrectionExportDto(

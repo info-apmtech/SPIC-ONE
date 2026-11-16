@@ -27,7 +27,10 @@ namespace SPIC.Core.Help
         public static string Normalize(string path)
         {
             var value = path ?? string.Empty;
-            if (Uri.TryCreate(value, UriKind.Absolute, out var abs) && (abs.Scheme == Uri.UriSchemeHttp || abs.Scheme == Uri.UriSchemeHttps))
+            // Any absolute app URL: https://0.0.0.1/... (Android, Windows), app://0.0.0.1/... (iOS,
+            // MacCatalyst), http(s)://host/... (web). A "file" URI is a relative path that .NET on
+            // some platforms reads as absolute, so it is left alone.
+            if (Uri.TryCreate(value, UriKind.Absolute, out var abs) && !abs.IsFile)
                 value = abs.AbsolutePath;
             value = value.Split('?', '#')[0].Trim().TrimEnd('/');
             if (!value.StartsWith('/')) value = "/" + value;
@@ -43,6 +46,9 @@ namespace SPIC.Core.Help
             "/" + string.Join("/", Segments(pattern).Select(s => IsParameter(s) ? "{}" : s));
 
         public static bool HasParameters(string pattern) => RawSegments(pattern).Any(IsParameter);
+
+        /// <summary>Number of fixed (non-parameter) segments: the more, the more specific a match.</summary>
+        public static int LiteralSegments(string pattern) => RawSegments(pattern).Count(s => !IsParameter(s));
 
         private static bool IsParameter(string segment) =>
             segment.StartsWith('{') && segment.EndsWith('}');

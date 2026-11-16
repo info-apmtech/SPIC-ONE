@@ -34,6 +34,7 @@ internal static class HelpCoverageTests
 		ParameterRoutesMatchByShape();
 		IgnoredRouteNotReported();
 		UnknownPermissionReported();
+		BareForTokenReported();
 		StaleTranslationReported();
 		MissingImageReported();
 		ParseProblemReported();
@@ -67,6 +68,15 @@ internal static class HelpCoverageTests
 		var bad = Lab.Replace("for: LabTestEntry.Entry", "for: NotAPage.View");
 		var issues = Run(HelpLibraryTests.Library(("help/lab/guide.en.md", bad)), Array.Empty<string>());
 		Check.That("unknown permission reported", issues.Any(i => i.Kind == "unknown-permission" && i.Detail.Contains("NotAPage")));
+	}
+
+	// Final review (minor 14, promoted): "for: LabTestEntry" without ".Action" hides the section from
+	// everyone; the check must say so instead of passing.
+	private static void BareForTokenReported()
+	{
+		var bad = Lab.Replace("for: LabTestEntry.Entry", "for: LabTestEntry");
+		var issues = Run(HelpLibraryTests.Library(("help/lab/guide.en.md", bad)), Array.Empty<string>());
+		Check.That("for: token without .Action reported", issues.Any(i => i.Kind == "unknown-permission" && i.Detail.Contains("Page.Action")));
 	}
 
 	private static void StaleTranslationReported()

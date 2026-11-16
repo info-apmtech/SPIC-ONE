@@ -491,7 +491,7 @@ public static class ShellNavigation
         // ---- Help Desk (2026-11-16): every signed-in user; the guides are role-filtered inside.
         //      Not a PagePermission (RouteAccess opens /Help), so the Rule replaces CanSeeMenu.
         //      More-sheet only, so it never takes a bottom-tab or rail slot. Appended at the END. ----
-        new("Help", "Help Desk", "bi-question-circle", "/Help", "Help") { MoreOnly = true, Rule = s => s.IsLoggedIn },
+        new("Help", "Help Desk", "bi-question-circle", "/Help", "Help") { MoreOnly = true, Rule = s => s.IsLoggedIn && RouteAccess.CanOpen(s, "/Help", null) },
         new("HelpReview", "Translation Review", "bi-translate", "/Help/Review", nameof(PagePermission.HelpTranslationReview)) { MoreOnly = true },
     };
 

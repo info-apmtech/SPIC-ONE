@@ -62,8 +62,8 @@ public sealed class HelpApi : ApiClientBase
     private readonly Dictionary<string, IReadOnlySet<string>> _approved = new(StringComparer.OrdinalIgnoreCase);
     private static readonly IReadOnlySet<string> NoneApproved = new HashSet<string>();
 
-    /// <summary>Approved "module/sectionId" keys for a language, from the cache (empty until loaded).
-    /// Plugged into HelpCatalog.ApprovedKeys.</summary>
+    /// <summary>Approval keys (module/sectionId/translationHash) for a language, from the cache (empty
+    /// until loaded). Plugged into HelpCatalog.ApprovedKeys.</summary>
     public IReadOnlySet<string> Approved(string lang) =>
         _approved.TryGetValue(lang, out var set) ? set : NoneApproved;
 

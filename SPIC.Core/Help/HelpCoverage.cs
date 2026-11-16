@@ -45,7 +45,9 @@ namespace SPIC.Core.Help
                     foreach (var token in s.For)
                     {
                         var page = token.Split('.')[0];
-                        if (!permissions.Contains(page))
+                        if (!token.Contains('.'))
+                            issues.Add(new CoverageIssue("unknown-permission", module, $"section '{s.Id}': for '{token}' must be Page.Action (e.g. {token}.View); as written it hides the section from everyone"));
+                        else if (!permissions.Contains(page))
                             issues.Add(new CoverageIssue("unknown-permission", module, $"section '{s.Id}': for '{token}' is not a PagePermission"));
                     }
 

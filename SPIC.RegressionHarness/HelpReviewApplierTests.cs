@@ -17,6 +17,33 @@ internal static class HelpReviewApplierTests
 		AppliesCorrectionAndKeepsHeaders();
 		SkipsCorrectionForStaleEnglish();
 		NewestCorrectionWins();
+		StaleSectionStaysStale();
+	}
+
+	// Final review (Important 3): applying a correction to one section must not re-stamp another,
+	// stale section with the current English hash (that would hide outdated steps as current).
+	private static void StaleSectionStaysStale()
+	{
+		var (en, _) = Guides();
+		var one = en.Sections.Single(s => s.Id == "one");
+		var ta = HelpGuideParser.Parse("publicity", "ta", $"""
+			::: section one
+			title: ஒன்று
+			source-hash: {HelpHash.Of(one.Title, one.Body)}
+
+			பழைய உரை.
+			:::
+
+			::: section two
+			title: இரண்டு
+			source-hash: 0000000000000000
+
+			பழைய இரண்டு.
+			:::
+			""");
+		var (text, _) = HelpReviewApplier.Apply(en, ta, new[] { Correction(en, "one", "ஒன்று", "சரி.", DateTime.UtcNow) });
+		var two = HelpGuideParser.Parse("publicity", "ta", text).Sections.Single(s => s.Id == "two");
+		Check.Equal("stale section keeps its old source hash", "0000000000000000", two.SourceHash);
 	}
 
 	private static (HelpGuide En, HelpGuide Ta) Guides()

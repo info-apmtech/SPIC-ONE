@@ -22,6 +22,28 @@ internal static class HelpSpeechTests
 		SecondRequestUsesSavedFile().GetAwaiter().GetResult();
 		ChangedTextMakesNewFile().GetAwaiter().GetResult();
 		UnsafeLanguageIsRejected().GetAwaiter().GetResult();
+		EmptyAudioIsNotSaved().GetAwaiter().GetResult();
+	}
+
+	private sealed class EmptySynth : ISpeechSynthesizer
+	{
+		public Task<byte[]> SynthesizeAsync(string ssml, CancellationToken ct) => Task.FromResult(Array.Empty<byte>());
+	}
+
+	// Final review (minor 6, promoted): an empty answer must not be saved and served for a year.
+	private static async Task EmptyAudioIsNotSaved()
+	{
+		var root = TempRoot();
+		try
+		{
+			var threw = false;
+			try { await new HelpAudioCache(root, new EmptySynth()).GetOrCreateAsync("ta", "<speak>e</speak>", CancellationToken.None); }
+			catch (InvalidOperationException) { threw = true; }
+			Check.That("empty audio rejected", threw);
+			Check.Equal("nothing saved for empty audio", 0,
+				Directory.Exists(root) ? Directory.GetFiles(root, "*", SearchOption.AllDirectories).Length : 0);
+		}
+		finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
 	}
 
 	private static void SsmlEscapesAndAppliesSayAs()

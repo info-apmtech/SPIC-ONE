@@ -36,6 +36,19 @@ namespace SPIC.Core.Help
             Same(HelpHash.Of(correction.SuggestedTitle ?? translated.Title, correction.SuggestedBody ?? string.Empty),
                  HelpHash.Of(translated.Title, translated.Body));
 
+        /// <summary>Key of an approval for one exact translated text: "module/sectionId/translationHash".
+        /// The API returns these; the app hides the "Machine translated" note only when the text it
+        /// shows has the approved hash.</summary>
+        public static string ApprovalKey(string module, string sectionId, string translationHash) =>
+            $"{module}/{sectionId}/{translationHash}".ToLowerInvariant();
+
+        /// <summary>True when the hashes of the text a reviewer was shown equal the current English and
+        /// translation on the server - a review must never be recorded against text nobody read.</summary>
+        public static bool SameText(string? shownSourceHash, string? shownTranslationHash, HelpSection english, HelpSection translated) =>
+            !string.IsNullOrWhiteSpace(shownSourceHash) && !string.IsNullOrWhiteSpace(shownTranslationHash)
+            && Same(shownSourceHash, HelpHash.Of(english.Title, english.Body))
+            && Same(shownTranslationHash, HelpHash.Of(translated.Title, translated.Body));
+
         private static bool Same(string? a, string? b) => string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
     }
 }
