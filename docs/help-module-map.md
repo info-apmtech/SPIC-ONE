@@ -1,15 +1,16 @@
 # Help Centre — module map
 
-Status: Draft, waiting for the user to confirm
+Status: All 18 modules written (2026-11-17); the grouping questions below still need the user's decision
 Used by: stage 4 of `docs/superpowers/specs/2026-11-16-help-centre-redesign-design.md`, the guides for the remaining modules.
 
 Every screen (`@page` route) belongs to exactly one guide module. The groups follow the side menu
 (`Layout/NavMenu.razor`). Screens that need no guide (sign-in, error, legal and the Help pages)
 are listed in `tools/help-tools/coverage-ignore.txt`.
 
-**Done**, in format v2: `publicity`, `sas-sample-collection`, `lab`.
+**Done**, in format v2: `publicity`, `sas-sample-collection`, `lab`, and (2026-11-17) all 18 modules below, in
+English, Tamil, Telugu, Marathi and Hindi.
 
-## Remaining modules (proposed order)
+## Modules (written 2026-11-17)
 
 | # | Module id | Title | Category | Colour | Icon | Screens |
 |---|---|---|---|---|---|---|
@@ -37,9 +38,22 @@ are listed in `tools/help-tools/coverage-ignore.txt`.
 These screens sit in the menu next to the administration pages, but their names also fit the dealer
 application. They are placed provisionally and need a decision:
 
-- `/Agriculture`, `/Financial`, `/Relationship`: dealer application steps, or admin masters? Proposed: `admin-masters`.
+- `/Agriculture`, `/Financial`, `/Relationship`: placed in `admin-masters`. The guide writer confirmed they are
+  working master-data screens in the Settings menu (the dealer pages only read their lists).
 - `/EntryInfo`: proposed: `dealer-application`.
 - `/Register` is also the new-dealer sign-up. Proposed: guide it as step 1 of the dealer application, not ignored.
+
+Found while writing the guides (each guide covers its routes as mapped; moving them is a small edit):
+
+- `/ApprovalDetail/{Id}` and `/MOApproval/{Id}` are the welfare (SDWA) application detail pages, opened
+  from /SchemeApproval: they fit `welfare` better than `budget-csr`.
+- `/RequestExtension/{CSRId}` is the Sales Audit extension request (opened from Period-End Review): it fits
+  `sales-tracking`.
+- `/DealerMapping` and `/DealerManagementTrainingProgram` belong to the Sales Audit / CSR process more than
+  to `dealer-review`.
+- `/EntryInfo` is a lucky-draw purchase entry mock-up: it fits `schemes`.
+- `/PaymentManagement` (guest house) is a welfare-payment mock-up.
+- `/ReportDashboard` is the SDWA Admin dashboard (menu: SDWA > Admin Dashboard).
 
 ## How each batch is done
 
