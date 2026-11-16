@@ -54,6 +54,7 @@ namespace SpicAPI.Controllers
 
 		// GET /api/GuestHouseBooking/houses
 		// Active guest houses shown on the GuestHouse selection page.
+		[GuestHouseBookingAccess(PagePermission.GuestHouseBooking)]
 		[HttpGet("houses")]
 		public async Task<ActionResult<List<GuestHouseCardDto>>> GetHouses()
 		{
@@ -139,6 +140,7 @@ namespace SpicAPI.Controllers
 		// (GuestHouseBookingDocument.GuestHouseBookingId is a required FK - there is no
 		// booking to point at until the booking is actually created).
 		[Authorize]
+		[GuestHouseBookingAccess(PagePermission.GuestHouseBooking)]
 		[HttpPost("documents/upload-temp")]
 		[RequestSizeLimit(6 * 1024 * 1024)]
 		public async Task<IActionResult> UploadTempDocument(IFormFile? file)
@@ -184,6 +186,7 @@ namespace SpicAPI.Controllers
 		// Lets the customer remove a not-yet-submitted ID Proof from the Guest Details page
 		// before continuing. Safe no-op if the token does not resolve to a temp file.
 		[Authorize]
+		[GuestHouseBookingAccess(PagePermission.GuestHouseBooking)]
 		[HttpDelete("documents/upload-temp/{token}")]
 		public IActionResult RemoveTempDocument(string token)
 		{
@@ -307,6 +310,7 @@ namespace SpicAPI.Controllers
 
 		// GET /api/GuestHouseBooking/availability?guestHouseId=1&checkIn=2026-09-10T14:00&checkOut=2026-09-12T12:00
 		// Returns the rooms of the selected guest house that are available for the whole stay.
+		[GuestHouseBookingAccess(PagePermission.GuestHouseBooking)]
 		[HttpGet("availability")]
 		public async Task<IActionResult> GetAvailability([FromQuery] int guestHouseId, [FromQuery] DateTime checkIn, [FromQuery] DateTime checkOut)
 		{
@@ -410,6 +414,7 @@ namespace SpicAPI.Controllers
 
 		// GET /api/GuestHouseBooking/rooms/{roomId}
 		// Canonical room + guest house details used by the GuestDetails booking summary.
+		[GuestHouseBookingAccess(PagePermission.GuestHouseBooking)]
 		[HttpGet("rooms/{roomId:int}")]
 		public async Task<IActionResult> GetRoom(int roomId)
 		{
@@ -439,6 +444,7 @@ namespace SpicAPI.Controllers
         // POST /api/GuestHouseBooking/book
         // Creates a guest house booking (save to DB). Re-checks room availability for the
         // selected period before saving so a room that became unavailable cannot be booked.
+        [GuestHouseBookingAccess(PagePermission.GuestHouseBooking)]
         [HttpPost("book")]
         public async Task<IActionResult> CreateBooking([FromBody] CreateBookingRequest request)
         {
@@ -710,6 +716,7 @@ namespace SpicAPI.Controllers
         // booking's own server-computed TotalAmount - the browser never supplies an amount.
         // Idempotent by design: reopening the Payment page or retrying after a dropped
         // connection returns the SAME order instead of creating a new one every time.
+        [GuestHouseBookingAccess(PagePermission.GuestHouseBooking)]
         [HttpPost("bookings/{id:int}/payment/create-order")]
         public async Task<IActionResult> CreatePaymentOrder(int id)
         {
@@ -789,6 +796,7 @@ namespace SpicAPI.Controllers
         // booking (duplicate callback, retry, double-submit), it returns success without
         // re-verifying or re-confirming anything - the same guard shape as the existing
         // Front Office POST pay endpoint.
+        [GuestHouseBookingAccess(PagePermission.GuestHouseBooking)]
         [HttpPost("bookings/{id:int}/payment/verify")]
         public async Task<IActionResult> VerifyPayment(int id, [FromBody] VerifyPaymentRequest request)
         {
@@ -954,6 +962,7 @@ namespace SpicAPI.Controllers
         //     PendingPayment for the verify callback / existing hold window to resolve.
         //   - The final change is a conditional UPDATE, so it can never overwrite a payment that
         //     VerifyPayment marked Paid in the meantime.
+        [GuestHouseBookingAccess(PagePermission.GuestHouseBooking)]
         [HttpPost("bookings/{id:int}/payment/failed")]
         public async Task<IActionResult> MarkPaymentFailed(int id, [FromBody] MarkPaymentFailedRequest? request)
         {
@@ -1067,6 +1076,7 @@ namespace SpicAPI.Controllers
         // GET /api/GuestHouseBooking/my-bookings
 		// Bookings belonging to the currently logged-in user (server-enforced via the JWT name claim).
 		[Authorize]
+		[GuestHouseBookingAccess(PagePermission.MyBookings)]
 		[HttpGet("my-bookings")]
 		public async Task<IActionResult> GetMyBookings()
 		{
@@ -1156,6 +1166,7 @@ namespace SpicAPI.Controllers
 		// Full booking summary. Ownership is enforced server-side: a booking can only be read
 		// by the same logged-in user that created it.
 		[Authorize]
+		[GuestHouseBookingAccess(PagePermission.MyBookings)]
 		[HttpGet("bookings/{id:int}")]
 		public async Task<IActionResult> GetBookingDetails(int id)
 		{
@@ -1257,6 +1268,7 @@ namespace SpicAPI.Controllers
 		//   authenticated customer -> owns/has access to booking -> payment is Paid ->
 		//   existing bill belongs to booking -> allow PDF download
 		[Authorize]
+		[GuestHouseBookingAccess(PagePermission.MyBookings)]
 		[HttpGet("bookings/{id:int}/invoice")]
 		public async Task<IActionResult> DownloadInvoice(int id)
 		{
@@ -1320,6 +1332,7 @@ namespace SpicAPI.Controllers
 		// refund calculation from the Guest House's own GuestHouseCancellationPolicy -
 		// never a hard-coded percentage. Does not create anything.
 		[Authorize]
+		[GuestHouseBookingAccess(PagePermission.MyBookings)]
 		[HttpGet("bookings/{id:int}/cancellation-preview")]
 		public async Task<IActionResult> GetCancellationPreview(int id)
 		{
@@ -1405,6 +1418,7 @@ namespace SpicAPI.Controllers
 		// GuestHouseBookingId, so a duplicate submit (double-click, retry) returns the
 		// SAME existing request instead of creating a second one.
 		[Authorize]
+		[GuestHouseBookingAccess(PagePermission.MyBookings)]
 		[HttpPost("bookings/{id:int}/cancel")]
 		public async Task<IActionResult> RequestCancellation(int id, [FromBody] CreateCancellationRequest? request)
 		{
@@ -1497,6 +1511,7 @@ namespace SpicAPI.Controllers
 		// Data needed by the existing RefundStatus page. Ownership-enforced the same way
 		// as every other customer-facing booking endpoint.
 		[Authorize]
+		[GuestHouseBookingAccess(PagePermission.MyBookings)]
 		[HttpGet("bookings/{id:int}/refund-status")]
 		public async Task<IActionResult> GetRefundStatus(int id)
 		{

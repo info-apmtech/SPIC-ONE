@@ -30,6 +30,11 @@ internal static class Program
 		GuestHouseInventoryTests.Run();
 		Console.WriteLine();
 
+		// Guest House Master / Book a Room / My Bookings: independent permissions, route mapping,
+		// menu visibility and the server-side filter on the booking API.
+		GuestHousePermissionTests.Run();
+		Console.WriteLine();
+
 		// GPS Settings entity, DTOs, controller authorization, and role access.
 		GpsSettingsTests.Run();
 		Console.WriteLine();
