@@ -12,7 +12,7 @@ namespace SpicAPI.Services
             QuestPDF.Settings.License = LicenseType.Community;
         }
 
-        public static byte[] Build(WelfareApplication app) =>
+        public static byte[] Build(WelfareApplication app, IReadOnlyList<WelfareApplicationPdfDocument>? attachedDocuments = null) =>
             Document.Create(container =>
             {
                 container.Page(page =>
@@ -22,7 +22,7 @@ namespace SpicAPI.Services
                     page.DefaultTextStyle(x => x.FontSize(10).FontColor(Colors.Grey.Darken3));
 
                     page.Header().Element(e => ComposeHeader(e, app));
-                    page.Content().Element(e => ComposeContent(e, app));
+                    page.Content().Element(e => ComposeContent(e, app, attachedDocuments));
                     page.Footer().Element(ComposeFooter);
                 });
             }).GeneratePdf();
@@ -33,7 +33,7 @@ namespace SpicAPI.Services
             {
                 row.RelativeItem().Column(col =>
                 {
-                    col.Item().Text("SPIC").FontSize(20).Bold().FontColor("#0B4A82");
+                    col.Item().Text("SDWA").FontSize(20).Bold().FontColor("#0B4A82");
                     col.Item().Text("Welfare Scheme Application Form").FontSize(9).FontColor(Colors.Grey.Darken1);
                 });
                 row.AutoItem().Column(col =>
@@ -78,7 +78,7 @@ namespace SpicAPI.Services
             });
         }
 
-        private static void ComposeContent(IContainer content, WelfareApplication app)
+        private static void ComposeContent(IContainer content, WelfareApplication app, IReadOnlyList<WelfareApplicationPdfDocument>? attachedDocuments)
         {
             content.Column(col =>
             {
@@ -141,6 +141,8 @@ namespace SpicAPI.Services
                     t.Span("Confirmed by dealer: ").FontSize(9).FontColor(Colors.Grey.Darken1);
                     t.Span(app.IsDeclarationConfirmed ? "Yes" : "No").FontSize(9).SemiBold();
                 });
+
+                col.Item().Element(e => ComposeAttachedDocuments(e, attachedDocuments));
             });
         }
 
@@ -287,6 +289,59 @@ namespace SpicAPI.Services
             });
         }
 
+        private static void ComposeAttachedDocuments(IContainer c, IReadOnlyList<WelfareApplicationPdfDocument>? attachedDocuments)
+        {
+            if (attachedDocuments == null || attachedDocuments.Count == 0)
+                return;
+
+            var documents = new List<(string Label, IReadOnlyList<Image> Pages)>();
+            foreach (var document in attachedDocuments)
+            {
+                var pages = new List<Image>();
+                foreach (var pageBytes in document.Pages)
+                {
+                    try
+                    {
+                        pages.Add(Image.FromBinaryData(pageBytes));
+                    }
+                    catch
+                    {
+                    }
+                }
+
+                if (pages.Count > 0)
+                    documents.Add((document.Label, pages));
+            }
+
+            if (documents.Count == 0)
+                return;
+
+            c.Column(col =>
+            {
+                col.Spacing(10);
+                col.Item().PageBreak();
+                col.Item().Element(e => Section(e, "Attached Documents"));
+
+                for (var documentIndex = 0; documentIndex < documents.Count; documentIndex++)
+                {
+                    var document = documents[documentIndex];
+                    if (documentIndex > 0)
+                        col.Item().PageBreak();
+
+                    col.Item().Text(document.Label).FontSize(10).SemiBold().FontColor("#0B4A82");
+
+                    for (var pageIndex = 0; pageIndex < document.Pages.Count; pageIndex++)
+                    {
+                        col.Item().Border(0.5f).BorderColor("#E5E7EB").Padding(4)
+                            .Height(600).AlignCenter().Image(document.Pages[pageIndex]).FitArea();
+
+                        if (pageIndex < document.Pages.Count - 1)
+                            col.Item().PageBreak();
+                    }
+                }
+            });
+        }
+
         private static void ApprovalsTable(IContainer c, WelfareApplication app)
         {
             var approvals = app.Approvals.OrderBy(a => a.CreatedAt).ToList();
@@ -350,4 +405,6 @@ namespace SpicAPI.Services
             return s >= 1048576 ? $"{s / 1048576:0.#} MB" : s >= 1024 ? $"{s / 1024:0.#} KB" : $"{s} B";
         }
     }
+
+    internal sealed record WelfareApplicationPdfDocument(string Label, IReadOnlyList<byte[]> Pages);
 }

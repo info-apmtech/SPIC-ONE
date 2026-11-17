@@ -13,6 +13,12 @@ namespace SpicAPI.Controllers
     [Route("api/[controller]")]
     public class SDWAWelfareApplicationController : ControllerBase
     {
+        private const long MaxImageAttachmentBytes = 10L * 1024 * 1024;
+        private const long MaxPdfAttachmentBytes = 25L * 1024 * 1024;
+        private const int MaxPdfAttachmentPages = 20;
+        private const int PdfAttachmentRenderDpi = 120;
+        private static readonly string[] SupportedAttachmentExtensions = new[] { ".jpg", ".jpeg", ".png", ".webp", ".pdf" };
+
         private readonly AppDbContext _db;
         private readonly IWebHostEnvironment _env;
         private readonly ILogger<SDWAWelfareApplicationController> _logger;
@@ -287,7 +293,8 @@ namespace SpicAPI.Controllers
 
             try
             {
-                var bytes = Services.WelfareApplicationPdfBuilder.Build(application);
+                var attachedDocuments = await LoadAttachedDocumentsAsync(application);
+                var bytes = Services.WelfareApplicationPdfBuilder.Build(application, attachedDocuments);
                 var fileName = string.IsNullOrWhiteSpace(application.ApplicationNumber)
                     ? $"WelfareApplication-{application.Id}.pdf"
                     : $"{application.ApplicationNumber}.pdf";
@@ -356,6 +363,144 @@ namespace SpicAPI.Controllers
             return await _db.DealerRegistrations
                 .AsNoTracking()
                 .FirstOrDefaultAsync(d => d.UserTableId == userId);
+        }
+
+        private async Task<List<Services.WelfareApplicationPdfDocument>> LoadAttachedDocumentsAsync(WelfareApplication application)
+        {
+            var documents = new List<Services.WelfareApplicationPdfDocument>();
+            var uploadsRoot = Path.GetFullPath(Path.Combine(_env.ContentRootPath, "Uploads"));
+            var applicationId = application.Id.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            var applicationRoot = Path.GetFullPath(Path.Combine(uploadsRoot, "Welfare", applicationId));
+            var expectedRelativePrefix = $"Welfare/{applicationId}/";
+
+            foreach (var document in application.Documents.OrderBy(d => d.UploadedAt).ThenBy(d => d.Id))
+            {
+                if (string.IsNullOrWhiteSpace(document.FilePath))
+                    continue;
+
+                var relativePath = document.FilePath.Replace('\\', '/').Trim();
+                if (relativePath.Length == 0 || Path.IsPathRooted(relativePath) ||
+                    !relativePath.StartsWith(expectedRelativePrefix, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                var fullPath = Path.GetFullPath(Path.Combine(uploadsRoot, relativePath));
+                if (!fullPath.StartsWith(applicationRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                var extension = Path.GetExtension(fullPath);
+                if (!SupportedAttachmentExtensions.Contains(extension, StringComparer.OrdinalIgnoreCase))
+                    continue;
+
+                var isPdf = extension.Equals(".pdf", StringComparison.OrdinalIgnoreCase);
+                var maxBytes = isPdf ? MaxPdfAttachmentBytes : MaxImageAttachmentBytes;
+                var fileInfo = new FileInfo(fullPath);
+                if (!fileInfo.Exists || fileInfo.Length == 0 || fileInfo.Length > maxBytes)
+                    continue;
+
+                var bytes = await System.IO.File.ReadAllBytesAsync(fullPath);
+                if (!HasMatchingSignature(extension, bytes))
+                    continue;
+
+                var pages = isPdf
+                    ? RenderPdfPages(bytes, document.Id)
+                    : new List<byte[]> { bytes };
+
+                if (pages.Count == 0)
+                    continue;
+
+                documents.Add(new Services.WelfareApplicationPdfDocument(BuildDocumentLabel(document), pages));
+            }
+
+            return documents;
+        }
+
+        private IReadOnlyList<byte[]> RenderPdfPages(byte[] pdfBytes, int documentId)
+        {
+            int pageCount;
+            try
+            {
+                pageCount = PDFtoImage.Conversion.GetPageCount(pdfBytes, null);
+            }
+            catch (Exception ex)
+            {
+                if (_logger != null)
+                    _logger.LogWarning(ex, "Could not read welfare document {DocumentId} as a PDF attachment.", documentId);
+                return Array.Empty<byte[]>();
+            }
+
+            if (pageCount <= 0 || pageCount > MaxPdfAttachmentPages)
+            {
+                if (_logger != null)
+                    _logger.LogWarning("Welfare document {DocumentId} has unsupported PDF page count {PageCount}.", documentId, pageCount);
+                return Array.Empty<byte[]>();
+            }
+
+            var pages = new List<byte[]>(pageCount);
+            for (var pageIndex = 0; pageIndex < pageCount; pageIndex++)
+            {
+                try
+                {
+                    using var stream = new MemoryStream();
+                    PDFtoImage.Conversion.SavePng(
+                        stream,
+                        pdfBytes,
+                        (Index)pageIndex,
+                        null,
+                        new PDFtoImage.RenderOptions { Dpi = PdfAttachmentRenderDpi });
+
+                    if (stream.Length > 0)
+                        pages.Add(stream.ToArray());
+                }
+                catch (Exception ex)
+                {
+                    if (_logger != null)
+                        _logger.LogWarning(ex, "Could not render page {PageNumber} of welfare document {DocumentId} for PDF attachment.", pageIndex + 1, documentId);
+                }
+            }
+
+            return pages;
+        }
+
+        private static bool HasMatchingSignature(string extension, byte[] bytes) => extension.ToLowerInvariant() switch
+        {
+            ".jpg" or ".jpeg" => IsJpeg(bytes),
+            ".png" => IsPng(bytes),
+            ".webp" => IsWebp(bytes),
+            ".pdf" => IsPdf(bytes),
+            _ => false
+        };
+
+        private static bool IsJpeg(byte[] bytes) =>
+            bytes.Length >= 3 && bytes[0] == 0xFF && bytes[1] == 0xD8 && bytes[2] == 0xFF;
+
+        private static bool IsPng(byte[] bytes) =>
+            bytes.Length >= 8 && bytes[0] == 0x89 && bytes[1] == 0x50 && bytes[2] == 0x4E && bytes[3] == 0x47 &&
+            bytes[4] == 0x0D && bytes[5] == 0x0A && bytes[6] == 0x1A && bytes[7] == 0x0A;
+
+        private static bool IsWebp(byte[] bytes) =>
+            bytes.Length >= 12 && bytes[0] == (byte)'R' && bytes[1] == (byte)'I' && bytes[2] == (byte)'F' && bytes[3] == (byte)'F' &&
+            bytes[8] == (byte)'W' && bytes[9] == (byte)'E' && bytes[10] == (byte)'B' && bytes[11] == (byte)'P';
+
+        private static bool IsPdf(byte[] bytes) =>
+            bytes.Length >= 5 && bytes[0] == (byte)'%' && bytes[1] == (byte)'P' && bytes[2] == (byte)'D' &&
+            bytes[3] == (byte)'F' && bytes[4] == (byte)'-';
+
+        private static string BuildDocumentLabel(WelfareApplicationDocument document)
+        {
+            var documentName = string.IsNullOrWhiteSpace(document.DocumentName) ? document.FileName : document.DocumentName;
+            var category = document.DocumentType;
+
+            if (!string.IsNullOrWhiteSpace(documentName) && !string.IsNullOrWhiteSpace(category) &&
+                !string.Equals(documentName, category, StringComparison.OrdinalIgnoreCase))
+                return $"{documentName} ({category})";
+
+            if (!string.IsNullOrWhiteSpace(documentName))
+                return documentName;
+
+            if (!string.IsNullOrWhiteSpace(category))
+                return category;
+
+            return "Document";
         }
 
         internal static string GetSchemeDisplayName(WelfareSchemeType scheme) => scheme switch
