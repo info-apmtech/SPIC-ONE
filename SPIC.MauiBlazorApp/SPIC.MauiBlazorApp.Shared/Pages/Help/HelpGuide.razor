@@ -1,4 +1,4 @@
-@page "/Help/{Module}"
+﻿@page "/Help/{Module}"
 @page "/Help/{Module}/{Section}"
 @* One module's guide (help centre v2): animated banner, then one scrolling page — overview, flow,
    statuses, roles, the user's screens with pictures, problems — with a contents rail. *@
@@ -14,7 +14,7 @@
 @inject IJSRuntime JS
 @inject NavigationManager Nav
 
-<div class="hc-page">
+<div class="hc-page" lang="@Lang.Current">
     @if (_view is null)
     {
         <div class="hc-lay" style="display:block">
@@ -185,7 +185,7 @@
                     @if (firstTour is not null) { <button type="button" class="hc-btn hc-btn--pri" @onclick="() => StartTourAsync(firstTour)"><i class="bi bi-play-circle" aria-hidden="true"></i> Guided tour</button> }
                     @if (screens.Select(s => s.Section.Routes.FirstOrDefault(r => !HelpRoutes.HasParameters(r))).FirstOrDefault(r => r is not null) is { } open)
                     {
-                        <a class="hc-btn" href="@open"><i class="bi bi-box-arrow-up-right" aria-hidden="true"></i> Open @_view.Title</a>
+                        <a class="hc-btn" href="@open"><i class="bi bi-box-arrow-up-right" aria-hidden="true"></i> <span>Open @_view.Title</span></a>
                     }
                     @if (_isWeb) { <button type="button" class="hc-btn" @onclick="PrintAsync"><i class="bi bi-printer" aria-hidden="true"></i> Print or save as PDF</button> }
                 </div>
@@ -219,6 +219,7 @@
     private bool _jsReady;
     private string? _scrolledFor;
     private DotNetObjectReference<HelpGuide>? _self;
+    private bool _disposed;
 
     protected override void OnInitialized()
     {
@@ -244,21 +245,34 @@
                 _jsReady = true;
             }
             catch { /* prerender: no JS yet */ }
-            StateHasChanged();
+            if (!_disposed) StateHasChanged();
             return;
         }
 
-        if (await Api.EnsureApprovedAsync(Lang.Current)) { _view = Catalog.Module(Module, Lang.Current); StateHasChanged(); return; }
-        if (!_jsReady || _view is null) return;
+        if (await Api.EnsureApprovedAsync(Lang.Current))
+        {
+            if (_disposed) return;
+            _view = Catalog.Module(Module, Lang.Current); StateHasChanged(); return;
+        }
+        // The page may have been left while the API answered (a tour that navigates away, a menu
+        // tap): its .NET reference is disposed then and must not be handed to JS.
+        var view = _view;
+        if (_disposed || !_jsReady || view is null || _self is null) return;
 
         var key = $"{Module}/{Section}/{Lang.Current}";
         if (_scrolledFor != key)
         {
             _scrolledFor = key;
-            var screenIds = _view.Screens.Select(s => $"hc-s-{s.Section.Id}").ToArray();
-            await JS.InvokeVoidAsync("helpCentre.observeToc", "toc", TocIds().ToArray(), _self);
-            await JS.InvokeVoidAsync("helpCentre.observeRead", "read", screenIds, _self, 5000);
-            if (!string.IsNullOrWhiteSpace(Section)) await JS.InvokeVoidAsync("helpCentre.scrollToId", AnchorFor(Section), true);
+            var screenIds = view.Screens.Select(s => $"hc-s-{s.Section.Id}").ToArray();
+            // Scroll tracking is a nicety: a failure here must never end the user's session.
+            try
+            {
+                await JS.InvokeVoidAsync("helpCentre.observeToc", "toc", TocIds().ToArray(), _self);
+                if (_disposed) return;
+                await JS.InvokeVoidAsync("helpCentre.observeRead", "read", screenIds, _self, 5000);
+                if (!_disposed && !string.IsNullOrWhiteSpace(Section)) await JS.InvokeVoidAsync("helpCentre.scrollToId", AnchorFor(Section), true);
+            }
+            catch { /* no JS, or the page is going away */ }
         }
     }
 
@@ -328,6 +342,7 @@
 
     public async ValueTask DisposeAsync()
     {
+        _disposed = true;
         Lang.Changed -= OnLangChanged;
         Progress.Changed -= OnProgressChanged;
         try

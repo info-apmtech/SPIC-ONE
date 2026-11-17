@@ -23,6 +23,9 @@ namespace SPIC.MauiBlazorApp.Shared.Services
         public int Index { get; private set; }
         public bool IsRunning => Module is not null && SectionId is not null;
 
+        /// <summary>When the running tour was started (UTC).</summary>
+        public DateTime StartedAt { get; private set; }
+
         public event Action? Changed;
 
         public Task StartAsync(HelpSectionView screen)
@@ -39,6 +42,7 @@ namespace SPIC.MauiBlazorApp.Shared.Services
             Module = screen.Module;
             SectionId = screen.Section.Id;
             Index = 0;
+            StartedAt = DateTime.UtcNow;
             Changed?.Invoke();
             if (route is not null) _nav.NavigateTo(route);
             return Task.CompletedTask;

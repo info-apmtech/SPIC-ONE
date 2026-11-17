@@ -10,6 +10,7 @@
 @inject IJSRuntime JS
 @inject NavigationManager Nav
 @inject HelpProgressState Progress
+@inject ToastService Toast
 
 @if (Tour.IsRunning && _section is not null)
 {
@@ -77,32 +78,63 @@
 
     private void OnTourChanged() => InvokeAsync(() => { Load(); _audio = null; _shownKey = null; _found = false; StateHasChanged(); });
 
+    // Several renders can be inside this method at once (it awaits JS and the API, and a tour that
+    // ends or moves on re-renders meanwhile). So: fields are read into locals BEFORE each await and
+    // re-checked after it, and nothing here may throw - on the web an exception in this method ends
+    // the user's whole session (the Blazor circuit), not just the tour.
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (!Tour.IsRunning || _section is null)
-        {
-            if (_self is not null) { try { await JS.InvokeVoidAsync("helpCentre.tour.unbindKeys"); } catch { } _self.Dispose(); _self = null; }
-            return;
-        }
-
-        var key = $"{Tour.Module}/{Tour.SectionId}/{Tour.Index}/{Lang.Current}";
-        if (_shownKey == key) return;
-        _shownKey = key;
-
-        if (_self is null)
-        {
-            _self = DotNetObjectReference.Create(this);
-            _voice = await Api.VoiceEnabledAsync();
-            try { await JS.InvokeVoidAsync("helpCentre.tour.bindKeys", _self); } catch { }
-        }
-
-        var target = _section.Section.Screen?.Tour.FirstOrDefault(t => t.N == Tour.Index + 1)?.Target;
         try
         {
-            var result = await JS.InvokeAsync<ShowResult>("helpCentre.tour.showWhenReady", target, 2500);
-            if (result.Found != _found) { _found = result.Found; StateHasChanged(); }
+            var section = _section;
+            if (!Tour.IsRunning || section is null)
+            {
+                await ReleaseKeysAsync();
+                return;
+            }
+
+            var key = $"{Tour.Module}/{Tour.SectionId}/{Tour.Index}/{Lang.Current}";
+            if (_shownKey == key) return;
+            _shownKey = key;
+            var step = Tour.Index + 1;
+
+            if (_self is null)
+            {
+                var self = _self = DotNetObjectReference.Create(this);
+                var voice = await Api.VoiceEnabledAsync();
+                if (!ReferenceEquals(_self, self)) return; // the tour ended while the API answered
+                _voice = voice;
+                try { await JS.InvokeVoidAsync("helpCentre.tour.bindKeys", self); } catch { }
+                if (_shownKey != key) return; // the tour moved on: that render shows its own step
+            }
+
+            var target = section.Section.Screen?.Tour.FirstOrDefault(t => t.N == step)?.Target;
+            var found = false;
+            try
+            {
+                var result = await JS.InvokeAsync<ShowResult?>("helpCentre.tour.showWhenReady", target, 2500);
+                found = result?.Found ?? false;
+            }
+            catch { /* no JS (navigating away): show the step without a highlight */ }
+
+            if (_shownKey != key) return; // an older step's answer: ignore it
+            if (found != _found) { _found = found; StateHasChanged(); }
         }
-        catch { _found = false; StateHasChanged(); }
+        catch (Exception)
+        {
+            // Never let the tour take the page down with it.
+        }
+    }
+
+    // Stops the keyboard / resize listeners and frees the .NET reference. The field is cleared
+    // first, so a second render arriving during the await finds nothing left to release.
+    private async Task ReleaseKeysAsync()
+    {
+        var self = _self;
+        if (self is null) return;
+        _self = null;
+        try { await JS.InvokeVoidAsync("helpCentre.tour.unbindKeys"); } catch { }
+        self.Dispose();
     }
 
     private sealed record ShowResult(bool Found);
@@ -122,17 +154,23 @@
 
     private async Task End()
     {
-        // A finished tour counts the screen as read.
-        if (Tour.IsRunning && Tour.Index >= _steps.Count - 1 && _section is not null)
-            await Progress.MarkReadAsync(_section.Module, _section.Section.Id);
+        try
+        {
+            // A finished tour counts the screen as read.
+            var section = _section;
+            if (Tour.IsRunning && Tour.Index >= _steps.Count - 1 && section is not null)
+                await Progress.MarkReadAsync(section.Module, section.Section.Id);
+        }
+        catch { /* progress is a nicety; the tour must still end */ }
         Tour.End();
         try { await JS.InvokeVoidAsync("helpCentre.tour.hide"); } catch { }
     }
 
     private async Task ListenAsync()
     {
-        if (_section is null) return;
-        _audio = await Api.AudioUrlAsync(_section.Module, _section.Section.Id, Lang.Current, Tour.Index + 1);
+        var section = _section;
+        if (section is null) return;
+        _audio = await Api.AudioUrlAsync(section.Module, section.Section.Id, Lang.Current, Tour.Index + 1);
     }
 
     // Leaving the tour's screen (not the navigation the tour itself made) ends the tour.
@@ -140,7 +178,20 @@
     {
         if (!Tour.IsRunning || _section is null) return;
         var path = "/" + Nav.ToBaseRelativePath(e.Location);
-        if (!_section.Section.Routes.Any(r => HelpRoutes.Matches(r, path))) InvokeAsync(End);
+        if (_section.Section.Routes.Any(r => HelpRoutes.Matches(r, path))) return;
+
+        // The tour's own screen sent the user somewhere else straight away: it only opens from a
+        // record (a list row, a program). Say so, instead of the tour vanishing without a word.
+        var redirected = Tour.Index == 0 && DateTime.UtcNow - Tour.StartedAt < TimeSpan.FromSeconds(2.5);
+        InvokeAsync(async () =>
+        {
+            await End();
+            if (redirected)
+            {
+                try { Toast.Info("This screen opens from a record. Open one, then press ? and choose Take the tour.", "Guided tour", 6000); }
+                catch { /* a missing toast must not matter */ }
+            }
+        });
     }
 
     private static string Inline(string text)
@@ -154,10 +205,6 @@
         Tour.Changed -= OnTourChanged;
         Lang.Changed -= OnTourChanged;
         Nav.LocationChanged -= OnLocationChanged;
-        if (_self is not null)
-        {
-            try { await JS.InvokeVoidAsync("helpCentre.tour.unbindKeys"); } catch { }
-            _self.Dispose();
-        }
+        await ReleaseKeysAsync();
     }
 }

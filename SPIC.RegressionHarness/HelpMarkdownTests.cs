@@ -16,6 +16,19 @@ internal static class HelpMarkdownTests
 		CalloutsToHtml();
 		TableAndCalloutToSpeech();
 		StepTextForTour();
+		LabelLineGetsItsOwnLine();
+	}
+
+	// "**What this screen is for**" on a line of its own, with the text under it, is a label: it
+	// must not run into that text ("What this screen is for My Dashboard is…").
+	private static void LabelLineGetsItsOwnLine()
+	{
+		var html = HelpMarkdown.ToHtml("**What this screen is for**\n**My Dashboard** is the home screen.", "");
+		Check.Equal("label line then its text",
+			"<p class=\"help-label\"><strong>What this screen is for</strong></p><p><strong>My Dashboard</strong> is the home screen.</p>", html);
+		Check.Equal("a bold line alone stays a paragraph", "<p><strong>Only this</strong></p>", HelpMarkdown.ToHtml("**Only this**", ""));
+		Check.Equal("bold at the start of a sentence is not a label", "<p><strong>Save</strong> the form. Then close it.</p>",
+			HelpMarkdown.ToHtml("**Save** the form.\nThen close it.", ""));
 	}
 
 	private const string Body = """

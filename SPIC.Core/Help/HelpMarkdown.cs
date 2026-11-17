@@ -19,6 +19,7 @@ namespace SPIC.Core.Help
         private static readonly Regex Ordered = new(@"^(\d+)\.\s+(.*)$", RegexOptions.Compiled);
         private static readonly Regex Image = new(@"!\[([^\]]*)\]\(([^)\s]+)\)", RegexOptions.Compiled);
         private static readonly Regex Bold = new(@"\*\*(.+?)\*\*", RegexOptions.Compiled);
+        private static readonly Regex LabelLine = new(@"^\*\*[^*]+\*\*$", RegexOptions.Compiled);
 
         public static string ToHtml(string body, string imageBase)
         {
@@ -150,6 +151,13 @@ namespace SPIC.Core.Help
                 else
                 {
                     CloseList();
+                    // A line that is only **bold**, with text under it, is a label for that text
+                    // ("What this screen is for"): it gets its own line instead of running into it.
+                    if (!inNote && paragraph.Count == 1 && LabelLine.IsMatch(paragraph[0]))
+                    {
+                        html.Append("<p class=\"help-label\">").Append(Inline(paragraph[0], imageBase)).Append("</p>");
+                        paragraph.Clear();
+                    }
                     paragraph.Add(line);
                 }
             }

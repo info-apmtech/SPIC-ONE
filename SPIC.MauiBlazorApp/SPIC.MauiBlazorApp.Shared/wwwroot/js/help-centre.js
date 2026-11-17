@@ -3,6 +3,15 @@
 window.helpCentre = (function () {
     const observers = {};
 
+    // Calls back into .NET without ever throwing or leaving a rejected promise behind: the page
+    // may already be gone (its reference disposed) when a scroll, timer, key or resize fires.
+    function call(ref, method, ...args) {
+        try {
+            const p = ref && ref.invokeMethodAsync(method, ...args);
+            if (p && typeof p.catch === 'function') p.catch(() => { });
+        } catch (e) { }
+    }
+
     function svgPath(svg, d, color, dashed, marker) {
         const p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
         p.setAttribute('d', d);
@@ -13,6 +22,17 @@ window.helpCentre = (function () {
         p.setAttribute('marker-end', 'url(#' + marker + ')');
         p.classList.add('hc-l');
         svg.appendChild(p);
+    }
+
+    // A right-angled path from box P to box Q that never crosses a box in between. In the same
+    // row it loops over the row (over = true) or under it; between rows it bends half way.
+    function elbow(P, Q, over) {
+        if (Math.abs(P.cy - Q.cy) < 8) {
+            if (over) return `M${P.cx} ${P.t} V${Math.min(P.t, Q.t) - 14} H${Q.cx} V${Q.t - 4}`;
+            return `M${P.cx} ${P.b} V${Math.max(P.b, Q.b) + 14} H${Q.cx} V${Q.b + 4}`;
+        }
+        if (Q.t >= P.b) return `M${P.cx} ${P.b} V${(P.b + Q.t) / 2} H${Q.cx} V${Q.t - 4}`;
+        return `M${P.cx} ${P.t} V${(P.t + Q.b) / 2} H${Q.cx} V${Q.b + 4}`;
     }
 
     function draw(wrap) {
@@ -41,11 +61,13 @@ window.helpCentre = (function () {
             if (el.dataset.return) {
                 const B = box(el.dataset.return); if (A && B) svgPath(svg, `M${A.cx} ${A.t} V${B.cy - 14} H${B.r + 4}`, '#d97706', true, 'hc-ahd');
             }
+            // "When something goes wrong": into the exception box from the step it leaves, and out
+            // of it to the step it sends you back to.
             if (el.dataset.from) {
-                const F = box(el.dataset.from); if (A && F) svgPath(svg, `M${F.cx} ${F.b} V${A.t - 4}`, '#dc2626', true, 'hc-ahr');
+                const F = box(el.dataset.from); if (A && F) svgPath(svg, elbow(F, A, true), '#dc2626', true, 'hc-ahr');
             }
             if (el.dataset.to) {
-                const T = box(el.dataset.to); if (A && T) svgPath(svg, `M${A.l} ${A.cy + 14} H${(T.r + A.l) / 2} V${T.cy} H${T.r + 4}`, '#dc2626', true, 'hc-ahr');
+                const T = box(el.dataset.to); if (A && T) svgPath(svg, elbow(A, T, false), '#dc2626', true, 'hc-ahr');
             }
         });
     }
@@ -69,7 +91,7 @@ window.helpCentre = (function () {
             els.forEach(e => { if (e.getBoundingClientRect().top < 140) current = e.id; });
             if (current && current !== observers[key + ':cur']) {
                 observers[key + ':cur'] = current;
-                dotnetRef.invokeMethodAsync('OnTocChanged', current);
+                call(dotnetRef, 'OnTocChanged', current);
             }
         };
         const scroller = window;
@@ -91,7 +113,7 @@ window.helpCentre = (function () {
                 // Counts only while a good part of the section (or of the screen) shows, for ms in a row.
                 const seen = en.intersectionRatio >= 0.35 || en.intersectionRect.height >= window.innerHeight * 0.5;
                 if (en.isIntersecting && seen) {
-                    timers[id] = setTimeout(() => { done.add(id); dotnetRef.invokeMethodAsync('OnSectionRead', id); }, ms);
+                    timers[id] = setTimeout(() => { done.add(id); call(dotnetRef, 'OnSectionRead', id); }, ms);
                 }
             });
         }, { threshold: 0.35 });
@@ -121,6 +143,7 @@ window.helpCentre = (function () {
 
     // ---------------- guided tour ----------------
     let tourKeys = null;
+    let tourSeq = 0; // the latest step asked for; an older step still waiting for its element gives up
 
     function tourShow(selector) {
         const spot = document.getElementById('hc-tour-spot');
@@ -133,8 +156,13 @@ window.helpCentre = (function () {
             if (card) { card.style.left = ''; card.style.top = ''; card.classList.add('is-center'); card.focus(); }
             return { found: false };
         }
-        el.scrollIntoView({ block: 'center', behavior: 'auto' });
-        const r = el.getBoundingClientRect();
+        // Scroll only when the element is not already fully on screen. (Scrolling on every call
+        // also made phones loop: scrolling resizes the viewport, and a resize repositions.)
+        let r = el.getBoundingClientRect();
+        if (r.top < 0 || r.left < 0 || r.bottom > window.innerHeight || r.right > window.innerWidth) {
+            el.scrollIntoView({ block: 'center', behavior: 'auto' });
+            r = el.getBoundingClientRect();
+        }
         const pad = 8;
         if (spot) Object.assign(spot.style, { left: (r.left - pad) + 'px', top: (r.top - pad) + 'px', width: (r.width + pad * 2) + 'px', height: (r.height + pad * 2) + 'px', opacity: '1' });
         if (card) {
@@ -157,19 +185,26 @@ window.helpCentre = (function () {
 
     // Waits (up to timeoutMs) for the target to appear — a tour may start right after navigating.
     function tourShowWhenReady(selector, timeoutMs) {
+        const seq = ++tourSeq;
         return new Promise(resolve => {
             const started = Date.now();
             const attempt = () => {
-                let el = null;
-                try { el = selector ? document.querySelector(selector) : null; } catch (e) { el = null; }
-                if ((el && el.getClientRects().length > 0) || Date.now() - started >= timeoutMs) resolve(tourShow(selector));
-                else setTimeout(attempt, 150);
+                try {
+                    // The tour moved to another step (or ended) while this one waited: do not
+                    // move the highlight back to an old step.
+                    if (seq !== tourSeq) { resolve({ found: false, stale: true }); return; }
+                    let el = null;
+                    try { el = selector ? document.querySelector(selector) : null; } catch (e) { el = null; }
+                    if ((el && el.getClientRects().length > 0) || Date.now() - started >= timeoutMs) resolve(tourShow(selector));
+                    else setTimeout(attempt, 150);
+                } catch (e) { resolve({ found: false }); }
             };
             attempt();
         });
     }
 
     function tourHide() {
+        tourSeq++; // anything still waiting for an element stops
         const spot = document.getElementById('hc-tour-spot');
         if (spot) spot.style.opacity = '0';
     }
@@ -180,18 +215,30 @@ window.helpCentre = (function () {
             // Arrow keys inside the language list or a text box belong to that control.
             const tag = (e.target && e.target.tagName || '').toLowerCase();
             if (e.key !== 'Escape' && (tag === 'select' || tag === 'input' || tag === 'textarea')) return;
-            if (e.key === 'Escape') dotnetRef.invokeMethodAsync('OnTourEnd');
-            else if (e.key === 'ArrowRight') dotnetRef.invokeMethodAsync('OnTourNext');
-            else if (e.key === 'ArrowLeft') dotnetRef.invokeMethodAsync('OnTourBack');
+            if (e.key === 'Escape') call(dotnetRef, 'OnTourEnd');
+            else if (e.key === 'ArrowRight') call(dotnetRef, 'OnTourNext');
+            else if (e.key === 'ArrowLeft') call(dotnetRef, 'OnTourBack');
         };
         document.addEventListener('keydown', tourKeys);
-        window.addEventListener('resize', tourKeys._r = () => dotnetRef.invokeMethodAsync('OnTourReposition'));
+        // Reposition once the size has settled, and only when the width or height really changed.
+        let timer = 0, w = window.innerWidth, h = window.innerHeight;
+        tourKeys._r = () => {
+            clearTimeout(timer);
+            timer = setTimeout(() => {
+                if (window.innerWidth === w && Math.abs(window.innerHeight - h) < 80) return; // phone address bar
+                w = window.innerWidth; h = window.innerHeight;
+                call(dotnetRef, 'OnTourReposition');
+            }, 200);
+        };
+        tourKeys._stop = () => clearTimeout(timer);
+        window.addEventListener('resize', tourKeys._r);
     }
 
     function tourUnbindKeys() {
         if (!tourKeys) return;
         document.removeEventListener('keydown', tourKeys);
         if (tourKeys._r) window.removeEventListener('resize', tourKeys._r);
+        if (tourKeys._stop) tourKeys._stop();
         tourKeys = null;
     }
 
