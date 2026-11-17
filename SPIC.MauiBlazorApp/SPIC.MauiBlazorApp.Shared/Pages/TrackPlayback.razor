@@ -31,15 +31,7 @@
         </div>
     </div>
 
-    @if (!IsNativeApp)
-    {
-        <div class="ma-card">
-            <EmptyState Icon="bi-phone"
-                        Title="Track Playback can only be used from the SPIC mobile app"
-                        Message="Please open SPIC ONE on your phone to review your live tracking history." />
-        </div>
-    }
-    else if (_trackLoading)
+    @if (_trackLoading)
     {
         <div class="ma-tracking-card">
             <EmptyState Icon="bi-hourglass-split" Title="Loading tracking history..." Compact="true" />
@@ -47,11 +39,12 @@
     }
     else
     {
-        @* Live Tracking card: only rendered while a session is genuinely Active - a distinct,
-           top-of-page card (not just a status line inside the playback card) so "I'm tracking right
-           now" is unmistakable, plus a one-tap way to get turn-by-turn directions to the most recent
-           fix (useful for whoever is viewing this - a supervisor heading to meet the JMDO, or the
-           JMDO themselves navigating back to a point already logged). *@
+        @* Live Tracking card: only rendered while a session is genuinely Active AND on the native app
+           - a distinct, top-of-page card (not just a status line inside the playback card) so "I'm
+           tracking right now" is unmistakable, plus a one-tap way to get turn-by-turn directions to
+           the most recent fix. Web is playback-only (see IsNativeApp/_liveSession) - no Stop control,
+           no live-refresh polling - so this card never shows there; the active session still appears
+           as a normal, non-live entry in "Other playbacks available" instead. *@
         @if (_liveSession is not null)
         {
             <div class="ma-tracking-card ma-tracking-card-live">
@@ -158,14 +151,15 @@
 </div>
 
 @code {
-    // Same IFormFactor-based split every JMDO-only field page uses: live tracking is mobile-app-only
-    // by design (see JMDOTrackingController's class doc comment) - a desktop/mobile-browser visit
-    // only ever sees the blocking message above, never the tracking card.
+    // Unlike FieldDashboard/MarkAttendance (which gate their whole page to native, since those pages
+    // start/record live tracking), Track Playback is view-only history and is open to web too.
+    // IsNativeApp instead scopes down the "live" pieces specifically - the Live Tracking card
+    // (Stop Tracking, Directions to live location) and the 15s live-refresh loop - so a web visitor
+    // can review any recorded route but never watch/control a session in real time.
     private bool IsNativeApp => FormFactor.GetFormFactor() != "Web";
 
     protected override async Task OnInitializedAsync()
     {
-        if (!IsNativeApp) return;
         await LoadTrackingViewAsync();
     }
 
@@ -193,7 +187,10 @@
     // it may not be the one currently selected for playback (_trackSession) - the JMDO can browse an
     // older day's route via "Other playbacks available" while their own live session keeps running
     // underneath. The Live Tracking card always reflects this, independently of what's on screen.
-    private JMDOTrackingSessionDto? _liveSession => _historySessions.FirstOrDefault(s => s.Status == JMDOTrackingSessionStatus.Active);
+    // Web never gets a "live" session at all (IsNativeApp guard) - its Active session, if any, is just
+    // another entry in _otherSessions, playable like any other recorded route.
+    private JMDOTrackingSessionDto? _liveSession =>
+        IsNativeApp ? _historySessions.FirstOrDefault(s => s.Status == JMDOTrackingSessionStatus.Active) : null;
 
     // Every session except the live one, which already has its own card above - keeps the live
     // session from being listed twice while still letting the JMDO switch between every other day's
@@ -404,12 +401,13 @@
 
     // Polls for new points only while the session is genuinely still Active - stops itself the
     // moment it sees the session end (stopped from here, auto-ended server-side, or from another
-    // device), so this never keeps polling a finished session forever.
+    // device), so this never keeps polling a finished session forever. Native-only: web is
+    // playback-only and must not watch a session update in real time (see IsNativeApp).
     private void StartRefreshLoopIfActive()
     {
         _trackRefreshCts?.Cancel();
         _trackRefreshCts = null;
-        if (_trackSession?.Status != JMDOTrackingSessionStatus.Active) return;
+        if (!IsNativeApp || _trackSession?.Status != JMDOTrackingSessionStatus.Active) return;
 
         var cts = new CancellationTokenSource();
         _trackRefreshCts = cts;
