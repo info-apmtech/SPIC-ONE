@@ -54,6 +54,18 @@ namespace SPIC.Core.Help
             sb.Append("icon: ").Append(english.Icon).Append('\n');
             sb.Append("order: ").Append(english.Order).Append('\n');
             sb.Append("language: ").Append(language).Append('\n');
+            var hasCategory = translated.TryGetValue(CategoryKey, out var tc) && !string.IsNullOrWhiteSpace(tc.Title);
+            var hasNote = translated.TryGetValue(NoteKey, out var tn) && !string.IsNullOrWhiteSpace(tn.Title);
+            if (hasCategory || hasNote)
+            {
+                sb.Append("category: ").Append(OneLine(hasCategory ? tc.Title : english.Category)).Append('\n');
+                sb.Append("note: ").Append(OneLine(hasNote ? tn.Title : english.Note)).Append('\n');
+                // A kept (possibly older) translation keeps its own hash, so it stays visibly stale.
+                var metaHash = sourceHashes is not null && sourceHashes.TryGetValue(MetaKey, out var keptMeta) && !string.IsNullOrWhiteSpace(keptMeta)
+                    ? keptMeta
+                    : HelpHash.Of(english.Category, english.Note);
+                sb.Append("meta-source-hash: ").Append(metaHash).Append('\n');
+            }
             sb.Append("---\n");
 
             foreach (var s in english.Sections)
@@ -67,6 +79,8 @@ namespace SPIC.Core.Help
                 sb.Append("for: ").Append(string.Join(", ", s.For)).Append('\n');
                 sb.Append("roles: ").Append(string.Join(", ", s.Roles)).Append('\n');
                 sb.Append("designations: ").Append(string.Join(", ", s.Designations)).Append('\n');
+                if (s.Kind != "screen") sb.Append("kind: ").Append(s.Kind).Append('\n');
+                AppendScreenMeta(sb, s.Screen);
                 var hash = sourceHashes is not null && sourceHashes.TryGetValue(s.Id, out var kept) && !string.IsNullOrWhiteSpace(kept)
                     ? kept
                     : HelpHash.Of(s.Title, s.Body);
@@ -79,6 +93,29 @@ namespace SPIC.Core.Help
 
             return sb.ToString();
         }
+
+        /// <summary>Front-matter keys for the translated category and update note.</summary>
+        public const string CategoryKey = "_category";
+        public const string NoteKey = "_note";
+
+        /// <summary>sourceHashes key for the meta-source-hash of a kept category/note translation.</summary>
+        public const string MetaKey = "_meta";
+
+        private static void AppendScreenMeta(StringBuilder sb, HelpScreenMeta? m)
+        {
+            if (m is null) return;
+            if (m.Image is not null) sb.Append("screenshot: ").Append(m.Image).Append('\n');
+            if (m.Hotspots.Count > 0) sb.Append("hotspots: ").Append(Spots(m.Hotspots)).Append('\n');
+            if (m.PhoneImage is not null) sb.Append("screenshot-phone: ").Append(m.PhoneImage).Append('\n');
+            if (m.PhoneHotspots.Count > 0) sb.Append("hotspots-phone: ").Append(Spots(m.PhoneHotspots)).Append('\n');
+            if (m.Tour.Count > 0) sb.Append("tour: ").Append(string.Join(" | ", m.Tour.Select(t => $"{t.N} > {t.Target}"))).Append('\n');
+            if (m.Minutes > 0) sb.Append("minutes: ").Append(m.Minutes).Append('\n');
+        }
+
+        private static string Spots(IReadOnlyList<HelpHotspot> spots) =>
+            string.Join(" | ", spots.Select(h => h.HasMarker
+                ? string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{h.N} @ {h.X},{h.Y},{h.W},{h.H}")
+                : $"{h.N} @ -"));
 
         private static string OneLine(string s) => s.Replace("\r", " ").Replace("\n", " ").Trim();
 

@@ -4,36 +4,175 @@ title: SAS मिट्टी जाँच लैब
 icon: bi-eyedropper
 order: 60
 language: hi
+category: मिट्टी की जाँच
+note: नया रूप, साथ में लैब का सफ़र, स्टेटस और गाइडेड टूर
+meta-source-hash: 3e2288cb66a7506f
 ---
 
 ::: section overview
-title: मिट्टी जाँच लैब कैसे काम करती है
-routes: /Lab
+title: यह मॉड्यूल आपके लिए क्या करता है
+routes: 
 for: 
 roles: 
 designations: 
-source-hash: d196c24e61d998d8
+kind: overview
+source-hash: f1de7a25d0e196a5
 confidence: ok
 
-**यह मॉड्यूल किस काम का है**
 लैब पोर्टल मिट्टी और पानी के हर सैंपल को उस दिन से ट्रैक करता है जिस दिन वह लैब पहुँचता है, तब तक जब तक किसान को रिपोर्ट नहीं मिल जाती। हर व्यक्ति को सिर्फ़ अपने काम की स्क्रीन दिखती हैं।
 
-## एक कंसाइनमेंट का सफ़र
+- receive | icon: bi-box-arrow-in-down | color: #0d9488
+  title: पार्सल लेना और बैच बनाना
+  text: कोऑर्डिनेटर हर पार्सल लेता है और सैंपल को एनालिस्ट के लिए बैच में डालता है।
+- test | icon: bi-eyedropper | color: #7c3aed
+  title: जाँच करना और वैल्यू भरना
+  text: एनालिस्ट टेस्ट वैल्यू टाइप करता है। नतीजे और सलाह सिस्टम खुद निकालता है।
+- report | icon: bi-file-earmark-pdf | color: #16a34a
+  title: कई भाषाओं में रिपोर्ट
+  text: पूरे हुए बैच से हर सैंपल की एक रिपोर्ट बनती है, अंग्रेज़ी और भारतीय भाषाओं में।
+:::
 
-1. फ़ील्ड स्टाफ़ किसानों से सैंपल लेते हैं और उन्हें कूरियर से एक **consignment** के रूप में लैब भेजते हैं। रास्ते में इस पर **In Transit** दिखता है।
-2. पार्सल पहुँचने पर लैब कोऑर्डिनेटर **Mark received** दबाता है। कंसाइनमेंट **Batch Pending** हो जाता है।
-3. कोऑर्डिनेटर एक या ज़्यादा Batch Pending कंसाइनमेंट को एक **batch** में डालता है और उसे किसी लैब एनालिस्ट को सौंपता है। बैच **Taken for Analysis** हो जाता है।
-4. एनालिस्ट बैच खोलता है, हर सैंपल की टेस्ट वैल्यू भरता है और **Submit Values** दबाता है। सिस्टम नतीजा, स्टेटस और सुझाव खुद निकाल लेता है।
-5. जब हर सैंपल सबमिट हो जाए, तो कोऑर्डिनेटर **Complete Batch** दबाता है। इससे वैल्यू लॉक हो जाती हैं और हर सैंपल की एक रिपोर्ट बनती है।
-6. रिपोर्ट PDF या Excel में अंग्रेज़ी और भारतीय भाषाओं में डाउनलोड करके किसान को दी जा सकती हैं। किसान ऐप में भी रिपोर्ट डाउनलोड कर सकता है।
+::: section flow
+title: कंसाइनमेंट लैब में कैसे आगे बढ़ता है
+routes: 
+for: 
+roles: 
+designations: 
+kind: flow
+source-hash: 998b226207ae8a8b
+confidence: ok
 
-## कौन क्या करता है
+हर लाइन एक रोल है और हर बॉक्स एक स्टेप है। किसी स्टेप पर टैप करके देखें कि वहाँ क्या होता है।
 
-- **Lab coordinator**: कंसाइनमेंट लेता है, बैच बनाता है, एनालिस्ट को काम सौंपता है, बैच पूरे करता है, लैब रिपोर्ट डाउनलोड करता है।
-- **Lab analyst**: अपने को सौंपे गए बैच की टेस्ट वैल्यू भरता है और सैंपल रिपोर्ट डाउनलोड करता है।
-- **Lab admin**: **Lab Tracking** पर सारे बैच देखता है। यह स्क्रीन सिर्फ़ देखने के लिए है।
+- field | type: lane | color: #64748b | roles: MDO, JMDO
+  title: फ़ील्ड स्टाफ़
+  sub: MDO · JMDO
+- coordinator | type: lane | color: #0d9488
+  title: लैब कोऑर्डिनेटर
+  sub: पार्सल लेता है और बैच बनाता है
+- analyst | type: lane | color: #7c3aed
+  title: लैब एनालिस्ट
+  sub: टेस्ट वैल्यू भरता है
+- farmer | type: lane | color: #16a34a | roles: Farmer
+  title: किसान
+  sub: रिपोर्ट पाता है
+- send | lane: field | col: 1 | icon: bi-truck | color: #64748b | next: receive
+  title: पार्सल भेजें
+  status: In Transit
+  text: फ़ील्ड स्टाफ़ सैंपल को कंसाइनमेंट के रूप में कूरियर से लैब भेजते हैं।
+- receive | lane: coordinator | col: 2 | icon: bi-box-arrow-in-down | color: #0d9488 | next: batch | screen: receive-consignments
+  title: मिला हुआ मार्क करें
+  status: Batch Pending
+  text: पार्सल पहुँचने पर कोऑर्डिनेटर **Mark received** दबाता है।
+- batch | lane: coordinator | col: 3 | icon: bi-collection | color: #ea580c | next: test | screen: create-batch
+  title: बैच बनाएँ
+  status: Taken for Analysis
+  text: कोऑर्डिनेटर कंसाइनमेंट को एक बैच में डालता है और उसे किसी एनालिस्ट को सौंपता है।
+- test | lane: analyst | col: 4 | icon: bi-eyedropper | color: #7c3aed | next: complete | screen: enter-test-values
+  title: टेस्ट वैल्यू भरें
+  status: Auto Result Ready
+  text: एनालिस्ट हर सैंपल की वैल्यू टाइप करता है और **Submit Values** दबाता है। नतीजा, स्टेटस और सलाह अपने-आप भर जाते हैं।
+- complete | lane: coordinator | col: 5 | icon: bi-patch-check | color: #2563eb | next: report | screen: batch-details
+  title: बैच पूरा करें
+  status: Report Generated
+  text: कोऑर्डिनेटर **Complete Batch** दबाता है। वैल्यू लॉक हो जाती हैं और हर सैंपल की एक रिपोर्ट बनती है।
+- report | lane: farmer | col: 6 | icon: bi-file-earmark-arrow-down | color: #16a34a
+  title: किसान को रिपोर्ट
+  status: Completed
+  text: किसान के लिए रिपोर्ट PDF या Excel में डाउनलोड की जाती है। किसान ऐप में भी इसे डाउनलोड कर सकता है।
+:::
 
-> लैब की स्क्रीन तभी खुलती हैं जब आपके पद (designation) में लैब पेज हों। Admin के लिए भी यह ज़रूरी है। अगर लैब मेन्यू नहीं दिख रहा, तो अपने एडमिनिस्ट्रेटर से पूछें।
+::: section statuses
+title: हर स्टेटस जो आपको दिख सकता है
+routes: 
+for: 
+roles: 
+designations: 
+kind: statuses
+source-hash: 670249fe2e3bdb4d
+confidence: ok
+
+- in-transit | color: #64748b
+  label: In Transit
+  text: पार्सल लैब के रास्ते में है।
+- batch-pending | color: #d97706
+  label: Batch Pending
+  text: मिल गया है, बैच में डाले जाने का इंतज़ार है।
+- batch-created | color: #0891b2
+  label: Batch Created
+  text: बैच में है, अभी कोई एनालिस्ट नहीं सौंपा गया।
+- taken | color: #ea580c
+  label: Taken for Analysis
+  text: किसी एनालिस्ट को सौंप दिया गया है।
+- pending-entry | color: #d97706
+  label: Pending Entry
+  text: एनालिस्ट ने अभी वैल्यू नहीं भरी हैं।
+- in-progress | color: #7c3aed
+  label: In Progress
+  text: कुछ वैल्यू सेव हो चुकी हैं।
+- auto-result | color: #2563eb
+  label: Auto Result Ready
+  text: सारी वैल्यू सबमिट हो गईं; नतीजे निकल गए हैं।
+- report | color: #16a34a
+  label: Report Generated
+  text: बैच पूरा हो गया है और रिपोर्ट तैयार हैं।
+- delayed | color: #dc2626
+  label: Delayed
+  text: 5 दिन से ज़्यादा हो गए और जाँच पूरी नहीं हुई।
+:::
+
+::: section roles
+title: कौन क्या करता है
+routes: 
+for: 
+roles: 
+designations: 
+kind: roles
+source-hash: a82220da9f08df6e
+confidence: ok
+
+जब आपका रोल मेल खाता है, तो आपका कार्ड हाइलाइट होता है।
+
+- coordinator | color: #0d9488
+  title: लैब कोऑर्डिनेटर
+  - कंसाइनमेंट लेना
+  - बैच बनाना और एनालिस्ट को सौंपना
+  - बैच पूरे करना और रिपोर्ट डाउनलोड करना
+- analyst | color: #7c3aed
+  title: लैब एनालिस्ट
+  - अपने बैच की टेस्ट वैल्यू भरना
+  - सैंपल रिपोर्ट डाउनलोड करना
+- admin | color: #2563eb | roles: Admin
+  title: लैब एडमिन
+  - Lab Tracking पर सारे बैच देखना
+  - सिर्फ़ देखने के लिए
+- field | color: #64748b | roles: MDO, JMDO
+  title: फ़ील्ड स्टाफ़
+  - सैंपल लैब को भेजना
+:::
+
+::: section faq
+title: दिक्कतें और जवाब
+routes: 
+for: 
+roles: 
+designations: 
+kind: faq
+source-hash: d8c921211d44aab6
+confidence: ok
+
+- no-lab-menu | popular: true
+  q: मुझे लैब मेन्यू नहीं दिख रहा
+  a: लैब की स्क्रीन तभी खुलती हैं जब आपके पद (designation) में लैब पेज हों। Admin के लिए भी यह ज़रूरी है। अपने एडमिनिस्ट्रेटर से पूछें।
+- no-receive
+  q: Mark received बटन नहीं है
+  a: सिर्फ़ कोऑर्डिनेटर ही कंसाइनमेंट ले सकते हैं, और सिर्फ़ वही कंसाइनमेंट जो **In Transit** हैं।
+- delayed | popular: true
+  q: बैच पर Delayed दिख रहा है, पर एनालिस्ट ने काम पूरा कर दिया
+  a: यह तब तक Delayed रहता है जब तक सारे सैंपल सबमिट होकर जाँच पूरी नहीं हो जाती।
+- edit-values
+  q: क्या सबमिट करने के बाद मैं कोई वैल्यू बदल सकता हूँ?
+  a: हाँ। सैंपल पर **Edit Values** दबाएँ। यह सिर्फ़ तब तक चलता है जब तक बैच पूरा नहीं हो जाता।
 :::
 
 ::: section coordinator-dashboard
@@ -42,13 +181,14 @@ routes: /Lab
 for: 
 roles: 
 designations: 
-source-hash: 17d85f22de7e96da
+screenshot: coordinator-dashboard.png
+screenshot-phone: coordinator-dashboard.phone.jpg
+minutes: 1
+source-hash: edeeb0d1e27dd744
 confidence: ok
 
 **यह स्क्रीन किस काम की है**
 **Lab Coordinator Dashboard** से लैब की झलक जल्दी मिल जाती है: कितने कंसाइनमेंट आए, कितने अभी बैच का इंतज़ार कर रहे हैं और जाँच कहाँ तक पहुँची। जब आप **Lab** खोलते हैं, तो ऐप कोऑर्डिनेटर को यही डैशबोर्ड दिखाता है। एनालिस्ट इसकी जगह अपने अलग डैशबोर्ड पर पहुँचते हैं।
-
-## स्टेप्स
 
 1. ऊपर के कार्ड देखें: **Total Consignments Received**, **Pending Batch Creation**, **Total Batches Created**, **Taken for Analysis**, **Analysis Completed**, **Completed Batches** और **Reports Generated**।
 2. **Recent Consignments** टेबल में आख़िरी पाँच कंसाइनमेंट उनके **Status** (**Batch Pending** या **Batch Created**) के साथ दिखते हैं।
@@ -70,13 +210,14 @@ routes: /Lab/Consignments, /Lab/Consignments/{id}
 for: 
 roles: 
 designations: 
-source-hash: fc856d94c96b8437
+screenshot: receive-consignments.png
+screenshot-phone: receive-consignments.phone.jpg
+minutes: 2
+source-hash: 93cb533d61543543
 confidence: ok
 
 **यह स्क्रीन किस काम की है**
 **Consignment Details** स्क्रीन पर लैब को भेजा गया हर कंसाइनमेंट दिखता है। पार्सल को मिला हुआ मार्क करने और उसके अंदर क्या है यह देखने के लिए इसका इस्तेमाल करें।
-
-## स्टेप्स
 
 1. ऊपर के कार्ड देखें: **Total Consignments**, **Pending Batch Creation**, **Batched Consignments**, **Water Samples** और **Soil Samples**।
 2. कोई कंसाइनमेंट ढूँढने के लिए सर्च बॉक्स में कंसाइनमेंट नंबर या AWB नंबर टाइप करें, या **All Statuses** में कोई स्टेटस चुनें।
@@ -101,13 +242,12 @@ routes: /Lab/Consignments, /Lab/Consignments/{id}
 for: 
 roles: 
 designations: 
-source-hash: 90ca666972940c84
+minutes: 2
+source-hash: dcc40dda2df92781
 confidence: ok
 
 **यह स्क्रीन किस काम की है**
 बैच सैंपल का एक समूह है जिसकी जाँच एक एनालिस्ट एक साथ करता है। एक बैच में कई कंसाइनमेंट हो सकते हैं। आप इसे **Consignment Details** लिस्ट से बनाते हैं।
-
-## स्टेप्स
 
 1. **Consignment Details** खोलें। सिर्फ़ बैच का इंतज़ार कर रहे कंसाइनमेंट देखने के लिए **All Statuses** में **Batch Pending** चुनें।
 2. बैच में जो कंसाइनमेंट चाहिए, उनमें से हर एक की लाइन की शुरुआत वाले बॉक्स पर टिक करें। सबसे ऊपर वाला बॉक्स पेज की सारी Batch Pending लाइनों पर टिक कर देता है।
@@ -136,23 +276,31 @@ routes: /Lab/Analysis
 for: 
 roles: 
 designations: 
-source-hash: eb674502e680b760
+screenshot: analysis-tracking.png
+hotspots: 1 @ 3.7,13.6,92.5,21.5 | 2 @ 16.1,39.1,78.2,5.3 | 3 @ 76.5,39.1,17.8,5.3 | 4 @ 5.7,46,88.6,54 | 5 @ 5.7,46,88.6,54
+screenshot-phone: analysis-tracking.phone.jpg
+hotspots-phone: 1 @ 6.2,7.4,87.7,27.5 | 2 @ 10,39.1,80,6.8 | 3 @ 10,42.8,80,3 | 4 @ 2,2,8,4 | 5 @ 2,2,8,4
+tour: 1 > [data-help=lab-at-cards] | 2 > [data-help=lab-at-search] | 3 > [data-help=lab-at-status] | 4 > [data-help=lab-at-table] | 5 > [data-help=lab-at-table]
+minutes: 2
+source-hash: 38d1f11b380940ea
 confidence: ok
 
 **यह स्क्रीन किस काम की है**
 **Analysis Tracking** स्क्रीन पर हर बैच दिखता है, ताकि आप उसे बनने से लेकर जाँच पूरी होने तक देख सकें और देर से चल रहे बैच पहचान सकें।
 
-## स्टेप्स
-
 1. ऊपर के कार्ड देखें: **Total Batches**, **Created**, **Taken for Analysis**, **Analysis Completed**, **Completed** और **Delayed Analysis**।
 2. सर्च बॉक्स में बैच नंबर, कंसाइनमेंट नंबर या एनालिस्ट का नाम टाइप करें।
 3. **All Statuses** में कोई स्टेटस चुनें। सिर्फ़ देर वाले बैच देखने के लिए **Delayed** चुनें।
-4. **Analysis Days** कॉलम पढ़ें:
-- **Pending** (पीला): जाँच शुरू नहीं हुई है।
-- हरे रंग में दिनों की संख्या: जाँच समय पर चल रही है।
-- लाल रंग में दिनों की संख्या: बैच में देर हो रही है (आम तौर पर 5 दिन से ज़्यादा हो गए और काम पूरा नहीं हुआ)।
-5. **Batch Details** खोलने के लिए बैच नंबर या आँख वाले आइकन पर टैप करें।
-6. और बैच देखने के लिए नीचे के पेज नंबर इस्तेमाल करें, या बदलें कि हर पेज पर कितनी लाइनें दिखें।
+4. कौन-से बैच समय पर हैं, यह देखने के लिए **Analysis Days** कॉलम पढ़ें (नीचे की टेबल देखें)।
+5. **Batch Details** खोलने के लिए बैच नंबर या आँख वाले आइकन पर टैप करें। और बैच देखने के लिए नीचे के पेज नंबर इस्तेमाल करें।
+
+## Analysis Days का मतलब
+
+| क्या दिखता है | मतलब |
+|---|---|
+| **Pending** (पीला) | जाँच शुरू नहीं हुई है। |
+| हरे रंग में दिनों की संख्या | जाँच समय पर चल रही है। |
+| लाल रंग में दिनों की संख्या | बैच में देर हो रही है (आम तौर पर 5 दिन से ज़्यादा हो गए और काम पूरा नहीं हुआ)। |
 
 ## आम दिक्कतें
 
@@ -166,13 +314,12 @@ routes: /Lab/Analysis/{id}
 for: 
 roles: 
 designations: 
-source-hash: ad50ad4baaed5137
+minutes: 2
+source-hash: 16c6bd2291162e28
 confidence: ok
 
 **यह स्क्रीन किस काम की है**
 **Batch Details** स्क्रीन पर एक बैच की पूरी जानकारी दिखती है: उसके सैंपल, टेस्ट पैरामीटर, दस्तावेज़ और इतिहास। कोऑर्डिनेटर यहीं एनालिस्ट को काम सौंपते हैं और बैच पूरा करते हैं।
-
-## स्टेप्स
 
 1. ऊपर की पट्टी में **Batch No.**, **Consignment No.**, **Total Samples**, **Assigned Date**, **Current Status** और **Analysis Days** दिखते हैं।
 2. टैब इस्तेमाल करें: **Overview** (प्रगति, सैंपल समरी, टाइमलाइन), **Samples**, **Parameters**, **Documents** और **Activity Log**।
@@ -196,13 +343,14 @@ routes: /Lab/Reports
 for: 
 roles: 
 designations: 
-source-hash: 4669cdab3bbe7c4e
+screenshot: lab-reports.png
+screenshot-phone: lab-reports.phone.jpg
+minutes: 2
+source-hash: bbe4683cfa84f8af
 confidence: ok
 
 **यह स्क्रीन किस काम की है**
 **Lab Reports** स्क्रीन पर वे रिपोर्ट दिखती हैं जो बैच पूरा होने पर बनती हैं। यहाँ से आप किसी रिपोर्ट की जानकारी खोल सकते हैं और उसे PDF या Excel में उस भाषा में डाउनलोड कर सकते हैं जो किसान पढ़ता है।
-
-## स्टेप्स
 
 1. ऊपर के कार्ड देखें: **Total Reports**, **Batch Reports**, **Sample Reports**, **Generated Today** और **Downloads Completed**।
 2. लिस्ट छोटी करने के लिए **Filters** दबाएँ। **From** और **To** तारीखें, **State**, **Sample Type** या **Financial Year** चुनें, फिर **Apply Filters** दबाएँ। इन्हें हटाने के लिए **Clear All** दबाएँ।
@@ -226,13 +374,14 @@ routes: /Lab/Analyst
 for: 
 roles: 
 designations: 
-source-hash: 976c980ff899d680
+screenshot: analyst-dashboard.png
+screenshot-phone: analyst-dashboard.phone.jpg
+minutes: 1
+source-hash: 84e531434d1c8d93
 confidence: ok
 
 **यह स्क्रीन किस काम की है**
 **Lab Analyst Dashboard** पर आपको सौंपा गया काम दिखता है, और यह भी कि पहले क्या करना है। जब कोई एनालिस्ट **Lab** खोलता है, तो ऐप यही स्क्रीन दिखाता है।
-
-## स्टेप्स
 
 1. ऊपर के कार्ड देखें: **Assigned Batches**, **Pending Value Entry** (वैल्यू का इंतज़ार कर रहे सैंपल), **Auto Result Ready** (जिन सैंपल का नतीजा निकल चुका है), **Reports Generated** (इस फ़ाइनेंशियल ईयर में) और **Previous FY Reports**।
 2. **Today's Work Priority** देखें:
@@ -254,23 +403,31 @@ routes: /Lab/TestEntry
 for: 
 roles: 
 designations: 
-source-hash: 3ec8fc5442d5b1f7
+screenshot: analyst-batch-list.png
+hotspots: 1 @ 2.2,9.8,95.5,17.9 | 2 @ 2.2,30.1,95.5,34.9 | 3 @ 75.2,69.6,20.6,4.8 | 4 @ 4.2,76.1,91.6,23.9
+screenshot-phone: analyst-batch-list.phone.jpg
+hotspots-phone: 1 @ 3.1,5.8,93.8,16.9 | 2 @ 3.1,23.7,93.8,3.5 | 3 @ 6.9,31.2,86.2,3 | 4 @ 2,2,8,4
+tour: 1 > [data-help=lab-bl-cards] | 2 > [data-help=lab-bl-filters] | 3 > [data-help=lab-bl-search] | 4 > [data-help=lab-bl-table]
+minutes: 2
+source-hash: 42bf99c9e09c8175
 confidence: ok
 
 **यह स्क्रीन किस काम की है**
 **Test Value Entry** स्क्रीन पर आपको सौंपे गए बैच दिखते हैं। टेस्ट वैल्यू भरना यहीं से शुरू करें या जारी रखें।
 
-## स्टेप्स
-
 1. ऊपर के कार्ड देखें: **Assigned Batches**, **Pending Value Entry**, **Auto Result Ready** और **Report Generated**।
 2. लिस्ट छोटी करने के लिए **Filters** खोलें और **Date Range**, **Sample Type**, **Status**, **Priority**, **Financial Year** या **Assigned By** चुनें। **Apply Filters** दबाएँ। इन्हें हटाने के लिए **Clear All** दबाएँ।
 3. सर्च बॉक्स में बैच या कंसाइनमेंट नंबर टाइप करें।
-4. **Assigned Batch List** में **Pending Entries**, **Completed Entries**, **Priority** और **Status** देखें। **High** प्राथमिकता वाले बैच पहले करें।
-5. बैच खोलने के लिए किसी लाइन पर, या **Action** कॉलम के आइकन पर टैप करें। आइकन का मतलब:
-- **Start entry**: स्टेटस **Pending Entry**, अभी कुछ नहीं भरा गया।
-- **Continue entry**: स्टेटस **In Progress**, कुछ वैल्यू सेव हैं।
-- **Preview results**: स्टेटस **Auto Result Ready**, सारी वैल्यू सबमिट हो गई हैं।
-- **View**: स्टेटस **Report Generated**, बैच बंद हो गया है।
+4. **Assigned Batch List** में **Pending Entries**, **Completed Entries**, **Priority** और **Status** देखें। **High** प्राथमिकता वाले बैच पहले करें। बैच खोलने के लिए किसी लाइन पर, या **Action** कॉलम के आइकन पर टैप करें।
+
+## Action आइकन का मतलब
+
+| आइकन | यह कब दिखता है |
+|---|---|
+| **Start entry** | स्टेटस **Pending Entry**, अभी कुछ नहीं भरा गया। |
+| **Continue entry** | स्टेटस **In Progress**, कुछ वैल्यू सेव हैं। |
+| **Preview results** | स्टेटस **Auto Result Ready**, सारी वैल्यू सबमिट हो गई हैं। |
+| **View** | स्टेटस **Report Generated**, बैच बंद हो गया है। |
 
 ## आम दिक्कतें
 
@@ -284,13 +441,12 @@ routes: /Lab/TestEntry/{id}
 for: 
 roles: 
 designations: 
-source-hash: 0543541df7d26c4a
+minutes: 4
+source-hash: d752cb5b39f927f4
 confidence: ok
 
 **यह स्क्रीन किस काम की है**
 **Sample-wise Entry** पर आप बैच के हर सैंपल की टेस्ट वैल्यू टाइप करते हैं। सिस्टम नॉर्मल रेंज, नतीजा, स्टेटस और सुझाव खुद भर देता है।
-
-## स्टेप्स
 
 1. ऊपर **Batch Summary** देखें।
 2. **Samples in this Batch** में, जिस सैंपल पर काम करना है उसके आइकन पर टैप करें, या **Next pending sample** दबाएँ।
@@ -322,13 +478,12 @@ routes: /Lab/TestEntry/Reports, /Lab/TestEntry/Reports/Previous
 for: 
 roles: 
 designations: 
-source-hash: 40645f32067eb759
+minutes: 2
+source-hash: f0ab8dbc77d485c5
 confidence: ok
 
 **यह स्क्रीन किस काम की है**
 **Test Reports** स्क्रीन पर इस फ़ाइनेंशियल ईयर (अप्रैल से मार्च) के आपके हर बैच की रिपोर्ट समरी दिखती है। **Previous FY Reports** में पिछले सालों की यही जानकारी दिखती है।
-
-## स्टेप्स
 
 1. ऊपर के कार्ड देखें: **Total Batches**, **Total Sample Reports**, **Reports Generated Today** और **Downloads Completed**।
 2. पुरानी रिपोर्ट देखने के लिए **Previous FY Reports** दबाएँ। वापस आने के लिए **Current FY Reports** दबाएँ।
@@ -350,13 +505,12 @@ routes: /Lab/TestEntry/Reports/{id}
 for: 
 roles: 
 designations: 
-source-hash: 683ffbc338437756
+minutes: 2
+source-hash: 8c8efa3d44f215ee
 confidence: ok
 
 **यह स्क्रीन किस काम की है**
 **Batch Report Details** में एक बैच के हर सैंपल की रिपोर्ट दिखती है। हर सैंपल की, उसके किसान के लिए, अपनी अलग रिपोर्ट होती है। यहाँ आप रिपोर्ट देखते हैं, डाउनलोड करते हैं और उन्हें प्रिंट हो चुका मार्क करते हैं।
-
-## स्टेप्स
 
 1. कार्ड देखें: **Total Samples**, **Soil Samples**, **Water Samples**, **Reports Generated** और **Downloads Completed**।
 2. **Batch Information** देखें: बैच, कंसाइनमेंट, State, Region, **Head Quarters**, **Date of Dispatch** और **Financial Year**।
@@ -383,13 +537,12 @@ routes: /Lab/Tracking
 for: 
 roles: 
 designations: 
-source-hash: dde8a3beb72cd9d3
+minutes: 2
+source-hash: 4713e37bae159d20
 confidence: ok
 
 **यह स्क्रीन किस काम की है**
 **Lab Tracking** लैब के सारे बैच का एडमिन व्यू है। कंसाइनमेंट, बैच और जाँच की प्रगति देखने के लिए इसका इस्तेमाल करें। यहाँ आप कुछ भी बदल नहीं सकते।
-
-## स्टेप्स
 
 1. ऊपर के कार्ड देखें: **Total Batches**, **Batch Created**, **Taken for analysis** और **Analysis Completed**।
 2. एक स्टेज दिखाने के लिए टैब इस्तेमाल करें: **All Batches**, **Batch Created**, **Taken for Analysis** या **Analysis Completed**। हर टैब पर उसकी गिनती दिखती है।
@@ -411,13 +564,12 @@ routes: /Lab/Tracking/{id}
 for: 
 roles: 
 designations: 
-source-hash: afb705e77b16edb3
+minutes: 1
+source-hash: 56cb817a9b7e82f1
 confidence: ok
 
 **यह स्क्रीन किस काम की है**
 बैच व्यू में एडमिन को एक ही पेज पर एक बैच की पूरी कहानी मिलती है: सैंपल कहाँ से आए, कूरियर, बैच, जाँच की प्रगति और टाइमलाइन। यह सिर्फ़ देखने के लिए है।
-
-## स्टेप्स
 
 1. ऊपर की पट्टी में **Batch No.**, **Consignment No.**, **Test Samples**, **Samples**, **Assigned To (Analyst)**, **Batch Created On** और **Last Updated** दिखते हैं।
 2. **Source Details** में दिखता है कि सैंपल किसने लिए, साथ में उनका **Mobile No.**, **Location** और **Collection Date**।

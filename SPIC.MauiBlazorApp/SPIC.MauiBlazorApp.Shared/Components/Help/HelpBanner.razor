@@ -1,0 +1,184 @@
+@* Animated module banner (help centre v2). The example journey is drawn from the module's flow
+   stages; with "reduce motion" on it shows the finished journey without movement. *@
+@using SPIC.Core.Help
+@using System.Globalization
+
+<header class="hc-banner @(Stages.Count < 2 ? "hc-banner--plain" : null)">
+    <div class="hc-orb hc-orb--1"></div><div class="hc-orb hc-orb--2"></div><div class="hc-orb hc-orb--3"></div><div class="hc-dots"></div>
+    <div class="hc-banner__in">
+        <div>
+            <div class="hc-crumb hc-ani" style="--d:0s">
+                <a href="/Help">Help Centre</a><i class="bi bi-chevron-right" aria-hidden="true"></i>
+                <a href="/Help#modules">Modules</a><i class="bi bi-chevron-right" aria-hidden="true"></i>
+                <span class="hc-crumb__here">@Module.Title</span>
+                <span class="hc-crumb__lang"><HelpLanguagePicker Compact="true" /></span>
+            </div>
+            <div class="hc-tline hc-ani" style="--d:.1s">
+                <div class="hc-mega" aria-hidden="true"><span class="hc-wv"></span><span class="hc-wv hc-wv--2"></span><span class="hc-wv hc-wv--3"></span><i class="bi @Module.Icon"></i></div>
+                <div>
+                    <div class="hc-eyb"><span class="hc-live"></span> Module guide@(string.IsNullOrWhiteSpace(Module.Guide.Category) ? null : " · " + Module.Guide.Category)</div>
+                    <h1>@Module.Title</h1>
+                </div>
+            </div>
+            @if (!string.IsNullOrWhiteSpace(Module.Lead))
+            {
+                <p class="hc-lead hc-ani" style="--d:.2s">@Module.Lead</p>
+            }
+            <div class="hc-bchips hc-ani" style="--d:.3s">
+                @if (!string.IsNullOrWhiteSpace(RoleLabel))
+                {
+                    <span class="hc-bchip hc-bchip--me"><i class="bi bi-person-check" aria-hidden="true"></i> Viewing as @RoleLabel</span>
+                }
+                <span class="hc-bchip"><i class="bi bi-window-stack" aria-hidden="true"></i> @Total @(Total == 1 ? "screen" : "screens")</span>
+                @if (Minutes > 0)
+                {
+                    <span class="hc-bchip"><i class="bi bi-clock" aria-hidden="true"></i> @Minutes min read</span>
+                }
+                @if (Module.Guide.Updated is { } updated)
+                {
+                    <span class="hc-bchip"><i class="bi bi-arrow-repeat" aria-hidden="true"></i> Updated @updated.ToString("d MMM", CultureInfo.InvariantCulture)</span>
+                }
+                @if (MachineTranslated)
+                {
+                    <span class="hc-bchip"><i class="bi bi-translate" aria-hidden="true"></i> Machine translated</span>
+                }
+            </div>
+            <div class="hc-hbtns hc-ani" style="--d:.4s">
+                @if (HasTour)
+                {
+                    <button type="button" class="hc-btn hc-btn--white hc-shine" @onclick="OnTour"><i class="bi bi-play-circle-fill" aria-hidden="true"></i> Start guided tour</button>
+                }
+                @ListenContent
+                @if (ShowPdf)
+                {
+                    <button type="button" class="hc-btn hc-btn--ghost" @onclick="OnPdf"><i class="bi bi-file-earmark-pdf" aria-hidden="true"></i> Print or save as PDF</button>
+                }
+            </div>
+            @if (Total > 0)
+            {
+                var pct = (int)Math.Round(100.0 * Read / Total);
+                <div class="hc-prog hc-ani" style="--d:.5s">
+                    <div class="hc-pring" aria-hidden="true">
+                        <svg viewBox="0 0 36 36"><circle cx="18" cy="18" r="15.5" class="bgc" /><circle cx="18" cy="18" r="15.5" class="fgc" style="--off:@((97.4 * (1 - (double)Read / Total)).ToString("0.0", CultureInfo.InvariantCulture))" /></svg>
+                        <b>@Read/@Total</b>
+                    </div>
+                    <div style="flex:1;min-width:160px;max-width:360px">
+                        <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span>Your progress</span><b>@pct%</b></div>
+                        <div class="hc-bar"><i style="--w:@pct%"></i></div>
+                    </div>
+                    @if (!string.IsNullOrWhiteSpace(NextTitle))
+                    {
+                        <span class="hc-nextup"><i class="bi bi-arrow-right-circle" aria-hidden="true"></i> Next: @NextTitle</span>
+                    }
+                </div>
+            }
+        </div>
+
+        @if (Stages.Count >= 2)
+        {
+            var n = Stages.Count;
+            var xs = Enumerable.Range(0, n).Select(i => 30 + i * 360.0 / (n - 1)).ToList();
+            var path = "M" + F(xs[0]) + " 95" + string.Concat(Enumerable.Range(0, n - 1).Select(i => $" Q{F((xs[i] + xs[i + 1]) / 2)} {(i % 2 == 0 ? 45 : 145)} {F(xs[i + 1])} 95"));
+            <div class="hc-hright hc-ani" style="--d:.25s" aria-hidden="true">
+                <div class="hc-glass">
+                    <div class="hc-gh"><span><span class="hc-live"></span> Example</span>@if (!string.IsNullOrWhiteSpace(Module.Guide.Example)) { <b>@Module.Guide.Example</b> }</div>
+                    <svg class="hc-jr" viewBox="-8 0 440 150">
+                        <defs>
+                            <linearGradient id="@($"hc-rd-{_id}")" x1="0" x2="1"><stop offset="0" stop-color="#7ee2a8" /><stop offset="1" stop-color="#ffffff" /></linearGradient>
+                            <filter id="@($"hc-gl-{_id}")" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="4" result="b" /><feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge></filter>
+                        </defs>
+                        <path id="@($"hc-road-{_id}")" d="@path" fill="none" stroke="rgba(255,255,255,.18)" stroke-width="10" stroke-linecap="round" />
+                        <path d="@path" fill="none" stroke="rgba(255,255,255,.55)" stroke-width="1.5" stroke-dasharray="4 7" class="hc-dash" />
+                        @if (Static)
+                        {
+                            <path d="@path" fill="none" stroke="@($"url(#hc-rd-{_id})")" stroke-width="4" stroke-linecap="round" />
+                        }
+                        else
+                        {
+                            <path d="@path" fill="none" stroke="@($"url(#hc-rd-{_id})")" stroke-width="4" stroke-linecap="round" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1">
+                                <animate attributeName="stroke-dashoffset" values="1;0;0" keyTimes="0;.85;1" dur="8s" repeatCount="indefinite" />
+                            </path>
+                        }
+                        @for (var i = 0; i < n; i++)
+                        {
+                            var s = Stages[i];
+                            var t = 0.85 * i / (n - 1);
+                            <g>
+                                <circle cx="@F(xs[i])" cy="95" r="13" fill="@s.Color" opacity="@(Static || i == 0 ? "1" : ".35")">
+                                    @if (!Static && i > 0)
+                                    {
+                                        <animate attributeName="opacity" values=".35;.35;1;1" keyTimes="@($"0;{F(t)};{F(Math.Min(t + .03, .99))};1")" dur="8s" repeatCount="indefinite" />
+                                        <animate attributeName="r" values="13;13;17;13;13" keyTimes="@($"0;{F(t)};{F(Math.Min(t + .03, .98))};{F(Math.Min(t + .08, .99))};1")" dur="8s" repeatCount="indefinite" />
+                                    }
+                                </circle>
+                                <text x="@F(xs[i])" y="99" text-anchor="middle" class="sn">@(i + 1)</text>
+                                @* With more than 4 stages the labels alternate below and above the road so they never touch. *@
+                                @* The first and last labels grow inwards, so a long status never runs off the card. *@
+                                <text x="@F(i == 0 ? xs[i] - 14 : i == n - 1 ? xs[i] + 14 : xs[i])" y="@(n > 4 && i % 2 == 1 ? "71" : "128")" text-anchor="@(i == 0 ? "start" : i == n - 1 ? "end" : "middle")" class="sl">@Short(s)</text>
+                            </g>
+                        }
+                        @if (!Static)
+                        {
+                            <g filter="@($"url(#hc-gl-{_id})")">
+                                <circle r="7" fill="#fff" /><circle r="3.5" fill="#f97316" />
+                                <animateMotion dur="8s" repeatCount="indefinite" keyPoints="0;1;1" keyTimes="0;.85;1" calcMode="linear"><mpath href="@($"#hc-road-{_id}")" /></animateMotion>
+                            </g>
+                        }
+                    </svg>
+                    <div class="hc-ticker">
+                        <div style="@(Static ? $"transform:translateY(-{30 * (n - 1)}px)" : $"animation:hc-tick-{n} 8s steps(1) infinite")">
+                            @foreach (var s in Stages)
+                            {
+                                <span><i class="bi @s.Icon"></i> @s.Title</span>
+                            }
+                        </div>
+                    </div>
+                    <style>
+                        @((MarkupString)TickerKeyframes(n))
+                    </style>
+                </div>
+                <div class="hc-fl hc-fl--1"><div class="hc-fl__i" style="background:@Stages[^1].Color"><i class="bi bi-check2-circle"></i></div><div><b>@Short(Stages[^1])</b><small>@Stages[^1].Title</small></div></div>
+                @if (n >= 3)
+                {
+                    var mid = Stages[n / 2];
+                    <div class="hc-fl hc-fl--2"><div class="hc-fl__i" style="background:@mid.Color"><i class="bi @mid.Icon"></i></div><div><b>@Short(mid)</b><small>@mid.Title</small></div></div>
+                }
+            </div>
+        }
+    </div>
+</header>
+
+@code {
+    [Parameter, EditorRequired] public HelpModuleView Module { get; set; } = null!;
+    /// <summary>Flow stages in column order, exceptions left out.</summary>
+    [Parameter] public IReadOnlyList<HelpStage> Stages { get; set; } = Array.Empty<HelpStage>();
+    [Parameter] public int Read { get; set; }
+    [Parameter] public int Total { get; set; }
+    [Parameter] public int Minutes { get; set; }
+    [Parameter] public string? NextTitle { get; set; }
+    [Parameter] public string? RoleLabel { get; set; }
+    [Parameter] public bool HasTour { get; set; }
+    [Parameter] public bool ShowPdf { get; set; }
+    [Parameter] public bool MachineTranslated { get; set; }
+    /// <summary>True under "reduce motion": the journey is drawn finished, nothing moves.</summary>
+    [Parameter] public bool Static { get; set; }
+    [Parameter] public EventCallback OnTour { get; set; }
+    [Parameter] public EventCallback OnPdf { get; set; }
+    /// <summary>The Listen button (a ListenButton for the whole guide), shown between Tour and PDF.</summary>
+    [Parameter] public RenderFragment? ListenContent { get; set; }
+
+    private readonly string _id = Guid.NewGuid().ToString("N")[..8];
+
+    private static string F(double v) => v.ToString("0.###", CultureInfo.InvariantCulture);
+
+    private static string Short(HelpStage s) => string.IsNullOrWhiteSpace(s.Status) ? s.Title : s.Status;
+
+    // One keyframe per stage: the ticker shows each stage's line while the marker is on it.
+    private static string TickerKeyframes(int n)
+    {
+        var sb = new System.Text.StringBuilder($"@keyframes hc-tick-{n} {{");
+        for (var i = 0; i < n; i++)
+            sb.Append(F(85.0 * i / (n - 1))).Append("% { transform: translateY(-").Append(30 * i).Append("px); } ");
+        return sb.Append('}').ToString();
+    }
+}

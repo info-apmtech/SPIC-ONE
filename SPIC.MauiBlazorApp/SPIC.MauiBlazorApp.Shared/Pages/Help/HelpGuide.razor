@@ -1,48 +1,204 @@
-@page "/Help/{Module}"
+﻿@page "/Help/{Module}"
 @page "/Help/{Module}/{Section}"
-@* One module's guide: its sections for this user (left / top) and the chosen section. *@
-@implements IDisposable
+@* One module's guide (help centre v2): animated banner, then one scrolling page — overview, flow,
+   statuses, roles, the user's screens with pictures, problems — with a contents rail. *@
+@using SPIC.Core.Help
+@implements IAsyncDisposable
 @inject HelpCatalog Catalog
 @inject HelpLanguageState Lang
+@inject HelpProgressState Progress
+@inject HelpTourState Tour
 @inject HelpApi Api
+@inject LoginState Login
+@inject IFormFactor FormFactor
+@inject IJSRuntime JS
+@inject NavigationManager Nav
 
-<PageHeader Title="@(_view?.Title ?? "Help Desk")" Subtitle="Help Desk" BackHref="/Help" BackLabel="All guides">
-    <Actions>
-        <HelpLanguagePicker />
-    </Actions>
-</PageHeader>
-
-<div class="help-page">
+<div class="hc-page" lang="@Lang.Current">
     @if (_view is null)
     {
-        <div class="help-empty">
-            <i class="bi bi-lock" aria-hidden="true"></i>
-            <p>This guide isn't available for your role.</p>
-            <a class="help-link" href="/Help">Back to the Help Desk</a>
+        <div class="hc-lay" style="display:block">
+            <div class="hc-blk" style="text-align:center">
+                <i class="bi bi-lock" style="font-size:28px;color:#61716a" aria-hidden="true"></i>
+                <p>This guide isn't available for your role.</p>
+                <a class="hc-btn hc-btn--pri" href="/Help">Back to the Help Centre</a>
+            </div>
         </div>
     }
     else
     {
-        <div class="help-guide">
-            <nav class="help-toc" aria-label="Guides in @_view.Title">
-                @foreach (var s in _view.Sections)
-                {
-                    <a class="help-toc__item @(s == _current ? "is-active" : null)"
-                       href="@($"/Help/{_view.Module}/{s.Section.Id}")"
-                       aria-current="@(s == _current ? "page" : null)">
-                        @s.Section.Title
-                    </a>
-                }
-            </nav>
+        var screens = _view.Screens;
+        var overview = _view.Block("overview");
+        var flow = _view.Block("flow");
+        var statuses = _view.Block("statuses");
+        var roles = _view.Block("roles");
+        var faq = _view.Block("faq");
+        var readCount = Progress.CountIn(_view.Module, screens.Select(s => s.Section.Id));
+        var next = screens.FirstOrDefault(s => !_read.Contains(HelpProgressState.ItemKey(_view.Module, s.Section.Id)));
+        var firstTour = screens.FirstOrDefault(s => s.Section.Screen is { Tour.Count: > 0 } && s.Section.Routes.Any(r => !HelpRoutes.HasParameters(r)));
 
-            @if (_current is not null)
-            {
-                <div class="help-guide__content">
-                    <HelpSectionBody View="_current">
-                        <ListenButton View="_current" />
-                    </HelpSectionBody>
+        <HelpBanner Module="_view"
+                    Stages="@(flow is null ? Array.Empty<HelpStage>() : HelpBlocks.Flow(flow.Section, new List<string>()).Stages.Where(s => !s.Exception).OrderBy(s => s.Col).ToList())"
+                    Read="readCount" Total="screens.Count"
+                    Minutes="@screens.Sum(s => s.Section.Screen?.Minutes ?? 0)"
+                    NextTitle="@next?.Section.Title"
+                    RoleLabel="@(Login.DesignationName ?? Login.UserRole?.ToString())"
+                    HasTour="firstTour is not null"
+                    ShowPdf="_isWeb"
+                    MachineTranslated="@screens.Any(s => s.MachineTranslated)"
+                    Static="_reducedMotion"
+                    OnTour="@(() => StartTourAsync(firstTour!))"
+                    OnPdf="PrintAsync">
+            <ListenContent>
+                @if (overview is not null) { <ListenButton View="overview" /> }
+            </ListenContent>
+        </HelpBanner>
+
+        <div class="hc-lay">
+            <aside class="hc-lnav" aria-label="This guide">
+                <div class="hc-grp">
+                    <h5>This guide</h5>
+                    @if (overview is not null) { <a class="@On("hc-overview")" @onclick='() => GoAsync("hc-overview")'><i class="bi bi-house" aria-hidden="true"></i>Overview</a> }
+                    @if (flow is not null) { <a class="@On("hc-flow")" @onclick='() => GoAsync("hc-flow")'><i class="bi bi-diagram-3" aria-hidden="true"></i>@flow.Section.Title</a> }
+                    @if (roles is not null) { <a class="@On("hc-roles")" @onclick='() => GoAsync("hc-roles")'><i class="bi bi-people" aria-hidden="true"></i>@roles.Section.Title</a> }
                 </div>
-            }
+                <div class="hc-grp">
+                    <h5>Your screens</h5>
+                    @for (var i = 0; i < screens.Count; i++)
+                    {
+                        var s = screens[i];
+                        var anchor = $"hc-s-{s.Section.Id}";
+                        <a class="@On(anchor)" @onclick="() => GoAsync(anchor)">
+                            <span class="hc-num">@(i + 1)</span>@s.Section.Title
+                            @if (_read.Contains(HelpProgressState.ItemKey(_view.Module, s.Section.Id))) { <i class="bi bi-check-circle-fill hc-ck" aria-label="Read"></i> }
+                        </a>
+                    }
+                </div>
+                @if (faq is not null)
+                {
+                    <div class="hc-grp"><a class="@On("hc-faq")" @onclick='() => GoAsync("hc-faq")'><i class="bi bi-question-circle" aria-hidden="true"></i>@faq.Section.Title</a></div>
+                }
+            </aside>
+
+            <main>
+                @if (overview is not null)
+                {
+                    <section class="hc-blk" id="hc-overview">
+                        <div class="hc-kick">Overview</div>
+                        <h2>@overview.Section.Title</h2>
+                        <HelpMtFlag View="overview" />
+                        @if (!string.IsNullOrWhiteSpace(_view.Lead)) { <p class="hc-sub">@_view.Lead</p> }
+                        <div class="hc-facts">
+                            @foreach (var c in HelpBlocks.Overview(overview.Section, new List<string>()))
+                            {
+                                <div class="hc-fact" style="--c:@c.Color"><div class="hc-fact__i"><i class="bi @c.Icon" aria-hidden="true"></i></div><div><b>@c.Title</b><span>@c.Text</span></div></div>
+                            }
+                        </div>
+                    </section>
+                }
+
+                @if (flow is not null)
+                {
+                    <section class="hc-blk" id="hc-flow">
+                        <div class="hc-kick">Flow</div>
+                        <h2>@flow.Section.Title</h2>
+                        <HelpMtFlag View="flow" />
+                        @{ var flowLead = HelpBlocks.Lead(flow.Section.Body); }
+                        @if (flowLead.Length > 0) { <p class="hc-sub">@flowLead</p> }
+                        <HelpFlow Flow="flow.Section" MyLane="@Catalog.MyLane(_view)"
+                                  VisibleScreens="@screens.Select(s => s.Section.Id).ToHashSet(StringComparer.OrdinalIgnoreCase)"
+                                  OnOpenScreen="@(id => GoAsync($"hc-s-{id}"))" />
+                        @if (statuses is not null)
+                        {
+                            <h3 style="font-size:15px;margin:26px 0 10px">@statuses.Section.Title</h3>
+                            <HelpStatusList Section="statuses.Section" />
+                        }
+                    </section>
+                }
+                else if (statuses is not null)
+                {
+                    <section class="hc-blk" id="hc-statuses">
+                        <h2>@statuses.Section.Title</h2>
+                        <HelpStatusList Section="statuses.Section" />
+                    </section>
+                }
+
+                @if (roles is not null)
+                {
+                    <section class="hc-blk" id="hc-roles">
+                        <div class="hc-kick">Roles</div>
+                        <h2>@roles.Section.Title</h2>
+                        <HelpMtFlag View="roles" />
+                        @{ var rolesLead = HelpBlocks.Lead(roles.Section.Body); }
+                        @if (rolesLead.Length > 0) { <p class="hc-sub">@rolesLead</p> }
+                        <HelpRoleCards Section="roles.Section" MyCard="@Catalog.MyRoleCard(_view)" />
+                    </section>
+                }
+
+                <section class="hc-blk" id="hc-screens">
+                    <div class="hc-kick">Screen by screen</div>
+                    <h2>Your @screens.Count @(screens.Count == 1 ? "screen" : "screens")</h2>
+                    <p class="hc-sub">Each picture has numbered points. Tap a number or a step to see where it is.</p>
+                    @for (var i = 0; i < screens.Count; i++)
+                    {
+                        var s = screens[i];
+                        <HelpScreen View="s" Number="i + 1" Phone="_phone" OnTour="@(() => StartTourAsync(s))">
+                            <ListenContent><ListenButton View="s" /></ListenContent>
+                        </HelpScreen>
+                    }
+                </section>
+
+                @if (faq is not null)
+                {
+                    <section class="hc-blk" id="hc-faq">
+                        <div class="hc-kick">Problems</div>
+                        <h2>@faq.Section.Title</h2>
+                        <HelpMtFlag View="faq" />
+                        <HelpFaqList Section="faq.Section" OpenItem="@Item" />
+                    </section>
+                }
+
+                <HelpFeedbackBox @key="_view.Module" Module="@_view.Module" Language="@Lang.Current" />
+
+                @{
+                    var all = Catalog.VisibleModules(Lang.Current);
+                    var at = all.ToList().FindIndex(m => m.Module == _view.Module);
+                    var prev = at > 0 ? all[at - 1] : null;
+                    var following = at >= 0 && at < all.Count - 1 ? all[at + 1] : null;
+                }
+                <div class="hc-pn">
+                    @if (prev is not null) { <a href="@($"/Help/{prev.Module}")"><small><i class="bi bi-arrow-left" aria-hidden="true"></i> Previous module</small><b>@prev.Title</b></a> } else { <span></span> }
+                    @if (following is not null) { <a href="@($"/Help/{following.Module}")" style="text-align:right"><small>Next module <i class="bi bi-arrow-right" aria-hidden="true"></i></small><b>@following.Title</b></a> }
+                </div>
+            </main>
+
+            <aside class="hc-rail" aria-label="On this page">
+                <h5>On this page</h5>
+                <div class="hc-toc">
+                    @foreach (var (id, title) in Toc(overview, flow, roles, faq))
+                    {
+                        <a class="@On(id)" @onclick="() => GoAsync(id)">@title</a>
+                    }
+                </div>
+                <div class="hc-rcard">
+                    <h5>Quick actions</h5>
+                    @if (firstTour is not null) { <button type="button" class="hc-btn hc-btn--pri" @onclick="() => StartTourAsync(firstTour)"><i class="bi bi-play-circle" aria-hidden="true"></i> Guided tour</button> }
+                    @if (screens.Select(s => s.Section.Routes.FirstOrDefault(r => !HelpRoutes.HasParameters(r))).FirstOrDefault(r => r is not null) is { } open)
+                    {
+                        <a class="hc-btn" href="@open"><i class="bi bi-box-arrow-up-right" aria-hidden="true"></i> <span>Open @_view.Title</span></a>
+                    }
+                    @if (_isWeb) { <button type="button" class="hc-btn" @onclick="PrintAsync"><i class="bi bi-printer" aria-hidden="true"></i> Print or save as PDF</button> }
+                </div>
+                @if (Catalog.Library.Support is { HasContact: true } support)
+                {
+                    <div class="hc-rcard hc-rcard--help">
+                        <b style="font-size:13px">Still stuck?</b>
+                        @if (SupportHours(support) is { Length: > 0 } hours) { <p style="margin:4px 0 0;font-size:12px;color:#7c5a1c">@hours</p> }
+                        @if (!string.IsNullOrWhiteSpace(support.Phone)) { <a class="hc-btn" href="@($"tel:{support.Phone}")"><i class="bi bi-telephone" aria-hidden="true"></i> Call support</a> }
+                        @if (!string.IsNullOrWhiteSpace(support.WhatsApp)) { <a class="hc-btn" style="background:#16a34a;color:#fff;border:0" href="@($"https://wa.me/{new string(support.WhatsApp.Where(char.IsDigit).ToArray())}")"><i class="bi bi-whatsapp" aria-hidden="true"></i> WhatsApp us</a> }
+                    </div>
+                }
+            </aside>
         </div>
     }
 </div>
@@ -51,31 +207,150 @@
     [Parameter] public string Module { get; set; } = string.Empty;
     [Parameter] public string? Section { get; set; }
 
+    /// <summary>An FAQ item to open (links from the home page's popular questions).</summary>
+    [SupplyParameterFromQuery(Name = "item")] public string? Item { get; set; }
+
     private HelpModuleView? _view;
-    private HelpSectionView? _current;
+    private IReadOnlySet<string> _read = new HashSet<string>();
+    private string? _tocOn;
+    private bool _phone;
+    private bool _isWeb;
+    private bool _reducedMotion;
+    private bool _jsReady;
+    private string? _scrolledFor;
+    private DotNetObjectReference<HelpGuide>? _self;
+    private bool _disposed;
 
     protected override void OnInitialized()
     {
         Catalog.ApprovedKeys = Api.Approved;
         Lang.Changed += OnLangChanged;
+        Progress.Changed += OnProgressChanged;
+        _isWeb = string.Equals(FormFactor.GetFormFactor(), "Web", StringComparison.OrdinalIgnoreCase);
+        _phone = false; // decided by the page width after the first render (phones, narrow windows)
     }
 
-    protected override void OnParametersSet() => Load();
+    protected override void OnParametersSet() => _view = Catalog.Module(Module, Lang.Current);
 
-    // Reviewer approvals for the chosen language (loaded once per session, quietly).
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (await Api.EnsureApprovedAsync(Lang.Current)) { Load(); StateHasChanged(); }
+        if (firstRender)
+        {
+            _self = DotNetObjectReference.Create(this);
+            _read = await Progress.ReadAsync();
+            try
+            {
+                _phone = await JS.InvokeAsync<bool>("helpCentre.isNarrow");
+                _reducedMotion = await JS.InvokeAsync<bool>("helpCentre.reducedMotion");
+                _jsReady = true;
+            }
+            catch { /* prerender: no JS yet */ }
+            if (!_disposed) StateHasChanged();
+            return;
+        }
+
+        if (await Api.EnsureApprovedAsync(Lang.Current))
+        {
+            if (_disposed) return;
+            _view = Catalog.Module(Module, Lang.Current); StateHasChanged(); return;
+        }
+        // The page may have been left while the API answered (a tour that navigates away, a menu
+        // tap): its .NET reference is disposed then and must not be handed to JS.
+        var view = _view;
+        if (_disposed || !_jsReady || view is null || _self is null) return;
+
+        var key = $"{Module}/{Section}/{Lang.Current}";
+        if (_scrolledFor != key)
+        {
+            _scrolledFor = key;
+            var screenIds = view.Screens.Select(s => $"hc-s-{s.Section.Id}").ToArray();
+            // Scroll tracking is a nicety: a failure here must never end the user's session.
+            try
+            {
+                await JS.InvokeVoidAsync("helpCentre.observeToc", "toc", TocIds().ToArray(), _self);
+                if (_disposed) return;
+                await JS.InvokeVoidAsync("helpCentre.observeRead", "read", screenIds, _self, 5000);
+                if (!_disposed && !string.IsNullOrWhiteSpace(Section)) await JS.InvokeVoidAsync("helpCentre.scrollToId", AnchorFor(Section), true);
+            }
+            catch { /* no JS, or the page is going away */ }
+        }
     }
 
-    private void Load()
+    [JSInvokable]
+    public void OnTocChanged(string id)
     {
-        _view = Catalog.Module(Module, Lang.Current);
-        _current = _view?.Sections.FirstOrDefault(s => string.Equals(s.Section.Id, Section, StringComparison.OrdinalIgnoreCase))
-                   ?? _view?.Sections.FirstOrDefault();
+        _tocOn = id;
+        StateHasChanged();
     }
 
-    private void OnLangChanged() => InvokeAsync(() => { Load(); StateHasChanged(); });
+    [JSInvokable]
+    public async Task OnSectionRead(string anchor)
+    {
+        if (_view is null || !anchor.StartsWith("hc-s-", StringComparison.Ordinal)) return;
+        await Progress.MarkReadAsync(_view.Module, anchor["hc-s-".Length..]);
+    }
 
-    public void Dispose() => Lang.Changed -= OnLangChanged;
+    private string? On(string id) => id == _tocOn ? "is-on" : null;
+
+    // Where /Help/{module}/{section} scrolls to: a screen's own block, or the block's place on the page.
+    private string AnchorFor(string section)
+    {
+        var kind = _view?.Sections.FirstOrDefault(s => string.Equals(s.Section.Id, section, StringComparison.OrdinalIgnoreCase))?.Section.Kind ?? "screen";
+        return kind switch
+        {
+            "overview" => "hc-overview",
+            "flow" => "hc-flow",
+            "statuses" => _view?.Block("flow") is not null ? "hc-flow" : "hc-statuses",
+            "roles" => "hc-roles",
+            "faq" => "hc-faq",
+            _ => $"hc-s-{section}",
+        };
+    }
+
+    private string? SupportHours(HelpSupport support) =>
+        support.Hours is null ? null
+        : support.Hours.TryGetValue(Lang.Current, out var h) && !string.IsNullOrWhiteSpace(h) ? h
+        : support.Hours.TryGetValue("en", out var en) ? en : null;
+
+    private async Task GoAsync(string id)
+    {
+        _tocOn = id;
+        try { await JS.InvokeVoidAsync("helpCentre.scrollToId", id); } catch { }
+    }
+
+    private Task StartTourAsync(HelpSectionView screen) => Tour.StartAsync(screen);
+
+    private async Task PrintAsync()
+    {
+        try { await JS.InvokeVoidAsync("helpCentre.print"); } catch { }
+    }
+
+    private IEnumerable<string> TocIds() => Toc(_view?.Block("overview"), _view?.Block("flow"), _view?.Block("roles"), _view?.Block("faq")).Select(t => t.Id);
+
+    private static IEnumerable<(string Id, string Title)> Toc(HelpSectionView? overview, HelpSectionView? flow, HelpSectionView? roles, HelpSectionView? faq)
+    {
+        if (overview is not null) yield return ("hc-overview", "Overview");
+        if (flow is not null) yield return ("hc-flow", flow.Section.Title);
+        if (roles is not null) yield return ("hc-roles", roles.Section.Title);
+        yield return ("hc-screens", "Screen by screen");
+        if (faq is not null) yield return ("hc-faq", faq.Section.Title);
+    }
+
+    private void OnLangChanged() => InvokeAsync(() => { _view = Catalog.Module(Module, Lang.Current); _scrolledFor = null; StateHasChanged(); });
+
+    private void OnProgressChanged() => InvokeAsync(StateHasChanged);
+
+    public async ValueTask DisposeAsync()
+    {
+        _disposed = true;
+        Lang.Changed -= OnLangChanged;
+        Progress.Changed -= OnProgressChanged;
+        try
+        {
+            await JS.InvokeVoidAsync("helpCentre.stop", "toc");
+            await JS.InvokeVoidAsync("helpCentre.stop", "read");
+        }
+        catch { /* circuit gone */ }
+        _self?.Dispose();
+    }
 }

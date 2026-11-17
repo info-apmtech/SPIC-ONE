@@ -1,90 +1,277 @@
-@page "/Help"
-@* Help Desk home: the guides this user's role can use, grouped by module, with search. *@
+﻿@page "/Help"
+@* Help centre home (v2): hero with search and language, numbers, the user's starter path, module
+   cards with read progress, guided tours, popular questions, What's new and support. Everything
+   is limited to what the signed-in user's role can open. *@
+@using SPIC.Core.Help
+@using System.Globalization
 @implements IDisposable
 @inject HelpCatalog Catalog
 @inject HelpLanguageState Lang
+@inject HelpProgressState Progress
+@inject HelpTourState Tour
 @inject HelpApi Api
+@inject LoginState Login
 
-<PageHeader Title="Help Desk" Subtitle="How to use each screen, for your role" ShowBack="false">
-    <Actions>
-        <HelpLanguagePicker />
-    </Actions>
-</PageHeader>
-
-<div class="help-page">
-    <label class="help-search">
-        <i class="bi bi-search" aria-hidden="true"></i>
-        <input type="search"
-               placeholder="Search the guides"
-               aria-label="Search the guides"
-               value="@_query"
-               @oninput="e => _query = e.Value?.ToString() ?? string.Empty" />
-    </label>
-
-    @if (!string.IsNullOrWhiteSpace(_query))
-    {
-        var hits = Catalog.Search(_query, Lang.Current);
-        @if (hits.Count == 0)
-        {
-            <p class="help-muted">No guide mentions "@_query".</p>
-        }
-        else
-        {
-            <ul class="help-hits">
-                @foreach (var hit in hits)
+<div class="hc-page" lang="@Lang.Current">
+    <header class="hc-hero">
+        <div class="hc-hgrid">
+            <div>
+                <div class="hc-hero__top">
+                    <span class="hc-eyebrow hc-ani"><i class="bi bi-stars" aria-hidden="true"></i> Guides in @string.Join(", ", Lang.Languages.Select(l => l.Native))</span>
+                    <HelpLanguagePicker />
+                </div>
+                <h1 class="hc-ani" style="--d:.1s">Learn every screen of SPIC ONE, <em>in your own language</em></h1>
+                <p class="hc-lead2 hc-ani" style="--d:.2s">Step-by-step guides, guided tours on the real screens and voice help, shown only for the work your role does.</p>
+                <label class="hc-search hc-ani" style="--d:.3s">
+                    <i class="bi bi-search" aria-hidden="true"></i>
+                    <input type="search" placeholder="What do you want to do today?" aria-label="Search the guides" value="@_query"
+                           @oninput="e => _query = e.Value?.ToString() ?? string.Empty" />
+                </label>
+                @if (!string.IsNullOrWhiteSpace(_query))
                 {
-                    <li>
-                        <a href="@($"/Help/{hit.Section.Module}/{hit.Section.Section.Id}")">
-                            <strong>@hit.Section.Section.Title</strong>
-                            <span>@hit.Snippet</span>
-                        </a>
-                    </li>
+                    var hits = Catalog.Search(_query, Lang.Current);
+                    <div class="hc-hits" aria-live="polite">
+                        @if (hits.Count == 0)
+                        {
+                            <a href="/ContactUs"><b>No guide mentions "@_query"</b><span>Try other words, or contact us.</span></a>
+                        }
+                        @foreach (var hit in hits)
+                        {
+                            <a href="@($"/Help/{hit.Section.Module}/{hit.Section.Section.Id}")"><b>@hit.Section.Section.Title</b><span>@hit.Snippet</span></a>
+                        }
+                    </div>
                 }
-            </ul>
-        }
-    }
-    else if (_modules.Count == 0)
+                else if (_path is not null)
+                {
+                    <div class="hc-pop hc-ani" style="--d:.4s">
+                        Popular:
+                        @foreach (var (step, view) in _path.Steps.Take(4))
+                        {
+                            <a href="@($"/Help/{view.Module}/{view.Section.Id}")">@view.Section.Title</a>
+                        }
+                    </div>
+                }
+            </div>
+            <div class="hc-art hc-ani" style="--d:.25s" aria-hidden="true">
+                <div class="hc-phone"><div class="hc-scr">
+                    <div class="hc-scr__hd"><small>Help Centre</small><b>@(Login.DesignationName ?? "SPIC ONE")</b></div>
+                    @foreach (var m in _modules.Take(4))
+                    {
+                        <div class="hc-mini"><i class="bi @m.Icon" style="background:@m.Guide.Color"></i><span>@m.Title</span></div>
+                    }
+                    <div class="hc-mini" style="outline:2px solid #f97316;outline-offset:2px"><i class="bi bi-question-lg" style="background:#f97316"></i><span>Tap ? on any screen</span></div>
+                </div></div>
+                <div class="hc-fc" style="left:0;top:60px"><div class="hc-fc__i" style="background:#16a34a"><i class="bi bi-check2-circle"></i></div><div><b>Every status explained</b><small>Know what happens next</small></div></div>
+                <div class="hc-fc" style="right:0;top:170px;animation-delay:1.2s"><div class="hc-fc__i" style="background:var(--hc-g)"><i class="bi bi-volume-up"></i></div><div><b>Listen in @(Lang.Languages.FirstOrDefault(l => l.Code != "en")?.Native ?? "your language")</b><div class="hc-eq"><i></i><i style="animation-delay:.15s"></i><i style="animation-delay:.3s"></i><i style="animation-delay:.45s"></i><i style="animation-delay:.6s"></i></div></div></div>
+                <div class="hc-fc" style="left:10px;bottom:30px;animation-delay:2.4s"><div class="hc-fc__i" style="background:#f97316"><i class="bi bi-cursor"></i></div><div><b>Guided tours</b><small>On the real screen</small></div></div>
+            </div>
+        </div>
+    </header>
+
+    <div class="hc-statsbar hc-ani" style="--d:.5s">
+        <div class="hc-stat" style="--c:#0b6b3a"><div class="hc-stat__i"><i class="bi bi-grid-1x2" aria-hidden="true"></i></div><div><b>@_modules.Count</b><small>@(_modules.Count == 1 ? "module" : "modules") for you</small></div></div>
+        <div class="hc-stat" style="--c:#7c3aed"><div class="hc-stat__i"><i class="bi bi-window-stack" aria-hidden="true"></i></div><div><b>@_modules.Sum(m => m.Screens.Count)</b><small>screens explained</small></div></div>
+        <div class="hc-stat" style="--c:#d97706"><div class="hc-stat__i"><i class="bi bi-translate" aria-hidden="true"></i></div><div><b>@Lang.Languages.Count</b><small>languages</small></div></div>
+        <div class="hc-stat" style="--c:#2563eb"><div class="hc-stat__i"><i class="bi bi-soundwave" aria-hidden="true"></i></div><div><b>@(_voice ? "Voice" : "Text")</b><small>@(_voice ? "listen to any guide" : "voice coming soon")</small></div></div>
+    </div>
+
+    @if (_modules.Count == 0)
     {
-        <div class="help-empty">
-            <i class="bi bi-journal-x" aria-hidden="true"></i>
-            <p>There are no guides for your role yet. Use <a href="/ContactUs">Contact Us</a> if you need help.</p>
+        <section class="hc-hsec">
+            <div class="hc-blk" style="text-align:center">
+                <i class="bi bi-journal-x" style="font-size:28px;color:#61716a" aria-hidden="true"></i>
+                <p>There are no guides for your role yet. Use <a href="/ContactUs" style="color:var(--hc-g);font-weight:600">Contact Us</a> if you need help.</p>
+            </div>
+        </section>
+    }
+
+    @if (_path is not null)
+    {
+        var done = _path.Steps.Count(s => IsRead(s.Section));
+        var nowIndex = _path.Steps.ToList().FindIndex(s => !IsRead(s.Section));
+        var pct = (int)Math.Round(100.0 * done / _path.Steps.Count);
+        <section class="hc-hsec">
+            <div class="hc-sh"><div><div class="hc-kick">Start here</div><h2>@_path.Title</h2><p>The screens to learn first. Each one opens a short guide.</p></div></div>
+            <div class="hc-journey">
+                <div style="position:relative;z-index:1">
+                    <h3>@(done == 0 ? "Let's get started" : done == _path.Steps.Count ? "All done, well done" : $"You're {pct}% there")</h3>
+                    <div class="hc-jring" style="background:conic-gradient(#7ee2a8 0 @(pct)%, rgba(255,255,255,.15) @(pct)% 100%)"><div><b>@done/@_path.Steps.Count</b><small>completed</small></div></div>
+                    <p>Read a screen's guide for a few seconds, or finish its tour, and it is ticked here.</p>
+                </div>
+                <div class="hc-path">
+                    @for (var i = 0; i < _path.Steps.Count; i++)
+                    {
+                        var (step, view) = _path.Steps[i];
+                        var read = IsRead(view);
+                        <a class="hc-pstep @(read ? "is-done" : i == nowIndex ? "is-now" : null)" href="@($"/Help/{view.Module}/{view.Section.Id}")">
+                            @if (i == nowIndex) { <span class="hc-pstep__tag">Next</span> }
+                            <div class="hc-pstep__n">@if (read) { <i class="bi bi-check-lg" aria-label="Read"></i> } else { @(i + 1) }</div>
+                            <b>@view.Section.Title</b>
+                            <small>@(step.Minutes > 0 ? $"{step.Minutes} min" : null)@(step.Tour ? " · tour" : null)</small>
+                        </a>
+                    }
+                </div>
+            </div>
+        </section>
+    }
+
+    @if (_modules.Count > 0)
+    {
+        <section class="hc-hsec" id="modules">
+            <div class="hc-sh"><div><div class="hc-kick">Modules</div><h2>Explore by module</h2><p>Only the modules your role can open are shown.</p></div></div>
+            <div class="hc-mods">
+                @foreach (var m in _modules)
+                {
+                    var total = m.Screens.Count;
+                    var read = Progress.CountIn(m.Module, m.Screens.Select(s => s.Section.Id));
+                    var isNew = m.Guide.Updated is { } u && u >= DateOnly.FromDateTime(DateTime.Today.AddDays(-14));
+                    <a class="hc-mod" href="@($"/Help/{m.Module}")" style="--a:@m.Guide.Color">
+                        @if (isNew) { <span class="hc-mod__new">NEW</span> }
+                        <div class="hc-mod__i"><i class="bi @m.Icon" aria-hidden="true"></i></div>
+                        <h4>@m.Title</h4>
+                        <p>@Clip(m.Lead, 90)</p>
+                        <div class="hc-mod__meta"><span>@total @(total == 1 ? "screen" : "screens")</span><span>@(read == 0 ? "Not started" : $"{read} of {total} read")</span></div>
+                        <div class="hc-mod__prog"><i style="width:@(total == 0 ? 0 : 100 * read / total)%"></i></div>
+                    </a>
+                }
+            </div>
+        </section>
+    }
+
+    @if (_tours.Count > 0)
+    {
+        <section class="hc-hsec">
+            <div class="hc-sh"><div><div class="hc-kick">Watch and learn</div><h2>Guided tours</h2><p>A tour runs on the real screen, step by step.</p></div></div>
+            <div class="hc-vids">
+                @foreach (var t in _tours)
+                {
+                    var m = _modules.First(x => x.Module == t.Module);
+                    var steps = t.Section.Screen?.Tour.Count ?? 0;
+                    <button type="button" class="hc-vid" style="--a:@m.Guide.Color" @onclick="() => Tour.StartAsync(t)">
+                        <i class="bi @m.Icon hc-vid__deco" aria-hidden="true"></i>
+                        <span class="hc-vid__dur">@steps steps@(t.Section.Screen?.Minutes > 0 ? $" · {t.Section.Screen.Minutes} min" : null)</span>
+                        <span class="hc-play"><i class="bi bi-play-fill" aria-hidden="true"></i></span>
+                        <div><b>@t.Section.Title</b><small>@m.Title</small></div>
+                    </button>
+                }
+            </div>
+        </section>
+    }
+
+    @if (_faq.Count > 0 || _news.Count > 0)
+    {
+        <section class="hc-hsec">
+            <div class="hc-two">
+                @if (_faq.Count > 0)
+                {
+                    <div>
+                        <div class="hc-sh"><div><div class="hc-kick">Quick answers</div><h2>People in your role ask</h2></div></div>
+                        <div class="hc-faqbox">
+                            @foreach (var (module, item) in _faq)
+                            {
+                                <a href="@FaqHref(module, item.Id)"><span class="hc-q__i"><i class="bi bi-question-lg" aria-hidden="true"></i></span>@item.Question<span class="hc-m">@_modules.First(x => x.Module == module).Title</span></a>
+                            }
+                        </div>
+                    </div>
+                }
+                @if (_news.Count > 0)
+                {
+                    <div>
+                        <div class="hc-sh"><div><div class="hc-kick">What's new</div><h2>Recent updates</h2></div></div>
+                        <div class="hc-news"><div class="hc-tl">
+                            @foreach (var n in _news)
+                            {
+                                var color = _modules.FirstOrDefault(x => x.Module == n.Module)?.Guide.Color ?? "#0b6b3a";
+                                <a class="hc-ti" style="--c:@color;display:block" href="@($"/Help/{n.Module}")"><span class="hc-d">@n.Updated.ToString("d MMM", CultureInfo.InvariantCulture)</span><b>@n.Title</b>@if (!string.IsNullOrWhiteSpace(n.Note)) { <small>@n.Note</small> }</a>
+                            }
+                        </div></div>
+                    </div>
+                }
+            </div>
+        </section>
+    }
+
+    @if (Catalog.Library.Support is { HasContact: true } support)
+    {
+        <div class="hc-cta">
+            <div class="hc-cta__i"><i class="bi bi-headset" aria-hidden="true"></i></div>
+            <div><h3>Still stuck?</h3><p>@(SupportHours(support) ?? "Our support team is here to help.")</p></div>
+            <div class="hc-cta__b">
+                @if (!string.IsNullOrWhiteSpace(support.Phone)) { <a class="hc-btn" href="@($"tel:{support.Phone}")"><i class="bi bi-telephone" aria-hidden="true"></i> Call support</a> }
+                @if (!string.IsNullOrWhiteSpace(support.WhatsApp)) { <a class="hc-btn" style="background:#16a34a;color:#fff;border:0" href="@($"https://wa.me/{new string(support.WhatsApp.Where(char.IsDigit).ToArray())}")"><i class="bi bi-whatsapp" aria-hidden="true"></i> WhatsApp us</a> }
+            </div>
         </div>
     }
-    else
-    {
-        <div class="help-grid">
-            @foreach (var m in _modules)
-            {
-                <a class="help-card" href="@($"/Help/{m.Module}")">
-                    <i class="bi @m.Icon help-card__icon" aria-hidden="true"></i>
-                    <span class="help-card__title">@m.Title</span>
-                    <span class="help-card__count">@m.Sections.Count @(m.Sections.Count == 1 ? "guide" : "guides")</span>
-                </a>
-            }
-        </div>
-    }
+    <div class="hc-home-end"></div>
 </div>
 
 @code {
     private string _query = string.Empty;
     private IReadOnlyList<HelpModuleView> _modules = Array.Empty<HelpModuleView>();
+    private HelpPathView? _path;
+    private List<HelpSectionView> _tours = new();
+    private IReadOnlyList<(string Module, HelpFaqItem Item)> _faq = Array.Empty<(string, HelpFaqItem)>();
+    private IReadOnlyList<HelpWhatsNewItem> _news = Array.Empty<HelpWhatsNewItem>();
+    private IReadOnlySet<string> _read = new HashSet<string>();
+    private bool _voice;
 
     protected override void OnInitialized()
     {
         Catalog.ApprovedKeys = Api.Approved;
-        Lang.Changed += OnLangChanged;
+        Lang.Changed += OnChanged;
+        Progress.Changed += OnChanged;
         Load();
     }
 
-    // Reviewer approvals for the chosen language (loaded once per session, quietly).
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (firstRender)
+        {
+            _read = await Progress.ReadAsync();
+            _voice = await Api.VoiceEnabledAsync();
+            StateHasChanged();
+            return;
+        }
         if (await Api.EnsureApprovedAsync(Lang.Current)) { Load(); StateHasChanged(); }
     }
 
-    private void Load() => _modules = Catalog.VisibleModules(Lang.Current);
+    private void Load()
+    {
+        _modules = Catalog.VisibleModules(Lang.Current);
+        _path = Catalog.PathFor(Lang.Current);
+        _faq = Catalog.PopularFaq(Lang.Current);
+        _news = Catalog.WhatsNew(Lang.Current);
 
-    private void OnLangChanged() => InvokeAsync(() => { Load(); StateHasChanged(); });
+        // Tour cards: the path's tour steps first, then other screens with a tour that open on their own.
+        var tours = new List<HelpSectionView>();
+        if (_path is not null) tours.AddRange(_path.Steps.Where(s => s.Step.Tour).Select(s => s.Section));
+        tours.AddRange(_modules.SelectMany(m => m.Screens).Where(HasOwnTour));
+        _tours = tours.Where(HasOwnTour).DistinctBy(s => (s.Module, s.Section.Id)).Take(3).ToList();
+    }
 
-    public void Dispose() => Lang.Changed -= OnLangChanged;
+    private string FaqHref(string module, string itemId) =>
+        _modules.FirstOrDefault(m => m.Module == module)?.Block("faq") is { } faq
+            ? $"/Help/{module}/{faq.Section.Id}?item={Uri.EscapeDataString(itemId)}"
+            : $"/Help/{module}";
+
+    private static bool HasOwnTour(HelpSectionView s) =>
+        s.Section.Screen is { Tour.Count: > 0 } && s.Section.Routes.Any(r => !HelpRoutes.HasParameters(r));
+
+    private bool IsRead(HelpSectionView v) => _read.Contains(HelpProgressState.ItemKey(v.Module, v.Section.Id));
+
+    private static string Clip(string text, int max) =>
+        string.IsNullOrWhiteSpace(text) || text.Length <= max ? text : text[..max].TrimEnd() + "…";
+
+    private string? SupportHours(HelpSupport support) =>
+        support.Hours is null ? null
+        : support.Hours.TryGetValue(Lang.Current, out var h) && !string.IsNullOrWhiteSpace(h) ? h
+        : support.Hours.TryGetValue("en", out var en) && !string.IsNullOrWhiteSpace(en) ? en : null;
+
+    private void OnChanged() => InvokeAsync(() => { Load(); StateHasChanged(); });
+
+    public void Dispose()
+    {
+        Lang.Changed -= OnChanged;
+        Progress.Changed -= OnChanged;
+    }
 }

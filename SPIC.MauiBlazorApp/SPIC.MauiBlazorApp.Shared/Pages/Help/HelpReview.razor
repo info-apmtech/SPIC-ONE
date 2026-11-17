@@ -28,15 +28,40 @@
         <nav class="help-tabs" aria-label="Languages">
             @foreach (var code in _access.Languages)
             {
-                <a class="help-tab @(code == _lang && !_showReviewers ? "is-active" : null)" href="@($"/Help/Review/{code}")">@NativeName(code)</a>
+                <a class="help-tab @(code == _lang && !_showReviewers && !_showFeedback ? "is-active" : null)" href="@($"/Help/Review/{code}")">@NativeName(code)</a>
             }
+            <button type="button" class="help-tab @(_showFeedback ? "is-active" : null)" @onclick="ShowFeedbackAsync">Feedback</button>
             @if (_access.IsAdmin)
             {
                 <button type="button" class="help-tab @(_showReviewers ? "is-active" : null)" @onclick="ShowReviewersAsync">Reviewers</button>
             }
         </nav>
 
-        @if (_showReviewers)
+        @if (_showFeedback)
+        {
+            <p class="help-muted">"Was this guide helpful?" answers from the last 90 days. Guides with the most "No" come first.</p>
+            @if (_feedback is null || _feedback.Count == 0)
+            {
+                <p class="help-muted">No answers yet.</p>
+            }
+            else
+            {
+                <table class="hc-fields hc-feedback">
+                    <tr><th>Guide</th><th>Screen</th><th>Yes</th><th>No</th><th>Recent comments</th></tr>
+                    @foreach (var f in _feedback)
+                    {
+                        <tr>
+                            <td>@ModuleTitle(f.Module)</td>
+                            <td>@(f.SectionId is null ? "Whole guide" : SectionTitle(f.Module, f.SectionId))</td>
+                            <td>@f.Yes</td>
+                            <td class="@(f.No > f.Yes ? "hc-feedback__bad" : null)">@f.No</td>
+                            <td>@foreach (var c in f.RecentComments) { <div>“@c”</div> }</td>
+                        </tr>
+                    }
+                </table>
+            }
+        }
+        else if (_showReviewers)
         {
             @if (_reviewers is null || _reviewers.Count == 0)
             {
@@ -116,6 +141,8 @@
     private List<HelpReviewRowDto>? _rows;
     private HelpReviewRowDto? _selected;
     private bool _showReviewers;
+    private bool _showFeedback;
+    private List<HelpFeedbackSummaryDto>? _feedback;
     private List<HelpReviewerDto>? _reviewers;
     private readonly Dictionary<string, HashSet<string>> _reviewerLangs = new();
 
@@ -130,6 +157,7 @@
         var wanted = Lang?.ToLowerInvariant();
         _lang = wanted is not null && _access.Languages.Contains(wanted) ? wanted : _access.Languages[0];
         _showReviewers = false;
+        _showFeedback = false;
         _selected = null;
         await ReloadRowsAsync();
     }
@@ -163,9 +191,20 @@
         await JS.InvokeVoidAsync("downloadFileFromBytes", name, "application/json", Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(json)));
     }
 
+    private async Task ShowFeedbackAsync()
+    {
+        _showFeedback = true;
+        _showReviewers = false;
+        _feedback = await Api.FeedbackSummaryAsync(90) ?? new List<HelpFeedbackSummaryDto>();
+    }
+
+    private string SectionTitle(string module, string sectionId) =>
+        Library.English(module)?.Sections.FirstOrDefault(s => string.Equals(s.Id, sectionId, StringComparison.OrdinalIgnoreCase))?.Title ?? sectionId;
+
     private async Task ShowReviewersAsync()
     {
         _showReviewers = true;
+        _showFeedback = false;
         _reviewers = await Api.ReviewersAsync() ?? new List<HelpReviewerDto>();
         _reviewerLangs.Clear();
         foreach (var r in _reviewers) _reviewerLangs[r.UserId] = new HashSet<string>(r.Languages);

@@ -16,13 +16,13 @@ else
         <section class="help-review-col">
             <h3 class="help-review-col__label">English</h3>
             <h2 class="help-section__title">@_english.Title</h2>
-            <div class="help-section__text">@((MarkupString)HelpMarkdown.ToHtml(_english.Body, HelpSectionBody.ImageBase(Module)))</div>
+            <div class="help-section__text">@((MarkupString)HelpMarkdown.ToHtml(HelpBlocks.ReviewMarkdown(_english), HelpSectionBody.ImageBase(Module)))</div>
         </section>
         <section class="help-review-col">
             <h3 class="help-review-col__label">@LanguageName</h3>
             <h2 class="help-section__title">@_translated.Title</h2>
             <ListenButton View="@(new HelpSectionView(Module, _translated, Lang, false, true))" />
-            <div class="help-section__text">@((MarkupString)HelpMarkdown.ToHtml(_translated.Body, HelpSectionBody.ImageBase(Module)))</div>
+            <div class="help-section__text">@((MarkupString)HelpMarkdown.ToHtml(HelpBlocks.ReviewMarkdown(_translated), HelpSectionBody.ImageBase(Module)))</div>
         </section>
     </div>
 
@@ -46,6 +46,10 @@ else
     {
         <div class="help-review-form">
             <label>Title<input class="form-control" @bind="_title" /></label>
+            @if (_english.Kind != "screen")
+            {
+                <p class="help-muted">Change only the words after <b>title:</b>, <b>text:</b>, <b>q:</b>, <b>a:</b>, <b>sub:</b> and the lines starting with <b>- </b> under them. Keep the lines that start with "- " and contain "|" exactly as they are, and keep each line on one line.</p>
+            }
             <label>Text<textarea class="form-control" rows="12" @bind="_body"></textarea></label>
             <label>Comment (optional)<input class="form-control" @bind="_comment" /></label>
             <button type="button" class="help-btn help-btn--primary" disabled="@_busy" @onclick="SendCorrectionAsync">Send correction</button>

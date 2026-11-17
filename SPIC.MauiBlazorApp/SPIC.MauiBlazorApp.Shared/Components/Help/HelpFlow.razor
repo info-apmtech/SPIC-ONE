@@ -1,0 +1,132 @@
+@* The module's flow: a swimlane (one row per role) on wide screens, a vertical timeline on narrow
+   ones. Tap a stage to read what happens there. Connectors are drawn by help-centre.js. *@
+@using SPIC.Core.Help
+@inject IJSRuntime JS
+
+@{
+    var maxCol = Math.Max(1, _flow.Stages.Count == 0 ? 1 : _flow.Stages.Max(s => s.Col));
+    // --hc-lane-w: the role-name column; HelpCentre.css widens it for the longer Indian-language names.
+    var cols = $"grid-template-columns:var(--hc-lane-w,132px) repeat({maxCol},minmax(0,1fr))";
+    var selected = _flow.Stages.FirstOrDefault(s => s.Id == _selected) ?? _flow.Stages.FirstOrDefault();
+}
+
+@* hc-flow--cN: HelpCentre.css shows the timeline instead when N columns do not fit the width. *@
+<div class="hc-flowbox hc-flow--c@(maxCol)">
+<div class="hc-lane-wrap" id="@_wrapId">
+    <div class="hc-lanes" style="@cols">
+        @foreach (var lane in _flow.Lanes)
+        {
+            var me = lane.Id == MyLane;
+            <div class="hc-lh @(me ? "is-me" : null)" style="--c:@lane.Color">
+                <div class="hc-lh__av">@Initials(lane.Title)</div>
+                <div>@lane.Title<small>@lane.Sub</small></div>
+                @if (me) { <span class="hc-you">You</span> }
+            </div>
+            @for (var col = 1; col <= maxCol; col++)
+            {
+                var here = _flow.Stages.Where(s => s.Lane == lane.Id && s.Col == col).ToList();
+                <div class="hc-cell @(me ? "is-me" : null)">
+                    @foreach (var s in here)
+                    {
+                        <button type="button" class="hc-node @(s.Id == selected?.Id ? "is-sel" : null)" style="--c:@s.Color"
+                                data-stage="@s.Id" data-next="@string.Join(",", s.Next)" data-return="@s.Return" data-from="@s.From" data-to="@s.To"
+                                @onclick="() => _selected = s.Id" aria-pressed="@(s.Id == selected?.Id ? "true" : "false")">
+                            <span class="hc-stepn">@Number(s)</span>
+                            <span class="hc-node__i"><i class="bi @s.Icon" aria-hidden="true"></i></span>
+                            <b>@s.Title</b>
+                            @if (!string.IsNullOrWhiteSpace(s.Status)) { <span class="hc-tag" style="--c:@s.Color">@s.Status</span> }
+                        </button>
+                    }
+                </div>
+            }
+        }
+    </div>
+    <svg class="hc-links" aria-hidden="true">
+        <defs>
+            <marker id="hc-ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1 1L9 5L1 9z" fill="#94a3b8" /></marker>
+            <marker id="hc-ahd" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1 1L9 5L1 9z" fill="#d97706" /></marker>
+            <marker id="hc-ahr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1 1L9 5L1 9z" fill="#dc2626" /></marker>
+        </defs>
+    </svg>
+</div>
+<div class="hc-legend">
+    <span><i class="hc-ln"></i>Next step</span>
+    @if (_flow.Stages.Any(s => s.Return is not null)) { <span><i class="hc-ln hc-ln--d"></i>Sent back for changes</span> }
+    @if (_flow.Stages.Any(s => s.Exception)) { <span><i class="hc-ln hc-ln--r"></i>When something goes wrong</span> }
+    <span style="margin-left:auto"><i class="bi bi-hand-index" aria-hidden="true"></i> Tap a step</span>
+</div>
+
+@if (selected is not null)
+{
+    <div class="hc-detail" style="--c:@selected.Color" aria-live="polite">
+        <div class="hc-detail__i"><i class="bi @selected.Icon" aria-hidden="true"></i></div>
+        <div>
+            <b>@Number(selected). @selected.Title</b>
+            <p>@((MarkupString)Inline(selected.Text))</p>
+            <div class="hc-who"><i class="bi bi-person" aria-hidden="true"></i> @LaneTitle(selected.Lane)</div>
+        </div>
+        @if (selected.Screen is { } screen && VisibleScreens.Contains(screen))
+        {
+            <button type="button" class="hc-btn hc-btn--pri" @onclick="() => OnOpenScreen.InvokeAsync(screen)">See this screen <i class="bi bi-arrow-down" aria-hidden="true"></i></button>
+        }
+    </div>
+}
+
+<div class="hc-vflow">
+    @foreach (var s in Ordered)
+    {
+        var me = s.Lane == MyLane;
+        <div class="hc-vf @(s.Exception ? "is-alt" : null)" style="--c:@s.Color">
+            <div class="hc-vf__i"><i class="bi @s.Icon" aria-hidden="true"></i></div>
+            <div class="hc-vf__b @(me ? "is-me" : null)">
+                <b>@(s.Exception ? s.Title : $"{Number(s)}. {s.Title}")</b>
+                <p>@((MarkupString)Inline(s.Text))</p>
+                <div class="hc-vf__r">@LaneTitle(s.Lane) @if (me) { <span class="hc-you" style="margin-left:0">You</span> } @if (!string.IsNullOrWhiteSpace(s.Status)) { <span class="hc-tag" style="--c:@s.Color">@s.Status</span> }</div>
+            </div>
+        </div>
+    }
+</div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public HelpSection Flow { get; set; } = default!;
+    [Parameter] public string? MyLane { get; set; }
+    [Parameter] public IReadOnlySet<string> VisibleScreens { get; set; } = new HashSet<string>();
+    [Parameter] public EventCallback<string> OnOpenScreen { get; set; }
+
+    private readonly string _wrapId = "hc-flow-" + Guid.NewGuid().ToString("N")[..8];
+    private HelpFlowView _flow = new(Array.Empty<HelpLane>(), Array.Empty<HelpStage>());
+    private string? _selected;
+
+    protected override void OnParametersSet() => _flow = HelpBlocks.Flow(Flow, new List<string>());
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        try { await JS.InvokeVoidAsync("helpCentre.drawFlow", _wrapId); } catch { /* prerender or no JS: no connectors */ }
+    }
+
+    /// <summary>Stages in reading order: by column, exceptions last.</summary>
+    private IEnumerable<HelpStage> Ordered => _flow.Stages.OrderBy(s => s.Exception ? 1 : 0).ThenBy(s => s.Col);
+
+    private string Number(HelpStage s)
+    {
+        if (s.Exception) return "!";
+        var i = Ordered.Where(x => !x.Exception).ToList().FindIndex(x => x.Id == s.Id);
+        return (i + 1).ToString();
+    }
+
+    private string LaneTitle(string lane) => _flow.Lanes.FirstOrDefault(l => l.Id == lane)?.Title ?? lane;
+
+    private static string Initials(string title)
+    {
+        var letters = new string(title.Where(char.IsLetter).Take(2).ToArray()).ToUpperInvariant();
+        return letters.Length == 0 ? "•" : letters;
+    }
+
+    // Inline bold only; HelpMarkdown encodes everything first.
+    private static string Inline(string text)
+    {
+        var html = HelpMarkdown.ToHtml(text ?? string.Empty, string.Empty);
+        return html.StartsWith("<p>") && html.EndsWith("</p>") ? html[3..^4] : html;
+    }
+}

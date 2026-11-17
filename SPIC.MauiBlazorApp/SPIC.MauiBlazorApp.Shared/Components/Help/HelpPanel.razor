@@ -5,6 +5,7 @@
 @inject HelpCatalog Catalog
 @inject HelpLanguageState Lang
 @inject HelpApi Api
+@inject HelpTourState Tour
 
 <div class="help-panel-backdrop" @onclick="Close"></div>
 <aside class="help-panel" role="dialog" aria-modal="true" aria-label="Help for this screen">
@@ -24,6 +25,10 @@
         }
         else
         {
+            @if (CanTour)
+            {
+                <button type="button" class="help-btn help-btn--primary" style="margin-bottom:12px" @onclick="TakeTourAsync"><i class="bi bi-play-circle" aria-hidden="true"></i> Take the tour</button>
+            }
             <HelpSectionBody View="_section" ShowOpenLink="false">
                 <ListenButton View="_section" />
             </HelpSectionBody>
@@ -53,6 +58,18 @@
     }
 
     private void Load() => _section = Catalog.ForPath(Nav.Uri, Lang.Current);
+
+    // Offered only when this section has a tour AND the user is on one of its screens.
+    private bool CanTour =>
+        _section?.Section.Screen is { Tour.Count: > 0 }
+        && _section.Section.Routes.Any(r => SPIC.Core.Help.HelpRoutes.Matches(r, "/" + Nav.ToBaseRelativePath(Nav.Uri)));
+
+    private async Task TakeTourAsync()
+    {
+        var section = _section!;
+        await Close();
+        await Tour.StartAsync(section);
+    }
 
     private void OnLangChanged() => InvokeAsync(() => { Load(); StateHasChanged(); });
 

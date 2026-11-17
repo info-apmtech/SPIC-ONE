@@ -1,0 +1,210 @@
+@* The guided tour overlay, drawn over the real page (mounted once in MainLayout). The page dims,
+   a highlight moves to each step's element and a card explains it. A step whose element is not on
+   the screen (hidden for this role, or not loaded) shows a note instead of highlighting nothing. *@
+@using SPIC.Core.Help
+@implements IAsyncDisposable
+@inject HelpTourState Tour
+@inject HelpCatalog Catalog
+@inject HelpLanguageState Lang
+@inject HelpApi Api
+@inject IJSRuntime JS
+@inject NavigationManager Nav
+@inject HelpProgressState Progress
+@inject ToastService Toast
+
+@if (Tour.IsRunning && _section is not null)
+{
+    var steps = _steps;
+    var i = Math.Min(Tour.Index, Math.Max(0, steps.Count - 1));
+    <div class="hc-tour-dim @(_found ? "is-spot" : null)" @onclick="End"></div>
+    <div id="hc-tour-spot" class="hc-tour-spot" aria-hidden="true"></div>
+    <div id="hc-tour-card" class="hc-tour-card @(_found ? null : "is-center")" role="dialog" aria-modal="true" aria-live="polite" tabindex="-1"
+         aria-label="@($"Guided tour, step {i + 1} of {steps.Count}")">
+        <div class="hc-tour-card__hd">
+            <i class="bi bi-signpost-2" aria-hidden="true"></i>
+            <span>Step @(i + 1) of @steps.Count</span>
+            <span class="hc-tour-card__sp"></span>
+            <HelpLanguagePicker Compact="true" />
+            @if (_voice)
+            {
+                <button type="button" class="hc-tour-card__lis" @onclick="ListenAsync"><i class="bi bi-volume-up" aria-hidden="true"></i> Listen</button>
+            }
+        </div>
+        <div class="hc-tour-card__bd">
+            <h3>@_section.Section.Title</h3>
+            <p>@((MarkupString)Inline(steps.Count > i ? steps[i] : string.Empty))</p>
+            @if (!_found)
+            {
+                <p class="hc-tour-card__note"><i class="bi bi-eye-slash" aria-hidden="true"></i> This part isn't on your screen right now.</p>
+            }
+            @if (_audio is not null)
+            {
+                <audio src="@_audio" autoplay controls style="width:100%;margin-top:8px"></audio>
+            }
+        </div>
+        <div class="hc-tour-card__ft">
+            <span class="hc-tour-dots" aria-hidden="true">@for (var d = 0; d < steps.Count; d++) { <i class="@(d == i ? "is-on" : null)"></i> }</span>
+            <span class="hc-tour-card__sp"></span>
+            <button type="button" class="hc-btn hc-btn--sm" @onclick="End">End tour</button>
+            @if (i > 0) { <button type="button" class="hc-btn hc-btn--sm" @onclick="Back">Back</button> }
+            <button type="button" class="hc-btn hc-btn--sm hc-btn--pri" @onclick="Next">@(i >= steps.Count - 1 ? "Finish" : "Next")</button>
+        </div>
+    </div>
+}
+
+@code {
+    private HelpSectionView? _section;
+    private IReadOnlyList<string> _steps = Array.Empty<string>();
+    private bool _found; // starts centred and dimmed until the target is found
+    private bool _voice;
+    private string? _audio;
+    private string? _shownKey;
+    private DotNetObjectReference<HelpTourHost>? _self;
+
+    protected override void OnInitialized()
+    {
+        Tour.Changed += OnTourChanged;
+        Lang.Changed += OnTourChanged;
+        Nav.LocationChanged += OnLocationChanged;
+    }
+
+    private void Load()
+    {
+        _section = Tour.IsRunning
+            ? Catalog.Module(Tour.Module!, Lang.Current)?.Screens.FirstOrDefault(s => s.Section.Id == Tour.SectionId)
+            : null;
+        _steps = _section is null ? Array.Empty<string>() : HelpSteps.Of(_section.Section.Body);
+    }
+
+    private void OnTourChanged() => InvokeAsync(() => { Load(); _audio = null; _shownKey = null; _found = false; StateHasChanged(); });
+
+    // Several renders can be inside this method at once (it awaits JS and the API, and a tour that
+    // ends or moves on re-renders meanwhile). So: fields are read into locals BEFORE each await and
+    // re-checked after it, and nothing here may throw - on the web an exception in this method ends
+    // the user's whole session (the Blazor circuit), not just the tour.
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        try
+        {
+            var section = _section;
+            if (!Tour.IsRunning || section is null)
+            {
+                await ReleaseKeysAsync();
+                return;
+            }
+
+            var key = $"{Tour.Module}/{Tour.SectionId}/{Tour.Index}/{Lang.Current}";
+            if (_shownKey == key) return;
+            _shownKey = key;
+            var step = Tour.Index + 1;
+
+            if (_self is null)
+            {
+                var self = _self = DotNetObjectReference.Create(this);
+                var voice = await Api.VoiceEnabledAsync();
+                if (!ReferenceEquals(_self, self)) return; // the tour ended while the API answered
+                _voice = voice;
+                try { await JS.InvokeVoidAsync("helpCentre.tour.bindKeys", self); } catch { }
+                if (_shownKey != key) return; // the tour moved on: that render shows its own step
+            }
+
+            var target = section.Section.Screen?.Tour.FirstOrDefault(t => t.N == step)?.Target;
+            var found = false;
+            try
+            {
+                var result = await JS.InvokeAsync<ShowResult?>("helpCentre.tour.showWhenReady", target, 2500);
+                found = result?.Found ?? false;
+            }
+            catch { /* no JS (navigating away): show the step without a highlight */ }
+
+            if (_shownKey != key) return; // an older step's answer: ignore it
+            if (found != _found) { _found = found; StateHasChanged(); }
+        }
+        catch (Exception)
+        {
+            // Never let the tour take the page down with it.
+        }
+    }
+
+    // Stops the keyboard / resize listeners and frees the .NET reference. The field is cleared
+    // first, so a second render arriving during the await finds nothing left to release.
+    private async Task ReleaseKeysAsync()
+    {
+        var self = _self;
+        if (self is null) return;
+        _self = null;
+        try { await JS.InvokeVoidAsync("helpCentre.tour.unbindKeys"); } catch { }
+        self.Dispose();
+    }
+
+    private sealed record ShowResult(bool Found);
+
+    [JSInvokable] public Task OnTourNext() => InvokeAsync(Next);
+    [JSInvokable] public Task OnTourBack() => InvokeAsync(Back);
+    [JSInvokable] public Task OnTourEnd() => InvokeAsync(End);
+    [JSInvokable] public Task OnTourReposition() => InvokeAsync(() => { _shownKey = null; StateHasChanged(); });
+
+    private Task Next()
+    {
+        if (Tour.Index >= _steps.Count - 1) return End();
+        Tour.Next(_steps.Count);
+        return Task.CompletedTask;
+    }
+    private void Back() => Tour.Back();
+
+    private async Task End()
+    {
+        try
+        {
+            // A finished tour counts the screen as read.
+            var section = _section;
+            if (Tour.IsRunning && Tour.Index >= _steps.Count - 1 && section is not null)
+                await Progress.MarkReadAsync(section.Module, section.Section.Id);
+        }
+        catch { /* progress is a nicety; the tour must still end */ }
+        Tour.End();
+        try { await JS.InvokeVoidAsync("helpCentre.tour.hide"); } catch { }
+    }
+
+    private async Task ListenAsync()
+    {
+        var section = _section;
+        if (section is null) return;
+        _audio = await Api.AudioUrlAsync(section.Module, section.Section.Id, Lang.Current, Tour.Index + 1);
+    }
+
+    // Leaving the tour's screen (not the navigation the tour itself made) ends the tour.
+    private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        if (!Tour.IsRunning || _section is null) return;
+        var path = "/" + Nav.ToBaseRelativePath(e.Location);
+        if (_section.Section.Routes.Any(r => HelpRoutes.Matches(r, path))) return;
+
+        // The tour's own screen sent the user somewhere else straight away: it only opens from a
+        // record (a list row, a program). Say so, instead of the tour vanishing without a word.
+        var redirected = Tour.Index == 0 && DateTime.UtcNow - Tour.StartedAt < TimeSpan.FromSeconds(2.5);
+        InvokeAsync(async () =>
+        {
+            await End();
+            if (redirected)
+            {
+                try { Toast.Info("This screen opens from a record. Open one, then press ? and choose Take the tour.", "Guided tour", 6000); }
+                catch { /* a missing toast must not matter */ }
+            }
+        });
+    }
+
+    private static string Inline(string text)
+    {
+        var html = HelpMarkdown.ToHtml(text ?? string.Empty, string.Empty);
+        return html.StartsWith("<p>") && html.EndsWith("</p>") ? html[3..^4] : html;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        Tour.Changed -= OnTourChanged;
+        Lang.Changed -= OnTourChanged;
+        Nav.LocationChanged -= OnLocationChanged;
+        await ReleaseKeysAsync();
+    }
+}

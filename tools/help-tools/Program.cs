@@ -10,6 +10,8 @@ return command switch
 	"translate" => await Translate(args),
 	"apply-reviews" => ApplyReviews(args),
 	"import" => Import(args),
+	"shoot" => await Shooter.RunAsync(Option(args, "--module"), Option(args, "--section"),
+		!args.Contains("--phone-only"), !args.Contains("--desktop-only")),
 	_ => Usage(),
 };
 
@@ -157,10 +159,26 @@ static async Task<int> Translate(string[] args)
 			else if (await translator.TranslateAsync(lang, library.GlossaryFor(lang.Code), en.Title, string.Empty) is { } gt)
 				result[HelpGuideWriter.GuideTitleKey] = gt;
 
+			// Category and note: keep an existing translation with the hash it was made from (stale stays stale).
+			var hashes = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+			if (existing is not null && (!string.IsNullOrWhiteSpace(existing.Category) || !string.IsNullOrWhiteSpace(existing.Note)))
+			{
+				if (!string.IsNullOrWhiteSpace(existing.Category)) result[HelpGuideWriter.CategoryKey] = (existing.Category, string.Empty, HelpConfidence.Ok);
+				if (!string.IsNullOrWhiteSpace(existing.Note)) result[HelpGuideWriter.NoteKey] = (existing.Note, string.Empty, HelpConfidence.Ok);
+				hashes[HelpGuideWriter.MetaKey] = existing.MetaSourceHash ?? "missing";
+			}
+
 			int ok = 0, low = 0;
 			foreach (var id in todo)
 			{
 				var s = en.Sections.First(x => x.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
+				if (s.Kind != "screen")
+				{
+					// Blocks have layout lines the model must not change: translate them outside and use 'import'.
+					Console.WriteLine($"    {id}: {s.Kind} block, skipped (translate it outside and use 'import')");
+					failures.Add($"{module}/{lang.Code}/{id} ({s.Kind} block: use import)");
+					continue;
+				}
 				Console.WriteLine($"    {id}");
 				var translated = await translator.TranslateAsync(lang, library.GlossaryFor(lang.Code), s.Title, s.Body);
 				if (translated is null) { failures.Add($"{module}/{lang.Code}/{id}"); continue; }
@@ -168,7 +186,10 @@ static async Task<int> Translate(string[] args)
 				if (translated.Value.Confidence == HelpConfidence.Low) low++; else ok++;
 			}
 
-			File.WriteAllText(Repo.GuidePath(module, lang.Code), HelpGuideWriter.Write(en, lang.Code, result), new System.Text.UTF8Encoding(false));
+			// Sections kept from the existing file keep their own source hash.
+			foreach (var t in existing?.Sections ?? Array.Empty<HelpSection>())
+				if (!todo.Contains(t.Id, StringComparer.OrdinalIgnoreCase)) hashes[t.Id] = t.SourceHash;
+			File.WriteAllText(Repo.GuidePath(module, lang.Code), HelpGuideWriter.Write(en, lang.Code, result, hashes), new System.Text.UTF8Encoding(false));
 			Console.WriteLine($"  wrote guide.{lang.Code}.md: {ok} ok, {low} low confidence, {todo.Count - ok - low} failed");
 		}
 	}
@@ -197,6 +218,10 @@ static int Usage()
 		                 Bring in a translation made outside 'translate' (a copy of guide.en.md with
 		                 titles and bodies translated). Checks every section is there and on-screen
 		                 names in **bold** stayed English, then writes it stamped like 'translate'.
+		  shoot [--module m] [--section id] [--desktop-only|--phone-only]
+		                 Photograph guide screens from the LOCAL web app as local test users
+		                 (tools/help-demo/shots.json), save them under wwwroot/help/<module>/images
+		                 and write screenshot/hotspots keys (hotspots from the tour targets).
 		  apply-reviews <file.json>
 		                 Write native-speaker corrections downloaded from /Help/Review into the
 		                 translation files, and print pronunciation reports as glossary entries.
@@ -218,18 +243,20 @@ static int Check()
 		routes,
 		ignored,
 		relative => File.Exists(Path.Combine(Repo.ImagesDir, relative.Replace('/', Path.DirectorySeparatorChar))),
-		Enum.GetNames<PagePermission>());
+		Enum.GetNames<PagePermission>(),
+		Repo.DataHelpIds());
 
 	foreach (var group in issues.GroupBy(i => i.Module).OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase))
 	{
 		Console.WriteLine($"[{group.Key}]");
 		foreach (var issue in group.OrderBy(i => i.Kind).ThenBy(i => i.Detail, StringComparer.OrdinalIgnoreCase))
-			Console.WriteLine($"  {issue.Kind,-20} {issue.Detail}");
+			Console.WriteLine($"  {issue.Kind,-20} {issue.Detail}{(issue.Warning ? "  (warning)" : string.Empty)}");
 	}
 
 	var uncovered = issues.Count(i => i.Kind == "uncovered-route");
 	var counted = routes.Count(r => !ignored.Any(x => HelpRoutes.Shape(x) == HelpRoutes.Shape(r)));
 	Console.WriteLine();
-	Console.WriteLine($"Guides: {library.Modules.Count} modules. Screens: {uncovered} uncovered of {counted}. Issues: {issues.Count}.");
-	return issues.Count == 0 ? 0 : 1;
+	var warnings = issues.Count(i => i.Warning);
+	Console.WriteLine($"Guides: {library.Modules.Count} modules. Screens: {uncovered} uncovered of {counted}. Issues: {issues.Count - warnings}. Warnings: {warnings}.");
+	return issues.Any(i => !i.Warning) ? 1 : 0;
 }
