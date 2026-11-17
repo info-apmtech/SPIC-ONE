@@ -833,6 +833,14 @@
                                 <span>PoS Liquidation</span>
                                 <strong>@(assignment.PosLiquidationQty?.ToString("N2") ?? "—")</strong>
                             </div>
+                            <div class="ta-dealer-info-row">
+                                <span><i class="bi bi-play-circle"></i> Started</span>
+                                <strong>@FormatTaskDateTime(assignment.StartedAt)</strong>
+                            </div>
+                            <div class="ta-dealer-info-row">
+                                <span><i class="bi bi-check-circle"></i> Completed</span>
+                                <strong>@FormatTaskDateTime(assignment.CompletedAt)</strong>
+                            </div>
 
                             <div class="ta-dealer-stats-row ta-dealer-stats-row-single">
                                 <div class="ta-mini-stat ta-mini-stat-pending">
@@ -868,6 +876,14 @@
                                 <span><i class="bi bi-calendar3"></i> Sanction Date</span>
                                 <strong>@FormatProgramSanctionDate(program)</strong>
                             </div>
+                            <div class="ta-dealer-info-row">
+                                <span><i class="bi bi-play-circle"></i> Started</span>
+                                <strong>@FormatTaskDateTime(program.StartedAt)</strong>
+                            </div>
+                            <div class="ta-dealer-info-row">
+                                <span><i class="bi bi-check-circle"></i> Completed</span>
+                                <strong>@FormatTaskDateTime(program.CompletedAt)</strong>
+                            </div>
 
                             <div class="ta-dealer-stats-row">
                                 <div class="ta-mini-stat ta-mini-stat-programs">
@@ -894,12 +910,30 @@
                         <div class="ta-today-card ta-today-card-narrow @StatusCardClass(alloc.SpcmStatus)">
                             <span class="ta-type-pill ta-type-pill-teal"><i class="bi bi-bullseye"></i> SPCM</span>
 
-                            <div class="ta-today-target-box">
-                                <span class="ta-today-target-icon"><i class="bi bi-bullseye"></i></span>
-                                <div>
-                                    <div class="ta-target-label">Today's Target</div>
-                                    <div class="ta-today-target-val">@alloc.SpcmTarget</div>
+                            <div class="ta-today-products-row">
+                                <div class="ta-today-target-box">
+                                    <span class="ta-today-target-icon"><i class="bi bi-bullseye"></i></span>
+                                    <div>
+                                        <div class="ta-target-label">Target</div>
+                                        <div class="ta-today-target-val">@alloc.SpcmTarget</div>
+                                    </div>
                                 </div>
+                                <div class="ta-today-target-box">
+                                    <span class="ta-today-target-icon"><i class="bi bi-check-circle"></i></span>
+                                    <div>
+                                        <div class="ta-target-label">Achieved</div>
+                                        <div class="ta-today-target-val">@SpcmAchieved(alloc)</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="ta-dealer-info-row">
+                                <span><i class="bi bi-play-circle"></i> Started</span>
+                                <strong>@FormatTaskDateTime(alloc.SpcmStartedAt)</strong>
+                            </div>
+                            <div class="ta-dealer-info-row">
+                                <span><i class="bi bi-check-circle"></i> Completed</span>
+                                <strong>@FormatTaskDateTime(alloc.SpcmCompletedAt)</strong>
                             </div>
 
                             @if (CanActOnTasks)
@@ -916,12 +950,30 @@
                         <div class="ta-today-card ta-today-card-narrow @StatusCardClass(alloc.SoilSampleStatus)">
                             <span class="ta-type-pill ta-type-pill-orange"><i class="bi bi-moisture"></i> Soil Sample</span>
 
-                            <div class="ta-today-target-box">
-                                <span class="ta-today-target-icon"><i class="bi bi-eyedropper"></i></span>
-                                <div>
-                                    <div class="ta-target-label">Today's Target</div>
-                                    <div class="ta-today-target-val">@alloc.SoilSampleTarget</div>
+                            <div class="ta-today-products-row">
+                                <div class="ta-today-target-box">
+                                    <span class="ta-today-target-icon"><i class="bi bi-eyedropper"></i></span>
+                                    <div>
+                                        <div class="ta-target-label">Target</div>
+                                        <div class="ta-today-target-val">@alloc.SoilSampleTarget</div>
+                                    </div>
                                 </div>
+                                <div class="ta-today-target-box">
+                                    <span class="ta-today-target-icon"><i class="bi bi-check-circle"></i></span>
+                                    <div>
+                                        <div class="ta-target-label">Achieved</div>
+                                        <div class="ta-today-target-val">@SoilSampleAchieved(alloc)</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="ta-dealer-info-row">
+                                <span><i class="bi bi-play-circle"></i> Started</span>
+                                <strong>@FormatTaskDateTime(alloc.SoilSampleStartedAt)</strong>
+                            </div>
+                            <div class="ta-dealer-info-row">
+                                <span><i class="bi bi-check-circle"></i> Completed</span>
+                                <strong>@FormatTaskDateTime(alloc.SoilSampleCompletedAt)</strong>
                             </div>
 
                             <button type="button" class="ta-start-btn" @onclick="ViewDetailsNotAvailable">
@@ -935,13 +987,14 @@
                         <div class="ta-today-card ta-today-card-wide @StatusCardClass(alloc.PosLiquidationStatus)">
                             <span class="ta-type-pill ta-type-pill-grey"><i class="bi bi-box-seam"></i> PoS Liquidation</span>
 
-                            <div class="ta-today-products-label"><i class="bi bi-clipboard-check"></i> Products to liquidate</div>
+                            <div class="ta-today-products-label"><i class="bi bi-clipboard-check"></i> Products to liquidate (Target / Achieved)</div>
                             <div class="ta-today-products-row">
                                 @if (alloc.UreaTarget > 0)
                                 {
                                     <div class="ta-today-product-tile">
                                         <div class="ta-today-product-name">UREA</div>
                                         <div class="ta-today-product-val">@alloc.UreaTarget</div>
+                                        <div class="ta-week-target-numbers">Achieved <strong>@PosCloseouts(alloc).Sum(c => c.Urea ?? 0)</strong></div>
                                     </div>
                                 }
                                 @if (alloc.NpsTarget > 0)
@@ -949,6 +1002,7 @@
                                     <div class="ta-today-product-tile">
                                         <div class="ta-today-product-name">NPKS</div>
                                         <div class="ta-today-product-val">@alloc.NpsTarget</div>
+                                        <div class="ta-week-target-numbers">Achieved <strong>@PosCloseouts(alloc).Sum(c => c.Nps ?? 0)</strong></div>
                                     </div>
                                 }
                                 @if (alloc.DapTarget > 0)
@@ -956,6 +1010,7 @@
                                     <div class="ta-today-product-tile">
                                         <div class="ta-today-product-name">DAP</div>
                                         <div class="ta-today-product-val">@alloc.DapTarget</div>
+                                        <div class="ta-week-target-numbers">Achieved <strong>@PosCloseouts(alloc).Sum(c => c.Dap ?? 0)</strong></div>
                                     </div>
                                 }
                                 @if (alloc.OthersTarget > 0)
@@ -963,8 +1018,18 @@
                                     <div class="ta-today-product-tile">
                                         <div class="ta-today-product-name">OTHER</div>
                                         <div class="ta-today-product-val">@alloc.OthersTarget</div>
+                                        <div class="ta-week-target-numbers">Achieved <strong>@PosCloseouts(alloc).Sum(c => c.Other ?? 0)</strong></div>
                                     </div>
                                 }
+                            </div>
+
+                            <div class="ta-dealer-info-row">
+                                <span><i class="bi bi-play-circle"></i> Started</span>
+                                <strong>@FormatTaskDateTime(alloc.PosLiquidationStartedAt)</strong>
+                            </div>
+                            <div class="ta-dealer-info-row">
+                                <span><i class="bi bi-check-circle"></i> Completed</span>
+                                <strong>@FormatTaskDateTime(alloc.PosLiquidationCompletedAt)</strong>
                             </div>
 
                             @if (CanActOnTasks)
@@ -1392,6 +1457,25 @@
         FilteredCompletedDealers.Any() || FilteredCompletedPrograms.Any() || FilteredCompletedSpcmAllocations.Any()
         || FilteredCompletedSoilAllocations.Any() || FilteredCompletedPosAllocations.Any();
 
+    // Started/Completed timestamps on Task History's cards - "—" when the task hasn't reached
+    // that stage yet (never started, or started but not yet completed).
+    private static string FormatTaskDateTime(DateTime? dt) =>
+        dt.HasValue ? dt.Value.ToString("dd MMM, h:mm tt") : "—";
+
+    // Achieved counts shown on Task History's cards, shared with BuildWeekSummary's identical
+    // Target-vs-Achieved breakdown below so both tabs always agree on the same allocation's numbers.
+    private static int SpcmAchieved(JmdoTaskAllocationResponseDto a) =>
+        a.Closeouts.Where(c => c.Kind == JmdoCloseoutKind.Spcm).Sum(c => c.AchievedTarget ?? 0);
+
+    // Soil Sample's Start button goes straight to /SampleCollection/new rather than through
+    // TaskDetail's close-out form, so there's no logged achieved quantity for it - approximate
+    // from Status alone (0 unless marked Completed).
+    private static int SoilSampleAchieved(JmdoTaskAllocationResponseDto a) =>
+        a.SoilSampleStatus == AllocTaskStatus.Completed ? (a.SoilSampleTarget ?? 0) : 0;
+
+    private static List<JmdoTaskCloseoutDto> PosCloseouts(JmdoTaskAllocationResponseDto a) =>
+        a.Closeouts.Where(c => c.Kind == JmdoCloseoutKind.PosLiquidation).ToList();
+
     // ---------- "Task Summary" tab ----------
     // One row per individual task (same 5 kinds as everywhere else on this page), flattened
     // across every allocation the JMDO has ever submitted - built from _allAllocations (already
@@ -1581,8 +1665,8 @@
             // weekly count targets a JMDO can log against on several different days (see
             // JmdoTaskAllocationController's CreateCloseout), so a single FirstOrDefault()
             // under-reported "Achieved" the moment more than one record existed for the week.
-            var spcmAchieved = a.Closeouts.Where(c => c.Kind == JmdoCloseoutKind.Spcm).Sum(c => c.AchievedTarget ?? 0);
-            var posCloseouts = a.Closeouts.Where(c => c.Kind == JmdoCloseoutKind.PosLiquidation).ToList();
+            var spcmAchieved = SpcmAchieved(a);
+            var posCloseouts = PosCloseouts(a);
 
             if (a.SpcmTarget is > 0 && MatchesStatus(a.SpcmStatus))
             {
@@ -1591,10 +1675,7 @@
 
             if (a.SoilSampleTarget is > 0 && MatchesStatus(a.SoilSampleStatus))
             {
-                // Soil Sample's Start button goes straight to /SampleCollection/new rather than
-                // through TaskDetail's close-out form, so there's no logged achieved quantity for
-                // it yet - approximate Achieved from Status alone (0 unless marked Completed).
-                week.Targets.Add(new TargetBreakdown { Label = "Soil Sample", Icon = "bi-moisture", Target = a.SoilSampleTarget.Value, Achieved = a.SoilSampleStatus == AllocTaskStatus.Completed ? a.SoilSampleTarget.Value : 0, Status = a.SoilSampleStatus });
+                week.Targets.Add(new TargetBreakdown { Label = "Soil Sample", Icon = "bi-moisture", Target = a.SoilSampleTarget.Value, Achieved = SoilSampleAchieved(a), Status = a.SoilSampleStatus });
             }
 
             if (MatchesStatus(a.PosLiquidationStatus))
@@ -1615,8 +1696,8 @@
         // a.PosLiquidationStatus can be stale "Completed" from before the backend started gating
         // that transition on the count actually reaching Target, which would otherwise overstate
         // OverallPercent (e.g. crediting SPCM as done at 2 of 200 achieved).
-        var allSpcmAchieved = a.Closeouts.Where(c => c.Kind == JmdoCloseoutKind.Spcm).Sum(c => c.AchievedTarget ?? 0);
-        var allPosCloseouts = a.Closeouts.Where(c => c.Kind == JmdoCloseoutKind.PosLiquidation).ToList();
+        var allSpcmAchieved = SpcmAchieved(a);
+        var allPosCloseouts = PosCloseouts(a);
         var spcmDone = a.SpcmTarget is > 0 && allSpcmAchieved >= a.SpcmTarget;
         var posDone = (a.UreaTarget > 0 || a.NpsTarget > 0 || a.DapTarget > 0 || a.OthersTarget > 0)
             && (a.UreaTarget is not > 0 || allPosCloseouts.Sum(c => c.Urea ?? 0) >= a.UreaTarget)
