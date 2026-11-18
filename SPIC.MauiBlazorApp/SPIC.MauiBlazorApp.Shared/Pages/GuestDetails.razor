@@ -519,6 +519,7 @@
     private decimal _roomPricePerNight;
     private decimal _extraCotPrice;
     private int _numberOfRooms;
+    private int? _roomCapacity;
     private int _extraBeds;
     private decimal _roomCost;
     private decimal _extraBedCost;
@@ -566,8 +567,11 @@
             return;
         }
 
-        _numberOfRooms = Math.Max(1, NumberOfRooms ?? 1);
-        _extraBeds = Math.Max(0, ExtraBeds ?? 0);
+        // One booking = one room. Whatever the query string says (it is user-editable), the
+        // quantity is always 1; the API enforces the same rule.
+        _numberOfRooms = 1;
+        // One additional bed per room at most, as the room selection page offers.
+        _extraBeds = Math.Clamp(ExtraBeds ?? 0, 0, _numberOfRooms);
 
         await LoadRoomAsync();
 
@@ -632,6 +636,8 @@
             _extraCotPrice = room.ExtraCotPrice ?? 0m;
             _guestHouseName = room.GuestHouseName;
             _roomNumber = room.RoomNumber;
+            // Same capacity the room card advertises ("N Guests allowed").
+            _roomCapacity = room.Capacity ?? room.NumberOfAdults;
 
             _roomCost = _roomPricePerNight * _numberOfRooms * _numberOfNights;
             _extraBedCost = _extraCotPrice * _extraBeds * _numberOfNights;
@@ -898,6 +904,17 @@
         if (string.IsNullOrWhiteSpace(_form.PhoneNumber)) return "Phone Number is required to continue.";
         if (string.IsNullOrWhiteSpace(_form.Email)) return "Email ID is required to continue.";
         if (string.IsNullOrWhiteSpace(_form.Nationality)) return "Please select the Nationality.";
+
+        // Guests must fit the single selected room (plus any additional bed). Counts are optional
+        // on this form, so only check what the customer entered.
+        if (_roomCapacity is > 0)
+        {
+            var guests = int.TryParse(_form.NumberOfPersons, out var p) ? p
+                : (int.TryParse(_form.NumberOfAdults, out var a) ? a : 0) + (int.TryParse(_form.NumberOfChildren, out var c) ? c : 0);
+            var allowed = _roomCapacity.Value + _extraBeds;
+            if (guests > allowed)
+                return $"This room allows up to {allowed} guest(s). Please reduce the number of guests, or book an additional room separately.";
+        }
         return null;
     }
 

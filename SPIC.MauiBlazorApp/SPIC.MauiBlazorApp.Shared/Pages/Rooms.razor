@@ -75,31 +75,8 @@
                         </div>
 
                         <div class="rm-selection-section">
-                            <div class="rm-selection-row">
-                                <label class="rm-selection-label">Number of Rooms</label>
-                                <select class="rm-select" value="@room.SelectedQuantity" @onchange="e => OnQuantityChanged(room, e)" disabled="@(room.MaxSelectableQuantity <= 0)">
-                                    @if (room.MaxSelectableQuantity > 0)
-                                    {
-                                        @for (int i = 1; i <= room.MaxSelectableQuantity; i++)
-                                        {
-                                            <option value="@i">@i</option>
-                                        }
-                                    }
-                                    else
-                                    {
-                                        <option value="0">0</option>
-                                    }
-                                </select>
-                            </div>
-
-                            @* A booking reserves ONE inventory row (POST api/GuestHouseBooking/book takes a single
-                               room id and checks that row's availability), so the dropdown stops at the largest
-                               single row while the badge above shows the group total. Say so instead of offering
-                               a quantity the booking would reject. *@
-                            @if (room.MaxSelectableQuantity > 0 && room.MaxSelectableQuantity < room.AvailableQuantity)
-                            {
-                                <div class="rm-selection-hint">Up to @room.MaxSelectableQuantity @(room.MaxSelectableQuantity == 1 ? "room" : "rooms") can be booked at a time for this room type.</div>
-                            }
+                            @* One booking = one room. There is no quantity selector: a customer who needs
+                               another room returns to availability and completes a separate booking. *@
 
                             @if (room.ExtraCotPrice.HasValue && room.ExtraCotPrice.Value > 0)
                             {
@@ -207,19 +184,6 @@
         Navigation.NavigateTo($"/GuestHouseBooking?guestHouseId={_guestHouseId}");
     }
 
-    private void OnQuantityChanged(RoomCardModel room, ChangeEventArgs e)
-    {
-        if (int.TryParse(e.Value?.ToString(), out var qty))
-        {
-            var max = room.MaxSelectableQuantity;
-            room.SelectedQuantity = max > 0 ? Math.Clamp(qty, 1, max) : 0;
-            if (room.ExtraBedSelected)
-            {
-                room.SelectedExtraBeds = Math.Min(room.SelectedExtraBeds, room.SelectedQuantity);
-            }
-        }
-    }
-
     private void OnExtraBedToggle(RoomCardModel room, ChangeEventArgs e)
     {
         room.ExtraBedSelected = e.Value is true;
@@ -252,7 +216,7 @@
         var extraBeds = room.ExtraBedSelected ? room.SelectedExtraBeds : 0;
         var url = $"/GuestDetails?guestHouseId={_guestHouseId}" +
                   $"&roomTypeId={targetRoomId.Value}" +
-                  $"&numberOfRooms={room.SelectedQuantity}" +
+                  $"&numberOfRooms=1" + // one booking = one room
                   $"&extraBeds={extraBeds}" +
                   $"&checkIn={Uri.EscapeDataString(_checkIn.ToString("yyyy-MM-ddTHH:mm:ss"))}" +
                   $"&checkOut={Uri.EscapeDataString(_checkOut.ToString("yyyy-MM-ddTHH:mm:ss"))}";
@@ -404,14 +368,14 @@
         public decimal? ExtraCotPrice { get; set; }
         public int AvailableQuantity { get; set; }
         public int NumberOfAdults { get; set; }
+        // Fixed: one booking = one room (0 only when nothing is available).
         public int SelectedQuantity { get; set; } = 1;
         public bool ExtraBedSelected { get; set; }
         public int SelectedExtraBeds { get; set; }
         public List<AvailableRoomDto> UnderlyingRooms { get; set; } = new();
 
-        // One booking can take the whole group: the API reserves the selected record first and
-        // the rest from the group's other records (POST api/GuestHouseBooking/book), re-checking
-        // availability for every record inside its transaction.
+        // Rooms available across the group; used only to enable/disable Book Now. A booking
+        // always takes exactly one room.
         public int MaxSelectableQuantity => UnderlyingRooms.Sum(r => Math.Max(0, r.AvailableQuantity));
 
         public int RoomId => GetSelectedRoomId() ?? UnderlyingRooms.FirstOrDefault()?.RoomId ?? 0;

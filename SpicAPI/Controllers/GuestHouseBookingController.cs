@@ -36,6 +36,11 @@ namespace SpicAPI.Controllers
 		private readonly GuestHouseBookingOptions _bookingOptions;
 		private readonly ILogger<GuestHouseBookingController> _logger;
 
+		// One booking = one room = one bill (see CreateBooking).
+		private const int MaxRoomsPerBooking = 1;
+		// An identical booking by the same user inside this window is treated as a duplicate submit.
+		private const int DuplicateSubmitWindowSeconds = 10;
+
 		public GuestHouseBookingController(
 			AppDbContext db,
 			IWebHostEnvironment env,
@@ -483,13 +488,41 @@ namespace SpicAPI.Controllers
             if (numberOfNights < 1)
                 return BadRequest(new { Success = false, Message = "Invalid stay duration." });
 
+            // Business rule: ONE booking = ONE room = ONE bill. Enforced here on the server (the UI
+            // also fixes the quantity at 1, but a client can send anything). An absent quantity means
+            // 1 (older clients); anything else is rejected rather than silently clamped, so a
+            // tampered request can never create a multi-room booking. Historical multi-room bookings
+            // already in the database are untouched - every read/payment/billing path still handles them.
             var numberOfRooms = request.NumberOfRooms ?? 1;
-            if (numberOfRooms < 1)
-                return BadRequest(new { Success = false, Message = "Number of rooms must be at least 1." });
+            if (numberOfRooms != MaxRoomsPerBooking)
+                return BadRequest(new
+                {
+                    Success = false,
+                    Message = "Only one room can be booked at a time. To book another room, please complete a separate booking."
+                });
 
+            // At most one additional bed per room.
             var extraCotQuantity = request.ExtraBeds ?? 0;
-            if (extraCotQuantity < 0)
+            if (extraCotQuantity < 0 || extraCotQuantity > numberOfRooms)
                 return BadRequest(new { Success = false, Message = "Invalid additional bed quantity." });
+
+            if ((request.NumberOfPersons ?? 0) < 0 || (request.NumberOfAdults ?? 0) < 0 || (request.NumberOfChildren ?? 0) < 0)
+                return BadRequest(new { Success = false, Message = "Invalid number of guests." });
+
+            // Guests must fit the selected room (plus any additional bed). Counts are optional, so
+            // only a supplied count is checked; a room with no capacity configured is not limited.
+            var roomCapacity = room.Capacity ?? room.NumberOfAdults;
+            if (roomCapacity is > 0)
+            {
+                var guestCount = request.NumberOfPersons ?? ((request.NumberOfAdults ?? 0) + (request.NumberOfChildren ?? 0));
+                var allowedGuests = roomCapacity.Value + extraCotQuantity;
+                if (guestCount > allowedGuests)
+                    return BadRequest(new
+                    {
+                        Success = false,
+                        Message = $"This room allows up to {allowedGuests} guest(s). Please reduce the number of guests, or book an additional room separately."
+                    });
+            }
 
             // Validate required guest details.
             if (string.IsNullOrWhiteSpace(request.GuestName))
@@ -539,6 +572,49 @@ namespace SpicAPI.Controllers
             var bookingStatus = isFreeBooking || isPayAfterStay ? GuestHouseBookingStatus.Confirmed : GuestHouseBookingStatus.PendingPayment;
             var paymentStatus = isFreeBooking ? GuestHousePaymentStatus.Paid : GuestHousePaymentStatus.Pending;
 
+            // Duplicate-submit guard (double click / network retry): an identical booking by the same
+            // user - same room, dates, guest, payment method - created moments ago is returned as-is
+            // instead of creating (and holding inventory for) a second booking. The window is short
+            // on purpose: a customer deliberately booking a second room fills in the whole form again,
+            // which always takes longer, and that remains a separate booking.
+            var duplicateCutoff = DateTime.Now.AddSeconds(-DuplicateSubmitWindowSeconds);
+            var recentDuplicate = await _db.GuestHouseBookings.AsNoTracking()
+                .Include(b => b.Payments)
+                .Where(b => b.CreatedBy == userId
+                    && b.GuestHouseRoomId == room.Id
+                    && b.CheckInDate == checkIn.Date
+                    && b.CheckOutDate == checkOut.Date
+                    && b.CreatedAt >= duplicateCutoff
+                    && (b.BookingStatus == GuestHouseBookingStatus.PendingPayment || b.BookingStatus == GuestHouseBookingStatus.Confirmed)
+                    && b.Guests.Any(g => g.GuestName == request.GuestName && g.PhoneNumber == request.PhoneNumber)
+                    && b.Payments.Any(p => p.PaymentMethod == paymentMethod))
+                .OrderByDescending(b => b.Id)
+                .FirstOrDefaultAsync();
+            if (recentDuplicate != null)
+            {
+                return Ok(new BookingResultDto
+                {
+                    Success = true,
+                    BookingId = recentDuplicate.Id,
+                    BookingReference = recentDuplicate.BookingReference,
+                    GuestHouseId = house.Id,
+                    GuestHouseName = house.Name,
+                    RoomType = room.RoomType ?? "Room",
+                    CheckIn = checkIn,
+                    CheckOut = checkOut,
+                    NumberOfNights = recentDuplicate.NumberOfNights ?? numberOfNights,
+                    NumberOfRooms = recentDuplicate.NumberOfRooms ?? 1,
+                    ExtraBeds = recentDuplicate.ExtraCotQuantity ?? 0,
+                    SubTotal = recentDuplicate.SubTotal ?? 0m,
+                    TaxAmount = recentDuplicate.TaxAmount ?? 0m,
+                    TotalAmount = recentDuplicate.TotalAmount ?? 0m,
+                    PaymentMethod = paymentMethod,
+                    PaymentStatus = recentDuplicate.PaymentStatus,
+                    BookingStatus = recentDuplicate.BookingStatus,
+                    IsFreeBooking = isFreeBooking
+                });
+            }
+
             // The availability re-check and the insert must happen atomically: without this,
             // two nearly-simultaneous requests for the same room/overlapping dates could both
             // read "room available" before either has saved, and both would then be allowed to
@@ -576,7 +652,19 @@ namespace SpicAPI.Controllers
                 return Conflict(new
                 {
                     Success = false,
-                    Message = $"Only {available} room(s) of this type are available for the selected dates. Please reduce the number of rooms or choose another room type."
+                    Message = "This room is no longer available for the selected dates. Please choose another room or different dates."
+                });
+            }
+
+            // A booking holds exactly one room on exactly one inventory record - never a
+            // multi-record booking with allocation rows (those exist only historically).
+            if (plan.Count != 1 || plan[0].Quantity != 1 || reservedRows.Count != 0)
+            {
+                await transaction.RollbackAsync();
+                return Conflict(new
+                {
+                    Success = false,
+                    Message = "This room was just booked by someone else for the selected dates. Please try again."
                 });
             }
 

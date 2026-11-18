@@ -863,6 +863,10 @@
 
     private async Task SubmitBooking()
     {
+        // Re-entrancy guard: a fast double click must not create a second booking. Once a
+        // booking exists for this page visit, only payment (never another "book") may follow.
+        if (_isSubmitting || _pendingBookingId.HasValue || isBookingConfirmed) return;
+
         if (!BookingState.IsInitialized)
         {
             _submitError = "No booking details found. Please start the booking again.";
@@ -886,7 +890,7 @@
                 CheckInTime = BookingState.CheckInDate?.TimeOfDay,
                 CheckOutDate = BookingState.CheckOutDate,
                 CheckOutTime = BookingState.CheckOutDate?.TimeOfDay,
-                NumberOfRooms = BookingState.NumberOfRooms,
+                NumberOfRooms = 1, // one booking = one room (the API rejects anything else)
                 ExtraBeds = BookingState.ExtraBeds,
                 NumberOfPersons = BookingState.NumberOfPersons,
                 NumberOfAdults = BookingState.NumberOfAdults,
