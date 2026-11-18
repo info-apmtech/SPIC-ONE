@@ -49,6 +49,11 @@ internal static class GuestHouseSingleRoomBookingTests
 		Step("6. historical multi-room booking", HistoricalMultiRoom);
 		Step("7. duplicate submission protection", DuplicateSubmission);
 		Step("8. authorization and roles", Authorization);
+		Step("9. Employee ID / Dealer Code binding", CodeBinding);
+		Step("10. Complimentary eligibility drives the binding", CodeEligibility);
+		Step("11. persons / adults / children rule", GuestCountRule);
+		Step("12. guest counts through the booking API", GuestCountsApi);
+		Step("13. Guest Details page wiring (source checks)", GuestDetailsWiring);
 	}
 
 	// A crash inside one scenario must show up as a failure, not abort the whole harness.
@@ -115,8 +120,41 @@ internal static class GuestHouseSingleRoomBookingTests
 			Db.Users.Add(TestUser("u-b", "user.b", 1));
 			Db.Users.Add(TestUser("u-bookingonly", "user.bookingonly", 2));
 			Db.Users.Add(TestUser("u-none", "user.none", 3));
+
+			// A large room, so the guest-count checks are not confused with the capacity rule.
+			Db.GuestHouseRooms.Add(new GuestHouseRoom { Id = 3, GuestHouseId = 1, RoomType = "Dormitory", RoomNumber = "301", PricePerNight = 500m, Capacity = 6, NumberOfAdults = 6, AvailableQuantity = 2, IsActive = true });
+
+			// Employee / Dealer masters behind the Employee ID / Dealer Code binding.
+			Db.EmployeeInformation.Add(Employee(50, "EMP-0050", "Emp Fifty"));
+			Db.EmployeeInformation.Add(Employee(51, "OLD-CODE", "Old Row"));
+			Db.EmployeeInformation.Add(Employee(52, "EMP-0052", "Emp Fifty-two"));
+			Db.EmployeeInformation.Add(Employee(53, "  ", "No Code"));
+			Db.Employeelogins.Add(new EmployeeRegistration.Employeelogin { Id = 1, UserId = "u-emp", Role = AppRole.RM, EmployeeInformationID = 50, IsActive = true });
+			// A user with a stale deactivated row and a current active one: the shared rule picks the active row.
+			Db.Employeelogins.Add(new EmployeeRegistration.Employeelogin { Id = 2, UserId = "u-emp2", Role = AppRole.RM, EmployeeInformationID = 51, IsActive = false });
+			Db.Employeelogins.Add(new EmployeeRegistration.Employeelogin { Id = 3, UserId = "u-emp2", Role = AppRole.RM, EmployeeInformationID = 52, IsActive = true });
+			Db.Employeelogins.Add(new EmployeeRegistration.Employeelogin { Id = 4, UserId = "u-nocode", Role = AppRole.RM, EmployeeInformationID = 53, IsActive = true });
+			Db.DealerRegistrations.Add(Dealer(70, "u-dealer", "D-1234"));
+			Db.DealerRegistrations.Add(Dealer(71, "u-dealer2", "D-5678"));
+			// The users the earlier scenarios book as: a Dealer (u-a, u-b as Dealer) and an RM (u-b as RM).
+			Db.DealerRegistrations.Add(Dealer(73, "u-a", "D-A001"));
+			Db.DealerRegistrations.Add(Dealer(74, "u-b", "D-B001"));
+			Db.EmployeeInformation.Add(Employee(54, "EMP-B054", "Emp B"));
+			Db.Employeelogins.Add(new EmployeeRegistration.Employeelogin { Id = 5, UserId = "u-b", Role = AppRole.RM, EmployeeInformationID = 54, IsActive = true });
+			// A dealer who has registered but not yet been approved has no code.
+			Db.DealerRegistrations.Add(Dealer(72, "u-newdealer", null));
 			Db.SaveChanges();
 		}
+
+		private static EmployeeRegistration.EmployeeInformation Employee(int id, string code, string name) =>
+			new() { Id = id, EmployeeCode = code, Name = name, Email = "e@example.com", PersonalPhoneNumber = "1", OfficialPhoneNumber = "2", CreatedBy = "test" };
+
+		private static DealerRegistration Dealer(int id, string userId, string? code) =>
+			new()
+			{
+				Id = id, UserTableId = userId, DealerCode = code, FirmName = "Test Firm", AccountHolderName = "Test", AccountNumber = "0", Branch = "Test", IFSC = "TEST0000000",
+				OfficialContactNumber = "1", WhatsAppNumber = "1", PinCode = "600001", ShopNoORRoomNoOrBlockNo = "1", Village = "Test", CreatedBy = "test", UpdatedBy = "test"
+			};
 
 		private static UserInfo TestUser(string id, string userName, int designationId) =>
 			new() { Id = id, UserName = userName, DesignationId = designationId, Name = userName, Password = "not-a-real-password", UpdatedBy = "test" };
@@ -145,8 +183,11 @@ internal static class GuestHouseSingleRoomBookingTests
 		public void Dispose() => Db.Dispose();
 	}
 
+	// Persons and adults are required by the guest-count rule, so by default every guest is an adult.
+	private const int SameAsPersons = int.MinValue;
+
 	private static CreateBookingRequest Req(int roomId, int? rooms = 1, GuestHousePaymentMethod method = GuestHousePaymentMethod.Razorpay,
-		string guest = "Guest One", int? persons = 2, int? extraBeds = 0) => new()
+		string guest = "Guest One", int? persons = 2, int? extraBeds = 0, int? adults = SameAsPersons, int? children = 0, string? code = null) => new()
 	{
 		GuestHouseId = 1,
 		RoomTypeId = roomId,
@@ -155,6 +196,9 @@ internal static class GuestHouseSingleRoomBookingTests
 		NumberOfRooms = rooms,
 		ExtraBeds = extraBeds,
 		NumberOfPersons = persons,
+		NumberOfAdults = adults == SameAsPersons ? persons : adults,
+		NumberOfChildren = children,
+		EmployeeOrDealerCode = code,
 		GuestName = guest,
 		PhoneNumber = "9999999999",
 		Email = "g@example.com",
@@ -537,6 +581,191 @@ internal static class GuestHouseSingleRoomBookingTests
 		// The owner still has full access.
 		Check.Equal("the owner can read their booking", 200, Status(await owner.GetBookingDetails(mine.BookingId)));
 		Check.Equal("the owner can request cancellation", 200, Status(await owner.RequestCancellation(mine.BookingId, new CreateCancellationRequest { Reason = "Other" })));
+	}
+
+	// ---- 9. Employee ID / Dealer Code binding -----------------------------------------------------------------
+
+	private static async Task<string?> SavedCode(Fx fx, int bookingId) =>
+		(await fx.Db.GuestHouseBookingGuests.AsNoTracking().SingleAsync(g => g.GuestHouseBookingId == bookingId)).EmployeeOrDealerCode;
+
+	private static async Task CodeBinding()
+	{
+		using var fx = new Fx();
+
+		// What the Guest Details page pre-fills: the signed-in user's own code from the masters.
+		var emp = await fx.Booking("u-emp", AppRole.RM).GetBookerIdentity();
+		Check.Equal("employee: identity lookup succeeds", 200, Status(emp));
+		Check.That("employee: bound to the Employee ID from EmployeeInformation", Prop<bool>(emp, "Bound") && Prop<string>(emp, "Kind") == "Employee" && Prop<string>(emp, "Code") == "EMP-0050");
+
+		var dealer = await fx.Booking("u-dealer", AppRole.Dealer).GetBookerIdentity();
+		Check.That("dealer: bound to the Dealer Code from DealerRegistration", Prop<bool>(dealer, "Bound") && Prop<string>(dealer, "Kind") == "Dealer" && Prop<string>(dealer, "Code") == "D-1234");
+		Check.That("dealer: no employee code is used for a dealer", Prop<string>(dealer, "Code") != "EMP-0050");
+
+		var emp2 = await fx.Booking("u-emp2", AppRole.RM).GetBookerIdentity();
+		Check.Equal("employee with a stale inactive login: the active row's code is used (shared Employeelogin rule)", "EMP-0052", Prop<string>(emp2, "Code") ?? "");
+
+		var admin = await fx.Booking("u-admin", AppRole.Admin).GetBookerIdentity();
+		Check.That("Admin keeps the manual field (not bound)", !Prop<bool>(admin, "Bound") && Prop<string>(admin, "Code") == null);
+
+		// The server applies the same value when the booking is created - the request value is ignored.
+		var asEmployee = await Book(fx.Booking("u-emp", AppRole.RM), Req(1, guest: "Emp Guest", code: "EMP-9999"));
+		Check.Equal("employee booking ignores a forged code and saves the employee's own", "EMP-0050", await SavedCode(fx, asEmployee.BookingId) ?? "");
+
+		var asDealer = await Book(fx.Booking("u-dealer", AppRole.Dealer), Req(1, guest: "Dealer Guest", code: "D-5678"));
+		Check.Equal("dealer booking ignores another dealer's code and saves their own", "D-1234", await SavedCode(fx, asDealer.BookingId) ?? "");
+
+		var noCode = await Book(fx.Booking("u-dealer", AppRole.Dealer), Req(2, guest: "Dealer Guest 2", code: null));
+		Check.Equal("dealer booking with no code typed still gets the dealer's code", "D-1234", await SavedCode(fx, noCode.BookingId) ?? "");
+
+		var manual = await Book(fx.Booking("u-admin", AppRole.Admin), Req(1, guest: "Admin Guest", code: "MANUAL-7"));
+		Check.Equal("Admin booking keeps the code entered on the form (unchanged behaviour)", "MANUAL-7", await SavedCode(fx, manual.BookingId) ?? "");
+
+		var bookingsBefore = await fx.Db.GuestHouseBookings.CountAsync();
+
+		// A required code that cannot be found refuses the booking instead of saving a wrong value.
+		var noLogin = await fx.Booking("u-nologin", AppRole.RM).CreateBooking(Req(1, guest: "X", code: "EMP-0050"));
+		Check.Equal("employee with no employee login is refused (400)", 400, Status(noLogin));
+		Check.That("the message says the Employee ID could not be found", (Prop<string>(noLogin, "Message") ?? "").Contains("Employee ID"));
+
+		var blank = await fx.Booking("u-nocode", AppRole.RM).CreateBooking(Req(1, guest: "X", code: "EMP-0050"));
+		Check.Equal("employee whose master record has a blank code is refused (400)", 400, Status(blank));
+
+		var newDealer = await fx.Booking("u-newdealer", AppRole.Dealer).CreateBooking(Req(1, guest: "X", code: "D-1234"));
+		Check.Equal("dealer without an approved Dealer Code is refused (400)", 400, Status(newDealer));
+		var noDealer = await fx.Booking("u-nodealer", AppRole.Dealer).CreateBooking(Req(1, guest: "X", code: "D-1234"));
+		Check.Equal("dealer with no dealer registration is refused (400)", 400, Status(noDealer));
+		Check.That("the message says the Dealer Code could not be found", (Prop<string>(noDealer, "Message") ?? "").Contains("Dealer Code"));
+
+		var identityMissing = await fx.Booking("u-nodealer", AppRole.Dealer).GetBookerIdentity();
+		Check.That("identity lookup reports bound with no code and a message", Prop<bool>(identityMissing, "Bound") && Prop<string>(identityMissing, "Code") == null && !string.IsNullOrWhiteSpace(Prop<string>(identityMissing, "Message")));
+
+		Check.Equal("none of the refused requests created a booking", bookingsBefore, await fx.Db.GuestHouseBookings.CountAsync());
+
+		var endpoint = typeof(GuestHouseBookingController).GetMethod(nameof(GuestHouseBookingController.GetBookerIdentity));
+		Check.Equal("the identity endpoint requires the GuestHouseBooking permission", (PagePermission?)PagePermission.GuestHouseBooking,
+			endpoint?.GetCustomAttributes(typeof(GuestHouseBookingAccessAttribute), false).Cast<GuestHouseBookingAccessAttribute>().FirstOrDefault()?.Permission);
+	}
+
+	// ---- 10. Complimentary eligibility drives the binding ----------------------------------------------------
+
+	private static async Task CodeEligibility()
+	{
+		using var fx = new Fx();
+
+		// Pin the binding to the EXISTING Complimentary policy: every role that books free is bound to an
+		// Employee ID, Dealer is bound to a Dealer Code, and nothing else is bound. A user id with no
+		// master data is used so a bound role reports "no code found" rather than a value.
+		foreach (var role in Enum.GetValues<AppRole>())
+		{
+			var free = GuestHouseBookingPolicy.IsEmployeeFreeBooking(role);
+			var expectedBound = free || role == AppRole.Dealer;
+			var r = await fx.Booking("u-ghost", role).GetBookerIdentity();
+			var kind = Prop<string>(r, "Kind");
+			Check.That($"{role}: bound = {expectedBound} ({(free ? "Complimentary employee" : role == AppRole.Dealer ? "dealer" : "not eligible")})",
+				Prop<bool>(r, "Bound") == expectedBound && kind == (free ? "Employee" : role == AppRole.Dealer ? "Dealer" : "NotBound"), kind);
+		}
+
+		// Eligible employee: free booking AND their own code. Ineligible: pays, and is not given an employee code.
+		var eligible = await Book(fx.Booking("u-emp", AppRole.RM), Req(1, guest: "Eligible"));
+		Check.That("eligible employee: booked free with their own Employee ID", eligible.IsFreeBooking && await SavedCode(fx, eligible.BookingId) == "EMP-0050");
+
+		var dealerBooking = await Book(fx.Booking("u-dealer", AppRole.Dealer), Req(2, guest: "Dealer"));
+		Check.That("dealer: not free (pays), saved with the Dealer Code", !dealerBooking.IsFreeBooking && await SavedCode(fx, dealerBooking.BookingId) == "D-1234");
+
+		var farmer = await Book(fx.Booking("u-a", AppRole.Farmer), Req(2, guest: "Farmer", code: "ANY"));
+		Check.That("farmer: not free and not bound (manual code kept)", !farmer.IsFreeBooking && await SavedCode(fx, farmer.BookingId) == "ANY");
+
+		// A paying role cannot reach Complimentary just by naming an employee code.
+		var cheat = await fx.Booking("u-a", AppRole.Dealer).CreateBooking(Req(1, method: GuestHousePaymentMethod.Complimentary, guest: "Cheat", code: "EMP-0050"));
+		Check.Equal("a dealer cannot obtain Complimentary by using an employee code", 400, Status(cheat));
+	}
+
+	// ---- 11. persons / adults / children rule -----------------------------------------------------------------
+
+	private static Task GuestCountRule()
+	{
+		string? V(int? p, int? a, int? c) => GuestHouseGuestCounts.Validate(p, a, c);
+		const string over = GuestHouseGuestCounts.TotalExceedsPersonsMessage;
+
+		Check.That("5 persons, 3 adults, 2 children (total 5) is valid", V(5, 3, 2) == null);
+		Check.Equal("5 persons, 3 adults, 3 children (total 6) is invalid, with the required message", over, V(5, 3, 3) ?? "");
+		Check.That("the message reads as specified", over == "Total adults and children cannot exceed the selected number of persons.");
+		Check.That("total equal to persons is allowed (3 + 2 = 5)", V(5, 3, 2) == null && V(2, 2, 0) == null);
+		Check.That("children left empty count as 0", V(5, 3, null) == null);
+		Check.That("fewer guests than persons is allowed (rule is <=)", V(5, 1, 0) == null);
+		Check.Equal("6 adults for 5 persons is invalid", over, V(5, 6, 0) ?? "");
+		Check.That("empty persons is rejected", V(null, 1, 0) != null);
+		Check.That("zero persons is rejected", V(0, 0, 0) != null);
+		Check.That("negative persons is rejected", V(-1, 1, 0) != null);
+		Check.That("empty adults is rejected", V(5, null, 0) != null);
+		Check.That("zero adults is rejected (children cannot stay alone)", V(5, 0, 2) != null);
+		Check.That("negative adults is rejected", V(5, -1, 0) != null);
+		Check.That("negative children is rejected (cannot offset the total)", V(5, 3, -1) != null);
+		Check.That("a large child count cannot overflow past the rule", V(5, 1, int.MaxValue - 1) != null);
+
+		Check.That("non-numeric page values parse as 'not provided'", GuestHouseGuestCounts.Parse("abc") == null && GuestHouseGuestCounts.Parse("") == null && GuestHouseGuestCounts.Parse(null) == null);
+		Check.Equal("numeric page values parse", 3, GuestHouseGuestCounts.Parse("3") ?? -1);
+		Check.That("a non-numeric persons value is therefore rejected", V(GuestHouseGuestCounts.Parse("five"), 1, 0) != null);
+		return Task.CompletedTask;
+	}
+
+	// ---- 12. guest counts through the booking API --------------------------------------------------------------
+
+	private static async Task GuestCountsApi()
+	{
+		using var fx = new Fx();
+		var c = fx.Booking("u-a");
+
+		// Room 3 (capacity 6) so only the persons/adults/children rule is under test.
+		var ok = await Book(c, Req(3, persons: 5, adults: 3, children: 2, guest: "Valid Party"));
+		var row = await fx.Db.GuestHouseBookings.AsNoTracking().Include(b => b.Guests).SingleAsync(b => b.Id == ok.BookingId);
+		Check.That("valid 5 / 3 / 2 is saved on the booking", row.NumberOfPersons == 5 && row.NumberOfAdults == 3 && row.NumberOfChildren == 2);
+		Check.That("and on the guest row", row.Guests.Single().NumberOfPersons == 5 && row.Guests.Single().NumberOfAdults == 3 && row.Guests.Single().NumberOfChildren == 2);
+
+		var before = await fx.Db.GuestHouseBookings.CountAsync();
+		var over = await c.CreateBooking(Req(3, persons: 5, adults: 3, children: 3, guest: "Too Many"));
+		Check.Equal("5 / 3 / 3 is refused by the API (400)", 400, Status(over));
+		Check.Equal("with the specified message", GuestHouseGuestCounts.TotalExceedsPersonsMessage, Prop<string>(over, "Message") ?? "");
+
+		Check.Equal("missing persons is refused", 400, Status(await c.CreateBooking(Req(3, persons: null, adults: 2, children: 0, guest: "A"))));
+		Check.Equal("zero persons is refused", 400, Status(await c.CreateBooking(Req(3, persons: 0, adults: 0, children: 0, guest: "B"))));
+		Check.Equal("missing adults is refused", 400, Status(await c.CreateBooking(Req(3, persons: 4, adults: null, children: 2, guest: "C"))));
+		Check.Equal("zero adults is refused", 400, Status(await c.CreateBooking(Req(3, persons: 4, adults: 0, children: 2, guest: "D"))));
+		Check.Equal("negative children is refused", 400, Status(await c.CreateBooking(Req(3, persons: 4, adults: 3, children: -1, guest: "E"))));
+		Check.Equal("no booking was created by any refused request", before, await fx.Db.GuestHouseBookings.CountAsync());
+
+		var noChildren = await Book(c, Req(3, persons: 4, adults: 3, children: null, guest: "No Children"));
+		Check.Equal("children omitted is accepted and saved as 0", 0, (await fx.Db.GuestHouseBookings.AsNoTracking().SingleAsync(b => b.Id == noChildren.BookingId)).NumberOfChildren ?? -1);
+
+		// The room-capacity rule still applies on top (room 1: capacity 2).
+		Check.Equal("room capacity is still enforced after the count rule passes", 400, Status(await c.CreateBooking(Req(1, persons: 4, adults: 4, children: 0, guest: "Over Capacity"))));
+		Check.Equal("room capacity plus one extra bed is still allowed", 200, Status(await c.CreateBooking(Req(1, persons: 3, adults: 2, children: 1, extraBeds: 1, guest: "With Bed"))));
+	}
+
+	// ---- 13. Guest Details page wiring ---------------------------------------------------------------------------
+
+	// The page is a Razor component and the harness has no component host, so these are STRUCTURAL checks of
+	// the markup/code (that each rule is wired in), not a behavioural run of the page. The behaviour they
+	// rely on is covered by scenarios 9 to 12, which exercise the same shared rule and the same API.
+	private static Task GuestDetailsWiring()
+	{
+		var dir = new DirectoryInfo(AppContext.BaseDirectory);
+		while (dir != null && !File.Exists(Path.Combine(dir.FullName, "SpicOne.sln")))
+			dir = dir.Parent;
+		var page = File.ReadAllText(Path.Combine(dir!.FullName, "SPIC.MauiBlazorApp", "SPIC.MauiBlazorApp.Shared", "Pages", "GuestDetails.razor"));
+
+		int Count(string needle) => System.Text.RegularExpressions.Regex.Matches(page, System.Text.RegularExpressions.Regex.Escape(needle)).Count;
+
+		Check.Equal("persons, adults and children each revalidate when changed", 3, Count("@bind:after=\"ValidateGuestCounts\""));
+		Check.That("Continue is disabled while the guest-count rule fails", page.Contains("@onclick=\"ContinueToPreview\" disabled=\"@(_guestCountError != null)\""));
+		Check.That("the shared rule is used (page and API apply the same check)", page.Contains("SPIC.Core.Entities.GuestHouseGuestCounts.Validate("));
+		Check.That("the rule is re-run in ValidateForm before navigating to the preview", page.Contains("_guestCountError = SPIC.Core.Entities.GuestHouseGuestCounts.Validate("));
+		Check.That("the code field is locked when bound", page.Contains("readonly=\"@_codeLocked\""));
+		Check.That("the code comes from the booker-identity endpoint", page.Contains("api/GuestHouseBooking/booker-identity"));
+		Check.That("a missing required code blocks Continue", page.Contains("if (_identityError != null) return _identityError;"));
+		Check.That("a failed identity lookup is retried before continuing", page.Contains("if (!_identityLoaded)"));
+		Check.That("the counts saved for the preview use the validated values", page.Contains("BookingState.NumberOfChildren = SPIC.Core.Entities.GuestHouseGuestCounts.Parse(_form.NumberOfChildren) ?? 0;"));
+		return Task.CompletedTask;
 	}
 }
 

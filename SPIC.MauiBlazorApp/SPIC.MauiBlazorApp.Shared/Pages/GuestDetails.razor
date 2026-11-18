@@ -1,4 +1,4 @@
-﻿@page "/GuestDetails"
+@page "/GuestDetails"
 
 @inject HttpClient Http
 @inject NavigationManager Navigation
@@ -276,7 +276,12 @@
                     
                     <div class="col-md-6">
                         <label class="form-label">Employee ID / Dealer Code</label>
-                        <input type="text" class="form-control-custom" placeholder="Enter Employee ID / Dealer Code" @bind="_form.EmployeeOrDealerCode">
+                        <input type="text" class="form-control-custom" placeholder="Enter Employee ID / Dealer Code" @bind="_form.EmployeeOrDealerCode"
+                               readonly="@_codeLocked" title="@(_codeLocked ? "Filled automatically from your account" : null)">
+                        @if (!string.IsNullOrEmpty(_identityError))
+                        {
+                            <div class="mt-1" style="color:#b91c1c;font-size:0.85rem;" role="alert">@_identityError</div>
+                        }
                     </div>
                     <div class="col-md-6">
                         <label class="form-label">Guest Name</label>
@@ -321,7 +326,7 @@
                     </div>
                     <div class="col-md-6">
                         <label class="form-label">Number of Persons</label>
-                        <select class="form-select-custom" @bind="_form.NumberOfPersons">
+                        <select class="form-select-custom" @bind="_form.NumberOfPersons" @bind:after="ValidateGuestCounts">
                             <option value="" disabled selected>Select Number of Persons</option>
                             <option value="1">1</option>
                             <option value="2">2</option>
@@ -333,7 +338,7 @@
 
                     <div class="col-md-6">
                         <label class="form-label">Number of Adults</label>
-                        <select class="form-select-custom" @bind="_form.NumberOfAdults">
+                        <select class="form-select-custom" @bind="_form.NumberOfAdults" @bind:after="ValidateGuestCounts">
                             <option value="" disabled selected>Select Number of Adults</option>
                             <option value="1">1</option>
                             <option value="2">2</option>
@@ -342,13 +347,19 @@
                     </div>
                     <div class="col-md-6">
                         <label class="form-label">Number of Children (below 12 years)</label>
-                        <select class="form-select-custom" @bind="_form.NumberOfChildren">
+                        <select class="form-select-custom" @bind="_form.NumberOfChildren" @bind:after="ValidateGuestCounts">
                             <option value="" disabled selected>Select Number of Children</option>
                             <option value="0">0</option>
                             <option value="1">1</option>
                             <option value="2">2</option>
                         </select>
                     </div>
+                    @if (!string.IsNullOrEmpty(_guestCountError))
+                    {
+                        <div class="col-12" style="margin-top:0.5rem;">
+                            <div style="color:#b91c1c;font-size:0.9rem;" role="alert">@_guestCountError</div>
+                        </div>
+                    }
 
                     <div class="col-md-6">
                         <label class="form-label">Upload ID Proof (Optional)</label>
@@ -471,7 +482,7 @@
                 <button class="btn-outline-back" @onclick="GoBack">Back</button>
             </Secondary>
             <ChildContent>
-                <button class="btn-primary-continue" @onclick="ContinueToPreview">Continue Review</button>
+                <button class="btn-primary-continue" @onclick="ContinueToPreview" disabled="@(_guestCountError != null)">Continue Review</button>
             </ChildContent>
         </ActionBar>
     </div>
@@ -520,6 +531,12 @@
     private decimal _extraCotPrice;
     private int _numberOfRooms;
     private int? _roomCapacity;
+
+    // Employee ID / Dealer Code binding and guest-count validation state.
+    private bool _codeLocked;
+    private bool _identityLoaded;
+    private string? _identityError;
+    private string? _guestCountError;
     private int _extraBeds;
     private decimal _roomCost;
     private decimal _extraBedCost;
@@ -575,6 +592,9 @@
 
         await LoadRoomAsync();
 
+        // Employee ID / Dealer Code comes from the signed-in user's own record (never typed).
+        await LoadBookerIdentityAsync();
+
         // Company Master dropdown — load companies applicable to the selected Guest House.
         await LoadCompaniesAsync();
 
@@ -585,6 +605,60 @@
         {
             await LoadDealerContactAsync();
         }
+    }
+
+    // Asks the API for the signed-in user's own Employee ID / Dealer Code (Dealer: Dealer Code; the
+    // Complimentary employee roles: Employee ID; other roles: nothing, the field stays manual). The API
+    // resolves it from the authenticated user and applies the same value again when the booking is
+    // created, so locking the field here is a convenience - not the security control.
+    private async Task LoadBookerIdentityAsync()
+    {
+        _identityError = null;
+        _codeLocked = false;
+        try
+        {
+            var identity = await Http.GetFromJsonAsync<BookerIdentityDto>("api/GuestHouseBooking/booker-identity");
+            if (identity == null)
+            {
+                _identityError = "We could not verify your Employee ID / Dealer Code. Please try again.";
+                return;
+            }
+
+            if (!identity.Bound)
+                return; // role without a fixed code: manual entry, unchanged
+
+            if (string.IsNullOrWhiteSpace(identity.Code))
+            {
+                _form.EmployeeOrDealerCode = null;
+                _identityError = identity.Message ?? "Your Employee ID / Dealer Code could not be found. Please contact support.";
+                return;
+            }
+
+            _form.EmployeeOrDealerCode = identity.Code;
+            _codeLocked = true;
+            _identityLoaded = true;
+        }
+        catch (Exception)
+        {
+            _identityError = "We could not verify your Employee ID / Dealer Code. Please try again.";
+        }
+        finally
+        {
+            if (_identityError == null) _identityLoaded = true;
+        }
+    }
+
+    // Number of Persons / Adults / Children: the shared GuestHouseGuestCounts rule (also applied by the API).
+    // Runs whenever one of the three selects changes. Until the customer has picked a value for a field
+    // there is nothing to complain about yet - an unfilled field is reported when they press Continue.
+    private void ValidateGuestCounts()
+    {
+        var persons = SPIC.Core.Entities.GuestHouseGuestCounts.Parse(_form.NumberOfPersons);
+        var adults = SPIC.Core.Entities.GuestHouseGuestCounts.Parse(_form.NumberOfAdults);
+        var children = SPIC.Core.Entities.GuestHouseGuestCounts.Parse(_form.NumberOfChildren);
+
+        var allPicked = persons.HasValue && adults.HasValue;
+        _guestCountError = allPicked ? SPIC.Core.Entities.GuestHouseGuestCounts.Validate(persons, adults, children) : null;
     }
 
     // Resolves the logged-in Dealer's registration (via UserTableId) and reuses
@@ -825,10 +899,18 @@
     private async Task ContinueToPreview()
     {
         _loadError = "";
+
+        // The identity lookup failed earlier (e.g. a network blip): try once more rather than
+        // letting the customer continue with an unverified, hand-typed code.
+        if (!_identityLoaded)
+            await LoadBookerIdentityAsync();
+
         var validationError = ValidateForm();
         if (validationError != null)
         {
-            _loadError = validationError;
+            // Guest-count problems are shown inline next to the fields (the summary card stays visible).
+            if (!ReferenceEquals(validationError, _guestCountError))
+                _loadError = validationError;
             Toast.Error(validationError);
             return;
         }
@@ -888,9 +970,10 @@
         BookingState.Email = _form.Email?.Trim();
         BookingState.AadhaarOrPassport = _form.AadhaarOrPassport?.Trim();
         BookingState.Nationality = _form.Nationality;
-        BookingState.NumberOfPersons = int.TryParse(_form.NumberOfPersons, out var persons) ? persons : null;
-        BookingState.NumberOfAdults = int.TryParse(_form.NumberOfAdults, out var adults) ? adults : null;
-        BookingState.NumberOfChildren = int.TryParse(_form.NumberOfChildren, out var children) ? children : null;
+        // Validated just above (ValidateForm): persons and adults are present, children empty means 0.
+        BookingState.NumberOfPersons = SPIC.Core.Entities.GuestHouseGuestCounts.Parse(_form.NumberOfPersons);
+        BookingState.NumberOfAdults = SPIC.Core.Entities.GuestHouseGuestCounts.Parse(_form.NumberOfAdults);
+        BookingState.NumberOfChildren = SPIC.Core.Entities.GuestHouseGuestCounts.Parse(_form.NumberOfChildren) ?? 0;
 
         BookingState.MarkInitialized();
 
@@ -899,18 +982,27 @@
 
     private string? ValidateForm()
     {
+        // A role that must use its own code but has none on file cannot continue (never a blank or wrong value).
+        if (_identityError != null) return _identityError;
         if (string.IsNullOrWhiteSpace(_form.EmployeeOrDealerCode)) return "Employee ID / Dealer Code is required to continue.";
         if (string.IsNullOrWhiteSpace(_form.GuestName)) return "Guest Name is required to continue.";
         if (string.IsNullOrWhiteSpace(_form.PhoneNumber)) return "Phone Number is required to continue.";
         if (string.IsNullOrWhiteSpace(_form.Email)) return "Email ID is required to continue.";
         if (string.IsNullOrWhiteSpace(_form.Nationality)) return "Please select the Nationality.";
 
-        // Guests must fit the single selected room (plus any additional bed). Counts are optional
-        // on this form, so only check what the customer entered.
+        // Persons / Adults / Children: re-checked here (the select handlers only run on change), so
+        // the rule cannot be skipped by never touching a select. The same string instance is kept in
+        // _guestCountError so the page shows it inline.
+        _guestCountError = SPIC.Core.Entities.GuestHouseGuestCounts.Validate(
+            SPIC.Core.Entities.GuestHouseGuestCounts.Parse(_form.NumberOfPersons),
+            SPIC.Core.Entities.GuestHouseGuestCounts.Parse(_form.NumberOfAdults),
+            SPIC.Core.Entities.GuestHouseGuestCounts.Parse(_form.NumberOfChildren));
+        if (_guestCountError != null) return _guestCountError;
+
+        // Guests must fit the single selected room (plus any additional bed).
         if (_roomCapacity is > 0)
         {
-            var guests = int.TryParse(_form.NumberOfPersons, out var p) ? p
-                : (int.TryParse(_form.NumberOfAdults, out var a) ? a : 0) + (int.TryParse(_form.NumberOfChildren, out var c) ? c : 0);
+            var guests = SPIC.Core.Entities.GuestHouseGuestCounts.Parse(_form.NumberOfPersons) ?? 0;
             var allowed = _roomCapacity.Value + _extraBeds;
             if (guests > allowed)
                 return $"This room allows up to {allowed} guest(s). Please reduce the number of guests, or book an additional room separately.";
@@ -931,6 +1023,14 @@
         public decimal? ExtraCotPrice { get; set; }
         public int? Capacity { get; set; }
         public int? NumberOfAdults { get; set; }
+    }
+
+    public class BookerIdentityDto
+    {
+        public bool Bound { get; set; }
+        public string? Kind { get; set; }
+        public string? Code { get; set; }
+        public string? Message { get; set; }
     }
 
     public class GuestForm

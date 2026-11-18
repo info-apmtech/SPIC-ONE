@@ -313,6 +313,26 @@ namespace SpicAPI.Controllers
 				: PhysicalFile(fullPath, contentType);
 		}
 
+		// GET /api/GuestHouseBooking/booker-identity
+		// The Employee ID / Dealer Code the Guest Details page pre-fills and locks for the signed-in
+		// user (see GuestHouseBookerIdentity for the data source). Bound = false means the role keeps the
+		// manual field. Bound = true with no Code means the code could not be found; Message says so.
+		// Read-only; CreateBooking resolves the same value itself and never trusts the page.
+		[GuestHouseBookingAccess(PagePermission.GuestHouseBooking)]
+		[HttpGet("booker-identity")]
+		public async Task<IActionResult> GetBookerIdentity()
+		{
+			var booker = await GuestHouseBookerIdentity.ResolveAsync(_db, User);
+			return Ok(new
+			{
+				Success = true,
+				Bound = booker.IsBound,
+				Kind = booker.Kind.ToString(),
+				Code = booker.Code,
+				Message = booker.Error
+			});
+		}
+
 		// GET /api/GuestHouseBooking/availability?guestHouseId=1&checkIn=2026-09-10T14:00&checkOut=2026-09-12T12:00
 		// Returns the rooms of the selected guest house that are available for the whole stay.
 		[GuestHouseBookingAccess(PagePermission.GuestHouseBooking)]
@@ -506,15 +526,19 @@ namespace SpicAPI.Controllers
             if (extraCotQuantity < 0 || extraCotQuantity > numberOfRooms)
                 return BadRequest(new { Success = false, Message = "Invalid additional bed quantity." });
 
-            if ((request.NumberOfPersons ?? 0) < 0 || (request.NumberOfAdults ?? 0) < 0 || (request.NumberOfChildren ?? 0) < 0)
-                return BadRequest(new { Success = false, Message = "Invalid number of guests." });
+            // Guest counts: persons and adults are required, adults + children must not exceed persons.
+            // The same rule the Guest Details page applies (GuestHouseGuestCounts) - enforced here too
+            // because the API can be called without the page.
+            var guestCountError = GuestHouseGuestCounts.Validate(request.NumberOfPersons, request.NumberOfAdults, request.NumberOfChildren);
+            if (guestCountError != null)
+                return BadRequest(new { Success = false, Message = guestCountError });
 
-            // Guests must fit the selected room (plus any additional bed). Counts are optional, so
-            // only a supplied count is checked; a room with no capacity configured is not limited.
+            // Guests must fit the selected room (plus any additional bed). A room with no capacity
+            // configured is not limited.
             var roomCapacity = room.Capacity ?? room.NumberOfAdults;
             if (roomCapacity is > 0)
             {
-                var guestCount = request.NumberOfPersons ?? ((request.NumberOfAdults ?? 0) + (request.NumberOfChildren ?? 0));
+                var guestCount = request.NumberOfPersons!.Value;
                 var allowedGuests = roomCapacity.Value + extraCotQuantity;
                 if (guestCount > allowedGuests)
                     return BadRequest(new
@@ -529,6 +553,14 @@ namespace SpicAPI.Controllers
                 return BadRequest(new { Success = false, Message = "Guest Name is required." });
             if (string.IsNullOrWhiteSpace(request.PhoneNumber))
                 return BadRequest(new { Success = false, Message = "Phone Number is required." });
+
+            // Employee ID / Dealer Code: for a Dealer and for the Complimentary employee roles it is the
+            // signed-in user's OWN code from the masters, and whatever the client sent is ignored - so a
+            // user cannot book under someone else's code. Other roles keep the guest-form value as before.
+            var booker = await GuestHouseBookerIdentity.ResolveAsync(_db, User);
+            if (booker.IsBound && booker.Code is null)
+                return BadRequest(new { Success = false, Message = booker.Error });
+            var employeeOrDealerCode = booker.IsBound ? booker.Code : request.EmployeeOrDealerCode;
 
             // Pricing (5% GST per the Guest House requirement).
             var roomPrice = room.PricePerNight;
@@ -692,7 +724,7 @@ namespace SpicAPI.Controllers
                 NumberOfRooms = numberOfRooms,
                 NumberOfPersons = request.NumberOfPersons,
                 NumberOfAdults = request.NumberOfAdults,
-                NumberOfChildren = request.NumberOfChildren,
+                NumberOfChildren = request.NumberOfChildren ?? 0, // empty means none
                 ExtraCotQuantity = extraCotQuantity,
                 RoomPrice = roomPrice,
                 ExtraCotPrice = extraCotPrice > 0 ? extraCotPrice : null,
@@ -709,7 +741,7 @@ namespace SpicAPI.Controllers
                 {
                     new GuestHouseBookingGuest
                     {
-                        EmployeeOrDealerCode = request.EmployeeOrDealerCode,
+                        EmployeeOrDealerCode = employeeOrDealerCode,
                         GuestName = request.GuestName,
                         CompanyName = request.CompanyName,
                         SdwaCompanyId = request.SdwaCompanyId,
@@ -720,7 +752,7 @@ namespace SpicAPI.Controllers
                         Nationality = request.Nationality,
                         NumberOfPersons = request.NumberOfPersons,
                         NumberOfAdults = request.NumberOfAdults,
-                        NumberOfChildren = request.NumberOfChildren,
+                        NumberOfChildren = request.NumberOfChildren ?? 0, // empty means none
                         Address = request.Address
                     }
                 },
