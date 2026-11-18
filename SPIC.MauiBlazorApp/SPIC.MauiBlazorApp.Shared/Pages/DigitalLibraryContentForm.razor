@@ -90,13 +90,74 @@ else
                             @foreach (var f in Formats) { <option value="@f">@f</option> }
                         </select>
                     </label>
-                    <label class="pf-field">
+                    <div class="pf-field">
                         <span>Visibility / Enable To</span>
-                        <select @bind="Draft.Visibility">
-                            <option value="">Select Audience Access..</option>
-                            @foreach (var v in Visibilities) { <option value="@v">@v</option> }
-                        </select>
-                    </label>
+                        <div class="crop-multiselect">
+                            <div class="crop-select-box" @onclick="ToggleVisibilityDropdown">
+                                <div class="selected-crops-container">
+                                    @if (!SelectedVisibilities.Any())
+                                    {
+                                        <span class="crop-placeholder">Select Audience Access..</span>
+                                    }
+                                    else
+                                    {
+                                        @foreach (var visibility in SelectedVisibilities)
+                                        {
+                                            <span class="crop-tag">
+                                                @visibility
+                                                <i class="bi bi-x crop-tag-remove"
+                                                   @onclick="() => RemoveSingleVisibility(visibility)"
+                                                   @onclick:stopPropagation="true"></i>
+                                            </span>
+                                        }
+                                    }
+                                </div>
+
+                                <div class="d-flex align-items-center gap-2 ms-2 crop-select-actions">
+                                    @if (SelectedVisibilities.Any())
+                                    {
+                                        <i class="bi bi-x-circle-fill clear-icon"
+                                           title="Clear all selections"
+                                           @onclick="ClearVisibilitySelection"
+                                           @onclick:stopPropagation="true"></i>
+                                    }
+                                    <i class="bi @(_isVisibilityDropdownOpen ? "bi-chevron-up" : "bi-chevron-down") text-muted"></i>
+                                </div>
+                            </div>
+
+                            @if (_isVisibilityDropdownOpen)
+                            {
+                                <div class="dropdown-overlay" @onclick="CloseVisibilityDropdown"></div>
+                                <div class="crop-dropdown" @onclick:stopPropagation="true">
+                                    <div class="crop-search-container">
+                                        <i class="bi bi-search crop-search-icon"></i>
+                                        <input type="text"
+                                               class="crop-search-input"
+                                               placeholder="Search audience..."
+                                               @bind="_visibilitySearchQuery"
+                                               @bind:event="oninput" />
+                                    </div>
+                                    <div class="crop-options-list">
+                                        @if (!FilteredVisibilities.Any())
+                                        {
+                                            <div class="crop-option text-muted">No audiences found</div>
+                                        }
+                                        else
+                                        {
+                                            @foreach (var visibility in FilteredVisibilities)
+                                            {
+                                                var isSelected = IsVisibilitySelected(visibility);
+                                                <div class="crop-option @(isSelected ? "selected-crop" : "")"
+                                                     @onclick="() => ToggleVisibilitySelection(visibility)">
+                                                    <span>@visibility</span>
+                                                </div>
+                                            }
+                                        }
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    </div>
                 </div>
             }
             else
@@ -431,6 +492,67 @@ else
     private List<string> SubCategories { get; set; } = new();
     private List<string> Formats { get; set; } = new();
     private List<string> Visibilities { get; set; } = new();
+
+    private bool _isVisibilityDropdownOpen;
+    private string _visibilitySearchQuery = "";
+
+    private IEnumerable<string> SelectedVisibilities => SplitVisibility(Draft.Visibility);
+
+    private IEnumerable<string> VisibilityOptions => Visibilities
+        .Concat(SelectedVisibilities)
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .OrderBy(v => v, StringComparer.OrdinalIgnoreCase);
+
+    private IEnumerable<string> FilteredVisibilities => string.IsNullOrWhiteSpace(_visibilitySearchQuery)
+        ? VisibilityOptions
+        : VisibilityOptions.Where(v => v.Contains(_visibilitySearchQuery, StringComparison.OrdinalIgnoreCase));
+
+    private static IEnumerable<string> SplitVisibility(string? value) =>
+        string.IsNullOrWhiteSpace(value)
+            ? Array.Empty<string>()
+            : value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+    private bool IsVisibilitySelected(string value) =>
+        SelectedVisibilities.Any(v => string.Equals(v, value, StringComparison.OrdinalIgnoreCase));
+
+    private void ToggleVisibilityDropdown()
+    {
+        _isVisibilityDropdownOpen = !_isVisibilityDropdownOpen;
+        if (!_isVisibilityDropdownOpen) _visibilitySearchQuery = "";
+    }
+
+    private void CloseVisibilityDropdown()
+    {
+        _isVisibilityDropdownOpen = false;
+        _visibilitySearchQuery = "";
+    }
+
+    private void ToggleVisibilitySelection(string visibility)
+    {
+        var selected = SelectedVisibilities.ToList();
+        if (selected.Any(v => string.Equals(v, visibility, StringComparison.OrdinalIgnoreCase)))
+        {
+            selected.RemoveAll(v => string.Equals(v, visibility, StringComparison.OrdinalIgnoreCase));
+        }
+        else
+        {
+            selected.Add(visibility);
+        }
+
+        Draft.Visibility = string.Join(",", VisibilityOptions.Where(v =>
+            selected.Any(s => string.Equals(s, v, StringComparison.OrdinalIgnoreCase))));
+    }
+
+    private void RemoveSingleVisibility(string visibility)
+    {
+        var selected = SelectedVisibilities
+            .Where(v => !string.Equals(v, visibility, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        Draft.Visibility = string.Join(",", selected);
+    }
+
+    private void ClearVisibilitySelection() => Draft.Visibility = "";
+
     /// <summary>Active master categories with their sub-categories (narrows the sub-category select).</summary>
     private List<LibraryCategoryDto> CategoryTree { get; set; } = new();
     /// <summary>Tags already used by other content (most used first), offered as suggestions.</summary>

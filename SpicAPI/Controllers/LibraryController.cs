@@ -40,7 +40,7 @@ namespace SpicAPI.Controllers
         // Categories and sub-categories come from the LibraryCategories master (V5r seeds the
         // defaults that used to be hard-coded here); see the "Category master" region.
         private static readonly string[] DefaultFormats = { "Video", "PDF", "Article" };
-        private static readonly string[] DefaultVisibilities = { "Everyone", "Staff", "Dealers" };
+        private static readonly string[] DefaultVisibilities = { "Everyone", "Staff", "Dealers", "Farmer" };
 
         private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
@@ -176,7 +176,7 @@ namespace SpicAPI.Controllers
                 Categories = MergeMaster(tree.Select(c => c.Name), rows.Select(r => r.Category)),
                 SubCategories = MergeMaster(tree.SelectMany(c => c.SubCategories).Select(s => s.Name), rows.Select(r => r.SubCategory)),
                 Formats = Merge(rows.Select(r => r.Format), DefaultFormats),
-                Visibilities = Merge(rows.Select(r => r.Visibility), DefaultVisibilities),
+                Visibilities = Merge(rows.SelectMany(r => SplitVisibility(r.Visibility)), DefaultVisibilities),
                 CategoryTree = tree,
                 Tags = tags
             });
@@ -542,7 +542,7 @@ namespace SpicAPI.Controllers
             content.Category = NullIfEmpty(payload.Category);
             content.SubCategory = NullIfEmpty(payload.SubCategory);
             content.Format = NullIfEmpty(payload.Format);
-            content.Visibility = string.IsNullOrWhiteSpace(payload.Visibility) ? "Everyone" : payload.Visibility.Trim();
+            content.Visibility = NormalizeVisibility(payload.Visibility);
             content.Keywords = NullIfEmpty(payload.Keywords);
             content.Tags = payload.Tags.Count == 0
                 ? null
@@ -649,6 +649,24 @@ namespace SpicAPI.Controllers
             string.IsNullOrWhiteSpace(csv)
                 ? new List<string>()
                 : csv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+
+        private static List<string> SplitVisibility(string? csv) =>
+            string.IsNullOrWhiteSpace(csv)
+                ? new List<string>()
+                : csv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+
+        private static string NormalizeVisibility(string? csv)
+        {
+            var values = SplitVisibility(csv);
+            if (values.Count == 0) return "Everyone";
+
+            var unique = new List<string>();
+            foreach (var value in values)
+            {
+                if (!unique.Any(v => string.Equals(v, value, StringComparison.OrdinalIgnoreCase))) unique.Add(value);
+            }
+            return string.Join(",", unique);
+        }
 
         private static string? NullIfEmpty(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
 

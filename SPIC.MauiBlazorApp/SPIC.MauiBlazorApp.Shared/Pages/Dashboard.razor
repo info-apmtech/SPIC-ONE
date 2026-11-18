@@ -1,4 +1,4 @@
- @* Dealer Dashboard*@
+﻿ @* Dealer Dashboard*@
 @page "/Dashboard" 
 @using System.Net.Http.Json
 @using System.Text.Json
@@ -12,7 +12,7 @@
 @inject ToastService Toast
 
 <style>
-    /* Dealer card status badge colors — visual only, no logic change */
+    /* Dealer card status badge colors â€” visual only, no logic change */
     .badge-status-active { background:#D1FAE5; color:#047857; }
     .badge-status-inactive { background:#FFEDD5; color:#C2410C; }
     .badge-status-terminated { background:#FEE2E2; color:#DC2626; }
@@ -21,6 +21,7 @@
     .badge-status-insmm { background:#EDE9FE; color:#7C3AED; }
     .badge-status-inavp { background:#E0E7FF; color:#4338CA; }
     .badge-status-inavpoffice { background:#CFFAFE; color:#0E7490; }
+    .badge-status-infinalavp { background:#FEF3C7; color:#92400E; }
 
     /* Dealer identity badges - visual distinction only */
     .dealer-kind-new {
@@ -232,9 +233,9 @@
     </div>
 </div>
 
-    <div class="row g-3 mb-4">
+    <div class="row g-3 mb-4 dashboard-kpi-row">
         <div class="col-6 col-md-4 col-lg-3">
-            <div class="kpi-card">
+            <div class="kpi-card h-100">
                 <div class="kpi-header">
                     <div class="kpi-icon bg-light-green"><i class="bi bi-file-earmark-check"></i></div>
                     <div class="kpi-number">@_summary.TotalRegistrations</div>
@@ -243,7 +244,7 @@
             </div>
         </div>
         <div class="col-6 col-md-4 col-lg-3">
-            <div class="kpi-card">
+            <div class="kpi-card h-100">
                 <div class="kpi-header">
                     <div class="kpi-icon bg-light-gray"><i class="bi bi-file-earmark-text"></i></div>
                     <div class="kpi-number">@_summary.Draft</div>
@@ -252,7 +253,7 @@
             </div>
         </div>
         <div class="col-6 col-md-4 col-lg-3">
-            <div class="kpi-card">
+            <div class="kpi-card h-100">
                 <div class="kpi-header">
                     <div class="kpi-icon bg-light-yellow"><i class="bi bi-clock"></i></div>
                    <div class="kpi-number">@_summary.InRM</div>
@@ -261,7 +262,7 @@
             </div>
         </div>
         <div class="col-6 col-md-4 col-lg-3">
-            <div class="kpi-card">
+            <div class="kpi-card h-100">
                 <div class="kpi-header">
                     <div class="kpi-icon bg-light-yellow"><i class="bi bi-clock"></i></div>
                   <div class="kpi-number">@_summary.InSMM</div>
@@ -269,29 +270,27 @@
                 <div class="kpi-label">In SMM</div>
             </div>
         </div>
-        <div class="col-6 col-md-4 col-lg-3">
-            <div class="kpi-card">
+
+        <div class="col-6 col-md-4 col-lg">
+            <div class="kpi-card h-100">
+                <div class="kpi-header">
+                    <div class="kpi-icon bg-light-yellow"><i class="bi bi-hourglass-split"></i></div>
+                    <div class="kpi-number">@_summary.InAvpOffice</div>
+                </div>
+                <div class="kpi-label">In AVP Office</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-4 col-lg">
+            <div class="kpi-card h-100">
                 <div class="kpi-header">
                     <div class="kpi-icon bg-light-yellow"><i class="bi bi-clock"></i></div>
-                  <div class="kpi-number">@_summary.InAVP</div>
+                  <div class="kpi-number">@(_summary.InAVP + _summary.InFinalAvp)</div>
                 </div>
                 <div class="kpi-label">In AVP</div>
             </div>
         </div>
-        @if (LoginState.IsAvpOffice || _summary.InAvpOffice > 0)
-        {
-            <div class="col-6 col-md-4 col-lg-3">
-                <div class="kpi-card">
-                    <div class="kpi-header">
-                        <div class="kpi-icon bg-light-yellow"><i class="bi bi-hourglass-split"></i></div>
-                        <div class="kpi-number">@_summary.InAvpOffice</div>
-                    </div>
-                    <div class="kpi-label">In AVP Office</div>
-                </div>
-            </div>
-        }
-        <div class="col-6 col-md-4 col-lg-3">
-            <div class="kpi-card">
+        <div class="col-6 col-md-4 col-lg">
+            <div class="kpi-card h-100">
                 <div class="kpi-header">
                     <div class="kpi-icon bg-light-green"><i class="bi bi-check-circle"></i></div>
                    <div class="kpi-number">@_summary.Approved</div>
@@ -299,8 +298,8 @@
                 <div class="kpi-label">Approved</div>
             </div>
         </div>
-        <div class="col-6 col-md-4 col-lg-3">
-            <div class="kpi-card">
+        <div class="col-6 col-md-4 col-lg">
+            <div class="kpi-card h-100">
                 <div class="kpi-header">
                     <div class="kpi-icon bg-light-red"><i class="bi bi-x-circle"></i></div>
                     <div class="kpi-number">@_summary.Rejected</div>
@@ -311,8 +310,8 @@
                 </div>
             </div>
         </div>
-        <div class="col-6 col-md-4 col-lg-3">
-            <div class="kpi-card justify-content-center">
+        <div class="col-6 col-md-4 col-lg">
+            <div class="kpi-card h-100 justify-content-center">
                 <div class="kpi-label mb-2">Status</div>
                 <div class="d-flex justify-content-between align-items-center mb-2">
                     <div class="status-list"><span class="status-dot bg-success"></span> Active</div>
@@ -375,6 +374,7 @@
                     <option value="Pending SMM">Pending SMM</option>
                     <option value="Pending AVP">Pending AVP</option>
                     <option value="Pending AVP Office">Pending AVP Office</option>
+                    <option value="Pending Final AVP">Pending Final AVP</option>
                     <option value="Approved">Approved</option>
                     <option value="Rejected/Returned">Rejected/Returned</option>
                 </select>
@@ -432,7 +432,7 @@
                                     </div>
                                 }
                             }
-                            else if (approvalStatus == "In RM" || approvalStatus == "In SMM" || approvalStatus == "In AVP" || approvalStatus == "In AVP Office")
+                            else if (approvalStatus == "In RM" || approvalStatus == "In SMM" || approvalStatus == "In AVP" || approvalStatus == "In AVP Office" || approvalStatus == "In Final AVP")
                             {
                                 <div class="progress-circle p-60">
                                     <div class="progress-inner">
@@ -456,14 +456,14 @@
                             <div class="d-flex flex-column align-items-end gap-2 card-top-right">
                                 <div class="badge-group align-items-center">
 
-                                    @* ── Action button routing ──
-                                       Edit   → only for the MO/creator level:
-                                                  • Draft
-                                                  • Rejected by RM  (routed back down to the MO)
-                                       Review → for the approver who currently owns the record:
-                                                  • In RM  / Rejected by SMM  → RM
-                                                  • In SMM / Rejected by AVP  → SMM
-                                                  • In AVP                    → AVP
+                                    @* â”€â”€ Action button routing â”€â”€
+                                       Edit   â†’ only for the MO/creator level:
+                                                  â€¢ Draft
+                                                  â€¢ Rejected by RM  (routed back down to the MO)
+                                       Review â†’ for the approver who currently owns the record:
+                                                  â€¢ In RM  / Rejected by SMM  â†’ RM
+                                                  â€¢ In SMM / Rejected by AVP  â†’ SMM
+                                                  â€¢ In AVP                    â†’ AVP
                                     *@
                                     @if (ShowEditButton(dealer))
                                     {
@@ -509,6 +509,10 @@
                                     else if (approvalStatus == "In AVP Office")
                                     {
                                         <span class="badge-custom badge-status-inavpoffice">In AVP Office</span>
+                                    }
+                                    else if (approvalStatus == "In Final AVP")
+                                    {
+                                        <span class="badge-custom badge-status-infinalavp">In Final AVP</span>
                                     }
                                     else
                                     {
@@ -603,7 +607,7 @@
                             }
                             @if (dealer.InSpic && dealer.InGreenStar)
                             {
-                                <span class="bullet-dot">•</span>
+                                <span class="bullet-dot">â€¢</span>
                             }
                             @if (dealer.InGreenStar)
                             {
@@ -611,15 +615,15 @@
                             }
                             @if (!string.IsNullOrEmpty(dealer.BusinessEntityType))
                             {
-                                <span class="bullet-dot">•</span> <span>@dealer.BusinessEntityType</span>
+                                <span class="bullet-dot">â€¢</span> <span>@dealer.BusinessEntityType</span>
                             }
                             @if (!string.IsNullOrEmpty(dealer.WholeSaleFertilizerLicenseNumber))
                             {
-                                <span class="bullet-dot">•</span> <span>Wholesale</span>
+                                <span class="bullet-dot">â€¢</span> <span>Wholesale</span>
                             }
                             @if (!string.IsNullOrEmpty(dealer.RetailFertilizerLicenseNumber))
                             {
-                                <span class="bullet-dot">•</span> <span>Retail</span>
+                                <span class="bullet-dot">â€¢</span> <span>Retail</span>
                             }
                         </div>
                         <div class="card-footer-note">Last Updated: @dealer.UpdatedAt.ToString("dd MMM yyyy")</div>
@@ -653,8 +657,8 @@
                 </div>
                 <div class="modal-body">
                     <p class="text-muted small mb-3">
-                        CUSTOMER prefix: <code>D</code> → SPICCode, <code>Z</code> → GreenStarCode,
-                        <code>T</code> → TnCode, <code>N</code> → NCode. Same routing as bulk import.
+                        CUSTOMER prefix: <code>D</code> â†’ SPICCode, <code>Z</code> â†’ GreenStarCode,
+                        <code>T</code> â†’ TnCode, <code>N</code> â†’ NCode. Same routing as bulk import.
                     </p>
 
                     <div class="mb-3">
@@ -716,7 +720,7 @@
                 <div class="modal-body">
                     <p class="text-muted small mb-3">
                         Expected columns: <strong>CUSTOMER</strong>, <strong>CUSTOMER NAME</strong>, <strong>State</strong>.<br />
-                        CUSTOMER prefix: <code>D</code> → SPICCode, <code>N,Z,T</code> → GreenStarCode.
+                        CUSTOMER prefix: <code>D</code> â†’ SPICCode, <code>N,Z,T</code> â†’ GreenStarCode.
                     </p>
                     <InputFile OnChange="OnImportFileSelected" accept=".xlsx,.xls" disabled="@_isImporting" />
                     <div class="mt-3">
@@ -807,7 +811,7 @@
 
 @code {
     // Cards currently on screen. The server decides which rows these are and how many
-    // there are in total — the browser no longer downloads every registration.
+    // there are in total â€” the browser no longer downloads every registration.
     private List<DealerDto> _dealers = new();
     private DashboardSummary _summary = new();
     private int _total;
@@ -1128,7 +1132,7 @@
    private bool CanCreateDealer => LoginState.Can("Dashboard", "Entry");
     private bool CanDeleteDealer => LoginState.UserRole == AppRole.Admin;
 
-    // Header action buttons (Create/Import/Add/Export) — Admin and AVP only
+    // Header action buttons (Create/Import/Add/Export) â€” Admin and AVP only
     private bool CanShowHeaderActions => LoginState.UserRole == AppRole.Admin || LoginState.UserRole == AppRole.AVP;
     private bool CanShowcreatebutton => LoginState.UserRole == AppRole.MO || LoginState.UserRole == AppRole.MDO || LoginState.UserRole == AppRole.JMDO|| LoginState.IsAdmin;
 
@@ -1285,7 +1289,7 @@
     }
 
     // Any filter, sort or search change goes back to page 1 and refreshes the KPI
-    // numbers — the same reset the old client-side ApplyFilters did.
+    // numbers â€” the same reset the old client-side ApplyFilters did.
     private async Task ReloadFirstPage()
     {
         var token = ++_loadToken;
@@ -1374,7 +1378,7 @@
         catch (OperationCanceledException) { }
     }
 
-    // ── Export only ──
+    // â”€â”€ Export only â”€â”€
     // Excel exports still need the complete filtered list, so they (and only they)
     // fall back to the full submitted-list endpoint and run the original client-side
     // role filter, filters and sort over it. The exported rows and their order are
@@ -1405,7 +1409,7 @@
 
     private bool IsDealerComplete(int dealerId) => _dealerStepCounts.TryGetValue(dealerId, out var c) && c >= 11;
 
-    // ── KPI card numbers ──
+    // â”€â”€ KPI card numbers â”€â”€
     // Every tile now reads its number from the server summary, which counts the same
     // filtered, role-scoped set the cards come from. The definitions there are the
     // ones that used to live here: rejections fold into the level they route back
@@ -1415,7 +1419,7 @@
     private string GetApprovalStatus(DealerDto d)
     {
         // Nothing counts as "in review" until the user explicitly clicked Submit Registration
-        // on the Final Submission page — filling in all sections alone is not enough.
+        // on the Final Submission page â€” filling in all sections alone is not enough.
         if (d.IsSubmittedForReview != true) return "Draft";
 
         if (d.RMApproved == false) return "Rejected by RM";
@@ -1423,9 +1427,10 @@
         if (d.AVPApproved == false) return "Rejected by AVP";
         if (d.AVPApproved == true)
         {
-            // Initial New Dealers get their company Dealer IDs from AVP Office.
-            // They are not fully Approved until that stage is submitted.
+            // Initial New Dealers get their company Dealer IDs from AVP Office, followed
+            // by a separate final AVP approval.
             if (d.IsNewDealerRegistration && !d.IsAvpOfficeSubmitted) return "In AVP Office";
+            if (d.IsNewDealerRegistration && !d.IsFinalAvpApproved) return "In Final AVP";
             return "Approved";
         }
         if (d.RMApproved == null) return "In RM";
@@ -1434,38 +1439,40 @@
         return "Submitted";
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    //  Ownership / routing — WHO currently owns the record and must act on it.
+    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    //  Ownership / routing â€” WHO currently owns the record and must act on it.
     //  This is the single source of truth for which button (Edit vs Review) is
     //  shown, and does NOT alter the approval/rejection workflow itself.
     //
-    //  Draft                → MO  (creator edits)
-    //  Rejected by RM       → MO  (routed back down to the creator)
-    //  In RM  / Rej. by SMM → RM  (RM reviews & corrects, or sends back to MO)
-    //  In SMM / Rej. by AVP → SMM (SMM reviews & corrects, or sends back to RM)
-    //  In AVP               → AVP
-    //  Approved             → None
-    // ─────────────────────────────────────────────────────────────────────────
-    private enum OwnerLevel { None, MO, RM, SMM, AVP, AvpOffice }
+    //  Draft                â†’ MO  (creator edits)
+    //  Rejected by RM       â†’ MO  (routed back down to the creator)
+    //  In RM  / Rej. by SMM â†’ RM  (RM reviews & corrects, or sends back to MO)
+    //  In SMM / Rej. by AVP â†’ SMM (SMM reviews & corrects, or sends back to RM)
+    //  In AVP               â†’ AVP
+    //  Approved             â†’ None
+    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    private enum OwnerLevel { None, MO, RM, SMM, AVP, AvpOffice, FinalAvp }
 
     private OwnerLevel GetCurrentOwnerLevel(DealerDto d)
     {
         if (d == null) return OwnerLevel.None;
 
-        // Never submitted → still a draft owned by the MO/creator.
+        // Never submitted â†’ still a draft owned by the MO/creator.
         if (d.IsSubmittedForReview != true) return OwnerLevel.MO;
 
-        // Fully approved → nobody needs to act. An initial New Dealer sits with
-        // AVP Office until the manual company Dealer IDs are saved.
+        // Fully approved â†’ nobody needs to act. An initial New Dealer sits with
+        // AVP Office until Dealer IDs are saved, then with AVP for final approval.
         if (d.AVPApproved == true)
-            return d.IsNewDealerRegistration && !d.IsAvpOfficeSubmitted
-                ? OwnerLevel.AvpOffice
-                : OwnerLevel.None;
+        {
+            if (d.IsNewDealerRegistration && !d.IsAvpOfficeSubmitted) return OwnerLevel.AvpOffice;
+            if (d.IsNewDealerRegistration && !d.IsFinalAvpApproved) return OwnerLevel.FinalAvp;
+            return OwnerLevel.None;
+        }
 
         // Rejections route BACK DOWN one level (order matters: match GetApprovalStatus).
-        if (d.RMApproved == false) return OwnerLevel.MO;   // Rejected by RM  → MO
-        if (d.SMApproved == false) return OwnerLevel.RM;   // Rejected by SMM → RM
-        if (d.AVPApproved == false) return OwnerLevel.SMM; // Rejected by AVP → SMM
+        if (d.RMApproved == false) return OwnerLevel.MO;   // Rejected by RM  â†’ MO
+        if (d.SMApproved == false) return OwnerLevel.RM;   // Rejected by SMM â†’ RM
+        if (d.AVPApproved == false) return OwnerLevel.SMM; // Rejected by AVP â†’ SMM
 
         // Normal forward flow.
         if (d.RMApproved == null) return OwnerLevel.RM;                                   // In RM
@@ -1476,17 +1483,17 @@
     }
 
     // Edit (full re-registration) is ONLY for the MO/creator level:
-    //   • Draft
-    //   • Rejected by RM  (came back down to the MO)
+    //   â€¢ Draft
+    //   â€¢ Rejected by RM  (came back down to the MO)
     // For SMM/AVP rejections the record is owned by RM/SMM respectively, so
-    // those approvers get the Review button instead — never a raw Edit.
+    // those approvers get the Review button instead â€” never a raw Edit.
     private bool ShowEditButton(DealerDto d)
     {
         if (d == null) return false;
         if (!LoginState.Can("Dashboard", "Update")) return false;
 
         // Edit is only for MO-level records (Draft or Rejected-by-RM) and only
-        // for the maker who owns them — the actual creator or an MO-type role.
+        // for the maker who owns them â€” the actual creator or an MO-type role.
         if (GetCurrentOwnerLevel(d) != OwnerLevel.MO) return false;
 
         return IsCreatorLevelUser(d);
@@ -1510,10 +1517,10 @@
 
     // "Action Required" lights up only for the exact role that currently owns
     // the record at its stage:
-    //   Draft   (owner MO)  → MO / creator only
-    //   In RM   (owner RM)  → RM role only
-    //   In SMM  (owner SMM) → SMM role only
-    //   In AVP  (owner AVP) → AVP role only
+    //   Draft   (owner MO)  â†’ MO / creator only
+    //   In RM   (owner RM)  â†’ RM role only
+    //   In SMM  (owner SMM) â†’ SMM role only
+    //   In AVP  (owner AVP) â†’ AVP role only
     // (Rejections route the ownership back down one level, so the correcting
     //  role sees "Action Required" there too.)
     private bool IsPendingForMe(DealerDto d)
@@ -1525,6 +1532,7 @@
             OwnerLevel.SMM => LoginState.IsStateRole,
             OwnerLevel.AVP => LoginState.IsAdmin,
             OwnerLevel.AvpOffice => LoginState.IsAvpOffice,
+            OwnerLevel.FinalAvp => LoginState.IsAdmin,
             _              => false
         };
     }
@@ -1566,6 +1574,7 @@
                 "Pending SMM" => query.Where(d => GetApprovalStatus(d) == "In SMM"),
                 "Pending AVP" => query.Where(d => GetApprovalStatus(d) == "In AVP"),
                 "Pending AVP Office" => query.Where(d => GetApprovalStatus(d) == "In AVP Office"),
+                "Pending Final AVP" => query.Where(d => GetApprovalStatus(d) == "In Final AVP"),
                 "Approved" => query.Where(d => GetApprovalStatus(d) == "Approved"),
                 "Rejected/Returned" => query.Where(d => GetApprovalStatus(d).StartsWith("Rejected")),
                 _ => query
@@ -1834,10 +1843,10 @@ private string GetStatusName(int status) => status switch
 
     // Review (SavedDealerReview page) is shown to the approver who currently owns
     // the record. This includes the "back down" rejection cases:
-    //   • Rejected by SMM → owned by RM  → RM sees Review (corrects, then forwards
+    //   â€¢ Rejected by SMM â†’ owned by RM  â†’ RM sees Review (corrects, then forwards
     //                                       again or sends back down to the MO)
-    //   • Rejected by AVP → owned by SMM → SMM sees Review
-    // The approval/rejection workflow itself is untouched — this only decides
+    //   â€¢ Rejected by AVP â†’ owned by SMM â†’ SMM sees Review
+    // The approval/rejection workflow itself is untouched â€” this only decides
     // button visibility.
     private bool CanShowReviewButton(DealerDto d)
     {
@@ -1851,7 +1860,8 @@ private string GetStatusName(int status) => status switch
             OwnerLevel.SMM => LoginState.IsStateRole,
             OwnerLevel.AVP => LoginState.IsAdmin,
             OwnerLevel.AvpOffice => LoginState.IsAvpOffice,
-            _              => false   // MO / None → no Review button
+            OwnerLevel.FinalAvp => LoginState.IsAdmin,
+            _              => false   // MO / None â†’ no Review button
         };
     }
 
@@ -1980,7 +1990,7 @@ private string GetStatusName(int status) => status switch
         }
     }
 
-    // ── Shapes returned by the two server-side dashboard endpoints ──
+    // â”€â”€ Shapes returned by the two server-side dashboard endpoints â”€â”€
     private sealed class DashboardPageResponse
     {
         public int Total { get; set; }
@@ -1997,6 +2007,7 @@ private string GetStatusName(int status) => status switch
         public int InSMM { get; set; }
         public int InAVP { get; set; }
         public int InAvpOffice { get; set; }
+        public int InFinalAvp { get; set; }
         public int Approved { get; set; }
         public int Rejected { get; set; }
         public int RejectedByRM { get; set; }
@@ -2031,6 +2042,8 @@ private string GetStatusName(int status) => status switch
         public bool IsNewDealerRegistration { get; set; }
         // True once AVP Office saved the manual company Dealer IDs for an initial New Dealer.
         public bool IsAvpOfficeSubmitted { get; set; }
+        // True once AVP completed the blocking final approval for an initial New Dealer.
+        public bool IsFinalAvpApproved { get; set; }
         // True only after an originally New Dealer completed the Existing Dealer
         // maintenance cycle and received the second final-level approval.
         public bool HasCompletedExistingMaintenance { get; set; }

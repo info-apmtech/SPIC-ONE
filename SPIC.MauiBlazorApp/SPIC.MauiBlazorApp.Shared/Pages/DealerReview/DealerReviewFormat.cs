@@ -122,6 +122,10 @@ namespace SPIC.MauiBlazorApp.Shared.Pages.DealerReview
             if (dealer.RMApproved == false || dealer.SMApproved == false || dealer.AVPApproved == false)
                 return "Rejected";
 
+            // New Dealer workflow: AVP flag is set at initial AVP approval; final completion is tracked separately in history/UI.
+            if (dealer.IsNewDealerRegistration && dealer.AVPApproved == true && string.IsNullOrWhiteSpace(dealer.DealerCode))
+                return "In AVP Office";
+
             if (dealer.AVPApproved == true)
                 return "Approved";
 
@@ -227,6 +231,7 @@ namespace SPIC.MauiBlazorApp.Shared.Pages.DealerReview
         string DotClass,
         string Icon,
         string CardClass,
-        string BadgeClass
+        string BadgeClass,
+        string Remarks = ""
     );
 }

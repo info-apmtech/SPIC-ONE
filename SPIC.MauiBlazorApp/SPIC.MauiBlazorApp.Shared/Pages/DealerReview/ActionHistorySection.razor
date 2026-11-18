@@ -68,7 +68,7 @@
 
                         <div class="info-row">
                             <span>Stage</span>
-                            <strong>@(action.Role != null ? $"{action.Role} Review" : "-")</strong>
+                            <strong>@GetStageLabel(action)</strong>
                         </div>
                         @{
                             string rolePrefix = "";
@@ -165,4 +165,17 @@
 
     /// <summary>The page fills UserNames in place while loading, so it bumps this when done.</summary>
     [Parameter] public int DataVersion { get; set; }
+
+    private string GetStageLabel(DR.DealerApprovalHistory action) => (action.Role ?? "") switch
+    {
+        "AVP Office" => "AVP Office",
+        "Final AVP" => "AVP (Final Approval)",
+        "RM" => "RM Review",
+        "SMD" => "SM Review",
+        "SMM" => "SM Review",
+        "SM" => "SM Review",
+        "AVP" => Dealer?.IsNewDealerRegistration == true ? "AVP (Initial Approval)" : "AVP Review",
+        var r when !string.IsNullOrWhiteSpace(r) => $"{r} Review",
+        _ => "-"
+    };
 }

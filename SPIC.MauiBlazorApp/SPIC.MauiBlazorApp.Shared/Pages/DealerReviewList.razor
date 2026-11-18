@@ -43,7 +43,7 @@
                 </svg>
                 <div>
                     <p class="drl-summary-card-title">Pending Review</p>
-                    <p class="drl-summary-card-value">@_allDealers.Count(d => IsDealerComplete(d.Id) && (d.RMApproved == null || d.SMApproved == null || d.AVPApproved == null || (d.IsNewDealerRegistration && d.AVPApproved == true && !d.IsAvpOfficeSubmitted)))</p>
+                    <p class="drl-summary-card-value">@_allDealers.Count(d => IsDealerComplete(d.Id) && (d.RMApproved == null || d.SMApproved == null || d.AVPApproved == null || (d.IsNewDealerRegistration && d.AVPApproved == true && !d.IsFinalAvpApproved)))</p>
                 </div>
             </div>
 
@@ -54,7 +54,7 @@
                 </svg>
                 <div>
                     <p class="drl-summary-card-title">Verified</p>
-                    <p class="drl-summary-card-value">@_allDealers.Count(d => IsDealerComplete(d.Id) && d.AVPApproved == true && (!d.IsNewDealerRegistration || d.IsAvpOfficeSubmitted))</p>
+                    <p class="drl-summary-card-value">@_allDealers.Count(d => IsDealerComplete(d.Id) && d.AVPApproved == true && (!d.IsNewDealerRegistration || d.IsFinalAvpApproved))</p>
                 </div>
             </div>
 
@@ -350,7 +350,7 @@
             .Where(d =>
                 _statusFilter switch
                 {
-                    "Pending" => GetApprovalStatus(d) == "In RM" || GetApprovalStatus(d) == "In SMM" || GetApprovalStatus(d) == "In AVP" || GetApprovalStatus(d) == "In AVP Office",
+                    "Pending" => GetApprovalStatus(d) == "In RM" || GetApprovalStatus(d) == "In SMM" || GetApprovalStatus(d) == "In AVP" || GetApprovalStatus(d) == "In AVP Office" || GetApprovalStatus(d) == "In Final AVP",
                     "Verified" => GetApprovalStatus(d) == "Approved",
                     "Sent Back" => GetApprovalStatus(d) == "Rejected",
                     _ => true
@@ -369,9 +369,11 @@
         if (d.RMApproved == false || d.SMApproved == false || d.AVPApproved == false)
             return "Rejected";
         if (d.AVPApproved == true)
-            return d.IsNewDealerRegistration && !d.IsAvpOfficeSubmitted
-                ? "In AVP Office"
-                : "Approved";
+        {
+            if (d.IsNewDealerRegistration && !d.IsAvpOfficeSubmitted) return "In AVP Office";
+            if (d.IsNewDealerRegistration && !d.IsFinalAvpApproved) return "In Final AVP";
+            return "Approved";
+        }
         if (!IsDealerComplete(d.Id))
             return "Draft";
         if (d.RMApproved == null)
@@ -388,7 +390,11 @@
         if (!IsDealerComplete(d.Id)) return false;
         if (d.RMApproved == false || d.SMApproved == false || d.AVPApproved == false) return false;
         if (d.AVPApproved == true)
-            return LoginState.IsAvpOffice && d.IsNewDealerRegistration && !d.IsAvpOfficeSubmitted;
+        {
+            if (d.IsNewDealerRegistration && !d.IsAvpOfficeSubmitted) return LoginState.IsAvpOffice;
+            if (d.IsNewDealerRegistration && !d.IsFinalAvpApproved) return LoginState.IsAdmin;
+            return false;
+        }
 
         if (LoginState.IsRegionRole && d.RMApproved == null) return true;
         if (LoginState.IsStateRole && d.RMApproved == true && d.SMApproved == null) return true;
@@ -416,6 +422,7 @@
             "In SMM" => "State Marketing Manager (SMM)",
             "In AVP" => "AVP",
             "In AVP Office" => "AVP Office",
+            "In Final AVP" => "Final AVP",
             _ => status
         };
     }
@@ -425,7 +432,7 @@
         var status = GetApprovalStatus(d);
         return status switch
         {
-            "Pending" or "In RM" or "In SMM" or "In AVP" or "In AVP Office" => "drl-badge-status drl-badge-status-pending rounded-pill",
+            "Pending" or "In RM" or "In SMM" or "In AVP" or "In AVP Office" or "In Final AVP" => "drl-badge-status drl-badge-status-pending rounded-pill",
             "Approved" => "drl-badge-status drl-badge-status-verified rounded-pill",
             "Rejected" or "Sent Back" => "drl-badge-status drl-badge-status-sentback rounded-pill",
             _ => "drl-badge-status rounded-pill"
@@ -437,7 +444,7 @@
         var status = GetApprovalStatus(d);
         return status switch
         {
-            "In RM" or "In SMM" or "In AVP" or "In AVP Office" => "Pending",
+            "In RM" or "In SMM" or "In AVP" or "In AVP Office" or "In Final AVP" => "Pending",
             "Approved" => "Verified",
             "Rejected" => "Sent Back",
             _ => status
@@ -473,6 +480,7 @@
         public string? PinCode { get; set; }
         public bool IsNewDealerRegistration { get; set; }
         public bool IsAvpOfficeSubmitted { get; set; }
+        public bool IsFinalAvpApproved { get; set; }
         public bool? RMApproved { get; set; }
         public bool? SMApproved { get; set; }
         public bool? AVPApproved { get; set; }
