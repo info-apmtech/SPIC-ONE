@@ -1753,7 +1753,7 @@ namespace SpicAPI.Controllers
 				GuestHousePaymentMethod.Card => "Card",
 				GuestHousePaymentMethod.NetBanking => "Net Banking",
 				GuestHousePaymentMethod.PayAfterStay => "Pay After Stay",
-				GuestHousePaymentMethod.Complimentary => "Complimentary",
+				GuestHousePaymentMethod.Complimentary => "Employee Stay",
 				_ => method.ToString()
 			};
 		}

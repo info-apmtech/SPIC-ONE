@@ -54,6 +54,7 @@ internal static class GuestHouseSingleRoomBookingTests
 		Step("11. persons / adults / children rule", GuestCountRule);
 		Step("12. guest counts through the booking API", GuestCountsApi);
 		Step("13. Guest Details page wiring (source checks)", GuestDetailsWiring);
+		Step("14. 'Employee Stay' wording; internal values unchanged", EmployeeStayWording);
 	}
 
 	// A crash inside one scenario must show up as a failure, not abort the whole harness.
@@ -740,6 +741,94 @@ internal static class GuestHouseSingleRoomBookingTests
 		// The room-capacity rule still applies on top (room 1: capacity 2).
 		Check.Equal("room capacity is still enforced after the count rule passes", 400, Status(await c.CreateBooking(Req(1, persons: 4, adults: 4, children: 0, guest: "Over Capacity"))));
 		Check.Equal("room capacity plus one extra bed is still allowed", 200, Status(await c.CreateBooking(Req(1, persons: 3, adults: 2, children: 1, extraBeds: 1, guest: "With Bed"))));
+	}
+
+	// ---- 14. "Complimentary" is now shown as "Employee Stay" (display only) -----------------------------------------
+
+	private static async Task EmployeeStayWording()
+	{
+		// Internal identifiers are untouched: stored values, enum member names and the server marker.
+		Check.Equal("enum member is still named Complimentary", "Complimentary", Enum.GetName(GuestHousePaymentMethod.Complimentary) ?? "");
+		Check.Equal("and still stores 5", 5, (int)GuestHousePaymentMethod.Complimentary);
+		Check.That("the other payment methods keep their stored values",
+			(int)GuestHousePaymentMethod.Razorpay == 0 && (int)GuestHousePaymentMethod.UPI == 1 && (int)GuestHousePaymentMethod.Card == 2
+			&& (int)GuestHousePaymentMethod.NetBanking == 3 && (int)GuestHousePaymentMethod.PayAfterStay == 4);
+
+		using var fx = new Fx();
+
+		// An eligible employee still books free; the record keeps the internal value, the screens say Employee Stay.
+		var emp = await Book(fx.Booking("u-emp", AppRole.RM), Req(1, guest: "Employee Stay Guest"));
+		var stored = await fx.Db.GuestHouseBookings.AsNoTracking().Include(b => b.Payments).SingleAsync(b => b.Id == emp.BookingId);
+		Check.That("eligible employee: booked with no payment (total 0, Confirmed, Paid)", emp.IsFreeBooking && stored.TotalAmount == 0m && stored.BookingStatus == GuestHouseBookingStatus.Confirmed && stored.PaymentStatus == GuestHousePaymentStatus.Paid);
+		Check.That("stored payment method is still the internal Complimentary value (5)", (int)stored.Payments.Single().PaymentMethod == 5 && stored.Payments.Single().TransactionId == "EMPLOYEE-FREE");
+
+		var owner = fx.Booking("u-emp", AppRole.RM);
+		var details = (BookingDetailsDto)((ObjectResult)await owner.GetBookingDetails(emp.BookingId)).Value!;
+		Check.Equal("Booking Details shows the payment method as Employee Stay", "Employee Stay", details.PaymentMethod);
+		Check.Equal("Booking Details amount is 0", 0m, details.TotalAmount ?? -1m);
+
+		// A booking saved before the rename (old internal value) shows the new wording, with its bill and invoice intact.
+		fx.Db.GuestHouseBookings.Add(new GuestHouseBooking
+		{
+			Id = 800, BookingReference = "BKOLDFREE", GuestHouseId = 1, GuestHouseRoomId = 1, CheckInDate = CheckIn, CheckOutDate = CheckOut,
+			NumberOfNights = 2, NumberOfRooms = 1, RoomPrice = 0m, SubTotal = 0m, TaxAmount = 0m, TotalAmount = 0m,
+			BookingStatus = GuestHouseBookingStatus.Completed, PaymentStatus = GuestHousePaymentStatus.Paid,
+			CreatedBy = "u-emp", CreatedAt = DateTime.Now.AddDays(-20), UpdatedBy = "u-emp", UpdatedAt = DateTime.Now.AddDays(-20),
+			Guests = { new GuestHouseBookingGuest { GuestName = "Old Free Guest", PhoneNumber = "7777777777", EmployeeOrDealerCode = "EMP-0050" } },
+			Payments = { new GuestHouseBookingPayment { PaymentMethod = GuestHousePaymentMethod.Complimentary, PaymentStatus = GuestHousePaymentStatus.Paid, Amount = 0m, TransactionId = "EMPLOYEE-FREE", PaymentDate = DateTime.Now.AddDays(-20) } }
+		});
+		fx.Db.GuestHouseBills.Add(new GuestHouseBill
+		{
+			Id = 800, BillNumber = "BILL-OLDFREE", GuestHouseBookingId = 800, BookingReference = "BKOLDFREE", GuestName = "Old Free Guest",
+			GuestHouseName = "Test Guest House", RoomType = "AC Deluxe", NumberOfNights = 2, NumberOfRooms = 1, PaymentMethod = GuestHousePaymentMethod.Complimentary,
+			PaymentStatus = GuestHousePaymentStatus.Paid, CreatedBy = "u-emp", UpdatedBy = "u-emp",
+			LineItems = { new GuestHouseBillLineItem { Description = "AC Deluxe - Room Charge", Quantity = 2m, Rate = 0m } }
+		});
+		await fx.Db.SaveChangesAsync();
+
+		var old = await owner.GetBookingDetails(800);
+		Check.Equal("an old booking (stored value 5) displays as Employee Stay", "Employee Stay", ((BookingDetailsDto)((ObjectResult)old).Value!).PaymentMethod);
+		Check.Equal("its invoice still downloads", 200, Status(await owner.DownloadInvoice(800)));
+		var mine = ((ObjectResult)await owner.GetMyBookings()).Value as MyBookingsResponse;
+		Check.That("My Bookings lists both employee bookings", mine != null && mine.Bookings.Any(b => b.BookingId == 800) && mine.Bookings.Any(b => b.BookingId == emp.BookingId));
+		Check.Equal("cancellation of an Employee Stay booking still works", 200, Status(await owner.RequestCancellation(emp.BookingId, new CreateCancellationRequest { Reason = "Other" })));
+
+		// The invoice's payment label (private helper) uses the new wording and leaves the other methods alone.
+		var label = typeof(SpicAPI.Services.GuestHouseInvoicePdfBuilder).GetMethod("PaymentMethodLabel", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+		string? Label(GuestHousePaymentMethod m) => label?.Invoke(null, new object[] { (int)m }) as string;
+		Check.Equal("invoice label for the employee option is Employee Stay", "Employee Stay", Label(GuestHousePaymentMethod.Complimentary) ?? "");
+		Check.That("invoice labels for the other methods are unchanged", Label(GuestHousePaymentMethod.PayAfterStay) == "Credit" && Label(GuestHousePaymentMethod.Razorpay) == "Razorpay"
+			&& Label(GuestHousePaymentMethod.UPI) == "UPI" && Label(GuestHousePaymentMethod.Card) == "Card" && Label(GuestHousePaymentMethod.NetBanking) == "Net Banking");
+
+		// Other payment methods and their display names are exactly as before.
+		var online = await Book(fx.Booking("u-a", AppRole.Dealer), Req(2, guest: "Online Guest"));
+		var payLater = await Book(fx.Booking("u-a", AppRole.Dealer), Req(1, method: GuestHousePaymentMethod.PayAfterStay, guest: "Later Guest"));
+		string Method(int id) => ((BookingDetailsDto)((ObjectResult)fx.Booking("u-a", AppRole.Dealer).GetBookingDetails(id).GetAwaiter().GetResult()).Value!).PaymentMethod;
+		Check.Equal("Online (Razorpay) still displays as Razorpay", "Razorpay", Method(online.BookingId));
+		Check.Equal("Pay After Stay still displays as Pay After Stay", "Pay After Stay", Method(payLater.BookingId));
+		Check.That("the dealer's bookings are not free and not Employee Stay", !online.IsFreeBooking && !payLater.IsFreeBooking);
+
+		// Ineligible roles still cannot reach it.
+		Check.Equal("a Dealer cannot request the employee option (400)", 400, Status(await fx.Booking("u-a", AppRole.Dealer).CreateBooking(Req(2, method: GuestHousePaymentMethod.Complimentary, guest: "Nope"))));
+		Check.Equal("a Farmer cannot request the employee option (400)", 400, Status(await fx.Booking("u-a", AppRole.Farmer).CreateBooking(Req(2, method: GuestHousePaymentMethod.Complimentary, guest: "Nope 2"))));
+		Check.Equal("an Admin cannot request the employee option (400)", 400, Status(await fx.Booking("u-admin", AppRole.Admin).CreateBooking(Req(2, method: GuestHousePaymentMethod.Complimentary, guest: "Nope 3"))));
+		Check.That("only roles in the existing policy are eligible (Dealer, Admin, SuperAdmin, Farmer are not)",
+			!GuestHouseBookingPolicy.IsEmployeeFreeBooking(AppRole.Dealer) && !GuestHouseBookingPolicy.IsEmployeeFreeBooking(AppRole.Admin)
+			&& !GuestHouseBookingPolicy.IsEmployeeFreeBooking(AppRole.SuperAdmin) && !GuestHouseBookingPolicy.IsEmployeeFreeBooking(AppRole.Farmer)
+			&& GuestHouseBookingPolicy.IsEmployeeFreeBooking(AppRole.RM));
+
+		// No user-facing "Complimentary" text is left on the Guest House screens (identifiers and comments excluded).
+		var dir = new DirectoryInfo(AppContext.BaseDirectory);
+		while (dir != null && !File.Exists(Path.Combine(dir.FullName, "SpicOne.sln"))) dir = dir.Parent;
+		var pages = Path.Combine(dir!.FullName, "SPIC.MauiBlazorApp", "SPIC.MauiBlazorApp.Shared", "Pages");
+		foreach (var file in new[] { "Payment.razor", "BookingPreview.razor", "BookingDetails.razor", "MyBookings.razor", "BillList.razor", "FrontOffice.razor", "GenerateBill.razor" })
+		{
+			var src = File.ReadAllText(Path.Combine(pages, file));
+			var shown = System.Text.RegularExpressions.Regex.Matches(src, "(\"[^\"\\n]*(?<![A-Za-z])Complimentary(?![A-Za-z])[^\"\\n]*\"|>[^<>@\\n]*(?<![A-Za-z])Complimentary(?![A-Za-z])[^<>\\n]*<|\\(Complimentary\\))");
+			Check.Equal($"{file}: no user-facing 'Complimentary' text", 0, shown.Count);
+		}
+		var payment = File.ReadAllText(Path.Combine(pages, "Payment.razor"));
+		Check.That("the Payment page shows the Employee Stay label, summary pill and confirmation", payment.Contains(">Employee Stay</div>") && payment.Contains(">Employee Stay</h3>") && payment.Contains(">Employee Stay</span>") && payment.Contains("Employee Stay booking - no payment is required."));
 	}
 
 	// ---- 13. Guest Details page wiring ---------------------------------------------------------------------------

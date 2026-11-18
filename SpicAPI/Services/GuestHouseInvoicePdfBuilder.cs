@@ -244,7 +244,7 @@ namespace SpicAPI.Services
             GuestHousePaymentMethod.UPI => "UPI",
             GuestHousePaymentMethod.Card => "Card",
             GuestHousePaymentMethod.NetBanking => "Net Banking",
-            GuestHousePaymentMethod.Complimentary => "Complimentary",
+            GuestHousePaymentMethod.Complimentary => "Employee Stay",
             _ => method.ToString()
         };
 
