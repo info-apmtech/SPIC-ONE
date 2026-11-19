@@ -303,7 +303,7 @@
                         <th>Beneficiary</th>
                         <th>Submitted Date</th>
                         <th>Status</th>
-                        <th>Approval Flow (MO → RM → SM → SDWA → SDWA Admin)</th>
+                        <th>Approval Flow (MO → RM → SM → DGM - MD&CS → SDWA Admin)</th>
                         <th>Action</th>
                     </tr>
                 </thead>
@@ -452,10 +452,10 @@
                         }
                         else
                         {
-                            @step.Code
+                            @FlowLabel(step.Code)
                         }
                     </div>
-                    <div class="ap-flow-label">@step.Code</div>
+                    <div class="ap-flow-label">@FlowLabel(step.Code)</div>
                 </div>
                 @if (i < flowSteps.Count - 1)
                 {
@@ -472,7 +472,7 @@
     private string StageLabel => loginState.CanAccess(PagePermission.SDWAAdmin)
         ? "SDWA Admin"
         : loginState.CanAccess(PagePermission.SDWA)
-            ? "SDWA"
+            ? "DGM - MD&CS"
             : loginState.UserRole switch
             {
                 AppRole.MO => "MO",
@@ -590,6 +590,8 @@
 
     private sealed record ApprovalFlowStep(string Code, FlowState State);
 
+    private static string FlowLabel(string code) => code == "SDWA" ? "DGM - MD&CS" : code;
+
     private static readonly (string Code, int Index)[] FlowStageOrder =
         { ("MO", 0), ("RM", 1), ("SM", 2), ("SDWA", 3), ("SDWA Admin", 4) };
 
@@ -630,7 +632,7 @@
     private string GetFlowSummary(WelfareApprovalApplicationDto app)
     {
         if (app.Status == 5)
-            return "Approved by all levels (MO → RM → SM → SDWA → SDWA Admin)";
+            return "Approved by all levels (MO → RM → SM → DGM - MD&CS → SDWA Admin)";
 
         var rejection = app.Approvals?
             .Where(a => string.Equals(a.ApprovalStatus, "Rejected", StringComparison.OrdinalIgnoreCase))
@@ -649,7 +651,7 @@
             1 or 2 => "Pending at MO",
             3 => "Pending at RM",
             4 => "Pending at SM",
-            8 => "Pending at SDWA",
+            8 => "Pending at DGM - MD&CS",
             10 => "Pending at SDWA Admin",
             _ => "Approval flow"
         };

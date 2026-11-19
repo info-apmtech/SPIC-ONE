@@ -1047,7 +1047,7 @@ namespace SpicAPI.Controllers
             WelfareApplicationStatus.MOReview => "Pending MO",
             WelfareApplicationStatus.RMReview => "Pending RM",
             WelfareApplicationStatus.SMReview => "Pending SM",
-            WelfareApplicationStatus.AVPReview => "Pending SDWA",
+            WelfareApplicationStatus.AVPReview => "Pending DGM - MD&CS",
             WelfareApplicationStatus.SDWAAdminReview => "Pending SDWA Admin",
             WelfareApplicationStatus.Approved => "Approved",
             WelfareApplicationStatus.Rejected => "Rejected",
