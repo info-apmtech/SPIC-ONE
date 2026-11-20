@@ -1670,22 +1670,32 @@
                 </NavLink>
             }
 
-            @* ================= BOTTOM-LEVEL MENUS =================
-               Sales Audit and Extension Requests live here only (removed from the
-               JMDO submenu). Add/reorder future bottom-level menus in this block. *@
-            @if (LoginState.CanSeeMenu(PagePermission.SalesAudit))
+            @if (AnySalesAuditAccessible)
             {
-                <NavLink class="nav-link" href="/SalesAudit" Match="NavLinkMatch.All">
-                    <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/StockReport.svg" class="SideBariconimg" />
-                    Sales Audit
-                </NavLink>
-            }
-            @if (LoginState.CanSeeMenu(PagePermission.ExtensionRequests))
-            {
-                <NavLink class="nav-link" href="/ExtensionRequests" Match="NavLinkMatch.Prefix">
-                    <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/PendingAcknowledgment.svg" class="SideBariconimg" />
-                    Extension Requests
-                </NavLink>
+                <div class="settings-menu-wrapper">
+
+                    <a href="javascript:void(0);"
+                       class="nav-link mt-2 @(isSalesAuditOpen ? "active" : "")"
+                       @onclick="ToggleSalesAuditMenu">
+
+                        <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/StockReport.svg"
+                             class="SideBariconimg" />
+
+                        Sales Audit
+
+                        <i class="bi @(isSalesAuditOpen ? "bi-chevron-up" : "bi-chevron-down") chevron-icon">
+                        </i>
+
+                    </a>
+
+                    @if (isSalesAuditOpen)
+                    {
+                        <ul class="submenu-list">
+                            @SalesAuditMenuItems
+                        </ul>
+                    }
+
+                </div>
             }
 
         </nav>
@@ -1719,6 +1729,8 @@
 
     private bool isFarmOpen = false;
 
+    private bool isSalesAuditOpen = false;
+
 
     protected override void OnInitialized()
     {
@@ -1730,20 +1742,30 @@
         isSchemesOpen = IsSchemesSectionActive();
         isSasOpen = IsFarmSectionActive();
         isFarmOpen = IsFarmSectionActive();
+        isSalesAuditOpen = IsSalesAuditSectionActive();
 
         // The only outside state this menu reads is LoginState (role + allowed pages).
         // It is repopulated when a stored session is restored after a page refresh, so
         // refresh ourselves on that instead of being re-rendered by the layout.
         LoginState.OnChange += OnLoginStateChanged;
+        Navigation.LocationChanged += HandleLocationChanged;
     }
 
 
     private void OnLoginStateChanged()
     {
+        isSalesAuditOpen = IsSalesAuditSectionActive();
         if (LoginState.UserRole is AppRole.RM or AppRole.RMD or AppRole.SMM or AppRole.SMD or AppRole.MO or AppRole.MDO or AppRole.JMDO)
         {
             isMdPortalOpen = true;
         }
+        InvokeAsync(StateHasChanged);
+    }
+
+
+    private void HandleLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        isSalesAuditOpen = IsSalesAuditSectionActive();
         InvokeAsync(StateHasChanged);
     }
 
@@ -1780,52 +1802,53 @@
 
     private void ToggleJmdoMenu()
     {
-        if (!isJmdoOpen) { isJmdoOpen = true; isSettingsOpen = false; isSdwaOpen = false; isSubsidyOpen = false; isMdPortalOpen = false; isSchemesOpen = false; isDemoDocumentationOpen = false; }
+        if (!isJmdoOpen) { isJmdoOpen = true; isSettingsOpen = false; isSdwaOpen = false; isSubsidyOpen = false; isMdPortalOpen = false; isSchemesOpen = false; isDemoDocumentationOpen = false; isSalesAuditOpen = false; }
         else isJmdoOpen = false;
     }
 
     private void ToggleSettingsMenu()
     {
-        if (!isSettingsOpen) { isSettingsOpen = true; isJmdoOpen = false; isSdwaOpen = false; isSubsidyOpen = false; isMdPortalOpen = false; isSchemesOpen = false; isDemoDocumentationOpen = false; }
+        if (!isSettingsOpen) { isSettingsOpen = true; isJmdoOpen = false; isSdwaOpen = false; isSubsidyOpen = false; isMdPortalOpen = false; isSchemesOpen = false; isDemoDocumentationOpen = false; isSalesAuditOpen = false; }
         else isSettingsOpen = false;
     }
 
 
     private void ToggleSdwaMenu()
     {
-        if (!isSdwaOpen) { isSdwaOpen = true; isJmdoOpen = false; isSettingsOpen = false; isSubsidyOpen = false; isMdPortalOpen = false; isSchemesOpen = false; isDemoDocumentationOpen = false; }
+        if (!isSdwaOpen) { isSdwaOpen = true; isJmdoOpen = false; isSettingsOpen = false; isSubsidyOpen = false; isMdPortalOpen = false; isSchemesOpen = false; isDemoDocumentationOpen = false; isSalesAuditOpen = false; }
         else isSdwaOpen = false;
     }
 
 
     private void ToggleSubsidyMenu()
     {
-        if (!isSubsidyOpen) { isSubsidyOpen = true; isJmdoOpen = false; isSettingsOpen = false; isSdwaOpen = false; isMdPortalOpen = false; isSchemesOpen = false; isDemoDocumentationOpen = false; }
+        if (!isSubsidyOpen) { isSubsidyOpen = true; isJmdoOpen = false; isSettingsOpen = false; isSdwaOpen = false; isMdPortalOpen = false; isSchemesOpen = false; isDemoDocumentationOpen = false; isSalesAuditOpen = false; }
         else isSubsidyOpen = false;
     }
 
 
     private void ToggleMdPortalMenu()
     {
-        if (!isMdPortalOpen) { isMdPortalOpen = true; isJmdoOpen = false; isSettingsOpen = false; isSdwaOpen = false; isSubsidyOpen = false; isSchemesOpen = false; isDemoDocumentationOpen = false; }
+        if (!isMdPortalOpen) { isMdPortalOpen = true; isJmdoOpen = false; isSettingsOpen = false; isSdwaOpen = false; isSubsidyOpen = false; isSchemesOpen = false; isDemoDocumentationOpen = false; isSalesAuditOpen = false; }
         else isMdPortalOpen = false;
     }
 
 
     private void ToggleSchemesMenu()
     {
-        if (!isSchemesOpen) { isSchemesOpen = true; isJmdoOpen = false; isSettingsOpen = false; isSdwaOpen = false; isSubsidyOpen = false; isMdPortalOpen = false; isDemoDocumentationOpen = false; }
+        if (!isSchemesOpen) { isSchemesOpen = true; isJmdoOpen = false; isSettingsOpen = false; isSdwaOpen = false; isSubsidyOpen = false; isMdPortalOpen = false; isDemoDocumentationOpen = false; isSalesAuditOpen = false; }
         else isSchemesOpen = false;
     }
 
     private void ToggleDemoDocumentationMenu()
     {
-        if (!isDemoDocumentationOpen) { isDemoDocumentationOpen = true; isJmdoOpen = false; isSettingsOpen = false; isSdwaOpen = false; isSubsidyOpen = false; isMdPortalOpen = false; isSchemesOpen = false; }
+        if (!isDemoDocumentationOpen) { isDemoDocumentationOpen = true; isJmdoOpen = false; isSettingsOpen = false; isSdwaOpen = false; isSubsidyOpen = false; isMdPortalOpen = false; isSchemesOpen = false; isSalesAuditOpen = false; }
         else isDemoDocumentationOpen = false;
     }
 
     private void ToggleSasMenu()
     {
+        isSalesAuditOpen = false;
         isSasOpen = !isSasOpen;
         if (!isSasOpen)
             isFarmOpen = false;
@@ -1833,6 +1856,7 @@
 
     private void ToggleFarmMenu()
     {
+        isSalesAuditOpen = false;
         if (!isSasOpen)
             isSasOpen = true;
 
@@ -1843,6 +1867,65 @@
     /* =========================================================
        ACTIVE SECTION DETECTION
        ========================================================= */
+
+    private bool AnySalesAuditAccessible =>
+        LoginState.CanSeeMenu(PagePermission.SalesAudit);
+
+    private void ToggleSalesAuditMenu()
+    {
+        if (!isSalesAuditOpen) { isSalesAuditOpen = true; isJmdoOpen = false; isSettingsOpen = false; isSdwaOpen = false; isSubsidyOpen = false; isMdPortalOpen = false; isSchemesOpen = false; isDemoDocumentationOpen = false; isSasOpen = false; isFarmOpen = false; }
+        else isSalesAuditOpen = false;
+    }
+
+    private RenderFragment SalesAuditMenuItems =>
+    @<text>
+        @if (LoginState.CanSeeMenu(PagePermission.SalesAudit))
+        {
+            <li class="submenu-item">
+                <NavLink href="/SalesAudit" class="submenu-link" Match="NavLinkMatch.All">
+                    <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/StockReport.svg" class="SideBariconimg" />
+                    Sales Audit
+                </NavLink>
+            </li>
+        }
+        @if (LoginState.CanSeeMenu(PagePermission.SalesAudit))
+        {
+            <li class="submenu-item">
+                <NavLink href="/DealerSalesUpload" class="submenu-link" Match="NavLinkMatch.All">
+                    <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/StockReport.svg" class="SideBariconimg" />
+                    Dealer Sales Upload
+                </NavLink>
+            </li>
+        }
+        @if (LoginState.CanSeeMenu(PagePermission.SalesTracking))
+        {
+            <li class="submenu-item">
+                <NavLink href="/SalesTrackingList" class="submenu-link" Match="NavLinkMatch.All">
+                    <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/StockReport.svg" class="SideBariconimg" />
+                    Sales Tracking
+                </NavLink>
+            </li>
+        }
+        @if (LoginState.CanSeeMenu(PagePermission.ExtensionRequests))
+        {
+            <li class="submenu-item">
+                <NavLink href="/ExtensionRequests" class="submenu-link" Match="NavLinkMatch.Prefix">
+                    <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/PendingAcknowledgment.svg" class="SideBariconimg" />
+                    Extension Requests
+                </NavLink>
+            </li>
+        }
+    </text>;
+
+    private bool IsSalesAuditSectionActive()
+    {
+        var uri = Navigation.ToBaseRelativePath(Navigation.Uri).ToLower();
+        return uri == "salesaudit"
+            || uri == "dealersalesupload"
+            || uri == "salestrackinglist"
+            || uri == "extensionrequests"
+            || uri.StartsWith("extensionrequests?");
+    }
 
     // Demo documentation group: pure union of its seven children's CanSeeMenu - no role term, no
     // open-route term, nothing that can disagree with the entries rendered below. Route-level
@@ -2412,5 +2495,6 @@
     public void Dispose()
     {
         LoginState.OnChange -= OnLoginStateChanged;
+        Navigation.LocationChanged -= HandleLocationChanged;
     }
 }

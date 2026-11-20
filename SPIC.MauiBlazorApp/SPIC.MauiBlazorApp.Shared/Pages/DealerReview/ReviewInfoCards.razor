@@ -52,7 +52,7 @@
             <div class="info-card">
                 <div>
                     <div class="info-label">Status</div>
-                    <span class="status-badge">@(DealerReviewFormat.GetApprovalStage(Dealer))</span>
+                    <span class="status-badge">@GetStatusText()</span>
                 </div>
                 <div class="info-icon yellow">
                     <i class="bi bi-file-earmark-text"></i>
@@ -68,7 +68,24 @@
     /// <summary>Display name resolved for the creator; null until the user list has loaded.</summary>
     [Parameter] public string? SubmittedByName { get; set; }
 
+    /// <summary>New Dealer workflow: AVP Office Dealer IDs submitted, awaiting final AVP.</summary>
+    [Parameter] public bool IsAwaitingFinalAvp { get; set; }
+
+    /// <summary>New Dealer workflow: final AVP approval completed.</summary>
+    [Parameter] public bool IsFinalAvpApproved { get; set; }
+
     /// <summary>Bumped by the page when it mutates data in place (approval sets RM/SM/AVP flags
     /// on the existing registration object), so the cards still refresh.</summary>
     [Parameter] public int DataVersion { get; set; }
+
+    private string GetStatusText()
+    {
+        if (Dealer == null) return "-";
+        if (Dealer.IsNewDealerRegistration)
+        {
+            if (IsAwaitingFinalAvp) return "In Final AVP";
+            if (IsFinalAvpApproved) return "Approved";
+        }
+        return DealerReviewFormat.GetApprovalStage(Dealer);
+    }
 }

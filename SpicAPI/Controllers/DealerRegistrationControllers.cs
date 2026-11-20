@@ -1083,10 +1083,10 @@ namespace SpicAPI.Controllers
         }
 
         /// <summary>
-        /// Final AVP approval for a New Dealer. The next DealerCode is previewed by
-        /// the UI and AVP may edit the numeric value before approval. The server
-        /// validates uniqueness and all company-code mappings before saving.
-        /// Existing RM/SMM approval, send-back and Existing Dealer flows are unchanged.
+        /// AVP approval for a New Dealer. The initial call records the AVP decision;
+        /// after AVP Office submits both Dealer IDs, a separate final call records
+        /// "Final AVP" history. Existing RM/SMM approval, send-back and Existing Dealer
+        /// flows are unchanged.
         /// </summary>
         [HttpPost("{id}/final-approve")]
         public async Task<IActionResult> FinalApprove(int id, [FromBody] FinalApproveRequest request)
@@ -1110,6 +1110,109 @@ namespace SpicAPI.Controllers
                     message = "Dealer must be approved by MO and SMM before final AVP approval."
                 });
 
+            var remarks = string.IsNullOrWhiteSpace(request?.Remarks)
+                ? string.Empty
+                : request.Remarks.Trim();
+
+            var finalAfterAvpOffice = dealer.AVPApproved == true;
+
+            if (finalAfterAvpOffice)
+            {
+                if (await HasFinalAvpApprovalAsync(id))
+                    return Ok(new { dealer.Id, alreadyFinalApproved = true, fullyApproved = true });
+
+                if (!await HasApprovedHistoryRoleAsync(id, "AVP Office") ||
+                    string.IsNullOrWhiteSpace(dealer.DealerCode) ||
+                    string.IsNullOrWhiteSpace(dealer.SPICCode) ||
+                    string.IsNullOrWhiteSpace(dealer.GreenStarCode))
+                {
+                    return BadRequest(new { message = "AVP Office must submit both Dealer IDs before final approval." });
+                }
+
+                await using var finalTransaction = await _db.Database.BeginTransactionAsync(
+                    System.Data.IsolationLevel.Serializable);
+
+                try
+                {
+                    var finalFresh = await _db.DealerRegistrations.FirstOrDefaultAsync(x => x.Id == id);
+                    if (finalFresh == null)
+                    {
+                        await finalTransaction.RollbackAsync();
+                        return NotFound(new { message = "Dealer registration was not found." });
+                    }
+
+                    if (await HasFinalAvpApprovalAsync(id))
+                    {
+                        await finalTransaction.RollbackAsync();
+                        return Ok(new { finalFresh.Id, alreadyFinalApproved = true, fullyApproved = true });
+                    }
+
+                    if (!finalFresh.IsNewDealerRegistration ||
+                        finalFresh.RMApproved != true ||
+                        finalFresh.SMApproved != true ||
+                        finalFresh.AVPApproved != true ||
+                        !await HasApprovedHistoryRoleAsync(id, "AVP Office") ||
+                        string.IsNullOrWhiteSpace(finalFresh.DealerCode) ||
+                        string.IsNullOrWhiteSpace(finalFresh.SPICCode) ||
+                        string.IsNullOrWhiteSpace(finalFresh.GreenStarCode))
+                    {
+                        await finalTransaction.RollbackAsync();
+                        return BadRequest(new { message = "AVP Office must submit both Dealer IDs before final approval." });
+                    }
+
+                    var finalApprovedAt = DateTime.Now;
+
+                    finalFresh.Status = DealerStatus.Active;
+                    finalFresh.FinalApprovalDate = finalApprovedAt;
+                    finalFresh.IsSubmittedForReview = true;
+                    finalFresh.UpdatedBy = userId;
+                    finalFresh.UpdatedAt = finalApprovedAt;
+
+                    if (_historyRepo != null)
+                    {
+                        await _historyRepo.CreateAsync(new DealerApprovalHistory
+                        {
+                            DealerId = finalFresh.Id,
+                            ApprovedBy = userId,
+                            Role = "Final AVP",
+                            ApprovedAt = finalApprovedAt,
+                            Remarks = remarks,
+                            IsApproved = true
+                        });
+                    }
+
+                    await _db.SaveChangesAsync();
+                    await finalTransaction.CommitAsync();
+
+                    if (string.IsNullOrEmpty(finalFresh.UserTableId) && !string.IsNullOrWhiteSpace(finalFresh.DealerCode))
+                    {
+                        var userError = await EnsureDealerUserAsync(finalFresh);
+                        if (!string.IsNullOrEmpty(userError))
+                            return BadRequest(new { message = userError });
+
+                        await _db.SaveChangesAsync();
+                    }
+
+                    return Ok(new
+                    {
+                        finalFresh.Id,
+                        finalFresh.DealerCode,
+                        finalFresh.SPICCode,
+                        finalFresh.GreenStarCode,
+                        alreadyFinalApproved = false,
+                        fullyApproved = true
+                    });
+                }
+                catch
+                {
+                    try { await finalTransaction.RollbackAsync(); } catch { }
+                    return StatusCode(500, new
+                    {
+                        message = "Final AVP approval failed and was rolled back. Please retry."
+                    });
+                }
+            }
+
             // Idempotent: this stage records the AVP decision only. The internal
             // DealerCode, company Dealer IDs and dealer login are created later by the
             // AVP Office stage, so an already-approved record needs no code checks here.
@@ -1132,10 +1235,6 @@ namespace SpicAPI.Controllers
 
             if (!dealer.InSpic && !dealer.InGreenStar)
                 return BadRequest(new { message = "The registration has no SPIC or GreenStar selection." });
-
-            var remarks = string.IsNullOrWhiteSpace(request?.Remarks)
-                ? string.Empty
-                : request.Remarks.Trim();
 
             await using var transaction = await _db.Database.BeginTransactionAsync(
                 System.Data.IsolationLevel.Serializable);
@@ -1238,10 +1337,9 @@ namespace SpicAPI.Controllers
         /// <summary>
         /// AVP Office completion for an initial New Dealer. The AVP Office employee
         /// manually enters the company Dealer IDs (SPIC and/or GFL) on the existing
-        /// New Dealer details. This is the only stage that allocates the internal
-        /// DealerCode, saves the company IDs, activates the dealer, records the office
-        /// decision and creates the dealer login. It is deliberately separate from
-        /// FinalApprove; the legacy AVP action never finalizes a New Dealer.
+        /// New Dealer details. This stage allocates the internal DealerCode, saves both
+        /// company IDs and records the office decision. A separate Final AVP approval
+        /// records the final sign-off. Existing Dealer flows are unchanged.
         /// </summary>
         [HttpPost("{id:int}/avp-office-submit")]
         public async Task<IActionResult> AvpOfficeSubmit(int id, [FromBody] AvpOfficeSubmitRequest request)
@@ -1288,17 +1386,11 @@ namespace SpicAPI.Controllers
             var spicDealerId = NormalizeDealerId(request?.SpicDealerId);
             var gflDealerId = NormalizeDealerId(request?.GflDealerId);
 
-            if (dealer.InSpic && spicDealerId == null)
+            if (spicDealerId == null)
                 return BadRequest(new { message = "SPIC Dealer ID is required for this application." });
 
-            if (dealer.InGreenStar && gflDealerId == null)
+            if (gflDealerId == null)
                 return BadRequest(new { message = "GFL Dealer ID is required for this application." });
-
-            if (!dealer.InSpic && spicDealerId != null)
-                return BadRequest(new { message = "This application is not selected for SPIC." });
-
-            if (!dealer.InGreenStar && gflDealerId != null)
-                return BadRequest(new { message = "This application is not selected for GFL." });
 
             var remarks = string.IsNullOrWhiteSpace(request?.Remarks)
                 ? string.Empty
@@ -1344,13 +1436,13 @@ namespace SpicAPI.Controllers
                     });
                 }
 
-                if (fresh.InSpic && spicDealerId == null)
+                if (spicDealerId == null)
                 {
                     await transaction.RollbackAsync();
                     return BadRequest(new { message = "SPIC Dealer ID is required for this application." });
                 }
 
-                if (fresh.InGreenStar && gflDealerId == null)
+                if (gflDealerId == null)
                 {
                     await transaction.RollbackAsync();
                     return BadRequest(new { message = "GFL Dealer ID is required for this application." });
@@ -1546,6 +1638,7 @@ namespace SpicAPI.Controllers
         public class FinalApproveRequest
         {
             public string? Remarks { get; set; }
+            public bool FinalAfterAvpOffice { get; set; }
             public string? DealerCode { get; set; }
 
             // Current UI: supports selecting any combination of N/Z/T.
@@ -1557,10 +1650,10 @@ namespace SpicAPI.Controllers
 
         public class AvpOfficeSubmitRequest
         {
-            /// <summary>Manually entered SPIC Dealer ID (required when InSpic).</summary>
+            /// <summary>Manually entered SPIC Dealer ID (always required for New Dealers).</summary>
             public string? SpicDealerId { get; set; }
 
-            /// <summary>Manually entered GFL/GreenStar Dealer ID (required when InGreenStar).</summary>
+            /// <summary>Manually entered GFL/GreenStar Dealer ID (always required for New Dealers).</summary>
             public string? GflDealerId { get; set; }
 
             public string? Remarks { get; set; }
@@ -1642,7 +1735,7 @@ namespace SpicAPI.Controllers
             var stateClaim = User.FindFirst("spic:state_id")?.Value;
             var hqClaim = User.FindFirst("spic:hq_id")?.Value;
 
-            var isAvpOffice = await IsAvpOfficeAsync() && await HasSubmitDealerIdsPermissionAsync();
+            var isAvpOffice = await IsAvpOfficeAsync();
             if (isAvpOffice)
             {
                 // AVP Office works only on AVP-approved initial New Dealers in its zone
@@ -1722,7 +1815,7 @@ namespace SpicAPI.Controllers
             var stateClaim = User.FindFirst("spic:state_id")?.Value;
             var hqClaim = User.FindFirst("spic:hq_id")?.Value;
 
-            var isAvpOffice = await IsAvpOfficeAsync() && await HasSubmitDealerIdsPermissionAsync();
+            var isAvpOffice = await IsAvpOfficeAsync();
             if (isAvpOffice)
             {
                 // AVP Office works only on AVP-approved initial New Dealers in its zone
@@ -1868,6 +1961,7 @@ namespace SpicAPI.Controllers
                     .ToListAsync();
 
             var avpOfficeSubmittedDealerIds = await GetAvpOfficeSubmittedDealerIdsAsync();
+            var finalAvpApprovedDealerIds = await GetFinalAvpApprovedDealerIdsAsync();
 
             // Return only the fields used by Dashboard. This prevents newly added
             // registration columns from breaking the existing-dealer list when a
@@ -1903,6 +1997,7 @@ namespace SpicAPI.Controllers
                         x.GflTradeDepositFilePath != null,
 
                     IsAvpOfficeSubmitted = avpOfficeSubmittedDealerIds.Contains(x.Id),
+                    IsFinalAvpApproved = finalAvpApprovedDealerIds.Contains(x.Id),
 
                     // First New Dealer approval has no completed Existing Dealer maintenance cycle.
                     // Maintenance is considered complete only after Credit Limit data exists AND
@@ -2018,10 +2113,9 @@ namespace SpicAPI.Controllers
         }
 
         /// <summary>
-        /// Explicit SubmitDealerIds permission. The designation must still be the active
-        /// "AVP Office" designation; this only adds the required action grant so a
-        /// CommonRole user cannot submit Dealer IDs by designation alone. Both the bare
-        /// token and a "Page.SubmitDealerIds" token are accepted.
+        /// AVP Office Dealer ID submission permission. Must be an active CommonRole user
+        /// with the active "AVP Office" designation; zone and dealer-stage checks are
+        /// enforced separately by the endpoint.
         /// </summary>
         private async Task<bool> HasSubmitDealerIdsPermissionAsync()
         {
@@ -2045,16 +2139,8 @@ namespace SpicAPI.Controllers
                     .AsNoTracking()
                     .FirstOrDefaultAsync(d => d.Id == user.DesignationId.Value);
 
-            if (designation is not { IsActive: true } ||
-                !string.Equals(designation.Name?.Trim(), "AVP Office", StringComparison.OrdinalIgnoreCase))
-            {
-                return false;
-            }
-
-            return RoleAccessPermissions.ParseTokens(designation.RoleAccess)
-                .Any(token =>
-                    string.Equals(token, "SubmitDealerIds", StringComparison.OrdinalIgnoreCase) ||
-                    token.EndsWith(".SubmitDealerIds", StringComparison.OrdinalIgnoreCase));
+            return designation is { IsActive: true }
+                && string.Equals(designation.Name?.Trim(), "AVP Office", StringComparison.OrdinalIgnoreCase);
         }
 
         #region Dashboard server-side paging
@@ -2149,6 +2235,59 @@ namespace SpicAPI.Controllers
                 .ToList();
         }
 
+        private async Task<bool> HasApprovedHistoryRoleAsync(int dealerId, string role) =>
+            _historyRepo != null && await _historyRepo.GetAll()
+                .AnyAsync(h => h.DealerId == dealerId && h.IsApproved == true && h.Role == role);
+
+        private async Task<bool> HasFinalAvpApprovalAsync(int dealerId)
+        {
+            if (await HasApprovedHistoryRoleAsync(dealerId, "Final AVP"))
+                return true;
+
+            if (await HasApprovedHistoryRoleAsync(dealerId, "AVP Office"))
+                return false;
+
+            return await _db.DealerRegistrations
+                .AsNoTracking()
+                .AnyAsync(x => x.Id == dealerId
+                    && x.IsNewDealerRegistration
+                    && x.AVPApproved == true
+                    && x.DealerCode != null && x.DealerCode != "");
+        }
+
+        private async Task<List<int>> GetFinalAvpApprovedDealerIdsAsync()
+        {
+            var finalRoleIds = _historyRepo == null
+                ? new List<int>()
+                : await _historyRepo.GetAll()
+                    .Where(h => h.IsApproved == true && h.Role == "Final AVP")
+                    .Select(h => h.DealerId)
+                    .Distinct()
+                    .ToListAsync();
+
+            var avpOfficeRoleIds = _historyRepo == null
+                ? new List<int>()
+                : await _historyRepo.GetAll()
+                    .Where(h => h.IsApproved == true && h.Role == "AVP Office")
+                    .Select(h => h.DealerId)
+                    .Distinct()
+                    .ToListAsync();
+
+            var legacyFinalIds = await _db.DealerRegistrations
+                .AsNoTracking()
+                .Where(x => x.IsNewDealerRegistration
+                    && x.AVPApproved == true
+                    && x.DealerCode != null && x.DealerCode != ""
+                    && !avpOfficeRoleIds.Contains(x.Id))
+                .Select(x => x.Id)
+                .ToListAsync();
+
+            return finalRoleIds
+                .Concat(legacyFinalIds)
+                .Distinct()
+                .ToList();
+        }
+
         private static Expression<Func<T, bool>> Not<T>(Expression<Func<T, bool>> expression) =>
             Expression.Lambda<Func<T, bool>>(Expression.Not(expression.Body), expression.Parameters);
 
@@ -2168,7 +2307,7 @@ namespace SpicAPI.Controllers
                 role == "Admin" || role == "CorporateAdmin" ||
                 role == "Director";
 
-            var isAvpOffice = await IsAvpOfficeAsync() && await HasSubmitDealerIdsPermissionAsync();
+            var isAvpOffice = await IsAvpOfficeAsync();
 
             if (isAvpOffice)
             {
@@ -2297,7 +2436,8 @@ namespace SpicAPI.Controllers
         /// </summary>
         private static IQueryable<DealerRegistration> ApplyDashboardFilters(
             IQueryable<DealerRegistration> query, DealerDashboardQuery request,
-            List<int> avpOfficeSubmittedDealerIds)
+            List<int> avpOfficeSubmittedDealerIds,
+            List<int> finalAvpApprovedDealerIds)
         {
             var search = request.Search?.Trim().ToLower();
             if (!string.IsNullOrWhiteSpace(search))
@@ -2342,9 +2482,14 @@ namespace SpicAPI.Controllers
                         && x.RMApproved == true && x.SMApproved == true
                         && x.AVPApproved == true && x.IsNewDealerRegistration
                         && !avpOfficeSubmittedDealerIds.Contains(x.Id)),
+                    "Pending Final AVP" => query.Where(x => x.IsSubmittedForReview == true
+                        && x.RMApproved == true && x.SMApproved == true
+                        && x.AVPApproved == true && x.IsNewDealerRegistration
+                        && avpOfficeSubmittedDealerIds.Contains(x.Id)
+                        && !finalAvpApprovedDealerIds.Contains(x.Id)),
                     "Approved" => query.Where(x => x.IsSubmittedForReview == true
                         && x.RMApproved != false && x.SMApproved != false && x.AVPApproved == true
-                        && (!x.IsNewDealerRegistration || avpOfficeSubmittedDealerIds.Contains(x.Id))),
+                        && (!x.IsNewDealerRegistration || finalAvpApprovedDealerIds.Contains(x.Id))),
                     "Rejected/Returned" => query.Where(x => x.IsSubmittedForReview == true
                         && (x.RMApproved == false || x.SMApproved == false || x.AVPApproved == false)),
                     _ => query
@@ -2366,7 +2511,8 @@ namespace SpicAPI.Controllers
         /// </summary>
         private Expression<Func<DealerRegistration, bool>> BuildPendingForMeExpression(
             bool isAvpOffice,
-            List<int> avpOfficeSubmittedDealerIds)
+            List<int> avpOfficeSubmittedDealerIds,
+            List<int> finalAvpApprovedDealerIds)
         {
             var role = User.FindFirst(ClaimTypes.Role)?.Value;
             var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
@@ -2393,7 +2539,9 @@ namespace SpicAPI.Controllers
                 x.IsSubmittedForReview != true
                     ? isCreatorRole || (hasUserId && x.CreatedBy == currentUserId)
                     : x.AVPApproved == true
-                        ? false
+                        ? isAdminRole && x.IsNewDealerRegistration
+                            && avpOfficeSubmittedDealerIds.Contains(x.Id)
+                            && !finalAvpApprovedDealerIds.Contains(x.Id)
                         : x.RMApproved == false
                             ? isCreatorRole || (hasUserId && x.CreatedBy == currentUserId)
                             : x.SMApproved == false
@@ -2416,7 +2564,8 @@ namespace SpicAPI.Controllers
             query = await ApplySubmittedRoleScopeAsync(query);
             query = ApplyDashboardUserScope(query);
             var avpOfficeSubmittedDealerIds = await GetAvpOfficeSubmittedDealerIdsAsync();
-            return ApplyDashboardFilters(query, request, avpOfficeSubmittedDealerIds);
+            var finalAvpApprovedDealerIds = await GetFinalAvpApprovedDealerIdsAsync();
+            return ApplyDashboardFilters(query, request, avpOfficeSubmittedDealerIds, finalAvpApprovedDealerIds);
         }
 
         /// <summary>
@@ -2436,9 +2585,10 @@ namespace SpicAPI.Controllers
 
             var total = await query.CountAsync();
 
-            var isAvpOffice = await IsAvpOfficeAsync() && await HasSubmitDealerIdsPermissionAsync();
+            var isAvpOffice = await IsAvpOfficeAsync();
             var avpOfficeSubmittedDealerIds = await GetAvpOfficeSubmittedDealerIdsAsync();
-            var pendingForMe = BuildPendingForMeExpression(isAvpOffice, avpOfficeSubmittedDealerIds);
+            var finalAvpApprovedDealerIds = await GetFinalAvpApprovedDealerIdsAsync();
+            var pendingForMe = BuildPendingForMeExpression(isAvpOffice, avpOfficeSubmittedDealerIds, finalAvpApprovedDealerIds);
             var sort = (request.Sort ?? "newest").Trim().ToLowerInvariant();
 
             IOrderedQueryable<DealerRegistration> ordered = sort switch
@@ -2483,6 +2633,7 @@ namespace SpicAPI.Controllers
             // fact that Approved and the Rejected counters look at the raw approval
             // flags and ignore IsSubmittedForReview.
             var avpOfficeSubmittedDealerIds = await GetAvpOfficeSubmittedDealerIdsAsync();
+            var finalAvpApprovedDealerIds = await GetFinalAvpApprovedDealerIdsAsync();
 
             var aggregate = await query
                 .GroupBy(x => 1)
@@ -2502,8 +2653,13 @@ namespace SpicAPI.Controllers
                         && x.RMApproved == true && x.SMApproved == true && x.AVPApproved == true
                         && x.IsNewDealerRegistration
                         && !avpOfficeSubmittedDealerIds.Contains(x.Id)),
+                    InFinalAvp = g.Count(x => x.IsSubmittedForReview == true
+                        && x.RMApproved == true && x.SMApproved == true && x.AVPApproved == true
+                        && x.IsNewDealerRegistration
+                        && avpOfficeSubmittedDealerIds.Contains(x.Id)
+                        && !finalAvpApprovedDealerIds.Contains(x.Id)),
                     Approved = g.Count(x => x.AVPApproved == true
-                        && (!x.IsNewDealerRegistration || avpOfficeSubmittedDealerIds.Contains(x.Id))),
+                        && (!x.IsNewDealerRegistration || finalAvpApprovedDealerIds.Contains(x.Id))),
                     Rejected = g.Count(x => x.RMApproved == false || x.SMApproved == false || x.AVPApproved == false),
                     RejectedByRM = g.Count(x => x.RMApproved == false),
                     RejectedBySMM = g.Count(x => x.SMApproved == false),
@@ -2524,6 +2680,7 @@ namespace SpicAPI.Controllers
                 summary.InSMM = aggregate.InSMM;
                 summary.InAVP = aggregate.InAVP;
                 summary.InAvpOffice = aggregate.InAvpOffice;
+                summary.InFinalAvp = aggregate.InFinalAvp;
                 summary.Approved = aggregate.Approved;
                 summary.Rejected = aggregate.Rejected;
                 summary.RejectedByRM = aggregate.RejectedByRM;
@@ -2578,6 +2735,7 @@ namespace SpicAPI.Controllers
                     .ToListAsync();
 
             var avpOfficeSubmittedDealerIds = await GetAvpOfficeSubmittedDealerIdsAsync();
+            var finalAvpApprovedDealerIds = await GetFinalAvpApprovedDealerIdsAsync();
 
             var stepCounts = await GetDashboardStepCountsAsync(ids);
 
@@ -2589,6 +2747,7 @@ namespace SpicAPI.Controllers
                 InGreenStar = x.InGreenStar,
                 IsNewDealerRegistration = IsNewDealerRegistrationFunc(x),
                 IsAvpOfficeSubmitted = avpOfficeSubmittedDealerIds.Contains(x.Id),
+                IsFinalAvpApproved = finalAvpApprovedDealerIds.Contains(x.Id),
                 HasCompletedExistingMaintenance =
                     creditLimitDealerIds.Contains(x.Id) && twiceFinalApprovedDealerIds.Contains(x.Id),
                 DealerCode = x.DealerCode,

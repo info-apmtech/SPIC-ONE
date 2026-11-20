@@ -1,12 +1,11 @@
-@namespace SPIC.MauiBlazorApp.Shared.Pages.DealerReview
+﻿@namespace SPIC.MauiBlazorApp.Shared.Pages.DealerReview
 @using DR = SPIC.Core.Entities
 @inherits DealerReviewSectionBase
 
 @*
-    The MO → RM → SM → AVP progress rail. Read-only; it reads the three approval flags from
-    the registration instance the page passes in.
+    Progress rail: Existing = MO → RM → SM → AVP (4). New Dealer = MO → RM → SM → AVP Office → AVP (5).
+    New Dealer final AVP uses IsFinalAvpApproved (not initial AVPApproved) so it is not marked approved before AVP Office submission.
 *@
-
     <!-- Approval Progress -->
     <div class="approval-card mb-3">
         <div class="approval-steps-wrapper">
@@ -58,31 +57,78 @@
             </div>
         </div>
 
-        <div class="step-line @DealerReviewFormat.GetLineClass(Dealer?.AVPApproved)"></div>
+        @if (IsNewDealer)
+        {
+            <div class="step-line @DealerReviewFormat.GetLineClass(IsAvpOfficeSubmitted)"></div>
 
-        <div class="approval-step @DealerReviewFormat.GetStepClass(Dealer?.AVPApproved)">
-            <div class="step-circle">
-                @if (Dealer?.AVPApproved == true)
-                {
-                    <i class="bi bi-check-lg"></i>
-                }
-                else
-                {
-                    <text>AVP</text>
-                }
+            <div class="approval-step @DealerReviewFormat.GetStepClass(IsAvpOfficeSubmitted)">
+                <div class="step-circle">
+                    @if (IsAvpOfficeSubmitted)
+                    {
+                        <i class="bi bi-check-lg"></i>
+                    }
+                    else
+                    {
+                        <text>Office</text>
+                    }
+                </div>
+                <div>
+                    <div class="step-title">AVP Office</div>
+                    <div class="step-status">@(IsAvpOfficeSubmitted ? "IDs Submitted" : "Pending")</div>
+                </div>
             </div>
-            <div>
-                <div class="step-title">AVP</div>
-                <div class="step-status">@(Dealer?.AVPApproved == null ? "Pending" : (Dealer.AVPApproved == true ? "Approved" : "Rejected"))</div>
-            </div>
-        </div>
 
-        <div class="step-line @DealerReviewFormat.GetLineClass(Dealer?.AVPApproved)"></div>
+            <div class="step-line @DealerReviewFormat.GetLineClass(IsFinalAvpApproved)"></div>
+
+            <div class="approval-step @DealerReviewFormat.GetStepClass(IsFinalAvpApproved)">
+                <div class="step-circle">
+                    @if (IsFinalAvpApproved)
+                    {
+                        <i class="bi bi-check-lg"></i>
+                    }
+                    else
+                    {
+                        <text>AVP</text>
+                    }
+                </div>
+                <div>
+                    <div class="step-title">AVP</div>
+                    <div class="step-status">@(IsFinalAvpApproved ? "Approved" : "Pending")</div>
+                </div>
+            </div>
+        }
+        else
+        {
+            <div class="step-line @DealerReviewFormat.GetLineClass(Dealer?.AVPApproved)"></div>
+
+            <div class="approval-step @DealerReviewFormat.GetStepClass(Dealer?.AVPApproved)">
+                <div class="step-circle">
+                    @if (Dealer?.AVPApproved == true)
+                    {
+                        <i class="bi bi-check-lg"></i>
+                    }
+                    else
+                    {
+                        <text>AVP</text>
+                    }
+                </div>
+                <div>
+                    <div class="step-title">AVP</div>
+                    <div class="step-status">@(Dealer?.AVPApproved == null ? "Pending" : (Dealer.AVPApproved == true ? "Approved" : "Rejected"))</div>
+                </div>
+            </div>
+        }
+
+        <div class="step-line @DealerReviewFormat.GetLineClass(IsNewDealer ? (bool?)IsFinalAvpApproved : Dealer?.AVPApproved)"></div>
         </div>
     </div>
 
 @code {
     [Parameter] public DR.DealerRegistration? Dealer { get; set; }
+
+    [Parameter] public bool IsNewDealer { get; set; }
+    [Parameter] public bool IsAvpOfficeSubmitted { get; set; }
+    [Parameter] public bool IsFinalAvpApproved { get; set; }
 
     /// <summary>Approval mutates the flags on the existing registration instance, so the page
     /// bumps this to tell the rail to re-render.</summary>

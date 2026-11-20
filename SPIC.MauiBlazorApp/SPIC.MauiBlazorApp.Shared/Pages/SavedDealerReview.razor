@@ -532,32 +532,95 @@
         var submitUser = "System";
         var submitterId = _dealer.UpdatedBy ?? _dealer.CreatedBy;
         if (!string.IsNullOrEmpty(submitterId))
+            submitUser = _userNames.TryGetValue(submitterId, out var submitName) ? submitName : submitterId;
+
+        var submitDate = _dealer.UpdatedAt.Year > 2000 ? _dealer.UpdatedAt : _dealer.CreatedAt;
+        var submitDateText = submitDate.ToString("dd-MMM-yyyy hh:mm tt");
+        items.Add(new TimelineItem("MO", "Submitted", submitUser, submitDateText, "dot-green", "bi bi-check-lg", "card-green", "badge-green"));
+
+        var history = (_approvalHistory ?? new()).OrderBy(h => h.ApprovedAt).ToList();
+        var isNewDealerTimeline = _showNewDealerSavedDetails;
+
+        TimelineItem Pending(string title) =>
+            new(title, "Pending", "-", "-", "dot-gray", "bi bi-clock", "card-pending", "badge-gray");
+
+        TimelineItem FromHistory(string title, DR.DealerApprovalHistory h)
         {
-            if (_userNames.ContainsKey(submitterId)) submitUser = _userNames[submitterId];
-            else submitUser = submitterId;
+            var userName = !string.IsNullOrEmpty(h.ApprovedBy) && _userNames.TryGetValue(h.ApprovedBy, out var un)
+                ? un
+                : (h.ApprovedBy ?? "-");
+            var dateText = h.ApprovedAt.ToString("dd-MMM-yyyy hh:mm tt");
+            var approved = h.IsApproved;
+            return new TimelineItem(
+                title,
+                approved ? "Approved" : "Sent Back",
+                userName,
+                dateText,
+                approved ? "dot-green" : "dot-red",
+                approved ? "bi bi-check-lg" : "bi bi-arrow-counterclockwise",
+                approved ? "card-green" : "card-red",
+                approved ? "badge-green" : "badge-red",
+                h.Remarks ?? "");
         }
-        var createdDateText = _dealer.UpdatedAt.Year > 2000 ? _dealer.UpdatedAt.ToString("dd-MMM-yyyy hh:mm tt") : _dealer.CreatedAt.ToString("dd-MMM-yyyy hh:mm tt");
 
-        items.Add(new TimelineItem("Submitted", "Submitted", submitUser, createdDateText, "dot-green", "bi bi-check-lg", "card-green", "badge-green"));
+        TimelineItem ApprovedFallback(string title) =>
+            new(title, "Approved", "-", "-", "dot-green", "bi bi-check-lg", "card-green", "badge-green");
 
-        if (_approvalHistory != null && _approvalHistory.Any())
+        bool Matches(DR.DealerApprovalHistory h, params string[] roles) =>
+            roles.Any(r => string.Equals(h.Role, r, StringComparison.OrdinalIgnoreCase));
+
+        void AddStageActions(string title, Func<DR.DealerApprovalHistory, bool> match, bool completedFallback = false, DR.DealerApprovalHistory? fallback = null)
         {
-            foreach (var h in _approvalHistory.OrderBy(h => h.ApprovedAt))
+            var matches = history.Where(match).OrderBy(h => h.ApprovedAt).ToList();
+            if (matches.Count > 0)
             {
-                var roleName = h.Role ?? "Unknown";
-                var userName = !string.IsNullOrEmpty(h.ApprovedBy) && _userNames.ContainsKey(h.ApprovedBy)
-                    ? _userNames[h.ApprovedBy]
-                    : (h.ApprovedBy ?? "-");
-                var dateText = h.ApprovedAt.ToString("dd-MMM-yyyy hh:mm tt");
-                var status = h.IsApproved ? "Approved" : "Sent Back";
-
-                var dotClass = h.IsApproved ? "dot-green" : "dot-red";
-                var icon = h.IsApproved ? "bi bi-check-lg" : "bi bi-arrow-counterclockwise";
-                var cardClass = h.IsApproved ? "card-green" : "card-red";
-                var badgeClass = h.IsApproved ? "badge-green" : "badge-red";
-
-                items.Add(new TimelineItem($"Under Review by {roleName}", status, userName, dateText, dotClass, icon, cardClass, badgeClass));
+                foreach (var h in matches)
+                    items.Add(FromHistory(title, h));
+                return;
             }
+
+            if (fallback != null)
+            {
+                items.Add(FromHistory(title, fallback));
+                return;
+            }
+
+            items.Add(completedFallback ? ApprovedFallback(title) : Pending(title));
+        }
+
+        AddStageActions("RM", h => Matches(h, "RM"));
+        AddStageActions("SM", h => Matches(h, "SM", "SMM", "SMD"));
+
+        if (isNewDealerTimeline)
+        {
+            // New dealer AVP/AVP Office actions can interleave (initial AVP, AVP Office, final AVP).
+            // Emit all matching history actions chronologically to preserve every approval/rejection.
+            var avpStageMatches = history
+                .Where(h => Matches(h, "AVP Office", "AVP", "Final AVP"))
+                .OrderBy(h => h.ApprovedAt)
+                .ToList();
+
+            if (avpStageMatches.Count > 0)
+            {
+                foreach (var h in avpStageMatches)
+                    items.Add(FromHistory(Matches(h, "AVP Office") ? "AVP Office" : "AVP", h));
+            }
+            else
+            {
+                if (IsAvpOfficeSubmitted)
+                    items.Add(ApprovedFallback("AVP Office"));
+                if (IsFinalAvpApproved)
+                    items.Add(ApprovedFallback("AVP"));
+            }
+
+            if (!IsAvpOfficeSubmitted && !avpStageMatches.Any(h => Matches(h, "AVP Office")))
+                items.Add(Pending("AVP Office"));
+            if (!IsFinalAvpApproved && !avpStageMatches.Any(h => Matches(h, "Final AVP") || (Matches(h, "AVP") && h.IsApproved && IsFinalAvpApproved && !HasAvpOfficeHistory)))
+                items.Add(Pending("AVP"));
+        }
+        else
+        {
+            AddStageActions("AVP", h => Matches(h, "AVP", "Final AVP"));
         }
 
         TimelineItems = items;
@@ -595,25 +658,41 @@
     private decimal? _previousRmCreditLimit;
     private decimal? _previousSmCreditLimit;
 
-    // New Dealer final AVP approval only records the AVP decision. The company
-    // Dealer IDs are entered afterwards by AVP Office, so no Dealer Code is
-    // previewed or generated here.
+    // New Dealer initial AVP approval only records the AVP decision. The company
+    // Dealer IDs are entered afterwards by AVP Office, followed by a separate
+    // final AVP approval recorded in approval history.
     private bool IsNewDealerFinalApproval =>
         _isNewDealer && (LoginState.IsDirectorOrAVP || LoginState.IsAdmin);
 
-    // AVP Office manual Dealer ID entry (SPIC and/or GFL), saved to the existing
-    // SPICCode / GreenStarCode fields by the server.
+    private bool _isAvpOfficePopupMode;
+    private bool _isFinalAvpPopupMode;
+    private string _successTitle = "";
+    private string _successSubtitle = "";
+
+    // AVP Office Dealer ID submission and final AVP review share the approval popup.
+    // Values are saved to the existing SPICCode / GreenStarCode fields by the server.
     private string _avpOfficeSpicDealerId = string.Empty;
     private string _avpOfficeGflDealerId = string.Empty;
     private string _avpOfficeRemarks = string.Empty;
     private string? _avpOfficeError;
     private bool _isSubmittingAvpOffice;
 
+    private bool HasAvpOfficeHistory =>
+        _approvalHistory.Any(h => h.IsApproved == true &&
+            string.Equals(h.Role, "AVP Office", StringComparison.OrdinalIgnoreCase));
+
     private bool IsAvpOfficeSubmitted =>
         _dealer != null &&
-        (_approvalHistory.Any(h => h.IsApproved == true &&
-             string.Equals(h.Role, "AVP Office", StringComparison.OrdinalIgnoreCase))
-         || !string.IsNullOrWhiteSpace(_dealer.DealerCode));
+        (HasAvpOfficeHistory || !string.IsNullOrWhiteSpace(_dealer.DealerCode));
+
+    private bool IsFinalAvpApproved =>
+        _approvalHistory.Any(h => h.IsApproved == true &&
+            string.Equals(h.Role, "Final AVP", StringComparison.OrdinalIgnoreCase))
+        || (_dealer != null
+            && _dealer.IsNewDealerRegistration
+            && _dealer.AVPApproved == true
+            && !string.IsNullOrWhiteSpace(_dealer.DealerCode)
+            && !HasAvpOfficeHistory);
 
     private bool IsAwaitingAvpOffice =>
         _dealer != null
@@ -621,16 +700,42 @@
         && _dealer.AVPApproved == true
         && !IsAvpOfficeSubmitted;
 
+    private bool IsAwaitingFinalAvp =>
+        _showNewDealerSavedDetails && IsAvpOfficeSubmitted && !IsFinalAvpApproved;
+
     private bool CanShowAvpOfficeSubmit =>
         LoginState.IsAvpOffice
         && _dealer != null
-        && (_dealer.IsNewDealerRegistration || DealerReviewFormat.HasNewDealerRegistrationEvidence(_dealer))
+        && _showNewDealerSavedDetails
         && _dealer.RMApproved == true
         && _dealer.SMApproved == true
         && _dealer.AVPApproved == true
         && !IsAvpOfficeSubmitted;
 
-private async Task ShowConfirmProceedPopup()
+    private bool CanShowFinalAvpApproval =>
+        (LoginState.IsDirectorOrAVP || LoginState.IsAdmin) && IsAwaitingFinalAvp;
+
+
+private async Task OpenApprovalPopup()
+{
+    _isAvpOfficePopupMode = CanShowAvpOfficeSubmit;
+    _isFinalAvpPopupMode = !_isAvpOfficePopupMode && CanShowFinalAvpApproval;
+    _avpOfficeError = null;
+
+    if (_isAvpOfficePopupMode || _isFinalAvpPopupMode)
+    {
+        _avpOfficeSpicDealerId = _dealer?.SPICCode ?? string.Empty;
+        _avpOfficeGflDealerId = _dealer?.GreenStarCode ?? _dealer?.NCode ?? _dealer?.TnCode ?? string.Empty;
+        _avpOfficeRemarks = _approvalHistory
+            .Where(h => string.Equals(h.Role, "AVP Office", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(h => h.ApprovedAt)
+            .LastOrDefault()?.Remarks ?? string.Empty;
+    }
+
+    await ShowConfirmProceedPopupCore();
+}
+
+private async Task ShowConfirmProceedPopupCore()
 {
     ConfirmRemarks = "";
     _approvalError = null;
@@ -682,13 +787,13 @@ private async Task SubmitAvpOfficeIds()
     var spicDealerId = _avpOfficeSpicDealerId?.Trim();
     var gflDealerId = _avpOfficeGflDealerId?.Trim();
 
-    if (_dealer.InSpic && string.IsNullOrWhiteSpace(spicDealerId))
+    if (string.IsNullOrWhiteSpace(spicDealerId))
     {
         _avpOfficeError = "SPIC Dealer ID is required for this application.";
         return;
     }
 
-    if (_dealer.InGreenStar && string.IsNullOrWhiteSpace(gflDealerId))
+    if (string.IsNullOrWhiteSpace(gflDealerId))
     {
         _avpOfficeError = "GFL Dealer ID is required for this application.";
         return;
@@ -703,8 +808,8 @@ private async Task SubmitAvpOfficeIds()
             $"api/DealerRegistration/{_dealer.Id}/avp-office-submit",
             new
             {
-                SpicDealerId = _dealer.InSpic ? spicDealerId : null,
-                GflDealerId = _dealer.InGreenStar ? gflDealerId : null,
+                SpicDealerId = spicDealerId,
+                GflDealerId = gflDealerId,
                 Remarks = _avpOfficeRemarks
             });
 
@@ -719,6 +824,9 @@ private async Task SubmitAvpOfficeIds()
             await FetchRelatedData(_dealer.Id);
 
         MarkDataChanged();
+        IsConfirmProceedPopupVisible = false;
+        _successTitle = "Forwarded to AVP for Final Approval!";
+        _successSubtitle = "Dealer IDs captured. AVP will complete the final approval.";
         _showSuccessNotification = true;
         StateHasChanged();
         await Task.Delay(3000);
@@ -737,9 +845,12 @@ private async Task SubmitAvpOfficeIds()
     }
 }
 
-private void HideConfirmProceedPopup()
+    private void HideConfirmProceedPopup()
     {
         IsConfirmProceedPopupVisible = false;
+        _isAvpOfficePopupMode = false;
+        _isFinalAvpPopupMode = false;
+        _avpOfficeError = null;
         StateHasChanged();
     }
 
@@ -758,6 +869,8 @@ private void HideConfirmProceedPopup()
     private string GetCurrentStageTarget()
     {
         if (LoginState == null) return "Review";
+        if (CanShowAvpOfficeSubmit) return "AVP Office Review";
+        if (CanShowFinalAvpApproval) return "Final AVP Approval";
         if (LoginState.IsRMGroup) return "RM Review";
         if (LoginState.IsSMGroup) return "SM Review";
         if (IsNewDealerFinalApproval) return "AVP Review";
@@ -768,6 +881,8 @@ private void HideConfirmProceedPopup()
     private string GetNextStageTarget()
     {
         if (LoginState == null) return "Next Stage";
+        if (CanShowAvpOfficeSubmit) return "Final AVP Approval";
+        if (CanShowFinalAvpApproval) return "Approved";
         if (LoginState.IsRMGroup) return "State Manager (SM) Review";
         if (LoginState.IsSMGroup) return "AVP Review";
         if (IsNewDealerFinalApproval) return "AVP Office";
@@ -785,13 +900,53 @@ private async Task ApproveDealer()
     try
     {
         // New Dealer flow: remarks are mandatory at every approval stage.
-        if (_isNewDealer && string.IsNullOrWhiteSpace(ConfirmRemarks))
+        if (_isNewDealer && !_isAvpOfficePopupMode && string.IsNullOrWhiteSpace(ConfirmRemarks))
         {
             _approvalError = "Remarks are required for New Dealer approval.";
             return;
         }
 
-        // New Dealer final (AVP) approval records the AVP decision only. The
+        if (_isAvpOfficePopupMode)
+        {
+            await SubmitAvpOfficeIds();
+            return;
+        }
+
+        if (_isFinalAvpPopupMode)
+        {
+            if (string.IsNullOrWhiteSpace(ConfirmRemarks))
+            {
+                _approvalError = "Remarks are required for final AVP approval.";
+                return;
+            }
+
+            var finalResp = await Http.PostAsJsonAsync(
+                $"api/DealerRegistration/{_dealer.Id}/final-approve",
+                new { Remarks = ConfirmRemarks, FinalAfterAvpOffice = true });
+
+            if (!finalResp.IsSuccessStatusCode)
+            {
+                _approvalError = await ReadErrorAsync(finalResp);
+                return;
+            }
+
+            _dealer = await Http.GetFromJsonAsync<DR.DealerRegistration>($"api/DealerRegistration/{_dealer.Id}");
+            if (_dealer != null)
+                await FetchRelatedData(_dealer.Id);
+
+            MarkDataChanged();
+            IsConfirmProceedPopupVisible = false;
+            _successTitle = "New Dealer Finally Approved!";
+            _successSubtitle = "Final AVP approval recorded after AVP Office submission.";
+            _showSuccessNotification = true;
+            StateHasChanged();
+            await Task.Delay(3000);
+            _showSuccessNotification = false;
+            Nav.NavigateTo("/Dashboard");
+            return;
+        }
+
+        // New Dealer initial AVP approval records the AVP decision only. The
         // company Dealer IDs and internal Dealer Code are entered later by AVP
         // Office, so nothing is generated or previewed here.
         if (IsNewDealerFinalApproval)
@@ -809,6 +964,8 @@ private async Task ApproveDealer()
             _dealer = await Http.GetFromJsonAsync<DR.DealerRegistration>($"api/DealerRegistration/{_dealer.Id}");
             MarkDataChanged();
             IsConfirmProceedPopupVisible = false;
+            _successTitle = "Forwarded to AVP Office!";
+            _successSubtitle = "AVP approval recorded. AVP Office will enter the Dealer IDs.";
             _showSuccessNotification = true;
             StateHasChanged();
             await Task.Delay(3000);
@@ -955,6 +1112,9 @@ private async Task ApproveDealer()
         if (_dealer == null)
             return false;
 
+        if (LoginState.IsAvpOffice)
+            return CanShowAvpOfficeSubmit;
+
         if (LoginState.IsRMGroup)
             return _dealer.RMApproved == null || (_dealer.RMApproved == true && _dealer.SMApproved == false);
 
@@ -962,10 +1122,10 @@ private async Task ApproveDealer()
             return (_dealer.RMApproved == true && _dealer.SMApproved == null) || (_dealer.RMApproved == true && _dealer.SMApproved == true && _dealer.AVPApproved == false);
 
         if (LoginState.IsDirectorOrAVP)
-            return _dealer.RMApproved == true && _dealer.SMApproved == true && _dealer.AVPApproved == null;
+            return (_dealer.RMApproved == true && _dealer.SMApproved == true && _dealer.AVPApproved == null) || CanShowFinalAvpApproval;
 
         if (LoginState.IsAdmin)
-            return _dealer.RMApproved == true && _dealer.SMApproved == true && _dealer.AVPApproved == null;
+            return (_dealer.RMApproved == true && _dealer.SMApproved == true && _dealer.AVPApproved == null) || CanShowFinalAvpApproval;
 
         return false;
     }
@@ -1005,6 +1165,8 @@ private async Task ApproveDealer()
 
     private string ApprovalButtonText()
     {
+        if (CanShowAvpOfficeSubmit) return "Submit Dealer IDs";
+        if (CanShowFinalAvpApproval) return "Final Approve";
         if (LoginState.IsRMGroup) return "Proceed to SM";
         if (LoginState.IsSMGroup) return "Proceed to AVP";
         if (LoginState.IsDirectorOrAVP || LoginState.IsAdmin) return "Approve";
@@ -1075,20 +1237,20 @@ private async Task ApproveDealer()
     .status-badge { background: #fef3c7; color: #f97316; border: 1px solid #fdba74; padding: 4px 14px; border-radius: 20px; font-size: 12px; font-weight: 600; }
 
     .approval-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 24px; box-shadow: 0 1px 3px rgba(0,0,0,.08); width: 100%; }
-    .approval-steps-wrapper { display: flex; align-items: center; overflow-x: auto; }
-    .approval-step { display: flex; align-items: center; gap: 14px; min-width: max-content; }
-    .step-circle { width: 48px; height: 48px; border-radius: 50%; background: #d1d5db; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 16px; }
+    .approval-steps-wrapper { display: flex; align-items: center; gap: 0; overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch; padding-bottom: 4px; }
+    .approval-step { display: flex; align-items: center; gap: 14px; min-width: 0; flex: 0 0 auto; }
+    .step-circle { width: 48px; height: 48px; border-radius: 50%; background: #d1d5db; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 16px; flex-shrink: 0; }
     .completed .step-circle { background: #dcfce7; color: #22c55e; border: 1px solid #86efac; font-size: 24px; }
     .active .step-circle { background: #fff3cd; color: #d97706; border: 1px solid #fde68a; }
     .pending .step-circle { background: #fff3cd; color: #d97706; border: 1px solid #fde68a; }
     .approval-step.rejected .step-circle { background: #fee2e2; color: #dc2626; border: 1px solid #fecaca; }
-    .step-title { font-size: 18px; font-weight: 700; color: #374151; }
-    .step-status { font-size: 13px; color: #1f2937; }
+    .step-title { font-size: 18px; font-weight: 700; color: #374151; white-space: nowrap; }
+    .step-status { font-size: 13px; color: #1f2937; white-space: nowrap; }
     .completed .step-status { color: #059669; }
     .active .step-status { color: #d97706; }
     .pending .step-status { color: #d97706; }
     .approval-step.rejected .step-status { color: #dc2626; }
-    .step-line { height: 3px; min-width: 130px; background: #d1d5db; margin: 0 24px; }
+    .step-line { height: 3px; flex: 1 1 40px; min-width: 40px; max-width: 130px; background: #d1d5db; margin: 0 16px; }
     .completed-line { background: #22c55e; }
     .active-line { background: #f97316; }
     .pending-line { background: #f97316; }
@@ -1332,7 +1494,7 @@ private async Task ApproveDealer()
         </div>
     }
 
-    @if (_dealer?.AVPApproved == true && !IsAwaitingAvpOffice)
+    @if (_dealer?.AVPApproved == true && !IsAwaitingAvpOffice && !IsAwaitingFinalAvp)
     {
         <div class="banner">
             <div class="banner-left">
@@ -1365,13 +1527,25 @@ private async Task ApproveDealer()
         </div>
     }
 
+    @if (IsAwaitingFinalAvp && !_showSuccessNotification)
+    {
+        <div class="banner mb-3">
+            <div class="banner-left">
+                <div class="text-block">
+                    <div class="title">Pending Final AVP Approval</div>
+                    <div class="subtitle">AVP Office submitted the Dealer IDs. AVP must complete the final approval.</div>
+                </div>
+            </div>
+        </div>
+    }
+
     @if (_showSuccessNotification)
     {
         <div class="banner mb-3">
             <div class="banner-left">
                 <div class="text-block">
-                    <div class="title">@(IsNewDealerFinalApproval ? "Forwarded to AVP Office!" : "Application Successfully Approved!")</div>
-                    <div class="subtitle">@(IsNewDealerFinalApproval ? "AVP approval recorded. AVP Office will enter the Dealer IDs." : "Redirecting to Dashboard...")</div>
+                    <div class="title">@(string.IsNullOrWhiteSpace(_successTitle) ? "Application Successfully Approved!" : _successTitle)</div>
+                    <div class="subtitle">@(string.IsNullOrWhiteSpace(_successSubtitle) ? "Redirecting to Dashboard..." : _successSubtitle)</div>
                 </div>
             </div>
         </div>
@@ -1394,18 +1568,24 @@ private async Task ApproveDealer()
         <ConfirmProceedPopup Dealer="_dealer"
                              ApprovalHistory="_approvalHistory"
                              Figures="_figures"
-                             IsNewDealer="_isNewDealer"
-                             IsNewDealerFinalApproval="IsNewDealerFinalApproval"
-                             ShowBusinessInfo="_showBusinessInfo"
-                             ShowSpicCreditLimit="_showSpicCreditLimit"
-                             ShowGreenstarCreditLimit="_showGreenstarCreditLimit"
-                             CurrentStageTarget="@GetCurrentStageTarget()"
-                             NextStageTarget="@GetNextStageTarget()"
-                             IsApproving="_isApproving"
-                             ApprovalError="@_approvalError"
-                             OnClose="HideConfirmProceedPopup"
-                             OnConfirm="ApproveDealer"
-                             @bind-ConfirmRemarks="ConfirmRemarks"
+                              IsNewDealer="_isNewDealer"
+                              IsNewDealerFinalApproval="IsNewDealerFinalApproval"
+                              IsAvpOfficeMode="_isAvpOfficePopupMode"
+                              IsFinalAvpMode="_isFinalAvpPopupMode"
+                              @bind-SpicDealerId="_avpOfficeSpicDealerId"
+                              @bind-GflDealerId="_avpOfficeGflDealerId"
+                              @bind-AvpOfficeRemarks="_avpOfficeRemarks"
+                              AvpOfficeError="@_avpOfficeError"
+                              ShowBusinessInfo="_showBusinessInfo"
+                              ShowSpicCreditLimit="_showSpicCreditLimit"
+                              ShowGreenstarCreditLimit="_showGreenstarCreditLimit"
+                              CurrentStageTarget="@GetCurrentStageTarget()"
+                              NextStageTarget="@GetNextStageTarget()"
+                              IsApproving="_isApproving || _isSubmittingAvpOffice"
+                              ApprovalError="@_approvalError"
+                              OnClose="HideConfirmProceedPopup"
+                              OnConfirm="ApproveDealer"
+                              @bind-ConfirmRemarks="ConfirmRemarks"
                              @bind-RmCreditLimitSpic="_rmCreditLimitSpic"
                              @bind-RmCreditLimitGfl="_rmCreditLimitGfl"
                              @bind-SmCreditLimitSpic="_smCreditLimitSpic"
@@ -1416,9 +1596,17 @@ private async Task ApproveDealer()
     }
     <!-- ================== END CONFIRM PROCEED POPUP ================== -->
 
-    <ReviewInfoCards Dealer="_dealer" SubmittedByName="@_submittedByName" DataVersion="_dataVersion" />
+    <ReviewInfoCards Dealer="_dealer"
+                     SubmittedByName="@_submittedByName"
+                     IsAwaitingFinalAvp="IsAwaitingFinalAvp"
+                     IsFinalAvpApproved="IsFinalAvpApproved"
+                     DataVersion="_dataVersion" />
 
-    <ApprovalProgress Dealer="_dealer" DataVersion="_dataVersion" />
+    <ApprovalProgress Dealer="_dealer"
+                      IsNewDealer="_showNewDealerSavedDetails"
+                      IsAvpOfficeSubmitted="IsAvpOfficeSubmitted"
+                      IsFinalAvpApproved="IsFinalAvpApproved"
+                      DataVersion="_dataVersion" />
 
     <ReviewTimeline Items="TimelineItems" />
 
@@ -1428,7 +1616,7 @@ private async Task ApproveDealer()
                           ApprovalHistory="_approvalHistory"
                           UserNames="_userNames"
                           ShowBusinessInfo="_showBusinessInfo"
-                          IsNewDealer="_isNewDealer"
+                          IsNewDealer="_showNewDealerSavedDetails"
                           Figures="_figures"
                           DataVersion="_dataVersion" />
 
@@ -1568,70 +1756,6 @@ private async Task ApproveDealer()
 
 
 
-@if (CanShowAvpOfficeSubmit)
-{
-    <div class="avp-office-card">
-        <div class="avp-office-header">
-            <div>
-                <h5 class="avp-office-title">AVP Office - Dealer ID Submission</h5>
-                <p class="avp-office-subtitle">
-                    Enter the company Dealer IDs issued for this approved New Dealer.
-                    Both are saved to the existing dealer registration.
-                </p>
-            </div>
-        </div>
-
-        <div class="avp-office-grid">
-            @if (_dealer?.InSpic == true)
-            {
-                <div class="avp-office-field">
-                    <label for="avpOfficeSpicId">SPIC Dealer ID <span class="text-danger">*</span></label>
-                    <input id="avpOfficeSpicId"
-                           class="form-control"
-                           maxlength="50"
-                           @bind="_avpOfficeSpicDealerId"
-                           @bind:event="oninput"
-                           placeholder="Enter SPIC Dealer ID" />
-                </div>
-            }
-            @if (_dealer?.InGreenStar == true)
-            {
-                <div class="avp-office-field">
-                    <label for="avpOfficeGflId">GFL Dealer ID <span class="text-danger">*</span></label>
-                    <input id="avpOfficeGflId"
-                           class="form-control"
-                           maxlength="50"
-                           @bind="_avpOfficeGflDealerId"
-                           @bind:event="oninput"
-                           placeholder="Enter GFL Dealer ID" />
-                </div>
-            }
-            <div class="avp-office-field avp-office-remarks">
-                <label for="avpOfficeRemarks">Remarks (optional)</label>
-                <textarea id="avpOfficeRemarks"
-                          class="form-control"
-                          rows="2"
-                          @bind="_avpOfficeRemarks"
-                          placeholder="Enter remarks"></textarea>
-            </div>
-        </div>
-
-        @if (!string.IsNullOrWhiteSpace(_avpOfficeError))
-        {
-            <div class="avp-office-error">@_avpOfficeError</div>
-        }
-
-        <div class="avp-office-actions">
-            <button type="button"
-                    class="btn-submit px-3"
-                    @onclick="SubmitAvpOfficeIds"
-                    disabled="@_isSubmittingAvpOffice">
-                @(_isSubmittingAvpOffice ? "Submitting..." : "Submit Dealer IDs")
-            </button>
-        </div>
-    </div>
-}
-
 @if (CanShowApprovalButton())
 {
     <ActionBar CssClass="sdr-review-actions" AriaLabel="Review actions">
@@ -1643,7 +1767,7 @@ private async Task ApproveDealer()
             </button>
         </Secondary>
         <ChildContent>
-            <button class="btn-submit px-3" @onclick="ShowConfirmProceedPopup" disabled="@_isApproving">
+            <button class="btn-submit px-3" @onclick="OpenApprovalPopup" disabled="@_isApproving">
                 @(_isApproving ? "Processing..." : ApprovalButtonText())
             </button>
         </ChildContent>
@@ -1668,10 +1792,7 @@ private async Task ApproveDealer()
         .sdr-review-page .file-view-btn { min-height: 40px; padding: 6px 12px; font-size: 0.8rem; }
         .sdr-review-page .approved-btn { white-space: normal; }
 
-        /* Approval progress: at 392px the four stages (MO / RM / SM / AVP) plus the
-           130px connector lines overflowed .approval-steps-wrapper, so everything
-           after MO was cut off at the card edge with no scroll affordance. Lay the
-           stages out as a 2x2 grid on phones and drop the connectors. */
+        /* Approval progress: avoid horizontal overflow on phones by stacking stages in a grid (no connector lines). */
         .approval-card { padding: 16px; }
 
         .approval-steps-wrapper {
@@ -1690,8 +1811,8 @@ private async Task ApproveDealer()
         .step-line { display: none; }
         .step-circle { width: 40px; height: 40px; font-size: 14px; flex-shrink: 0; }
         .completed .step-circle { font-size: 20px; }
-        .step-title { font-size: 15px; }
-        .step-status { font-size: 12px; }
+        .step-title { font-size: 15px; white-space: normal; }
+        .step-status { font-size: 12px; white-space: normal; }
     }
 
     .newdealer-review-box { height: 100%; border: 1px solid #dbeafe; background: #f8fbff; border-radius: 10px; padding: 14px 16px; }
@@ -1717,13 +1838,5 @@ private async Task ApproveDealer()
 .credit-box-label { color: #c9e8d2; font-size: 0.72rem; margin-bottom: 6px; }
 .credit-box-val { color: #fff; font-weight: 700; font-size: 1.1rem; }
 
-.avp-office-card { background: #F0FDFA; border: 1px solid #99F6E4; border-radius: 12px; padding: 18px 20px; margin: 16px 0; }
-.avp-office-title { color: #115E59; font-weight: 700; font-size: 1rem; margin: 0 0 4px; }
-.avp-office-subtitle { color: #374151; font-size: 0.82rem; margin: 0 0 14px; }
-.avp-office-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
-.avp-office-field { display: flex; flex-direction: column; gap: 5px; }
-.avp-office-field label { font-size: 0.78rem; font-weight: 600; color: #374151; }
-.avp-office-remarks { grid-column: 1 / -1; }
-.avp-office-actions { display: flex; justify-content: flex-end; margin-top: 14px; }
-.avp-office-error { background: #FEF2F2; border: 1px solid #FECACA; color: #B91C1C; border-radius: 8px; padding: 10px 12px; font-size: 0.82rem; margin-top: 12px; }
+.timeline-remarks { margin-top: 8px; padding-top: 8px; border-top: 1px dashed #e5e7eb; color: #4b5563; font-size: 0.75rem; line-height: 1.35; word-break: break-word; }
 </style>

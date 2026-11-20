@@ -76,8 +76,21 @@
 
                     <header class="cp-modal-header">
                         <div class="header-text">
-                            <h1 class="cp-modal-title">Confirm Proceed</h1>
-                            <p class="cp-modal-subtitle">Are you sure you want to approve and forward this application to @NextStageTarget?</p>
+                            <h1 class="cp-modal-title">@(IsAvpOfficeMode ? "Submit Dealer IDs" : IsFinalAvpMode ? "Final AVP Approval" : "Confirm Proceed")</h1>
+                            <p class="cp-modal-subtitle">
+                                @if (IsAvpOfficeMode)
+                                {
+                                    <text>Enter both company Dealer IDs. The application will be forwarded to AVP for final approval.</text>
+                                }
+                                else if (IsFinalAvpMode)
+                                {
+                                    <text>Review the AVP Office submission and complete the final approval.</text>
+                                }
+                                else
+                                {
+                                    <text>Are you sure you want to approve and forward this application to @DisplayNextStage?</text>
+                                }
+                            </p>
                         </div>
                         <button class="cp-btn-close" aria-label="Close modal" @onclick="OnClose">
                             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -107,7 +120,7 @@
                                     <span class="cp-summary-label">Dealer Name</span>
                                     <span class="cp-summary-value">@(Dealer?.FirmName ?? "-")</span>
                                 </div>
-                                @if (Dealer?.Status != DR.DealerStatus.InActive && ShowBusinessInfo && !IsNewDealer)
+                                @if (Dealer?.Status != DR.DealerStatus.InActive && ShowBusinessInfo && !IsNewDealer && !IsAvpOfficeMode && !IsFinalAvpMode)
                                 {
                                     @if (Dealer?.IsCreditLimitConsentGiven != true)
                                     {
@@ -129,21 +142,63 @@
                                 }
                                 <div class="cp-summary-item">
                                     <span class="cp-summary-label">Current Stage</span>
-                                    <span class="cp-summary-value">@CurrentStageTarget</span>
+                                    <span class="cp-summary-value">@DisplayCurrentStage</span>
                                 </div>
                                 <div class="cp-summary-item">
                                     <span class="cp-summary-label">Next Stage</span>
-                                    <span class="cp-summary-value">@NextStageTarget</span>
+                                    <span class="cp-summary-value">@DisplayNextStage</span>
                                 </div>
                             </div>
                         </section>
 
+                        @if (IsAvpOfficeMode || IsFinalAvpMode)
+                        {
+                            <section class="cp-code-section">
+                                <h2 class="cp-section-title">
+                                    @(IsAvpOfficeMode ? "Company Dealer IDs" : "Dealer IDs Submitted by AVP Office")
+                                </h2>
+                                <div class="cp-code-row">
+                                    <div class="cp-code-field">
+                                        <label>SPIC Dealer ID @(IsAvpOfficeMode ? "*" : "")</label>
+                                        @if (IsAvpOfficeMode)
+                                        {
+                                            <input class="cp-code-input" maxlength="50" @bind="SpicValue" placeholder="Enter SPIC Dealer ID" />
+                                        }
+                                        else
+                                        {
+                                            <input class="cp-code-input" value="@SpicValue" readonly />
+                                        }
+                                    </div>
+                                    <div class="cp-code-field">
+                                        <label>GFL Dealer ID @(IsAvpOfficeMode ? "*" : "")</label>
+                                        @if (IsAvpOfficeMode)
+                                        {
+                                            <input class="cp-code-input" maxlength="50" @bind="GflValue" placeholder="Enter GFL Dealer ID" />
+                                        }
+                                        else
+                                        {
+                                            <input class="cp-code-input" value="@GflValue" readonly />
+                                        }
+                                    </div>
+                                </div>
+
+                                @if (IsFinalAvpMode && !string.IsNullOrWhiteSpace(AvpOfficeRemarks))
+                                {
+                                    <div class="cp-code-help"><strong>AVP Office Remarks:</strong> @AvpOfficeRemarks</div>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(AvpOfficeError))
+                                {
+                                    <div class="cp-code-error">@AvpOfficeError</div>
+                                }
+                            </section>
+                        }
+
                         <section class="cp-remarks-section">
-                            <h2 class="cp-section-title">Remarks <span class="cp-optional-text">@(IsNewDealer ? "(required)" : "(optional)")</span></h2>
-                            <textarea class="cp-remarks-input" @bind="Remarks" placeholder="@(IsNewDealer ? "Remarks are required for this stage" : "Enter Remarks Optional")"></textarea>
+                            <h2 class="cp-section-title">Remarks <span class="cp-optional-text">@(IsAvpOfficeMode ? "(optional)" : (IsNewDealer || IsFinalAvpMode ? "(required)" : "(optional)"))</span></h2>
+                            <textarea class="cp-remarks-input" @bind="Remarks" placeholder="@(IsAvpOfficeMode ? "Enter remarks Optional" : (IsNewDealer || IsFinalAvpMode ? "Remarks are required for this stage" : "Enter Remarks Optional"))"></textarea>
                         </section>
 
-                       @if (Dealer?.IsCreditLimitConsentGiven == true)
+                       @if (!IsAvpOfficeMode && !IsFinalAvpMode && Dealer?.IsCreditLimitConsentGiven == true)
                        {
                            <section class="cp-remarks-section" style="background:#F0FDF4; border:1px solid #BBF7D0; border-radius:8px; padding:14px 18px; margin-bottom:16px;">
                                <div style="display:flex; align-items:center; gap:8px; color:#166534; font-weight:600; font-size:0.95rem; margin-bottom:4px;">
@@ -156,8 +211,8 @@
 <p style="margin:0; color:#374151; font-size:0.875rem; font-weight:500;">Disclaimer: The form has been submitted with consent (i.e.,) without credit limit details. Hence the dealer's credit limit is <strong>0</strong>.</p>
                             </section>
                        }
-                       else if (Dealer?.Status != DR.DealerStatus.InActive && ShowBusinessInfo && !IsNewDealer)
-                       {
+                        else if (!IsAvpOfficeMode && !IsFinalAvpMode && Dealer?.Status != DR.DealerStatus.InActive && ShowBusinessInfo && !IsNewDealer)
+                        {
                            @if (LoginState.IsRMGroup)
 {
     <section class="cp-credit-section">
@@ -297,7 +352,7 @@
                                     <line x1="12" y1="8" x2="12.01" y2="8"></line>
                                 </svg>
                             </div>
-                            <p class="cp-alert-text">Once You Proceed the Application will be Forwarded to @NextStageTarget and you will not be able to edit it</p>
+                            <p class="cp-alert-text">Once You Proceed the Application will be Forwarded to @DisplayNextStage and you will not be able to edit it</p>
                         </div>
                     </div>
 
@@ -315,7 +370,7 @@
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <polyline points="20 6 9 17 4 12"></polyline>
                             </svg>
-                            @(IsApproving ? "Processing..." : "Confirm & Proceed")
+                            @(IsApproving ? "Processing..." : (IsAvpOfficeMode ? "Submit Dealer IDs" : IsFinalAvpMode ? "Final Approve" : "Confirm & Proceed"))
                         </button>
                     </footer>
 
@@ -330,12 +385,36 @@
 
     [Parameter] public bool IsNewDealer { get; set; }
     [Parameter] public bool IsNewDealerFinalApproval { get; set; }
+    [Parameter] public bool IsAvpOfficeMode { get; set; }
+    [Parameter] public bool IsFinalAvpMode { get; set; }
+    [Parameter] public string SpicDealerId { get; set; } = "";
+    [Parameter] public EventCallback<string> SpicDealerIdChanged { get; set; }
+    [Parameter] public string GflDealerId { get; set; } = "";
+    [Parameter] public EventCallback<string> GflDealerIdChanged { get; set; }
+    [Parameter] public string AvpOfficeRemarks { get; set; } = "";
+    [Parameter] public EventCallback<string> AvpOfficeRemarksChanged { get; set; }
+    [Parameter] public string? AvpOfficeError { get; set; }
     [Parameter] public bool ShowBusinessInfo { get; set; }
     [Parameter] public bool ShowSpicCreditLimit { get; set; }
     [Parameter] public bool ShowGreenstarCreditLimit { get; set; }
 
     [Parameter] public string CurrentStageTarget { get; set; } = "";
     [Parameter] public string NextStageTarget { get; set; } = "";
+
+    private string DisplayCurrentStage => (IsNewDealer, CurrentStageTarget) switch
+    {
+        (true, "AVP Review") => "AVP",
+        (true, "AVP Office Review") => "AVP Office",
+        (true, "Final AVP Approval") => "AVP",
+        _ => CurrentStageTarget
+    };
+
+    private string DisplayNextStage => (IsNewDealer, NextStageTarget) switch
+    {
+        (true, "AVP Office") => "AVP Office",
+        (true, "Final AVP Approval") => "AVP",
+        _ => NextStageTarget
+    };
 
     [Parameter] public bool IsApproving { get; set; }
     [Parameter] public string? ApprovalError { get; set; }
@@ -367,8 +446,31 @@
 
     private string Remarks
     {
-        get => ConfirmRemarks;
-        set { ConfirmRemarks = value; ConfirmRemarksChanged.InvokeAsync(value); }
+        get => IsAvpOfficeMode ? AvpOfficeRemarks : ConfirmRemarks;
+        set
+        {
+            if (IsAvpOfficeMode)
+            {
+                AvpOfficeRemarks = value;
+                AvpOfficeRemarksChanged.InvokeAsync(value);
+                return;
+            }
+
+            ConfirmRemarks = value;
+            ConfirmRemarksChanged.InvokeAsync(value);
+        }
+    }
+
+    private string SpicValue
+    {
+        get => SpicDealerId;
+        set { SpicDealerId = value; SpicDealerIdChanged.InvokeAsync(value); }
+    }
+
+    private string GflValue
+    {
+        get => GflDealerId;
+        set { GflDealerId = value; GflDealerIdChanged.InvokeAsync(value); }
     }
 
     private decimal? RmSpic
