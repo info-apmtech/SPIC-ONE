@@ -201,6 +201,21 @@ namespace Spic.Infrastructure.Data
                     .OnDelete(DeleteBehavior.SetNull);
             });
 
+            builder.Entity<JmdoDealerVisitPostponeRequest>(entity =>
+            {
+                entity.HasOne(x => x.DealerRow)
+                    .WithMany()
+                    .HasForeignKey(x => x.DealerRowId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasIndex(x => x.RequestedByUserId);
+                // Belt-and-suspenders against two near-simultaneous requests for the same dealer
+                // row - the app-level check in the create endpoint is the primary guard, this is
+                // the race-proof backstop.
+                entity.HasIndex(x => x.DealerRowId)
+                    .HasFilter("\"Status\" = 0")
+                    .IsUnique();
+            });
+
             // JMDO Attendance and Tracking: one attendance row per (UserId, Date); a session is a
             // continuous GPS tracking window within a day's attendance; a point is one GPS fix
             // within a session. Tracking sessions/points are not written yet (next step), but the
@@ -1052,6 +1067,7 @@ namespace Spic.Infrastructure.Data
         public DbSet<JmdoTaskAllocationProgram> JmdoTaskAllocationPrograms { get; set; }
         public DbSet<JmdoTaskCloseout> JmdoTaskCloseouts { get; set; }
         public DbSet<JmdoTaskCloseoutProduct> JmdoTaskCloseoutProducts { get; set; }
+        public DbSet<JmdoDealerVisitPostponeRequest> JmdoDealerVisitPostponeRequests { get; set; }
         public DbSet<JmdoYearlyTarget> JmdoYearlyTargets { get; set; }
 
         //// Knowledge Community

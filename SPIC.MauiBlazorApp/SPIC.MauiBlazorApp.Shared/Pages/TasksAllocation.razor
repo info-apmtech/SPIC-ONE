@@ -546,6 +546,18 @@
 
                     <!-- Task cards -->
                     <div class="ta-wizard-content">
+                        @if (_selectedPostponeRowIds.Count > 0)
+                        {
+                            <div class="ta-postpone-selection-bar">
+                                <span><i class="bi bi-calendar-event"></i> @_selectedPostponeRowIds.Count visit(s) selected for postponement</span>
+                                <div class="ta-postpone-selection-actions">
+                                    <button type="button" class="ta-modal-btn-outline" @onclick="ClearPostponeSelection">Clear</button>
+                                    <button type="button" class="ta-postpone-btn" @onclick="OpenBulkPostponeModal">
+                                        <i class="bi bi-calendar-event"></i> Postpone Selected
+                                    </button>
+                                </div>
+                            </div>
+                        }
                         <div class="ta-today-grid">
                             @if (BadgeCount(todayFilter) == 0)
                             {
@@ -589,11 +601,27 @@
                                                 </div>
                                             </div>
 
-                                            @if (CanActOnTasks)
+                                            @if (assignment.PendingPostponeRequestId != null)
                                             {
-                                                <button type="button" class="ta-start-btn" @onclick='() => Navigation.NavigateTo($"/TaskDetail?type=dealer&id=dealer_{assignment.DealerId}")'>
-                                                    @ActionLabel(dStatus) <i class="bi bi-arrow-right"></i>
-                                                </button>
+                                                <div class="ta-postpone-badge">
+                                                    <i class="bi bi-calendar-event"></i> Postpone Requested &rarr; @assignment.PendingPostponeRequestedDate?.ToString("dd MMM yyyy")
+                                                </div>
+                                            }
+                                            else
+                                            {
+                                                @if (CanActOnTasks)
+                                                {
+                                                    <button type="button" class="ta-start-btn" @onclick='() => Navigation.NavigateTo($"/TaskDetail?type=dealer&id=dealer_{assignment.DealerId}")'>
+                                                        @ActionLabel(dStatus) <i class="bi bi-arrow-right"></i>
+                                                    </button>
+                                                    @if (dStatus != AllocTaskStatus.Completed)
+                                                    {
+                                                        <label class="ta-postpone-select">
+                                                            <input type="checkbox" checked="@_selectedPostponeRowIds.Contains(assignment.RowId)" @onchange="() => TogglePostponeSelection(assignment.RowId)" />
+                                                            <span>Select to postpone</span>
+                                                        </label>
+                                                    }
+                                                }
                                             }
                                         </div>
                                     }
@@ -807,6 +835,18 @@
             }
             else
             {
+                @if (_selectedPostponeRowIds.Count > 0)
+                {
+                    <div class="ta-postpone-selection-bar">
+                        <span><i class="bi bi-calendar-event"></i> @_selectedPostponeRowIds.Count visit(s) selected for postponement</span>
+                        <div class="ta-postpone-selection-actions">
+                            <button type="button" class="ta-modal-btn-outline" @onclick="ClearPostponeSelection">Clear</button>
+                            <button type="button" class="ta-postpone-btn" @onclick="OpenBulkPostponeModal">
+                                <i class="bi bi-calendar-event"></i> Postpone Selected
+                            </button>
+                        </div>
+                    </div>
+                }
                 <div class="ta-today-grid">
                     @foreach (var assignment in FilteredCompletedDealers)
                     {
@@ -833,6 +873,14 @@
                                 <span>PoS Liquidation</span>
                                 <strong>@(assignment.PosLiquidationQty?.ToString("N2") ?? "—")</strong>
                             </div>
+                            <div class="ta-dealer-info-row">
+                                <span><i class="bi bi-play-circle"></i> Started</span>
+                                <strong>@FormatTaskDateTime(assignment.StartedAt)</strong>
+                            </div>
+                            <div class="ta-dealer-info-row">
+                                <span><i class="bi bi-check-circle"></i> Completed</span>
+                                <strong>@FormatTaskDateTime(assignment.CompletedAt)</strong>
+                            </div>
 
                             <div class="ta-dealer-stats-row ta-dealer-stats-row-single">
                                 <div class="ta-mini-stat ta-mini-stat-pending">
@@ -841,11 +889,29 @@
                                 </div>
                             </div>
 
-                            @if (CanActOnTasks)
+                            @if (assignment.PendingPostponeRequestId != null)
                             {
-                                <button type="button" class="ta-start-btn" @onclick='() => Navigation.NavigateTo($"/TaskDetail?type=dealer&id=dealer_{assignment.DealerId}")'>
-                                    @ActionLabel(assignment.Status) <i class="bi bi-arrow-right"></i>
-                                </button>
+                                <div class="ta-postpone-badge">
+                                    <i class="bi bi-calendar-event"></i> Postpone Requested &rarr; @assignment.PendingPostponeRequestedDate?.ToString("dd MMM yyyy")
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="ta-dealer-actions-row">
+                                    @if (CanActOnTasks)
+                                    {
+                                        <button type="button" class="ta-start-btn" @onclick='() => Navigation.NavigateTo($"/TaskDetail?type=dealer&id=dealer_{assignment.DealerId}")'>
+                                            @ActionLabel(assignment.Status) <i class="bi bi-arrow-right"></i>
+                                        </button>
+                                        @if (assignment.Status != AllocTaskStatus.Completed)
+                                        {
+                                            <label class="ta-postpone-select">
+                                                <input type="checkbox" checked="@_selectedPostponeRowIds.Contains(assignment.RowId)" @onchange="() => TogglePostponeSelection(assignment.RowId)" />
+                                                <span>Select to postpone</span>
+                                            </label>
+                                        }
+                                    }
+                                </div>
                             }
                         </div>
                     }
@@ -867,6 +933,14 @@
                             <div class="ta-dealer-info-row">
                                 <span><i class="bi bi-calendar3"></i> Sanction Date</span>
                                 <strong>@FormatProgramSanctionDate(program)</strong>
+                            </div>
+                            <div class="ta-dealer-info-row">
+                                <span><i class="bi bi-play-circle"></i> Started</span>
+                                <strong>@FormatTaskDateTime(program.StartedAt)</strong>
+                            </div>
+                            <div class="ta-dealer-info-row">
+                                <span><i class="bi bi-check-circle"></i> Completed</span>
+                                <strong>@FormatTaskDateTime(program.CompletedAt)</strong>
                             </div>
 
                             <div class="ta-dealer-stats-row">
@@ -894,12 +968,30 @@
                         <div class="ta-today-card ta-today-card-narrow @StatusCardClass(alloc.SpcmStatus)">
                             <span class="ta-type-pill ta-type-pill-teal"><i class="bi bi-bullseye"></i> SPCM</span>
 
-                            <div class="ta-today-target-box">
-                                <span class="ta-today-target-icon"><i class="bi bi-bullseye"></i></span>
-                                <div>
-                                    <div class="ta-target-label">Today's Target</div>
-                                    <div class="ta-today-target-val">@alloc.SpcmTarget</div>
+                            <div class="ta-today-products-row">
+                                <div class="ta-today-target-box">
+                                    <span class="ta-today-target-icon"><i class="bi bi-bullseye"></i></span>
+                                    <div>
+                                        <div class="ta-target-label">Target</div>
+                                        <div class="ta-today-target-val">@alloc.SpcmTarget</div>
+                                    </div>
                                 </div>
+                                <div class="ta-today-target-box">
+                                    <span class="ta-today-target-icon"><i class="bi bi-check-circle"></i></span>
+                                    <div>
+                                        <div class="ta-target-label">Achieved</div>
+                                        <div class="ta-today-target-val">@SpcmAchieved(alloc)</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="ta-dealer-info-row">
+                                <span><i class="bi bi-play-circle"></i> Started</span>
+                                <strong>@FormatTaskDateTime(alloc.SpcmStartedAt)</strong>
+                            </div>
+                            <div class="ta-dealer-info-row">
+                                <span><i class="bi bi-check-circle"></i> Completed</span>
+                                <strong>@FormatTaskDateTime(alloc.SpcmCompletedAt)</strong>
                             </div>
 
                             @if (CanActOnTasks)
@@ -916,12 +1008,30 @@
                         <div class="ta-today-card ta-today-card-narrow @StatusCardClass(alloc.SoilSampleStatus)">
                             <span class="ta-type-pill ta-type-pill-orange"><i class="bi bi-moisture"></i> Soil Sample</span>
 
-                            <div class="ta-today-target-box">
-                                <span class="ta-today-target-icon"><i class="bi bi-eyedropper"></i></span>
-                                <div>
-                                    <div class="ta-target-label">Today's Target</div>
-                                    <div class="ta-today-target-val">@alloc.SoilSampleTarget</div>
+                            <div class="ta-today-products-row">
+                                <div class="ta-today-target-box">
+                                    <span class="ta-today-target-icon"><i class="bi bi-eyedropper"></i></span>
+                                    <div>
+                                        <div class="ta-target-label">Target</div>
+                                        <div class="ta-today-target-val">@alloc.SoilSampleTarget</div>
+                                    </div>
                                 </div>
+                                <div class="ta-today-target-box">
+                                    <span class="ta-today-target-icon"><i class="bi bi-check-circle"></i></span>
+                                    <div>
+                                        <div class="ta-target-label">Achieved</div>
+                                        <div class="ta-today-target-val">@SoilSampleAchieved(alloc)</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="ta-dealer-info-row">
+                                <span><i class="bi bi-play-circle"></i> Started</span>
+                                <strong>@FormatTaskDateTime(alloc.SoilSampleStartedAt)</strong>
+                            </div>
+                            <div class="ta-dealer-info-row">
+                                <span><i class="bi bi-check-circle"></i> Completed</span>
+                                <strong>@FormatTaskDateTime(alloc.SoilSampleCompletedAt)</strong>
                             </div>
 
                             <button type="button" class="ta-start-btn" @onclick="ViewDetailsNotAvailable">
@@ -935,13 +1045,14 @@
                         <div class="ta-today-card ta-today-card-wide @StatusCardClass(alloc.PosLiquidationStatus)">
                             <span class="ta-type-pill ta-type-pill-grey"><i class="bi bi-box-seam"></i> PoS Liquidation</span>
 
-                            <div class="ta-today-products-label"><i class="bi bi-clipboard-check"></i> Products to liquidate</div>
+                            <div class="ta-today-products-label"><i class="bi bi-clipboard-check"></i> Products to liquidate (Target / Achieved)</div>
                             <div class="ta-today-products-row">
                                 @if (alloc.UreaTarget > 0)
                                 {
                                     <div class="ta-today-product-tile">
                                         <div class="ta-today-product-name">UREA</div>
                                         <div class="ta-today-product-val">@alloc.UreaTarget</div>
+                                        <div class="ta-week-target-numbers">Achieved <strong>@PosCloseouts(alloc).Sum(c => c.Urea ?? 0)</strong></div>
                                     </div>
                                 }
                                 @if (alloc.NpsTarget > 0)
@@ -949,6 +1060,7 @@
                                     <div class="ta-today-product-tile">
                                         <div class="ta-today-product-name">NPKS</div>
                                         <div class="ta-today-product-val">@alloc.NpsTarget</div>
+                                        <div class="ta-week-target-numbers">Achieved <strong>@PosCloseouts(alloc).Sum(c => c.Nps ?? 0)</strong></div>
                                     </div>
                                 }
                                 @if (alloc.DapTarget > 0)
@@ -956,6 +1068,7 @@
                                     <div class="ta-today-product-tile">
                                         <div class="ta-today-product-name">DAP</div>
                                         <div class="ta-today-product-val">@alloc.DapTarget</div>
+                                        <div class="ta-week-target-numbers">Achieved <strong>@PosCloseouts(alloc).Sum(c => c.Dap ?? 0)</strong></div>
                                     </div>
                                 }
                                 @if (alloc.OthersTarget > 0)
@@ -963,8 +1076,18 @@
                                     <div class="ta-today-product-tile">
                                         <div class="ta-today-product-name">OTHER</div>
                                         <div class="ta-today-product-val">@alloc.OthersTarget</div>
+                                        <div class="ta-week-target-numbers">Achieved <strong>@PosCloseouts(alloc).Sum(c => c.Other ?? 0)</strong></div>
                                     </div>
                                 }
+                            </div>
+
+                            <div class="ta-dealer-info-row">
+                                <span><i class="bi bi-play-circle"></i> Started</span>
+                                <strong>@FormatTaskDateTime(alloc.PosLiquidationStartedAt)</strong>
+                            </div>
+                            <div class="ta-dealer-info-row">
+                                <span><i class="bi bi-check-circle"></i> Completed</span>
+                                <strong>@FormatTaskDateTime(alloc.PosLiquidationCompletedAt)</strong>
                             </div>
 
                             @if (CanActOnTasks)
@@ -1160,6 +1283,52 @@
 
 </div>
 
+@* Request Postponement modal - select one or more visits via their card checkbox (Today's
+   Allocation/Task History), then one date (min today) + one reason applied to all of them,
+   posted to api/JmdoTaskAllocation/postpone-requests once per selected visit. See
+   TogglePostponeSelection/OpenBulkPostponeModal/SubmitPostponeRequest below. *@
+@if (_postponeModalOpen)
+{
+    <div class="ta-modal-overlay">
+        <div class="ta-modal-card">
+            <div class="ta-modal-header">
+                <h4>Request Postponement</h4>
+                <button type="button" class="ta-modal-close" @onclick="ClosePostponeModal" aria-label="Close">&times;</button>
+            </div>
+            <div class="ta-modal-body">
+                <p>Move <strong>@SelectedPostponeAssignments.Count</strong> visit(s) to a different day - this needs your MDO's approval before it takes effect.</p>
+
+                <ul class="ta-postpone-selected-list">
+                    @foreach (var d in SelectedPostponeAssignments)
+                    {
+                        <li>@d.DealerName <span class="text-muted">(@d.DealerCode)</span></li>
+                    }
+                </ul>
+
+                <div class="ta-modal-field">
+                    <label for="ta-postpone-date">New date</label>
+                    <input id="ta-postpone-date" type="date" @bind="_postponeDate" min="@DateTime.Today.ToString("yyyy-MM-dd")" />
+                </div>
+                <div class="ta-modal-field">
+                    <label for="ta-postpone-reason">Reason</label>
+                    <textarea id="ta-postpone-reason" rows="3" placeholder="e.g. Not available that day / partially completed, need another visit" @bind="_postponeReason"></textarea>
+                </div>
+
+                @if (!string.IsNullOrWhiteSpace(_postponeError))
+                {
+                    <p class="text-danger mt-2">@_postponeError</p>
+                }
+            </div>
+            <div class="ta-modal-footer">
+                <button type="button" class="ta-modal-btn-outline" @onclick="ClosePostponeModal" disabled="@_postponeSubmitting">Cancel</button>
+                <button type="button" class="ta-modal-btn-primary" @onclick="SubmitPostponeRequest" disabled="@_postponeSubmitting">
+                    @(_postponeSubmitting ? "Submitting..." : $"Submit Request ({_selectedPostponeRowIds.Count})")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
     private enum TaTab { All, Today, Completed, Summary }
 
@@ -1257,6 +1426,140 @@
         finally
         {
             _isLoadingCompleted = false;
+        }
+    }
+
+    // ---------- Request Postponement modal (dealer visits only - see JmdoDealerVisitPostponeRequest's
+    // own doc comment for why MD Program/SPCM/Soil Sample/PoS Liquidation aren't included) ----------
+    // Selection is a single shared set across BOTH tabs (Today's Allocation/Task History both
+    // surface the same checkbox) - a dealer row's Id means the same thing regardless of which
+    // tab it's currently being viewed from, and the selection bar/modal below read from this
+    // one set no matter which tab is open.
+    private readonly HashSet<int> _selectedPostponeRowIds = new();
+
+    private bool _postponeModalOpen;
+    private DateTime _postponeDate = DateTime.Today.AddDays(1);
+    private string _postponeReason = "";
+    private string? _postponeError;
+    private bool _postponeSubmitting;
+
+    // Every dealer row currently known to the client, from whichever source has it - used only
+    // to resolve a selected RowId back to a display name/code in the modal's summary list.
+    // DistinctBy guards against the same row appearing in both todayAllocation and _allAllocations
+    // (today's own allocation is also one of the entries _allAllocations holds).
+    private IEnumerable<JmdoDealerAssignmentResponseDto> AllKnownDealerAssignments =>
+        (todayAllocation?.DealerAssignments ?? Enumerable.Empty<JmdoDealerAssignmentResponseDto>())
+            .Concat(_allAllocations.SelectMany(a => a.DealerAssignments))
+            .DistinctBy(d => d.RowId);
+
+    private List<JmdoDealerAssignmentResponseDto> SelectedPostponeAssignments =>
+        AllKnownDealerAssignments.Where(d => _selectedPostponeRowIds.Contains(d.RowId)).ToList();
+
+    private void TogglePostponeSelection(int rowId)
+    {
+        if (!_selectedPostponeRowIds.Add(rowId))
+            _selectedPostponeRowIds.Remove(rowId);
+    }
+
+    private void ClearPostponeSelection() => _selectedPostponeRowIds.Clear();
+
+    private void OpenBulkPostponeModal()
+    {
+        if (_selectedPostponeRowIds.Count == 0) return;
+        _postponeModalOpen = true;
+        _postponeDate = DateTime.Today.AddDays(1);
+        _postponeReason = "";
+        _postponeError = null;
+    }
+
+    private void ClosePostponeModal()
+    {
+        if (_postponeSubmitting) return;
+        // Selection deliberately survives Cancel - closing to double-check something on a card
+        // shouldn't lose the picks already made.
+        _postponeModalOpen = false;
+    }
+
+    private async Task SubmitPostponeRequest()
+    {
+        if (!_postponeModalOpen || _postponeSubmitting || _selectedPostponeRowIds.Count == 0) return;
+
+        if (_postponeDate.Date < DateTime.Today)
+        {
+            _postponeError = "Pick a date from today onward.";
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(_postponeReason))
+        {
+            _postponeError = "A reason is required.";
+            return;
+        }
+
+        _postponeSubmitting = true;
+        _postponeError = null;
+        try
+        {
+            // One request per selected visit - the API has no batch endpoint (each visit is its
+            // own independent approval row), so this submits them one at a time and reports a
+            // combined success/failure summary rather than letting one bad row (already completed,
+            // already has a pending request, etc.) silently swallow the rest.
+            var reason = _postponeReason.Trim();
+            var date = _postponeDate.Date;
+            var succeeded = 0;
+            var failures = new List<string>();
+
+            foreach (var rowId in _selectedPostponeRowIds.ToList())
+            {
+                var dto = new CreatePostponeRequestDto { DealerRowId = rowId, RequestedDate = date, Reason = reason };
+                var response = await Http.PostAsJsonAsync("api/JmdoTaskAllocation/postpone-requests", dto);
+
+                if (response.IsSuccessStatusCode)
+                {
+                    succeeded++;
+                    _selectedPostponeRowIds.Remove(rowId);
+                }
+                else
+                {
+                    var dealerName = AllKnownDealerAssignments.FirstOrDefault(d => d.RowId == rowId)?.DealerName ?? $"Row {rowId}";
+                    failures.Add($"{dealerName}: {await ReadErrorMessageAsync(response) ?? "request failed"}");
+                }
+            }
+
+            if (succeeded > 0)
+            {
+                Toast.Success(failures.Count == 0
+                    ? $"Postponement requested for {succeeded} visit(s) - awaiting MDO approval."
+                    : $"{succeeded} visit(s) submitted, {failures.Count} failed: {string.Join("; ", failures)}");
+                _postponeModalOpen = false;
+
+                // Both tabs read from data this just invalidated (the dealer's new
+                // PendingPostponeRequestId) - reload whichever of todayAllocation/_allAllocations
+                // actually carried these rows so the badges appear without a manual page refresh.
+                await Task.WhenAll(CheckExistingAllocationAsync(), LoadAllAllocationsAsync());
+            }
+            else
+            {
+                // Nothing went through - keep the modal open with the error so the reason/date
+                // aren't lost, and the still-failed rows stay selected for another attempt.
+                _postponeError = string.Join("; ", failures);
+            }
+        }
+        finally
+        {
+            _postponeSubmitting = false;
+        }
+    }
+
+    private static async Task<string?> ReadErrorMessageAsync(HttpResponseMessage response)
+    {
+        try
+        {
+            var body = await response.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+            return body.TryGetProperty("message", out var m) ? m.GetString() : null;
+        }
+        catch
+        {
+            return null;
         }
     }
 
@@ -1391,6 +1694,25 @@
     private bool AnyFilteredCompletedTasks =>
         FilteredCompletedDealers.Any() || FilteredCompletedPrograms.Any() || FilteredCompletedSpcmAllocations.Any()
         || FilteredCompletedSoilAllocations.Any() || FilteredCompletedPosAllocations.Any();
+
+    // Started/Completed timestamps on Task History's cards - "—" when the task hasn't reached
+    // that stage yet (never started, or started but not yet completed).
+    private static string FormatTaskDateTime(DateTime? dt) =>
+        dt.HasValue ? dt.Value.ToString("dd MMM, h:mm tt") : "—";
+
+    // Achieved counts shown on Task History's cards, shared with BuildWeekSummary's identical
+    // Target-vs-Achieved breakdown below so both tabs always agree on the same allocation's numbers.
+    private static int SpcmAchieved(JmdoTaskAllocationResponseDto a) =>
+        a.Closeouts.Where(c => c.Kind == JmdoCloseoutKind.Spcm).Sum(c => c.AchievedTarget ?? 0);
+
+    // Soil Sample's Start button goes straight to /SampleCollection/new rather than through
+    // TaskDetail's close-out form, so there's no logged achieved quantity for it - approximate
+    // from Status alone (0 unless marked Completed).
+    private static int SoilSampleAchieved(JmdoTaskAllocationResponseDto a) =>
+        a.SoilSampleStatus == AllocTaskStatus.Completed ? (a.SoilSampleTarget ?? 0) : 0;
+
+    private static List<JmdoTaskCloseoutDto> PosCloseouts(JmdoTaskAllocationResponseDto a) =>
+        a.Closeouts.Where(c => c.Kind == JmdoCloseoutKind.PosLiquidation).ToList();
 
     // ---------- "Task Summary" tab ----------
     // One row per individual task (same 5 kinds as everywhere else on this page), flattened
@@ -1581,8 +1903,8 @@
             // weekly count targets a JMDO can log against on several different days (see
             // JmdoTaskAllocationController's CreateCloseout), so a single FirstOrDefault()
             // under-reported "Achieved" the moment more than one record existed for the week.
-            var spcmAchieved = a.Closeouts.Where(c => c.Kind == JmdoCloseoutKind.Spcm).Sum(c => c.AchievedTarget ?? 0);
-            var posCloseouts = a.Closeouts.Where(c => c.Kind == JmdoCloseoutKind.PosLiquidation).ToList();
+            var spcmAchieved = SpcmAchieved(a);
+            var posCloseouts = PosCloseouts(a);
 
             if (a.SpcmTarget is > 0 && MatchesStatus(a.SpcmStatus))
             {
@@ -1591,10 +1913,7 @@
 
             if (a.SoilSampleTarget is > 0 && MatchesStatus(a.SoilSampleStatus))
             {
-                // Soil Sample's Start button goes straight to /SampleCollection/new rather than
-                // through TaskDetail's close-out form, so there's no logged achieved quantity for
-                // it yet - approximate Achieved from Status alone (0 unless marked Completed).
-                week.Targets.Add(new TargetBreakdown { Label = "Soil Sample", Icon = "bi-moisture", Target = a.SoilSampleTarget.Value, Achieved = a.SoilSampleStatus == AllocTaskStatus.Completed ? a.SoilSampleTarget.Value : 0, Status = a.SoilSampleStatus });
+                week.Targets.Add(new TargetBreakdown { Label = "Soil Sample", Icon = "bi-moisture", Target = a.SoilSampleTarget.Value, Achieved = SoilSampleAchieved(a), Status = a.SoilSampleStatus });
             }
 
             if (MatchesStatus(a.PosLiquidationStatus))
@@ -1615,8 +1934,8 @@
         // a.PosLiquidationStatus can be stale "Completed" from before the backend started gating
         // that transition on the count actually reaching Target, which would otherwise overstate
         // OverallPercent (e.g. crediting SPCM as done at 2 of 200 achieved).
-        var allSpcmAchieved = a.Closeouts.Where(c => c.Kind == JmdoCloseoutKind.Spcm).Sum(c => c.AchievedTarget ?? 0);
-        var allPosCloseouts = a.Closeouts.Where(c => c.Kind == JmdoCloseoutKind.PosLiquidation).ToList();
+        var allSpcmAchieved = SpcmAchieved(a);
+        var allPosCloseouts = PosCloseouts(a);
         var spcmDone = a.SpcmTarget is > 0 && allSpcmAchieved >= a.SpcmTarget;
         var posDone = (a.UreaTarget > 0 || a.NpsTarget > 0 || a.DapTarget > 0 || a.OthersTarget > 0)
             && (a.UreaTarget is not > 0 || allPosCloseouts.Sum(c => c.Urea ?? 0) >= a.UreaTarget)

@@ -212,6 +212,52 @@ public class JmdoTaskCloseout
     public ICollection<JmdoTaskCloseoutProduct> Products { get; set; } = new List<JmdoTaskCloseoutProduct>();
 }
 
+/// <summary>JMDO -> MDO approval for moving ONE dealer visit to a different date (possibly a
+/// different week) - orthogonal to AllocTaskStatus (execution progress on the visit) and to
+/// JmdoTaskAllocationStatus (the MDO's approval of the whole week's submission). A request row is
+/// created once and only ever transitions Pending -> Approved or Pending -> Rejected; it is never
+/// deleted or reused, so postponing the same visit more than once builds up a full audit trail
+/// instead of overwriting the previous attempt.</summary>
+public enum PostponeRequestStatus { Pending = 0, Approved = 1, Rejected = 2 }
+
+public class JmdoDealerVisitPostponeRequest
+{
+    public int Id { get; set; }
+
+    /// <summary>JmdoTaskAllocationDealer.Id - the specific row this request is about. Deliberately
+    /// NOT EffectiveDealerId, which is ambiguous if the same dealer is scheduled more than once in
+    /// a week on different days.</summary>
+    public int DealerRowId { get; set; }
+    public JmdoTaskAllocationDealer? DealerRow { get; set; }
+
+    /// <summary>Snapshot taken at request time - the row's own AllocationId/PlannedDate/PlannedDay
+    /// change on approval, so this is the only surviving record of "what this was before". Never
+    /// updated after creation.</summary>
+    public int OriginalAllocationId { get; set; }
+    public DateTime? OriginalPlannedDate { get; set; }
+    public DayOfWeek? OriginalPlannedDay { get; set; }
+
+    public string RequestedByUserId { get; set; } = string.Empty;
+    public DateTime RequestedAt { get; set; } = DateTime.Now;
+    public DateTime RequestedDate { get; set; }
+    public string Reason { get; set; } = string.Empty;
+
+    public PostponeRequestStatus Status { get; set; } = PostponeRequestStatus.Pending;
+
+    public string? ReviewedByUserId { get; set; }
+    public DateTime? ReviewedAt { get; set; }
+    public string? ReviewRemarks { get; set; }
+
+    /// <summary>Stamped only on Approve - the MDO may pin a different date than RequestedDate,
+    /// same "reviewer can adjust before confirming" precedent as UpdateDealerPlannedDate.</summary>
+    public DateTime? ApprovedDate { get; set; }
+
+    /// <summary>The allocation the dealer row actually ended up under after approval - same as
+    /// OriginalAllocationId when the move stayed within the same week, different when it crossed
+    /// into another week's allocation.</summary>
+    public int? ResultingAllocationId { get; set; }
+}
+
 /// <summary>One product line added via TaskDetail's "Add another Product" popup - only populated
 /// when the parent JmdoTaskCloseout.Kind == Dealer. Name/Group/Stock are a free-text snapshot at
 /// save time, same reasoning as JmdoTaskAllocationDealer's DealerName/DealerCode.</summary>
