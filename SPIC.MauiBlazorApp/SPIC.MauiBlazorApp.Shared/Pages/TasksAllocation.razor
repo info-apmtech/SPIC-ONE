@@ -3172,9 +3172,25 @@
 
             var result = await response.Content.ReadFromJsonAsync<List<CSR1ListDto>>();
 
+            // CSR1Date is the one real date on a program - the day the JMDO is actually meant to
+            // conduct it, not just "whenever assigned". Without this filter, every active program
+            // assigned to this JMDO (see the comment above) kept reappearing in EVERY week's Step 4,
+            // not just the week it's actually scheduled for - this scopes it down to the week
+            // currently selected here (SelectedWeekStart/_weekOffset, same Previous/Next Week
+            // navigation this whole wizard already uses), so a program only ever shows up once, in
+            // the one week matching its own CSR1Date. A program with no CSR1Date set at all (legacy/
+            // incomplete record) falls back to the old always-show behaviour rather than silently
+            // vanishing for having no date to match against.
+            var selectedWeekStart = SelectedWeekStart;
+            var selectedWeekEndExclusive = selectedWeekStart.AddDays(7);
+            bool HasCsr1Date(DateTime date) => date != default && date != DateTime.MinValue;
+            bool MatchesSelectedWeek(DateTime date) =>
+                date.Date >= selectedWeekStart && date.Date < selectedWeekEndExclusive;
+
             Programs.Clear();
             Programs.AddRange((result ?? new())
                 .Where(p => p.IsActive)
+                .Where(p => !HasCsr1Date(p.CSR1Date) || MatchesSelectedWeek(p.CSR1Date))
                 .Select(p => new ProgramOption
                 {
                     Id = p.Id,

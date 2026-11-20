@@ -585,6 +585,31 @@ public class JmdoTaskAllocationController : ControllerBase
 
     private static DateTime WeekStartFor(DateTime date) => date.Date.AddDays(-(int)date.Date.DayOfWeek);
 
+    // The API container runs on UTC with no timezone configured, so plain DateTime.Today is still
+    // "yesterday" between 00:00 and 05:30 IST - but JMDOAttendance.Date (JMDOAttendanceController's
+    // UpdateAttendance/GetToday) is always normalized to the India calendar day. UpdateMyTaskStatus's
+    // attendance check below needs the same India-day notion that row was saved under, not the
+    // server's raw UTC day, or a JMDO who marks attendance in that window gets wrongly told they
+    // haven't. Mirrors JMDOAttendanceController.IndiaNow exactly (Asia/Kolkata IANA id for Linux,
+    // "India Standard Time" for Windows, so this resolves correctly in both); duplicated rather than
+    // shared because no shared timezone utility exists in this codebase - every controller that
+    // needs India "today" (JMDOAttendanceController, JMDOTrackingController, StockReconciliationController,
+    // FarmReportController, ...) already keeps its own private copy of this exact pattern.
+    private static DateTime IndiaNow() =>
+        IndiaTimeZone is { } tz ? TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz) : DateTime.UtcNow.AddHours(5.5);
+
+    private static readonly TimeZoneInfo? IndiaTimeZone = FindIndiaTimeZone();
+
+    private static TimeZoneInfo? FindIndiaTimeZone()
+    {
+        foreach (var id in new[] { "Asia/Kolkata", "India Standard Time" })
+        {
+            try { return TimeZoneInfo.FindSystemTimeZoneById(id); }
+            catch (Exception) { /* try the next id */ }
+        }
+        return null;
+    }
+
     // SPCM/PoS Liquidation are weekly count targets, not a single visit like Dealer/MD Program -
     // "done" has to mean "the cumulative logged count across every closeout saved this week (one
     // per day/visit) reached the target", not "a closeout was saved at all". Requires
@@ -1136,7 +1161,7 @@ public class JmdoTaskAllocationController : ControllerBase
             && string.Equals(CurrentRole(), "JMDO", StringComparison.OrdinalIgnoreCase))
         {
             var hasAttendanceToday = await _db.JMDOAttendances
-                .AnyAsync(a => a.UserId == userId && a.Date == DateTime.Today);
+                .AnyAsync(a => a.UserId == userId && a.Date == IndiaNow().Date);
             if (!hasAttendanceToday)
                 return BadRequest(new { Success = false, Message = "Mark today's attendance before starting a task." });
         }
