@@ -4,43 +4,185 @@ title: मातीचे नमुने गोळा करणे
 icon: bi-droplet
 order: 50
 language: mr
+category: माती परीक्षण
+note: नमुन्याचा प्रवास, स्थिती आणि मार्गदर्शक टूरसह नवीन रूप
+meta-source-hash: 91cc9c6288b84a36
 ---
 
 ::: section overview
-title: मातीचे नमुने गोळा करण्याचे काम कसे चालते
-routes: /SampleCollection
+title: हा मॉड्युल तुमच्यासाठी काय करतो
+routes: 
 for: 
 roles: 
 designations: 
-source-hash: 690edb1b53c94744
+kind: overview
+source-hash: 722480765e5f4cad
 confidence: ok
 
-**ही स्क्रीन कशासाठी आहे**
-SPIC शेतकऱ्याच्या शेतातली माती आणि पाणी जिल्ह्याच्या लॅबमध्ये तपासते. ॲप प्रत्येक नमुन्याचा मागोवा शेतापासून शेतकऱ्याच्या रिपोर्टपर्यंत ठेवते. प्रत्येक संकलन (collection) याच टप्प्यांमधून जाते.
+SPIC शेतकऱ्याच्या शेतातली माती आणि पाणी जिल्ह्याच्या लॅबमध्ये तपासते. ॲप प्रत्येक नमुन्याचा मागोवा शेतापासून शेतकऱ्याच्या रिपोर्टपर्यंत ठेवते, त्यामुळे नमुना कुठे आहे हे सगळ्यांना दिसते.
 
-## पायऱ्या
+- collect | icon: bi-droplet | color: #0d9488
+  title: शेतात नमुना गोळा करा
+  text: MDO किंवा JMDO शेतकरी आणि नमुन्यांची नोंद करतात.
+- pay | icon: bi-qr-code | color: #d97706
+  title: पैसे भरणे आणि मंजुरी
+  text: पैसे घेण्याच्या नमुन्याचे पैसे UPI किंवा दुसऱ्या पद्धतीने भरले जातात. मग त्याला मंजुरी मिळते आणि Finance ते तपासते.
+- report | icon: bi-file-earmark-text | color: #7c3aed
+  title: शेतकऱ्यासाठी लॅब रिपोर्ट
+  text: लॅब नमुने तपासते आणि शेतकरी रिपोर्ट तमिळ किंवा इंग्रजीमध्ये डाउनलोड करतो.
+:::
 
-1. **Collect.** (नमुना गोळा करणे) फील्ड ऑफिसर (MDO किंवा JMDO) **New Sample Collection** उघडतात, शेतकरी निवडतात आणि एक किंवा जास्त नमुने जोडतात.
-2. **Pay.** (पैसे भरणे) **Paid Sample** साठी पैसे भरावे लागतात. ऑफिसर UPI किंवा दुसऱ्या पद्धतीने झालेल्या पेमेंटची नोंद करतात आणि पावतीचा फोटो अपलोड करतात. **Free Sample** साठी हा टप्पा नसतो.
-3. **Approve.** (मंजुरी) मंजुरी देणारे पेमेंट आणि पावती तपासतात. मग Finance पैसे मिळाले आहेत का ते तपासते.
-4. **लॅबला पाठवणे.** ऑफिसर नमुने कुरिअरने पाठवतात आणि ट्रॅकिंग नंबर टाकतात. याला consignment (पार्सल) म्हणतात.
-5. **Test.** (तपासणी) लॅबला नमुने मिळतात आणि लॅब ते तपासते.
-6. **Report.** (रिपोर्ट) शेतकऱ्याला ॲपमध्ये रिपोर्ट दिसतो आणि तो तमिळ किंवा इंग्रजीमध्ये डाउनलोड करता येतो.
+::: section flow
+title: नमुना कसा पुढे जातो, आणि कोण काय करते
+routes: 
+for: 
+roles: 
+designations: 
+kind: flow
+source-hash: 8e557635907c2edf
+confidence: ok
 
-## स्थितीचा अर्थ
+प्रत्येक ओळ एक रोल आहे आणि प्रत्येक बॉक्स एक टप्पा आहे. मोफत नमुन्यासाठी पैसे भरण्याचे टप्पे नसतात. तिथे काय होते ते पाहण्यासाठी टप्पा टॅप करा.
 
-- **Draft**: सेव्ह केले आहे, अजून सबमिट केलेले नाही.
-- **Pending Payment**: पेमेंटची नोंद होण्याची वाट पाहत आहे.
-- **Pending Approval**: पेमेंटची नोंद झाली आहे, मंजुरीची वाट पाहत आहे.
-- **Ready consignment**: लॅबला पाठवायला तयार.
-- **Dispatched**, **In Transit**, **Delivered to Lab**: लॅबकडे जात आहे.
-- **In Progress**: लॅबमध्ये तपासणी चालू आहे.
-- **Completed**: निकाल उपलब्ध आहेत.
+- officer | type: lane | color: #0d9488 | roles: MDO, JMDO
+  title: फील्ड ऑफिसर
+  sub: MDO · JMDO
+- approver | type: lane | color: #ea580c | roles: Admin, CorporateAdmin
+  title: मंजुरी देणारे
+  sub: पेमेंटची मंजुरी
+- finance | type: lane | color: #2563eb
+  title: Finance
+  sub: पेमेंटची खात्री
+- lab | type: lane | color: #7c3aed
+  title: लॅब
+  sub: जिल्ह्याची लॅब
+- farmer | type: lane | color: #16a34a | roles: Farmer
+  title: शेतकरी
+  sub: नमुन्याचे मालक
+- collect | lane: officer | col: 1 | icon: bi-droplet | color: #64748b | next: pay | screen: collect-sample
+  title: नमुने गोळा करा
+  status: Draft
+  text: शेतकरी निवडा, मातीचा किंवा पाण्याचा प्रत्येक नमुना जोडा आणि सेव्ह करा. मोफत नमुना थेट consignment कडे जातो.
+- pay | lane: officer | col: 2 | icon: bi-qr-code | color: #d97706 | next: approve | screen: record-payment
+  title: पेमेंटची नोंद करा
+  status: Pending Payment
+  text: शेतकरी QR कोड स्कॅन करून पैसे भरतो. ऑफिसर व्यवहाराचा तपशील टाकतात आणि पावती अपलोड करतात.
+- approve | lane: approver | col: 3 | icon: bi-patch-check | color: #ea580c | next: send, verify | return: pay | screen: approve-payments
+  title: पेमेंट मंजूर करा
+  status: Pending Approval
+  text: मंजुरी देणारे रक्कम आणि पावती तपासतात, मग मंजूर करून Finance कडे पाठवतात, किंवा परत पाठवतात.
+- send | lane: officer | col: 4 | icon: bi-truck | color: #0d9488 | next: test | screen: send-consignment
+  title: लॅबला पाठवा
+  status: Dispatched
+  text: ऑफिसर नमुने कुरिअरकडे देतात आणि ट्रॅकिंग नंबरची नोंद करतात. याला consignment (पार्सल) म्हणतात.
+- verify | lane: finance | col: 4 | icon: bi-bank | color: #2563eb | screen: verify-payments
+  title: पैसे आले का ते तपासा
+  status: Finance Verified
+  text: Finance पैसे खात्यात आले याची खात्री करते, किंवा रक्कम जुळत नाही (mismatch) अशी नोंद करते.
+- test | lane: lab | col: 5 | icon: bi-eyedropper | color: #7c3aed | next: report
+  title: नमुने तपासा
+  status: In Progress
+  text: लॅबला पार्सल मिळते, लॅब प्रत्येक नमुना तपासते आणि निकाल प्रसिद्ध करते.
+- report | lane: farmer | col: 6 | icon: bi-file-earmark-arrow-down | color: #16a34a | screen: farmer-my-reports
+  title: रिपोर्ट डाउनलोड करा
+  status: Completed
+  text: शेतकऱ्याला ॲपमध्ये रिपोर्ट दिसतो आणि तो तमिळ किंवा इंग्रजीमध्ये डाउनलोड करता येतो.
+:::
 
-## नेहमीच्या अडचणी
+::: section statuses
+title: तुम्हाला दिसणारी प्रत्येक स्थिती
+routes: 
+for: 
+roles: 
+designations: 
+kind: statuses
+source-hash: 0771c49c0ffc8c78
+confidence: ok
 
-- मेनूमध्ये **Sample Collection** दिसत नाही: तुमच्या पदामध्ये (designation) हे पेज नाही. तुमच्या ॲडमिनिस्ट्रेटरला विचारा.
-- JMDO वापरकर्त्यांना हे मेनूमध्ये दिसत नाही. त्याऐवजी तुमच्या **Soil Sample** टास्कमधून ते उघडा.
+- draft | color: #64748b
+  label: Draft
+  text: सेव्ह केले आहे, अजून सबमिट केलेले नाही.
+- pending-payment | color: #d97706
+  label: Pending Payment
+  text: पेमेंटची नोंद होण्याची वाट पाहत आहे.
+- pending-approval | color: #ea580c
+  label: Pending Approval
+  text: पेमेंटची नोंद झाली आहे, मंजुरीची वाट पाहत आहे.
+- ready | color: #0891b2
+  label: Ready consignment
+  text: लॅबला पाठवायला तयार.
+- dispatched | color: #0d9488
+  label: Dispatched
+  text: कुरिअरकडे दिले आहे.
+- in-transit | color: #0d9488
+  label: In Transit
+  text: लॅबकडे जात आहे.
+- delivered | color: #2563eb
+  label: Delivered to Lab
+  text: पार्सल लॅबला मिळाले आहे.
+- in-progress | color: #7c3aed
+  label: In Progress
+  text: लॅबमध्ये तपासणी चालू आहे.
+- completed | color: #16a34a
+  label: Completed
+  text: निकाल उपलब्ध आहेत.
+:::
+
+::: section roles
+title: कोण काय करते
+routes: 
+for: 
+roles: 
+designations: 
+kind: roles
+source-hash: 9c070a1e6fc377cf
+confidence: ok
+
+तुमचे कार्ड ठळक दिसते. तुमचा रोल वापरतो त्याच स्क्रीन तुम्हाला दिसतात.
+
+- officer | color: #0d9488 | roles: MDO, JMDO
+  title: MDO, JMDO
+  - नमुने गोळा करा
+  - पेमेंटची नोंद करा
+  - consignment लॅबला पाठवा
+- approver | color: #ea580c | roles: Admin, CorporateAdmin
+  title: मंजुरी देणारे
+  - पेमेंट मंजूर करा किंवा परत पाठवा
+  - consignment पुढे न्या
+  - लॅबचे निकाल भरा
+- finance | color: #2563eb
+  title: Finance
+  - मिळालेल्या पैशांची खात्री करा
+  - न जुळणाऱ्या रकमेची (mismatch) नोंद करा
+- farmer | color: #16a34a | roles: Farmer
+  title: शेतकरी
+  - तुमचे नमुने पाहा
+  - तुमचे रिपोर्ट डाउनलोड करा
+  - तुमचे पेमेंट तपासा
+:::
+
+::: section faq
+title: अडचणी आणि उत्तरे
+routes: 
+for: 
+roles: 
+designations: 
+kind: faq
+source-hash: b121292d9fb622a2
+confidence: ok
+
+- no-menu | popular: true
+  q: मला मेनूमध्ये Sample Collection दिसत नाही
+  a: तुमच्या पदामध्ये (designation) हे पेज नाही. तुमच्या ॲडमिनिस्ट्रेटरला विचारा. JMDO वापरकर्ते त्याऐवजी **Soil Sample** टास्कमधून ते उघडतात.
+- payment-rejected | popular: true
+  q: माझे पेमेंट नाकारले गेले. आता काय करू?
+  a: तपशील पेजवर कारणासह **Payment rejected** दिसते. ते दुरुस्त करा आणि परत **Record payment** टॅप करा.
+- not-ready
+  q: "This collection is not ready to send" (हे संकलन पाठवायला तयार नाही) असे दिसते
+  a: पेमेंटची अजून नोंद झालेली नाही किंवा ते मंजूर झालेले नाही. मोफत नमुने लगेच पाठवता येतात.
+- report-language
+  q: मला रिपोर्ट तमिळमध्ये कसा मिळेल?
+  a: **Download PDF** च्या बाजूचा छोटा बाण टॅप करा आणि तमिळ किंवा इंग्रजी निवडा.
 :::
 
 ::: section collection-list
@@ -49,22 +191,26 @@ routes: /SampleCollection
 for: 
 roles: 
 designations: 
-source-hash: 53f4f23e337f18d1
+screenshot: collection-list.png
+hotspots: 1 @ 2.2,68.5,95.5,15.1 | 2 @ 73.7,88,22.4,4.8 | 3 @ 2.2,30.7,95.5,35.4 | 4 @ 3.8,94.7,92.3,5.3 | 5 @ 62.1,1.9,8.1,4.8 | 6 @ 79.2,1.9,18.5,4.8
+screenshot-phone: collection-list.phone.jpg
+hotspots-phone: 1 @ 3.1,40.6,93.8,24.4 | 2 @ 6.4,69.4,87.2,3.2 | 3 @ 3.1,36,93.8,3.2 | 4 @ 2,2,8,4 | 5 @ 15.3,4.3,10.2,3 | 6 @ 39.7,4.3,48.8,3
+tour: 1 > [data-help=sc-tiles] | 2 > [data-help=sc-search] | 3 > [data-help=sc-filters] | 4 > [data-help=sc-table] | 5 > [data-help=sc-excel] | 6 > [data-help=sc-new]
+minutes: 2
+source-hash: 01315bd944ae112a
 confidence: ok
 
 **ही स्क्रीन कशासाठी आहे**
 **Sample Collection** पेजवर तुम्हाला दिसणारी सगळी संकलने, त्यांच्या पेमेंट आणि लॅबच्या स्थितीसह दिसतात. संकलन शोधण्यासाठी आणि त्याचा तपशील उघडण्यासाठी हे पेज वापरा.
 
-## पायऱ्या
+वरच्या कार्डांवर आकडे दिसतात: **Total Samples**, **Free Samples**, **Paid Samples**, **Lab Level** आणि **Ready to Submit**.
 
-1. मेनूमधून **Sample Collection** उघडा.
-2. वरच्या कार्डांवर आकडे दिसतात: **Total Samples**, **Free Samples**, **Paid Samples**, **Lab Level** आणि **Ready to Submit**.
-3. **Pending Payment** किंवा **Draft** सारखी रंगीत टाइल टॅप केली की फक्त तीच संकलने दिसतात. सगळी पाहण्यासाठी ती परत टॅप करा.
-4. शोधण्यासाठी **Search collections...** मध्ये शेतकऱ्याचे नाव किंवा collection ID टाइप करा.
-5. आणखी पर्यायांसाठी **Filters** उघडा, **Date Range**, **Location**, **Payment Type**, **Payment Status** किंवा **Status** निवडा, मग **Apply Filters** टॅप करा. ते काढण्यासाठी **Clear All** टॅप करा.
-6. संकलन उघडण्यासाठी डोळ्याचा आयकॉन (फोनवर कार्ड) टॅप करा.
-7. स्क्रीनवर दिसणारी लिस्ट डाउनलोड करण्यासाठी **Excel** किंवा **PDF** टॅप करा.
-8. नवीन स्थिती पाहण्यासाठी **Refresh Data** टॅप करा.
+1. **Pending Payment** किंवा **Draft** सारखी रंगीत टाइल टॅप केली की फक्त तीच संकलने दिसतात. सगळी पाहण्यासाठी ती परत टॅप करा.
+2. शोधण्यासाठी **Search collections...** मध्ये शेतकऱ्याचे नाव किंवा collection ID टाइप करा.
+3. आणखी पर्यायांसाठी **Filters** उघडा, **Date Range**, **Location**, **Payment Type**, **Payment Status** किंवा **Status** निवडा, मग **Apply Filters** टॅप करा. ते काढण्यासाठी **Clear All** टॅप करा.
+4. संकलन उघडण्यासाठी डोळ्याचा आयकॉन (फोनवर कार्ड) टॅप करा.
+5. स्क्रीनवर दिसणारी लिस्ट डाउनलोड करण्यासाठी **Excel** किंवा **PDF** टॅप करा. नवीन स्थिती पाहण्यासाठी **Refresh Data** टॅप करा.
+6. नमुने गोळा करायला सुरुवात करण्यासाठी **New Sample Collection** टॅप करा.
 
 ## नेहमीच्या अडचणी
 
@@ -80,24 +226,27 @@ routes: /SampleCollection/new
 for: SampleCollection.Entry
 roles: MDO, JMDO, Admin, CorporateAdmin
 designations: 
-source-hash: 4807aa811490f90c
+screenshot: collect-sample.png
+hotspots: 1 @ 66,1.9,31.8,5 | 2 @ 4,34.7,29.7,7.8 | 3 @ 35.2,81.7,29.7,8 | 4 @ 78.7,100,17.2,0 | 5 @ 81.8,100,16,0
+screenshot-phone: collect-sample.phone.jpg
+hotspots-phone: 1 @ 3.1,4.6,93.8,3.2 | 2 @ 6.9,33.7,86.2,8.5 | 3 @ 6.9,100,86.2,0 | 4 @ 6.9,100,86.2,0 | 5 @ 43.8,92.1,52.1,3
+tour: 1 > [data-help=sc-paytype] | 2 > [data-help=sc-farmer] | 3 > [data-help=sc-soil] | 4 > [data-help=sc-add] | 5 > [data-help=sc-save]
+minutes: 4
+source-hash: 3ae93abc0337f008
 confidence: ok
 
 **ही स्क्रीन कशासाठी आहे**
 तुम्ही शेतकऱ्यांकडून घेतलेल्या नमुन्यांची नोंद करण्यासाठी **New Sample Collection** वापरा. एका संकलनात अनेक शेतकऱ्यांचे नमुने असू शकतात.
 
-## पायऱ्या
+**Sample Collection** पेजवर **New Sample Collection** टॅप करून ही स्क्रीन उघडा. JMDO: **Tasks Allocation** मधल्या **Soil Sample** कार्डवर **Start** टॅप करा, किंवा टास्कच्या **Quick actions** मधले **Soil Sample Collection** टॅप करा.
 
-1. **Sample Collection** वर **New Sample Collection** टॅप करा. JMDO: **Tasks Allocation** मधल्या **Soil Sample** कार्डवर **Start** टॅप करा, किंवा टास्कच्या **Quick actions** मधले **Soil Sample Collection** टॅप करा.
-2. वर **Free Sample** किंवा **Paid Sample** निवडा.
-3. **Farmer Name** मध्ये किमान दोन अक्षरे टाइप करा आणि शेतकरी निवडा. शेतकरी नवीन असेल तर **New Farmer** टॅप करा.
-4. पैसे घेण्याच्या नमुन्यासाठी **Paid Sample Category** खाली **Farmer** किंवा **NGO** निवडा.
-5. **Soil Sample** आणि **Water Sample** साठी **Yes** किंवा **No** निवडा.
-6. **Crop 1**, **Crop 2** निवडा आणि गरज असेल तर **Remarks** टाका.
-7. **Add Another Sample** टॅप करा. नमुना त्याच्या रकमेसह **Sample Added (Preview)** मध्ये दिसतो.
-8. प्रत्येक नमुन्यासाठी हेच करा. ओळ बदलण्यासाठी पेन्सिल, किंवा काढण्यासाठी डस्टबिन वापरा.
-9. नंतर पूर्ण करायचे असेल तर **Save Draft** टॅप करा, किंवा **Sample Summary** पाहण्यासाठी **Save and Continue** टॅप करा.
-10. सारांश तपासा आणि **Continue to payment** (पैसे घेण्याचा नमुना) किंवा **Continue to consignment** (मोफत नमुना) टॅप करा.
+1. वर **Free Sample** किंवा **Paid Sample** निवडा.
+2. **Farmer Name** मध्ये किमान दोन अक्षरे टाइप करा आणि शेतकरी निवडा. शेतकरी नवीन असेल तर **New Farmer** टॅप करा. पैसे घेण्याच्या नमुन्यासाठी **Paid Sample Category** खाली **Farmer** किंवा **NGO** निवडा.
+3. **Soil Sample** आणि **Water Sample** साठी **Yes** किंवा **No** निवडा. **Crop 1**, **Crop 2** निवडा आणि गरज असेल तर **Remarks** टाका.
+4. **Add Another Sample** टॅप करा. नमुना त्याच्या रकमेसह **Sample Added (Preview)** मध्ये दिसतो. प्रत्येक नमुन्यासाठी हेच करा; ओळ बदलण्यासाठी पेन्सिल, आणि काढण्यासाठी डस्टबिन वापरा.
+5. नंतर पूर्ण करायचे असेल तर **Save Draft** टॅप करा, किंवा **Save and Continue** टॅप करा. **Sample Summary** तपासा आणि **Continue to payment** (पैसे घेण्याचा नमुना) किंवा **Continue to consignment** (मोफत नमुना) टॅप करा.
+
+> Tip: एका संकलनात अनेक शेतकऱ्यांचे नमुने असू शकतात.
 
 ## फील्डची माहिती
 
@@ -119,13 +268,12 @@ routes: /SampleCollection/new, /SampleCollection/view/{id}
 for: SampleCollection.Update
 roles: MDO, JMDO, Admin, CorporateAdmin
 designations: 
-source-hash: 1e935425e9054d62
+minutes: 2
+source-hash: 2699d934a7f0674d
 confidence: ok
 
 **ही स्क्रीन कशासाठी आहे**
 **Save Draft** ने सेव्ह केलेले संकलन **Draft** म्हणूनच राहते. तुम्ही सबमिट करेपर्यंत काहीही पेमेंटला किंवा लॅबला जात नाही. तुम्ही ते परत उघडून पूर्ण करू शकता.
-
-## पायऱ्या
 
 1. **Sample Collection** उघडा आणि **Draft** टाइल टॅप करा.
 2. डोळ्याच्या आयकॉनने संकलन उघडा.
@@ -149,13 +297,12 @@ routes: /SampleCollection/payment/{id}
 for: 
 roles: MDO, JMDO, Admin, CorporateAdmin
 designations: 
-source-hash: 67de9290d8256a0c
+minutes: 3
+source-hash: c5b827bf8559be23
 confidence: ok
 
 **ही स्क्रीन कशासाठी आहे**
 **Payments** स्क्रीनवर किती पैसे घ्यायचे ते दिसते, शेतकऱ्याला स्कॅन करण्यासाठी UPI QR कोड दिसतो, आणि पेमेंटचा तपशील व पावतीसाठी फॉर्म असतो.
-
-## पायऱ्या
 
 1. **Continue to payment** नंतर **Payments** स्क्रीन उघडते. संकलनाच्या तपशीलावर **Record payment** टॅप करूनही ती उघडता येते.
 2. **Total Amount to Collect** तपासा. नमुने पाहण्यासाठी **View Sample Summary** टॅप करा.
@@ -188,13 +335,12 @@ routes: /SampleCollection/consignment/{id}, /SampleCollection/submitted/{id}
 for: 
 roles: MDO, JMDO, Admin, CorporateAdmin
 designations: 
-source-hash: 1820125bf239140d
+minutes: 3
+source-hash: de0b21e8f58ece6a
 confidence: ok
 
 **ही स्क्रीन कशासाठी आहे**
 संकलन मोफत असेल किंवा त्याचे पेमेंट मंजूर झाले असेल, तेव्हा तुम्ही नमुने पॅक करून कुरिअरकडे देता. **Upload Consignment** कुरिअरचा तपशील आणि फोटो नोंदवते, त्यामुळे लॅबला काय येत आहे ते कळते.
-
-## पायऱ्या
 
 1. संकलन उघडा आणि **Upload consignment** टॅप करा. मोफत नमुन्यासाठी **Continue to consignment** ने ते थेट उघडते.
 2. **Courier Details** खाली **Courier Service** निवडा आणि **Tracking Number (AWB)** टाइप करा.
@@ -224,13 +370,14 @@ routes: /SampleCollection/view/{id}
 for: 
 roles: 
 designations: 
-source-hash: c0ff9ecbae88fe84
+screenshot: collection-details.png
+screenshot-phone: collection-details.phone.jpg
+minutes: 2
+source-hash: 0b6c9585e9bd5ccc
 confidence: ok
 
 **ही स्क्रीन कशासाठी आहे**
 **Sample Collection Details** मध्ये एका संकलनाची सगळी माहिती दिसते: पेमेंट, कुरिअर, लॅबचे निकाल आणि इतिहास. फील्ड कर्मचारी, डीलर आणि मॅनेजर इथे प्रगती पाहू शकतात.
-
-## पायऱ्या
 
 1. **Sample Collection** उघडा आणि संकलनावरचा डोळ्याचा आयकॉन टॅप करा.
 2. वरच्या ओळीत collection ID, **Paid Sample** किंवा **Free Sample**, आणि सध्याची स्थिती दिसते.
@@ -259,13 +406,12 @@ routes: /SampleCollection/view/{id}, /ConsignmentHistory/view/{id}
 for: 
 roles: Admin, CorporateAdmin
 designations: 
-source-hash: 71850d4b14d9d073
+minutes: 3
+source-hash: 16838640fb4dadb0
 confidence: ok
 
 **ही स्क्रीन कशासाठी आहे**
 ॲडमिनिस्ट्रेटर संकलनाच्या तपशील पेजवर पेमेंट तपासू शकतात, consignment पुढच्या टप्प्यावर नेऊ शकतात, आणि लॅबचे निकाल टाइप करू शकतात.
-
-## पायऱ्या
 
 ### संकलनावरचे पेमेंट मंजूर करा
 
@@ -299,13 +445,14 @@ routes: /ConsignmentHistory, /ConsignmentHistory/view/{id}
 for: 
 roles: 
 designations: 
-source-hash: c0eb73648ebf3b77
+screenshot: consignment-history.png
+screenshot-phone: consignment-history.phone.jpg
+minutes: 2
+source-hash: c4455c0c6e2c1ab2
 confidence: ok
 
 **ही स्क्रीन कशासाठी आहे**
 **Consignment History** मध्ये लॅबला पाठवलेले नमुन्यांचे प्रत्येक पार्सल, कुरिअर, ट्रॅकिंग नंबर आणि सध्याच्या स्थितीसह दिसते.
-
-## पायऱ्या
 
 1. मेनूमधून **Consignment History** उघडा.
 2. कार्डांवर **Total Consignments**, **Total Consignment Sent**, **Total Samples**, **Delivered** आणि **Pending** दिसतात.
@@ -335,13 +482,14 @@ routes: /Sas/MySamples, /SampleCollection/view/{id}
 for: 
 roles: Farmer
 designations: 
-source-hash: fa5d1d2f177d288c
+screenshot: farmer-my-samples.png
+screenshot-phone: farmer-my-samples.phone.jpg
+minutes: 2
+source-hash: eac7ad7b8677316c
 confidence: ok
 
 **ही स्क्रीन कशासाठी आहे**
 **My Samples** मध्ये तुमच्या MO ऑफिसरने तुमच्याकडून घेतलेले मातीचे किंवा पाण्याचे सगळे नमुने, आणि प्रत्येक नमुना आता कुठे आहे ते दिसते.
-
-## पायऱ्या
 
 1. मेनूमधून **My Samples** उघडा.
 2. प्रत्येक कार्डवर नमुन्याचा नंबर, consignment, तो गोळा करणारे ऑफिसर, तारीख आणि पीक दिसते.
@@ -371,13 +519,14 @@ routes: /Sas/MyReports
 for: 
 roles: Farmer
 designations: 
-source-hash: 810f0b093cade052
+screenshot: farmer-my-reports.png
+screenshot-phone: farmer-my-reports.phone.jpg
+minutes: 2
+source-hash: 40b826ab2246cad3
 confidence: ok
 
 **ही स्क्रीन कशासाठी आहे**
 **My Reports** मध्ये लॅबने तुमच्या नमुन्यांसाठी बनवलेले तपासणी रिपोर्ट दिसतात. प्रत्येक रिपोर्ट तुम्ही तमिळ किंवा इंग्रजीमध्ये डाउनलोड करू शकता.
-
-## पायऱ्या
 
 1. मेनूमधून **My Reports** उघडा.
 2. कार्डांवर **Total Reports**, **Ready to Download**, **Downloaded** आणि **Under Process** दिसतात.
@@ -405,13 +554,12 @@ routes: /Sas/Payments, /Sas/Payments/{id}
 for: 
 roles: Farmer
 designations: 
-source-hash: 41753a10de9d41d6
+minutes: 2
+source-hash: f07974a161df2664
 confidence: ok
 
 **ही स्क्रीन कशासाठी आहे**
 **Payments** मध्ये तुमच्या पैसे भरलेल्या मातीच्या नमुन्यांसाठी केलेली पेमेंट दिसतात, आणि SPIC ने ती मंजूर केली आणि मिळाली का ते दिसते. इथे तुम्ही फक्त पाहता; काहीही भरायचे नसते.
-
-## पायऱ्या
 
 1. मेनूमधून **Payments** उघडा.
 2. कार्डांवर **Total Paid Samples**, **Finance Verified**, **Approval Pending** आणि **Payment Issues** दिसतात.
@@ -438,13 +586,12 @@ routes: /Sas/Payments, /Sas/Payments/{id}
 for: SasPaymentApproval.View
 roles: 
 designations: 
-source-hash: 4a8d8dd3f9015aa4
+minutes: 3
+source-hash: 2c0a5e7b4b9a51d2
 confidence: ok
 
 **ही स्क्रीन कशासाठी आहे**
 **Payment Approval** मध्ये फील्ड ऑफिसरनी पैसे घेण्याच्या नमुन्यांसाठी नोंदवलेली पेमेंट दिसतात. तुम्ही प्रत्येक पावती आणि रक्कम तपासता, मग ते मंजूर करून Finance कडे पाठवता, किंवा ऑफिसरकडे परत पाठवता.
-
-## पायऱ्या
 
 1. मेनूमधून **Payment Approval** उघडा.
 2. **Pending Admin Approval** टॅब टॅप करा.
@@ -474,13 +621,12 @@ routes: /Sas/Payments, /Sas/Payments/{id}, /Sas/Payments/History
 for: SasPaymentVerification.View
 roles: 
 designations: 
-source-hash: ec36e4e58f4e4b58
+minutes: 3
+source-hash: 788890513e2baf14
 confidence: ok
 
 **ही स्क्रीन कशासाठी आहे**
 **Payment Verification** मध्ये मंजुरी देणाऱ्याने Finance कडे पाठवलेली पेमेंट दिसतात. पैसे खात्यात आले याची तुम्ही खात्री करता. **Payment History** मध्ये तुम्ही पूर्ण केलेले प्रत्येक पेमेंट राहते.
-
-## पायऱ्या
 
 1. मेनूमधून **Payment Verification** उघडा.
 2. **Pending Verification** टॅब टॅप करा.

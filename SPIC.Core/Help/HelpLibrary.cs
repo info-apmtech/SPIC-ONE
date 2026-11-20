@@ -46,6 +46,11 @@ namespace SPIC.Core.Help
                     LoadGlossary(text);
                     continue;
                 }
+                if (path.Equals("paths.json", StringComparison.OrdinalIgnoreCase))
+                {
+                    Paths = JsonSerializer.Deserialize<HelpPathsFile>(text, Json)?.Paths?.Select(HelpPath.Clean).ToList() ?? new List<HelpPath>();
+                    continue;
+                }
 
                 // <module>/guide.<lang>.md
                 var parts = path.Split('/');
@@ -71,6 +76,12 @@ namespace SPIC.Core.Help
 
         public HelpConfig Config { get; }
 
+        /// <summary>The "Still stuck?" contacts, or null when not configured.</summary>
+        public HelpSupport? Support => Config.Support;
+
+        /// <summary>"Your path" per role or designation (paths.json).</summary>
+        public IReadOnlyList<HelpPath> Paths { get; } = Array.Empty<HelpPath>();
+
         /// <summary>Modules that have an English guide.</summary>
         public IReadOnlyList<string> Modules { get; }
 
@@ -84,7 +95,13 @@ namespace SPIC.Core.Help
             _glossary.TryGetValue(lang, out var terms) ? terms : Array.Empty<HelpGlossaryTerm>();
 
         /// <summary>The guide in <paramref name="lang"/>, falling back to English per section; null for an unknown module.</summary>
-        public HelpGuide? Localized(string module, string lang)
+        public HelpGuide? Localized(string module, string lang) =>
+            // The library never changes after loading, so each (module, language) is merged once.
+            _localized.GetOrAdd((module.ToLowerInvariant(), (lang ?? "en").ToLowerInvariant()), key => Localize(key.Module, key.Lang));
+
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<(string Module, string Lang), HelpGuide?> _localized = new();
+
+        private HelpGuide? Localize(string module, string lang)
         {
             var en = English(module);
             if (en is null) return null;
@@ -98,17 +115,26 @@ namespace SPIC.Core.Help
             {
                 if (!byId.TryGetValue(source.Id, out var t)) return source;
                 if (!string.Equals(t.SourceHash, HelpHash.Of(source.Title, source.Body), StringComparison.OrdinalIgnoreCase)) return source;
+                // Kind and screen meta stay English (source with ...); blocks also keep English layout lines.
                 return source with
                 {
                     Title = string.IsNullOrWhiteSpace(t.Title) ? source.Title : t.Title,
-                    Body = t.Body,
+                    Body = source.Kind == "screen" ? t.Body : HelpBlocks.MergeLayout(source.Body, t.Body),
                     SourceHash = t.SourceHash,
                     Confidence = t.Confidence,
                 };
             }).ToList();
 
             var translatedTitle = translated.Title != module ? translated.Title : en.Title;
-            return en with { Language = lang, Title = translatedTitle, Sections = sections };
+            var metaCurrent = string.Equals(translated.MetaSourceHash, HelpHash.Of(en.Category, en.Note), StringComparison.OrdinalIgnoreCase);
+            return en with
+            {
+                Language = lang,
+                Title = translatedTitle,
+                Sections = sections,
+                Category = metaCurrent && !string.IsNullOrWhiteSpace(translated.Category) ? translated.Category : en.Category,
+                Note = metaCurrent && !string.IsNullOrWhiteSpace(translated.Note) ? translated.Note : en.Note,
+            };
         }
 
         private void LoadGlossary(string text)

@@ -3,41 +3,158 @@ module: lab
 title: SAS Soil Testing Lab
 icon: bi-eyedropper
 order: 60
+category: Soil testing
+color: #7c3aed
+example: BATCH-2026-031 · 24 samples
+updated: 2026-11-16
+note: New look with the lab flow, statuses and guided tours
 ---
 
 ::: section overview
-title: How the soil testing lab works
-routes: /Lab
+title: What this module does for you
+kind: overview
 
-**What this module is for**
 The lab portal follows every soil and water sample from the day it reaches the lab until the farmer gets the report. Each person sees only the screens of their own job.
 
-## The journey of one consignment
+- receive | icon: bi-box-arrow-in-down | color: #0d9488
+  title: Receive and batch
+  text: The coordinator receives each parcel and groups samples into batches for an analyst.
+- test | icon: bi-eyedropper | color: #7c3aed
+  title: Test and enter values
+  text: The analyst types the test values. Results and advice are worked out by the system.
+- report | icon: bi-file-earmark-pdf | color: #16a34a
+  title: Reports in many languages
+  text: Completed batches give one report per sample, in English and Indian languages.
+:::
 
-1. Field staff collect samples from farmers and send them to the lab as a **consignment** by courier. On the way it shows **In Transit**.
-2. When the parcel arrives, the lab coordinator presses **Mark received**. The consignment becomes **Batch Pending**.
-3. The coordinator puts one or more Batch Pending consignments into a **batch** and assigns it to a lab analyst. The batch becomes **Taken for Analysis**.
-4. The analyst opens the batch, enters the test values for each sample and presses **Submit Values**. The system works out the result, the status and the recommendation by itself.
-5. When every sample is submitted, the coordinator presses **Complete Batch**. This locks the values and creates one report for each sample.
-6. Reports can be downloaded as PDF or Excel in English and Indian languages and given to the farmer. The farmer can also download the report in the app.
+::: section flow
+title: How a consignment moves through the lab
+kind: flow
 
-## Who does what
+Each row is a role and each box is a step. Tap a step to see what happens there.
 
-- **Lab coordinator**: receives consignments, makes batches, assigns analysts, completes batches, downloads lab reports.
-- **Lab analyst**: enters test values for the batches assigned to them and downloads sample reports.
-- **Lab admin**: watches all batches on **Lab Tracking**. This screen is read only.
+- field | type: lane | color: #64748b | roles: MDO, JMDO
+  title: Field staff
+  sub: MDO · JMDO
+- coordinator | type: lane | color: #0d9488
+  title: Lab coordinator
+  sub: Receives and batches
+- analyst | type: lane | color: #7c3aed
+  title: Lab analyst
+  sub: Enters test values
+- farmer | type: lane | color: #16a34a | roles: Farmer
+  title: Farmer
+  sub: Gets the report
+- send | lane: field | col: 1 | icon: bi-truck | color: #64748b | next: receive
+  title: Send the parcel
+  status: In Transit
+  text: Field staff send the samples to the lab as a consignment by courier.
+- receive | lane: coordinator | col: 2 | icon: bi-box-arrow-in-down | color: #0d9488 | next: batch | screen: receive-consignments
+  title: Mark received
+  status: Batch Pending
+  text: When the parcel arrives, the coordinator presses **Mark received**.
+- batch | lane: coordinator | col: 3 | icon: bi-collection | color: #ea580c | next: test | screen: create-batch
+  title: Make a batch
+  status: Taken for Analysis
+  text: The coordinator groups consignments into a batch and assigns it to an analyst.
+- test | lane: analyst | col: 4 | icon: bi-eyedropper | color: #7c3aed | next: complete | screen: enter-test-values
+  title: Enter test values
+  status: Auto Result Ready
+  text: The analyst types each sample's values and presses **Submit Values**. Result, status and advice fill by themselves.
+- complete | lane: coordinator | col: 5 | icon: bi-patch-check | color: #2563eb | next: report | screen: batch-details
+  title: Complete the batch
+  status: Report Generated
+  text: The coordinator presses **Complete Batch**. Values are locked and one report is made per sample.
+- report | lane: farmer | col: 6 | icon: bi-file-earmark-arrow-down | color: #16a34a
+  title: Report to the farmer
+  status: Completed
+  text: The report is downloaded as PDF or Excel for the farmer, who can also download it in the app.
+:::
 
-> Lab screens open only when your designation has the lab pages. Even an Admin needs this. Ask your administrator if a lab menu is missing.
+::: section statuses
+title: Every status you can see
+kind: statuses
+
+- in-transit | color: #64748b
+  label: In Transit
+  text: The parcel is on its way to the lab.
+- batch-pending | color: #d97706
+  label: Batch Pending
+  text: Received, waiting to be put in a batch.
+- batch-created | color: #0891b2
+  label: Batch Created
+  text: In a batch, no analyst assigned yet.
+- taken | color: #ea580c
+  label: Taken for Analysis
+  text: Assigned to an analyst.
+- pending-entry | color: #d97706
+  label: Pending Entry
+  text: The analyst has not entered values yet.
+- in-progress | color: #7c3aed
+  label: In Progress
+  text: Some values are saved.
+- auto-result | color: #2563eb
+  label: Auto Result Ready
+  text: All values submitted; results are worked out.
+- report | color: #16a34a
+  label: Report Generated
+  text: The batch is completed and reports are ready.
+- delayed | color: #dc2626
+  label: Delayed
+  text: More than 5 days without completing the analysis.
+:::
+
+::: section roles
+title: Who does what
+kind: roles
+
+Your card is highlighted when your role matches.
+
+- coordinator | color: #0d9488
+  title: Lab coordinator
+  - Receive consignments
+  - Make batches and assign analysts
+  - Complete batches and download reports
+- analyst | color: #7c3aed
+  title: Lab analyst
+  - Enter test values for your batches
+  - Download sample reports
+- admin | color: #2563eb | roles: Admin
+  title: Lab admin
+  - Watch all batches on Lab Tracking
+  - Read only
+- field | color: #64748b | roles: MDO, JMDO
+  title: Field staff
+  - Send samples to the lab
+:::
+
+::: section faq
+title: Problems and answers
+kind: faq
+
+- no-lab-menu | popular: true
+  q: I cannot see the lab menu
+  a: Lab screens open only when your designation has the lab pages. Even an Admin needs this. Ask your administrator.
+- no-receive
+  q: There is no Mark received button
+  a: Only coordinators can receive, and only consignments that are **In Transit**.
+- delayed | popular: true
+  q: A batch shows Delayed but the analyst finished
+  a: It stays delayed until all samples are submitted and the analysis is completed.
+- edit-values
+  q: Can I change a value after submitting?
+  a: Yes. Press **Edit Values** on the sample. This works only until the batch is completed.
 :::
 
 ::: section coordinator-dashboard
 title: Lab coordinator dashboard
 routes: /Lab
+minutes: 1
+screenshot: coordinator-dashboard.png
+screenshot-phone: coordinator-dashboard.phone.jpg
 
 **What this screen is for**
 The **Lab Coordinator Dashboard** gives a quick picture of the lab: how many consignments arrived, how many still wait for a batch and how far the analysis has gone. When you open **Lab**, the app shows this dashboard to coordinators. Analysts are taken to their own dashboard instead.
-
-## Steps
 
 1. Look at the cards at the top: **Total Consignments Received**, **Pending Batch Creation**, **Total Batches Created**, **Taken for Analysis**, **Analysis Completed**, **Completed Batches** and **Reports Generated**.
 2. The **Recent Consignments** table shows the last five consignments with their **Status** (**Batch Pending** or **Batch Created**).
@@ -56,11 +173,12 @@ The **Lab Coordinator Dashboard** gives a quick picture of the lab: how many con
 ::: section receive-consignments
 title: Receive consignments at the lab
 routes: /Lab/Consignments, /Lab/Consignments/{id}
+minutes: 2
+screenshot: receive-consignments.png
+screenshot-phone: receive-consignments.phone.jpg
 
 **What this screen is for**
 The **Consignment Details** screen lists every consignment sent to the lab. Use it to mark a parcel as received and to check what is inside it.
-
-## Steps
 
 1. Look at the cards at the top: **Total Consignments**, **Pending Batch Creation**, **Batched Consignments**, **Water Samples** and **Soil Samples**.
 2. To find a consignment, type the consignment number or AWB number in the search box, or choose a status in **All Statuses**.
@@ -82,11 +200,10 @@ The **Consignment Details** screen lists every consignment sent to the lab. Use 
 ::: section create-batch
 title: Make a batch from consignments
 routes: /Lab/Consignments, /Lab/Consignments/{id}
+minutes: 2
 
 **What this screen is for**
 A batch is a group of samples that one analyst tests together. One batch can hold several consignments. You make it from the **Consignment Details** list.
-
-## Steps
 
 1. Open **Consignment Details**. Choose **Batch Pending** in **All Statuses** to see only the consignments that wait for a batch.
 2. Tick the box at the start of each consignment you want in the batch. The top box ticks all Batch Pending rows on the page.
@@ -112,21 +229,29 @@ A batch is a group of samples that one analyst tests together. One batch can hol
 ::: section analysis-tracking
 title: Track batches under analysis
 routes: /Lab/Analysis
+minutes: 2
+tour: 1 > [data-help=lab-at-cards] | 2 > [data-help=lab-at-search] | 3 > [data-help=lab-at-status] | 4 > [data-help=lab-at-table] | 5 > [data-help=lab-at-table]
+screenshot: analysis-tracking.png
+hotspots: 1 @ 3.7,13.6,92.5,21.5 | 2 @ 16.1,39.1,78.2,5.3 | 3 @ 76.5,39.1,17.8,5.3 | 4 @ 5.7,46,88.6,54 | 5 @ 5.7,46,88.6,54
+screenshot-phone: analysis-tracking.phone.jpg
+hotspots-phone: 1 @ 6.2,7.4,87.7,27.5 | 2 @ 10,39.1,80,6.8 | 3 @ 10,42.8,80,3 | 4 @ - | 5 @ -
 
 **What this screen is for**
 The **Analysis Tracking** screen lists every batch so you can follow it from creation to completed analysis and spot batches that are late.
 
-## Steps
-
 1. Look at the cards at the top: **Total Batches**, **Created**, **Taken for Analysis**, **Analysis Completed**, **Completed** and **Delayed Analysis**.
 2. Type a batch number, consignment number or analyst name in the search box.
 3. Choose a status in **All Statuses**. Choose **Delayed** to see only the late batches.
-4. Read the **Analysis Days** column:
-- **Pending** (yellow): analysis has not started.
-- A green number of days: analysis is going on in time.
-- A red number of days: the batch is delayed (normally more than 5 days without completing).
-5. Tap the batch number or the eye icon to open **Batch Details**.
-6. Use the page numbers at the bottom to see more batches, or change how many rows show on each page.
+4. Read the **Analysis Days** column to see which batches are on time (see the table below).
+5. Tap the batch number or the eye icon to open **Batch Details**. Use the page numbers at the bottom to see more batches.
+
+## Analysis Days explained
+
+| Shown | Meaning |
+|---|---|
+| **Pending** (yellow) | Analysis has not started. |
+| A green number of days | Analysis is going on in time. |
+| A red number of days | The batch is delayed (normally more than 5 days without completing). |
 
 ## Common problems
 
@@ -137,11 +262,10 @@ The **Analysis Tracking** screen lists every batch so you can follow it from cre
 ::: section batch-details
 title: Assign, follow and complete a batch
 routes: /Lab/Analysis/{id}
+minutes: 2
 
 **What this screen is for**
 The **Batch Details** screen shows everything about one batch: its samples, test parameters, documents and history. Coordinators also assign the analyst and complete the batch here.
-
-## Steps
 
 1. The strip at the top shows **Batch No.**, **Consignment No.**, **Total Samples**, **Assigned Date**, **Current Status** and **Analysis Days**.
 2. Use the tabs: **Overview** (progress, sample summary, timeline), **Samples**, **Parameters**, **Documents** and **Activity Log**.
@@ -162,11 +286,12 @@ The **Batch Details** screen shows everything about one batch: its samples, test
 ::: section lab-reports
 title: Download lab reports
 routes: /Lab/Reports
+minutes: 2
+screenshot: lab-reports.png
+screenshot-phone: lab-reports.phone.jpg
 
 **What this screen is for**
 The **Lab Reports** screen lists the reports made when a batch is completed. From here you can open a report's details and download it as PDF or Excel in the language the farmer reads.
-
-## Steps
 
 1. Look at the cards at the top: **Total Reports**, **Batch Reports**, **Sample Reports**, **Generated Today** and **Downloads Completed**.
 2. To narrow the list, press **Filters**. Choose **From** and **To** dates, **State**, **Sample Type** or **Financial Year**, then press **Apply Filters**. Press **Clear All** to remove them.
@@ -187,11 +312,12 @@ The **Lab Reports** screen lists the reports made when a batch is completed. Fro
 ::: section analyst-dashboard
 title: Lab analyst dashboard
 routes: /Lab/Analyst
+minutes: 1
+screenshot: analyst-dashboard.png
+screenshot-phone: analyst-dashboard.phone.jpg
 
 **What this screen is for**
 The **Lab Analyst Dashboard** shows the work assigned to you and what to do first. When an analyst opens **Lab**, the app shows this screen.
-
-## Steps
 
 1. Look at the cards at the top: **Assigned Batches**, **Pending Value Entry** (samples waiting for values), **Auto Result Ready** (samples whose result is worked out), **Reports Generated** (this financial year) and **Previous FY Reports**.
 2. Check **Today's Work Priority**:
@@ -210,21 +336,29 @@ The **Lab Analyst Dashboard** shows the work assigned to you and what to do firs
 ::: section analyst-batch-list
 title: Find the batches assigned to me
 routes: /Lab/TestEntry
+minutes: 2
+tour: 1 > [data-help=lab-bl-cards] | 2 > [data-help=lab-bl-filters] | 3 > [data-help=lab-bl-search] | 4 > [data-help=lab-bl-table]
+screenshot: analyst-batch-list.png
+hotspots: 1 @ 2.2,9.8,95.5,17.9 | 2 @ 2.2,30.1,95.5,34.9 | 3 @ 75.2,69.6,20.6,4.8 | 4 @ 4.2,76.1,91.6,23.9
+screenshot-phone: analyst-batch-list.phone.jpg
+hotspots-phone: 1 @ 3.1,5.8,93.8,16.9 | 2 @ 3.1,23.7,93.8,3.5 | 3 @ 6.9,31.2,86.2,3 | 4 @ -
 
 **What this screen is for**
 The **Test Value Entry** screen lists the batches assigned to you. Start or continue entering test values from here.
 
-## Steps
-
 1. Look at the cards at the top: **Assigned Batches**, **Pending Value Entry**, **Auto Result Ready** and **Report Generated**.
 2. To narrow the list, open **Filters** and choose **Date Range**, **Sample Type**, **Status**, **Priority**, **Financial Year** or **Assigned By**. Press **Apply Filters**. Press **Clear All** to remove them.
 3. Type a batch or consignment number in the search box.
-4. In the **Assigned Batch List**, check **Pending Entries**, **Completed Entries**, **Priority** and **Status**. Do **High** priority batches first.
-5. Tap a row, or the icon in the **Action** column, to open the batch. The icon means:
-- **Start entry**: status **Pending Entry**, nothing entered yet.
-- **Continue entry**: status **In Progress**, some values saved.
-- **Preview results**: status **Auto Result Ready**, all values submitted.
-- **View**: status **Report Generated**, the batch is closed.
+4. In the **Assigned Batch List**, check **Pending Entries**, **Completed Entries**, **Priority** and **Status**. Do **High** priority batches first. Tap a row, or the icon in the **Action** column, to open the batch.
+
+## What the Action icon means
+
+| Icon | When you see it |
+|---|---|
+| **Start entry** | Status **Pending Entry**, nothing entered yet. |
+| **Continue entry** | Status **In Progress**, some values saved. |
+| **Preview results** | Status **Auto Result Ready**, all values submitted. |
+| **View** | Status **Report Generated**, the batch is closed. |
 
 ## Common problems
 
@@ -235,11 +369,10 @@ The **Test Value Entry** screen lists the batches assigned to you. Start or cont
 ::: section enter-test-values
 title: Enter test values for a sample
 routes: /Lab/TestEntry/{id}
+minutes: 4
 
 **What this screen is for**
 On **Sample-wise Entry** you type the test values of each sample in a batch. The system fills the normal range, result, status and recommendation by itself.
-
-## Steps
 
 1. Check the **Batch Summary** at the top.
 2. In **Samples in this Batch**, tap the icon of the sample to work on, or press **Next pending sample**.
@@ -268,11 +401,10 @@ On **Sample-wise Entry** you type the test values of each sample in a batch. The
 ::: section analyst-test-reports
 title: Test reports and previous year reports
 routes: /Lab/TestEntry/Reports, /Lab/TestEntry/Reports/Previous
+minutes: 2
 
 **What this screen is for**
 The **Test Reports** screen shows a report summary for each of your batches in this financial year (April to March). **Previous FY Reports** shows the same for earlier years.
-
-## Steps
 
 1. Look at the cards at the top: **Total Batches**, **Total Sample Reports**, **Reports Generated Today** and **Downloads Completed**.
 2. To see older reports, press **Previous FY Reports**. To come back, press **Current FY Reports**.
@@ -291,11 +423,10 @@ The **Test Reports** screen shows a report summary for each of your batches in t
 ::: section batch-report-details
 title: Open and download sample reports of a batch
 routes: /Lab/TestEntry/Reports/{id}
+minutes: 2
 
 **What this screen is for**
 **Batch Report Details** lists the report of each sample in one batch. Each sample has its own report for its farmer. Here you view, download and mark reports as printed.
-
-## Steps
 
 1. Look at the cards: **Total Samples**, **Soil Samples**, **Water Samples**, **Reports Generated** and **Downloads Completed**.
 2. Check **Batch Information**: batch, consignment, State, Region, **Head Quarters**, **Date of Dispatch** and **Financial Year**.
@@ -319,11 +450,10 @@ routes: /Lab/TestEntry/Reports/{id}
 ::: section lab-tracking
 title: Lab tracking for admins
 routes: /Lab/Tracking
+minutes: 2
 
 **What this screen is for**
 **Lab Tracking** is the admin view of all batches in the lab. Use it to watch consignments, batches and analysis progress. You cannot change anything here.
-
-## Steps
 
 1. Look at the cards at the top: **Total Batches**, **Batch Created**, **Taken for analysis** and **Analysis Completed**.
 2. Use the tabs to show one stage: **All Batches**, **Batch Created**, **Taken for Analysis** or **Analysis Completed**. Each tab shows its count.
@@ -342,11 +472,10 @@ routes: /Lab/Tracking
 ::: section batch-view
 title: View one batch as admin
 routes: /Lab/Tracking/{id}
+minutes: 1
 
 **What this screen is for**
 The batch view gives an admin the full story of one batch on one page: where the samples came from, the courier, the batch, the analysis progress and the timeline. It is read only.
-
-## Steps
 
 1. The strip at the top shows **Batch No.**, **Consignment No.**, **Test Samples**, **Samples**, **Assigned To (Analyst)**, **Batch Created On** and **Last Updated**.
 2. **Source Details** shows who collected the samples, their **Mobile No.**, **Location** and **Collection Date**.

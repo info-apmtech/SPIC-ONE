@@ -49,6 +49,10 @@ namespace SPIC.Core.Help
             var translated = new Dictionary<string, (string Title, string Body, HelpConfidence Confidence)>(StringComparer.OrdinalIgnoreCase);
             if (!string.IsNullOrWhiteSpace(draft.Title) && !string.Equals(draft.Title, draft.Module, StringComparison.OrdinalIgnoreCase))
                 translated[HelpGuideWriter.GuideTitleKey] = (draft.Title, string.Empty, HelpConfidence.Ok);
+            if (!string.IsNullOrWhiteSpace(draft.Category))
+                translated[HelpGuideWriter.CategoryKey] = (draft.Category, string.Empty, HelpConfidence.Ok);
+            if (!string.IsNullOrWhiteSpace(draft.Note))
+                translated[HelpGuideWriter.NoteKey] = (draft.Note, string.Empty, HelpConfidence.Ok);
 
             foreach (var s in english.Sections)
             {
@@ -56,11 +60,39 @@ namespace SPIC.Core.Help
                 if (d is null) { problems.Add($"{s.Id}: section missing"); continue; }
                 if (string.IsNullOrWhiteSpace(d.Title) || string.IsNullOrWhiteSpace(d.Body)) { problems.Add($"{s.Id}: empty title or body"); continue; }
 
-                var draftBolds = new HashSet<string>(Bold.Matches(d.Body).Select(m => m.Groups[1].Value.Trim()), StringComparer.Ordinal);
-                foreach (var name in ScreenNames(s.Body).Where(n => !draftBolds.Contains(n)))
+                var isBlock = s.Kind != "screen";
+                if (isBlock)
+                {
+                    var enItems = HelpBlocks.Items(s.Body);
+                    var draftProblems = new List<string>();
+                    var draftItems = HelpBlocks.Items(d.Body, draftProblems);
+                    problems.AddRange(draftProblems.Select(p => $"{s.Id}: {p}"));
+                    var enIds = enItems.Select(i => i.Id).ToList();
+                    var draftIds = draftItems.Select(i => i.Id).ToList();
+                    foreach (var missing in enIds.Where(id => !draftIds.Contains(id, StringComparer.OrdinalIgnoreCase)))
+                        problems.Add($"{s.Id}: item {missing} missing");
+                    foreach (var extra in draftIds.Where(id => !enIds.Contains(id, StringComparer.OrdinalIgnoreCase)))
+                        problems.Add($"{s.Id}: item {extra} is not in English");
+                    // Every English text field must be translated under its English key (title:, text:, q: ...).
+                    foreach (var en in enItems)
+                    {
+                        var di = draftItems.FirstOrDefault(x => string.Equals(x.Id, en.Id, StringComparison.OrdinalIgnoreCase));
+                        if (di is null) continue;
+                        foreach (var field in en.Text.Keys.Where(k => !di.Text.TryGetValue(k, out var v) || string.IsNullOrWhiteSpace(v)))
+                            problems.Add($"{s.Id}: item {en.Id} has no '{field}:' line");
+                        if (en.Bullets.Count != di.Bullets.Count)
+                            problems.Add($"{s.Id}: item {en.Id} has {di.Bullets.Count} bullet(s), English has {en.Bullets.Count}");
+                    }
+                }
+
+                // Blocks: check only their text (lead, fields, bullets), never their layout lines.
+                var draftText = isBlock ? string.Join("\n", HelpBlocks.TextLines(d with { Kind = s.Kind })) : d.Body;
+                var englishText = isBlock ? string.Join("\n", HelpBlocks.TextLines(s)) : s.Body;
+                var draftBolds = new HashSet<string>(Bold.Matches(draftText).Select(m => m.Groups[1].Value.Trim()), StringComparer.Ordinal);
+                foreach (var name in ScreenNames(englishText).Where(n => !draftBolds.Contains(n)))
                     problems.Add($"{s.Id}: **{name}** must stay in English");
 
-                translated[s.Id] = (d.Title, d.Body, HelpConfidence.Ok);
+                translated[s.Id] = (d.Title, isBlock ? HelpBlocks.MergeLayout(s.Body, d.Body) : d.Body, HelpConfidence.Ok);
             }
 
             foreach (var extra in draft.Sections.Where(d => !english.Sections.Any(s => string.Equals(s.Id, d.Id, StringComparison.OrdinalIgnoreCase))))

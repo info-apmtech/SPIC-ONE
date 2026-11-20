@@ -61,6 +61,15 @@ internal static class Program
 		HelpReviewStatusTests.Run();
 		HelpReviewApplierTests.Run();
 		HelpImportTests.Run();
+		HelpParserV2Tests.Run();
+		HelpBlocksTests.Run();
+		HelpV2TranslationTests.Run();
+		HelpMarkdownTests.Run();
+		HelpPathsTests.Run();
+		HelpCoverageV2Tests.Run();
+		HelpFeedbackTests.Run();
+		HelpCatalogV2Tests.Run();
+		HelpReviewFixTests.Run();
 
 		return Check.Report("Total");
 	}

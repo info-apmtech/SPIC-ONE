@@ -1,0 +1,44 @@
+@* "Was this guide helpful?" — Yes sends at once; No asks what was missing first. Quiet on failure. *@
+@using SPIC.Core.DTOs
+@inject HelpApi Api
+
+<div class="hc-fb">
+    @if (_sent)
+    {
+        <span><i class="bi bi-heart-fill" style="color:#16a34a" aria-hidden="true"></i> <b>Thank you.</b> <span style="color:#61716a;font-size:12.5px">Your answer helps us improve this guide.</span></span>
+    }
+    else if (_askWhy)
+    {
+        <div style="flex:1;min-width:220px">
+            <b>What was missing or unclear?</b>
+            <textarea rows="3" maxlength="500" @bind="_comment" placeholder="Optional"></textarea>
+        </div>
+        <span style="display:flex;gap:8px">
+            <button type="button" class="hc-btn" @onclick="() => _askWhy = false">Cancel</button>
+            <button type="button" class="hc-btn hc-btn--pri" @onclick="() => SendAsync(false)">Send</button>
+        </span>
+    }
+    else
+    {
+        <span><b>Was this guide helpful?</b> <span style="color:#61716a;font-size:12.5px">Tell us so we can improve it.</span></span>
+        <span style="display:flex;gap:8px">
+            <button type="button" class="hc-btn" @onclick="() => SendAsync(true)"><i class="bi bi-hand-thumbs-up" aria-hidden="true"></i> Yes</button>
+            <button type="button" class="hc-btn" @onclick="() => _askWhy = true"><i class="bi bi-hand-thumbs-down" aria-hidden="true"></i> No</button>
+        </span>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Module { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public string Language { get; set; } = "en";
+
+    private bool _askWhy;
+    private bool _sent;
+    private string? _comment;
+
+    private async Task SendAsync(bool helpful)
+    {
+        _sent = true; // thank the user either way; the vote is best effort
+        await Api.SendFeedbackAsync(new HelpFeedbackDto(Module, null, Language, helpful, string.IsNullOrWhiteSpace(_comment) ? null : _comment.Trim()));
+    }
+}

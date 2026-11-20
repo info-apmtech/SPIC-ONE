@@ -3,57 +3,180 @@ module: sas-sample-collection
 title: Soil Sample Collection
 icon: bi-droplet
 order: 50
+category: Soil testing
+color: #0d9488
+example: SC-2026-0142 · 3 samples
+updated: 2026-11-16
+note: New look with the sample journey, statuses and guided tours
 ---
 
 ::: section overview
-title: How soil sample collection works
-routes: /SampleCollection
+title: What this module does for you
+kind: overview
 
-**What this screen is for**
-SPIC tests soil and water from a farmer's land in a district lab. The app follows each sample from the field to the farmer's report. Every collection moves through the same steps.
+SPIC tests soil and water from a farmer's land in a district lab. The app follows each sample from the field to the farmer's report, so everyone can see where it is.
 
-## Steps
+- collect | icon: bi-droplet | color: #0d9488
+  title: Collect in the field
+  text: The MDO or JMDO records the farmer and the samples.
+- pay | icon: bi-qr-code | color: #d97706
+  title: Pay and approve
+  text: A paid sample is paid by UPI or another mode, then approved and checked by Finance.
+- report | icon: bi-file-earmark-text | color: #7c3aed
+  title: Lab report for the farmer
+  text: The lab tests the samples and the farmer downloads the report in Tamil or English.
+:::
 
-1. **Collect.** The field officer (MDO or JMDO) opens **New Sample Collection**, picks the farmer and adds one or more samples.
-2. **Pay.** A **Paid Sample** needs a payment. The officer records the UPI or other payment and uploads a photo of the receipt. A **Free Sample** skips this step.
-3. **Approve.** An approver checks the payment and the receipt. Finance then checks that the money was received.
-4. **Send to the lab.** The officer sends the samples by courier and enters the tracking number. This is called a consignment.
-5. **Test.** The lab receives the samples and tests them.
-6. **Report.** The farmer sees the report in the app and can download it in Tamil or English.
+::: section flow
+title: How a sample moves, and who acts
+kind: flow
 
-## What the status means
+Each row is a role and each box is a step. A free sample skips the payment steps. Tap a step to see what happens there.
 
-- **Draft**: saved, not yet submitted.
-- **Pending Payment**: waiting for the payment to be recorded.
-- **Pending Approval**: payment recorded, waiting for approval.
-- **Ready consignment**: ready to send to the lab.
-- **Dispatched**, **In Transit**, **Delivered to Lab**: on the way to the lab.
-- **In Progress**: the lab is testing.
-- **Completed**: results are available.
+- officer | type: lane | color: #0d9488 | roles: MDO, JMDO
+  title: Field officer
+  sub: MDO · JMDO
+- approver | type: lane | color: #ea580c | roles: Admin, CorporateAdmin
+  title: Approver
+  sub: Payment approval
+- finance | type: lane | color: #2563eb
+  title: Finance
+  sub: Payment verification
+- lab | type: lane | color: #7c3aed
+  title: Lab
+  sub: District lab
+- farmer | type: lane | color: #16a34a | roles: Farmer
+  title: Farmer
+  sub: Sample owner
+- collect | lane: officer | col: 1 | icon: bi-droplet | color: #64748b | next: pay | screen: collect-sample
+  title: Collect the samples
+  status: Draft
+  text: Pick the farmer, add each soil or water sample and save. A free sample goes straight to the consignment.
+- pay | lane: officer | col: 2 | icon: bi-qr-code | color: #d97706 | next: approve | screen: record-payment
+  title: Record the payment
+  status: Pending Payment
+  text: The farmer pays by scanning the QR code. The officer enters the transaction and uploads the receipt.
+- approve | lane: approver | col: 3 | icon: bi-patch-check | color: #ea580c | next: send, verify | return: pay | screen: approve-payments
+  title: Approve the payment
+  status: Pending Approval
+  text: The approver checks the amount and the receipt, then approves and forwards it to Finance, or sends it back.
+- send | lane: officer | col: 4 | icon: bi-truck | color: #0d9488 | next: test | screen: send-consignment
+  title: Send to the lab
+  status: Dispatched
+  text: The officer hands the samples to a courier and records the tracking number. This is the consignment.
+- verify | lane: finance | col: 4 | icon: bi-bank | color: #2563eb | screen: verify-payments
+  title: Verify the money
+  status: Finance Verified
+  text: Finance confirms that the money reached the account, or marks a mismatch.
+- test | lane: lab | col: 5 | icon: bi-eyedropper | color: #7c3aed | next: report
+  title: Test the samples
+  status: In Progress
+  text: The lab receives the parcel, tests each sample and publishes the results.
+- report | lane: farmer | col: 6 | icon: bi-file-earmark-arrow-down | color: #16a34a | screen: farmer-my-reports
+  title: Download the report
+  status: Completed
+  text: The farmer sees the report in the app and downloads it in Tamil or English.
+:::
 
-## Common problems
+::: section statuses
+title: Every status you can see
+kind: statuses
 
-- You cannot see **Sample Collection** in the menu: your designation does not include this page. Ask your administrator.
-- JMDO users do not see it in the menu. Open it from your **Soil Sample** task instead.
+- draft | color: #64748b
+  label: Draft
+  text: Saved, not yet submitted.
+- pending-payment | color: #d97706
+  label: Pending Payment
+  text: Waiting for the payment to be recorded.
+- pending-approval | color: #ea580c
+  label: Pending Approval
+  text: Payment recorded, waiting for approval.
+- ready | color: #0891b2
+  label: Ready consignment
+  text: Ready to send to the lab.
+- dispatched | color: #0d9488
+  label: Dispatched
+  text: Handed to the courier.
+- in-transit | color: #0d9488
+  label: In Transit
+  text: On the way to the lab.
+- delivered | color: #2563eb
+  label: Delivered to Lab
+  text: The lab has the parcel.
+- in-progress | color: #7c3aed
+  label: In Progress
+  text: The lab is testing.
+- completed | color: #16a34a
+  label: Completed
+  text: Results are available.
+:::
+
+::: section roles
+title: Who does what
+kind: roles
+
+Your card is highlighted. You only see the screens your role uses.
+
+- officer | color: #0d9488 | roles: MDO, JMDO
+  title: MDO, JMDO
+  - Collect samples
+  - Record payments
+  - Send consignments to the lab
+- approver | color: #ea580c | roles: Admin, CorporateAdmin
+  title: Approver
+  - Approve or return payments
+  - Move consignments on
+  - Enter lab results
+- finance | color: #2563eb
+  title: Finance
+  - Verify money received
+  - Mark mismatches
+- farmer | color: #16a34a | roles: Farmer
+  title: Farmer
+  - See your samples
+  - Download your reports
+  - Check your payments
+:::
+
+::: section faq
+title: Problems and answers
+kind: faq
+
+- no-menu | popular: true
+  q: I cannot see Sample Collection in the menu
+  a: Your designation does not include this page. Ask your administrator. JMDO users open it from the **Soil Sample** task instead.
+- payment-rejected | popular: true
+  q: My payment was rejected. What now?
+  a: The details page shows **Payment rejected** with the reason. Correct it and tap **Record payment** again.
+- not-ready
+  q: It says "This collection is not ready to send"
+  a: The payment is not recorded or approved yet. Free samples can be sent straight away.
+- report-language
+  q: How do I get the report in Tamil?
+  a: Tap the small arrow next to **Download PDF** and choose Tamil or English.
 :::
 
 ::: section collection-list
 title: Find and track your sample collections
 routes: /SampleCollection
+minutes: 2
+tour: 1 > [data-help=sc-tiles] | 2 > [data-help=sc-search] | 3 > [data-help=sc-filters] | 4 > [data-help=sc-table] | 5 > [data-help=sc-excel] | 6 > [data-help=sc-new]
+screenshot: collection-list.png
+hotspots: 1 @ 2.2,68.5,95.5,15.1 | 2 @ 73.7,88,22.4,4.8 | 3 @ 2.2,30.7,95.5,35.4 | 4 @ 3.8,94.7,92.3,5.3 | 5 @ 62.1,1.9,8.1,4.8 | 6 @ 79.2,1.9,18.5,4.8
+screenshot-phone: collection-list.phone.jpg
+hotspots-phone: 1 @ 3.1,40.6,93.8,24.4 | 2 @ 6.4,69.4,87.2,3.2 | 3 @ 3.1,36,93.8,3.2 | 4 @ - | 5 @ 15.3,4.3,10.2,3 | 6 @ 39.7,4.3,48.8,3
 
 **What this screen is for**
 The **Sample Collection** page lists every collection you can see, with its payment and lab status. Use it to find a collection and open its details.
 
-## Steps
+The cards at the top show counts: **Total Samples**, **Free Samples**, **Paid Samples**, **Lab Level** and **Ready to Submit**.
 
-1. Open **Sample Collection** from the menu.
-2. The cards at the top show counts: **Total Samples**, **Free Samples**, **Paid Samples**, **Lab Level** and **Ready to Submit**.
-3. Tap a coloured tile such as **Pending Payment** or **Draft** to show only those collections. Tap it again to show all.
-4. To search, type a farmer name or collection ID in **Search collections...**.
-5. For more choices, open **Filters**, set **Date Range**, **Location**, **Payment Type**, **Payment Status** or **Status**, then tap **Apply Filters**. Tap **Clear All** to remove them.
-6. Tap the eye icon (or the card on a phone) to open the collection.
-7. Tap **Excel** or **PDF** to download the list shown on the screen.
-8. Tap **Refresh Data** to load the latest status.
+1. Tap a coloured tile such as **Pending Payment** or **Draft** to show only those collections. Tap it again to show all.
+2. To search, type a farmer name or collection ID in **Search collections...**.
+3. For more choices, open **Filters**, set **Date Range**, **Location**, **Payment Type**, **Payment Status** or **Status**, then tap **Apply Filters**. Tap **Clear All** to remove them.
+4. Tap the eye icon (or the card on a phone) to open the collection.
+5. Tap **Excel** or **PDF** to download the list shown on the screen. Tap **Refresh Data** to load the latest status.
+6. Tap **New Sample Collection** to start collecting.
 
 ## Common problems
 
@@ -68,22 +191,25 @@ title: Collect a new soil or water sample
 routes: /SampleCollection/new
 for: SampleCollection.Entry
 roles: MDO, JMDO, Admin, CorporateAdmin
+minutes: 4
+tour: 1 > [data-help=sc-paytype] | 2 > [data-help=sc-farmer] | 3 > [data-help=sc-soil] | 4 > [data-help=sc-add] | 5 > [data-help=sc-save]
+screenshot: collect-sample.png
+hotspots: 1 @ 66,1.9,31.8,5 | 2 @ 4,34.7,29.7,7.8 | 3 @ 35.2,81.7,29.7,8 | 4 @ - | 5 @ -
+screenshot-phone: collect-sample.phone.jpg
+hotspots-phone: 1 @ 3.1,4.6,93.8,3.2 | 2 @ 6.9,33.7,86.2,8.5 | 3 @ - | 4 @ - | 5 @ 43.8,92.1,52.1,3
 
 **What this screen is for**
 Use **New Sample Collection** to record the samples you take from farmers. One collection can hold samples from several farmers.
 
-## Steps
+Open it with **New Sample Collection** on the **Sample Collection** page. JMDO: tap **Start** on the **Soil Sample** card in **Tasks Allocation**, or **Soil Sample Collection** in a task's **Quick actions**.
 
-1. On **Sample Collection**, tap **New Sample Collection**. JMDO: tap **Start** on the **Soil Sample** card in **Tasks Allocation**, or **Soil Sample Collection** in a task's **Quick actions**.
-2. At the top, choose **Free Sample** or **Paid Sample**.
-3. In **Farmer Name**, type at least two letters and pick the farmer. If the farmer is new, tap **New Farmer**.
-4. For a paid sample, choose **Farmer** or **NGO** under **Paid Sample Category**.
-5. Set **Soil Sample** and **Water Sample** to **Yes** or **No**.
-6. Pick **Crop 1**, **Crop 2** and add **Remarks** if needed.
-7. Tap **Add Another Sample**. The sample appears in **Sample Added (Preview)** with its amount.
-8. Repeat for every sample. Use the pencil to change a row or the bin to remove it.
-9. Tap **Save Draft** to finish later, or **Save and Continue** to see the **Sample Summary**.
-10. Check the summary and tap **Continue to payment** (paid) or **Continue to consignment** (free).
+1. At the top, choose **Free Sample** or **Paid Sample**.
+2. In **Farmer Name**, type at least two letters and pick the farmer. If the farmer is new, tap **New Farmer**. For a paid sample, choose **Farmer** or **NGO** under **Paid Sample Category**.
+3. Set **Soil Sample** and **Water Sample** to **Yes** or **No**. Pick **Crop 1**, **Crop 2** and add **Remarks** if needed.
+4. Tap **Add Another Sample**. The sample appears in **Sample Added (Preview)** with its amount. Repeat for every sample; the pencil changes a row and the bin removes it.
+5. Tap **Save Draft** to finish later, or **Save and Continue**. Check the **Sample Summary** and tap **Continue to payment** (paid) or **Continue to consignment** (free).
+
+> Tip: One collection can hold samples from several farmers.
 
 ## Fields explained
 
@@ -104,11 +230,10 @@ title: Finish or change a draft collection
 routes: /SampleCollection/new, /SampleCollection/view/{id}
 for: SampleCollection.Update
 roles: MDO, JMDO, Admin, CorporateAdmin
+minutes: 2
 
 **What this screen is for**
 A collection saved with **Save Draft** stays as a **Draft**. Nothing goes to payment or the lab until you submit it. You can open it again and finish it.
-
-## Steps
 
 1. Open **Sample Collection** and tap the **Draft** tile.
 2. Open the collection with the eye icon.
@@ -130,11 +255,10 @@ A collection saved with **Save Draft** stays as a **Draft**. Nothing goes to pay
 title: Record the payment for a paid sample
 routes: /SampleCollection/payment/{id}
 roles: MDO, JMDO, Admin, CorporateAdmin
+minutes: 3
 
 **What this screen is for**
 The **Payments** screen shows how much to collect, a UPI QR code for the farmer to scan, and a form for the payment details and receipt.
-
-## Steps
 
 1. After **Continue to payment**, the **Payments** screen opens. You can also tap **Record payment** on the collection details.
 2. Check **Total Amount to Collect**. Tap **View Sample Summary** to see the samples.
@@ -165,11 +289,10 @@ The **Payments** screen shows how much to collect, a UPI QR code for the farmer 
 title: Send samples to the lab (consignment)
 routes: /SampleCollection/consignment/{id}, /SampleCollection/submitted/{id}
 roles: MDO, JMDO, Admin, CorporateAdmin
+minutes: 3
 
 **What this screen is for**
 When a collection is free or its payment is approved, you pack the samples and hand them to a courier. **Upload Consignment** records the courier details and photos so the lab knows what is coming.
-
-## Steps
 
 1. Open the collection and tap **Upload consignment**. For a free sample, **Continue to consignment** opens it directly.
 2. Under **Courier Details**, choose the **Courier Service** and type the **Tracking Number (AWB)**.
@@ -196,11 +319,12 @@ When a collection is free or its payment is approved, you pack the samples and h
 ::: section collection-details
 title: Read a sample collection's details
 routes: /SampleCollection/view/{id}
+minutes: 2
+screenshot: collection-details.png
+screenshot-phone: collection-details.phone.jpg
 
 **What this screen is for**
 **Sample Collection Details** shows everything about one collection: payment, courier, lab results and history. Field staff, dealers and managers can follow progress here.
-
-## Steps
 
 1. Open **Sample Collection** and tap the eye icon on a collection.
 2. The top line shows the collection ID, **Paid Sample** or **Free Sample**, and the current status.
@@ -227,11 +351,10 @@ routes: /SampleCollection/view/{id}
 title: Approve payments, move consignments and enter results
 routes: /SampleCollection/view/{id}, /ConsignmentHistory/view/{id}
 roles: Admin, CorporateAdmin
+minutes: 3
 
 **What this screen is for**
 Administrators can review a payment on the collection details page, move a consignment to its next stage, and type lab results.
-
-## Steps
 
 ### Approve a payment on the collection
 
@@ -262,11 +385,12 @@ Administrators can review a payment on the collection details page, move a consi
 ::: section consignment-history
 title: Track consignments sent to the lab
 routes: /ConsignmentHistory, /ConsignmentHistory/view/{id}
+minutes: 2
+screenshot: consignment-history.png
+screenshot-phone: consignment-history.phone.jpg
 
 **What this screen is for**
 **Consignment History** lists every parcel of samples sent to the lab, with courier, tracking number and current status.
-
-## Steps
 
 1. Open **Consignment History** from the menu.
 2. The cards show **Total Consignments**, **Total Consignment Sent**, **Total Samples**, **Delivered** and **Pending**.
@@ -294,11 +418,12 @@ routes: /ConsignmentHistory, /ConsignmentHistory/view/{id}
 title: See your soil samples (farmer)
 routes: /Sas/MySamples, /SampleCollection/view/{id}
 roles: Farmer
+minutes: 2
+screenshot: farmer-my-samples.png
+screenshot-phone: farmer-my-samples.phone.jpg
 
 **What this screen is for**
 **My Samples** shows every soil or water sample your MO officer collected from you, and where each one is now.
-
-## Steps
 
 1. Open **My Samples** from the menu.
 2. Each card shows the sample number, the consignment, the officer who collected it, the date and the crop.
@@ -326,11 +451,12 @@ roles: Farmer
 title: Download your soil test report (farmer)
 routes: /Sas/MyReports
 roles: Farmer
+minutes: 2
+screenshot: farmer-my-reports.png
+screenshot-phone: farmer-my-reports.phone.jpg
 
 **What this screen is for**
 **My Reports** lists the test reports the lab made for your samples. You can download each report in Tamil or English.
-
-## Steps
 
 1. Open **My Reports** from the menu.
 2. The cards show **Total Reports**, **Ready to Download**, **Downloaded** and **Under Process**.
@@ -356,11 +482,10 @@ roles: Farmer
 title: Check your sample payments (farmer)
 routes: /Sas/Payments, /Sas/Payments/{id}
 roles: Farmer
+minutes: 2
 
 **What this screen is for**
 **Payments** shows the payments made for your paid soil samples and whether SPIC has approved and received them. You only view here; nothing needs to be filled in.
-
-## Steps
 
 1. Open **Payments** from the menu.
 2. The cards show **Total Paid Samples**, **Finance Verified**, **Approval Pending** and **Payment Issues**.
@@ -385,11 +510,10 @@ roles: Farmer
 title: Approve sample payments and forward to Finance
 routes: /Sas/Payments, /Sas/Payments/{id}
 for: SasPaymentApproval.View
+minutes: 3
 
 **What this screen is for**
 **Payment Approval** lists the payments field officers recorded for paid samples. You check each receipt and amount, then approve and forward it to Finance, or send it back to the officer.
-
-## Steps
 
 1. Open **Payment Approval** from the menu.
 2. Tap the **Pending Admin Approval** tab.
@@ -417,11 +541,10 @@ for: SasPaymentApproval.View
 title: Verify payments received (Finance)
 routes: /Sas/Payments, /Sas/Payments/{id}, /Sas/Payments/History
 for: SasPaymentVerification.View
+minutes: 3
 
 **What this screen is for**
 **Payment Verification** lists payments the approver has forwarded to Finance. You confirm that the money reached the account. **Payment History** keeps every payment you have finished.
-
-## Steps
 
 1. Open **Payment Verification** from the menu.
 2. Tap the **Pending Verification** tab.

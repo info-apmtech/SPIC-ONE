@@ -3,54 +3,185 @@ module: publicity
 title: Publicity Material Tracking
 icon: bi-megaphone
 order: 40
+category: Marketing
+color: #0b6b3a
+example: IND-1042 · Banner 6x3
+updated: 2026-11-16
+note: New look with the request flow, statuses and guided tours
 ---
 
 ::: section overview
-title: How publicity material tracking works
-routes: /PublicityRequest, /PublicityReview
+title: What this module does for you
+kind: overview
 
-**What this module is for**
-Use this module to ask for publicity material (posters, banners and similar items) for your HQ, get it approved, receive it and confirm that it arrived. Every step is recorded, so everyone can see where a request is.
+Ask for publicity material (posters, banners and similar items) for your HQ, get it approved, receive it and confirm that it arrived. Every step is recorded, so everyone can see where a request is.
 
-## The journey of one request
+- start | icon: bi-pencil-square | color: #0b6b3a
+  title: The RMDO starts it
+  text: Raise a request with the material, product and quantity.
+- approve | icon: bi-shield-check | color: #d97706
+  title: Five approvals
+  text: RM, SMD, SMM, ADMIN-MD CS and DGM-MD CS check it in turn.
+- close | icon: bi-box-seam | color: #7c3aed
+  title: The RMDO closes it
+  text: Confirm what arrived, including short or damaged pieces.
+:::
 
-1. The RMDO fills a request and presses **Submit Request**.
-2. The request goes for approval in this order: RM, then SMD, then SMM, then ADMIN-MD CS, then DGM-MD CS (final approval).
-3. Any approver (except DGM-MD CS) can change the details before forwarding. An approver can also **Reject** the request, which closes it.
-4. After final approval, ADMIN-MD CS (or DGM-MD CS) creates the dispatch from the vendor.
-5. The material travels: **Dispatched**, then **In Transit**, then **Delivered**.
-6. The RMDO checks the material and submits the **Acknowledgement** with the quantity received and its condition.
-7. If everything is correct, the request becomes **Completed**.
-8. If some items are short or damaged, an **Exception Raised** status appears. ADMIN-MD CS solves it by sending a new dispatch from the vendor, or by moving extra stock from another HQ.
+::: section flow
+title: How a request moves, and who acts
+kind: flow
 
-## Who does what
+Each row is a role and each box is a step. Your row is marked "You". Tap a step to see what happens there.
 
-- **RMDO**: creates requests, acknowledges delivery, sends courier proof when asked to transfer extra stock.
-- **RM, SMD, SMM**: check and approve requests for their region or state.
-- **ADMIN-MD CS**: approves, creates dispatches, updates delivery, solves exceptions.
-- **DGM-MD CS**: gives final approval and may also create dispatches.
+- rmdo | type: lane | color: #0b6b3a | roles: RMD | designations: RMDO
+  title: RMDO
+  sub: Your HQ
+- approvers | type: lane | color: #0d9488 | roles: RM, SMD, SMM
+  title: Approvers
+  sub: RM · SMD · SMM
+- mdcs | type: lane | color: #ea580c | roles: MDAdmin, MDHOD | designations: ADMIN-MD CS, ADMIN MD CS, DGM-MD CS, DGM MD CS
+  title: MD CS
+  sub: ADMIN-MD CS · DGM-MD CS
+- vendor | type: lane | color: #64748b
+  title: Vendor
+  sub: Courier
+- raise | lane: rmdo | col: 1 | icon: bi-pencil-square | color: #64748b | next: approve | screen: raise-request
+  title: Raise and submit
+  status: Draft
+  text: Fill the request form and press **Submit Request**. Until then it is a draft only you can see.
+- approve | lane: approvers | col: 2 | icon: bi-hourglass-split | color: #d97706 | next: final | return: raise | screen: review-approve
+  title: Check and approve
+  status: Pending Approval
+  text: RM, then SMD, then SMM check the request. Each can change it, approve and forward it, return it to the RMDO, or reject it.
+- final | lane: mdcs | col: 3 | icon: bi-patch-check | color: #2563eb | next: dispatch | screen: review-approve
+  title: Final approval
+  status: Final Approved
+  text: ADMIN-MD CS approves and forwards it, then DGM-MD CS gives the final approval.
+- dispatch | lane: mdcs | col: 4 | icon: bi-truck | color: #7c3aed | next: ship | screen: create-dispatch
+  title: Create the dispatch
+  status: In Dispatch
+  text: ADMIN-MD CS or DGM-MD CS records the dispatch from the vendor with the courier details.
+- ship | lane: vendor | col: 5 | icon: bi-box-seam | color: #0d9488 | next: ack | screen: update-delivery
+  title: Ship to the HQ
+  status: Delivered
+  text: The material travels from the vendor. MD CS marks it **In Transit** and then **Delivered**.
+- ack | lane: rmdo | col: 6 | icon: bi-clipboard-check | color: #16a34a | screen: acknowledge-delivery
+  title: Acknowledge
+  status: Completed
+  text: The RMDO counts the material and submits the **Acknowledgement**. If everything is right, the request is completed.
+- exception | lane: mdcs | col: 6 | icon: bi-exclamation-triangle | color: #dc2626 | kind: exception | from: ack | to: dispatch | screen: resolve-exception
+  title: Solve a shortage or damage
+  status: Exception Raised
+  text: If pieces are short or damaged, MD CS sends the rest from the vendor or moves extra stock from another HQ.
+:::
 
-> Tap the bell button **Notifications** on the list page to see new approvals, dispatches and transfer orders.
+::: section statuses
+title: Every status you can see
+kind: statuses
+
+- draft | color: #64748b
+  label: Draft
+  text: Saved but not sent. Only you can see it.
+- pending | color: #d97706
+  label: Pending Approval
+  text: With an approver now.
+- pending-final | color: #d97706
+  label: Pending Final Approval
+  text: With DGM-MD CS for the last approval.
+- returned | color: #ea580c
+  label: Returned
+  text: Sent back to the RMDO. Edit and submit it again.
+- final | color: #2563eb
+  label: Final Approved
+  text: Approved. Waiting for the dispatch.
+- dispatch | color: #7c3aed
+  label: In Dispatch
+  text: The vendor has sent the material.
+- delivered | color: #0d9488
+  label: Delivered
+  text: The material reached the HQ.
+- ack-pending | color: #0891b2
+  label: Acknowledgement Pending
+  text: Waiting for the RMDO to confirm what arrived.
+- completed | color: #16a34a
+  label: Completed
+  text: Everything arrived in good condition.
+- exception | color: #dc2626
+  label: Exception Raised
+  text: Pieces were short or damaged. MD CS is solving it.
+- transfer | color: #7c3aed
+  label: Transfer Order Received
+  text: Your HQ is asked to send extra stock to another HQ.
+- rejected | color: #475569
+  label: Rejected
+  text: Closed by an approver. Raise a new request if needed.
+:::
+
+::: section roles
+title: Who does what
+kind: roles
+
+Your card is highlighted. You only see the screens your role uses.
+
+- rmdo | color: #0b6b3a | roles: RMD | designations: RMDO
+  title: RMDO
+  - Raise requests
+  - Acknowledge delivery
+  - Send courier proof for a stock transfer
+- approvers | color: #0d9488 | roles: RM, SMD, SMM
+  title: RM, SMD, SMM
+  - Check requests for your area
+  - Approve, return or reject
+- admin | color: #ea580c | roles: MDAdmin | designations: ADMIN-MD CS, ADMIN MD CS
+  title: ADMIN-MD CS
+  - Approve and forward
+  - Create dispatches and update delivery
+  - Solve shortages and damage
+- dgm | color: #7c3aed | roles: MDHOD | designations: DGM-MD CS, DGM MD CS
+  title: DGM-MD CS
+  - Give the final approval
+  - Create dispatches
+:::
+
+::: section faq
+title: Problems and answers
+kind: faq
+
+- no-pencil | popular: true
+  q: I submitted my request and now there is no pencil icon
+  a: After you submit, only an approver can return the request to you. Once it shows **Returned**, the pencil appears again.
+- damaged | popular: true
+  q: Some pieces arrived damaged or short. What do I do?
+  a: Enter the received and damaged quantities when you acknowledge and submit anyway. An exception goes to ADMIN-MD CS, who sends the missing pieces.
+- who-has-it
+  q: Who has my request right now?
+  a: Open the request. The top shows **Current Stage** and **Pending With**, and the **Approval History** shows every action.
+- no-rows
+  q: I see "No requests found"
+  a: Your filters may be too narrow. Open **Filters** and press **Clear All**.
 :::
 
 ::: section requester-list
 title: See and manage my requests
 routes: /PublicityRequest
+minutes: 2
+tour: 1 > [data-help=pub-cards] | 2 > [data-help=pub-search] | 3 > [data-help=pub-filters] | 4 > [data-help=pub-table] | 5 > [data-help=pub-export] | 6 > [data-help=pub-new]
+screenshot: requester-list.png
+hotspots: 1 @ 2.2,12.2,95.5,33.6 | 2 @ 61.6,81.1,24.3,5.1 | 3 @ 2.2,48.2,95.5,27.9 | 4 @ 4.2,87.9,91.6,12.1 | 5 @ 86.9,81.2,8.9,4.8 | 6 @ 80.7,1.9,17,4.8
+screenshot-phone: requester-list.phone.jpg
+hotspots-phone: 1 @ 3.1,9.9,93.8,35.4 | 2 @ 6.9,86.1,59.1,3 | 3 @ 3.1,46.3,93.8,35.1 | 4 @ 6.9,90,86.2,10 | 5 @ 68.5,86.2,24.5,2.8 | 6 @ 17.4,5.4,46.7,2.8
 
 **What this screen is for**
 The **My Publicity Material Request** screen shows every request for your HQ, with counts at the top and a table below.
 
-## Steps
+1. Look at the cards at the top, such as **Draft**, **Pending Approval** and **Completed**. Tap a card to show only those requests. Tap it again to show all.
+2. Type an indent number, product or material in the search box to find a request quickly.
+3. Open **Filters** to choose **Date Range**, **Product**, **Publicity Material** or **Status**, then press **Apply Filters**. **Clear All** removes them.
+4. In the **Action** column, the eye opens a request. The pencil edits a **Draft** or **Returned** request. The bin deletes a **Draft**.
+5. Press **Export** to download the list as an Excel file.
+6. Press **Create New Request** to start a new request.
 
-1. Look at the cards at the top: **Total Request**, **Draft**, **Pending Approval**, **Final Approved**, **In Dispatch**, **Acknowledgement Pending**, **Completed** and **Exception**.
-2. Tap a card to show only the requests in that status. Tap it again to show all.
-3. To search with more detail, open **Filters**, choose **Date Range**, **Product**, **Publicity Material** or **Status**, then press **Apply Filters**. Press **Clear All** to remove the filters.
-4. Type an indent number, product or material in the search box to find a request quickly.
-5. In the **Action** column, tap the eye icon to open a request.
-6. For a **Draft** or **Returned** request, tap the pencil icon to change it.
-7. For a **Draft** only, tap the bin icon to delete it. This cannot be undone.
-8. Press **Export** to download the list as an Excel file.
-9. Press **Create New Request** to start a new request.
+> Careful: Deleting a draft cannot be undone.
 
 ## Common problems
 
@@ -62,30 +193,33 @@ The **My Publicity Material Request** screen shows every request for your HQ, wi
 ::: section raise-request
 title: Raise a publicity request
 routes: /PublicityRequest/new, /PublicityRequest/edit/{id}
+minutes: 3
+tour: 1 > [data-help=pub-material] | 2 > [data-help=pub-qty] | 3 > [data-help=pub-design] | 4 > [data-help=pub-location] | 5 > [data-help=pub-submit]
+screenshot: raise-request.png
+hotspots: 1 @ 4.2,20.2,21.5,8.5 | 2 @ 50.9,20.2,21.5,8.5 | 3 @ 4.2,30.4,91.6,20.7 | 4 @ 2.2,73.6,95.5,19.1 | 5 @ 2.2,95,95.5,4.8
+screenshot-phone: raise-request.phone.jpg
+hotspots-phone: 1 @ 6.9,15.5,86.2,4.9 | 2 @ 6.9,27.4,86.2,4.9 | 3 @ 6.9,39.2,86.2,14.7 | 4 @ 3.1,66.1,93.8,23.6 | 5 @ 0,87.5,100,8.4
 
 **What this screen is for**
 Use the **Create Publicity Material Request** screen to ask for publicity material for your HQ. You can save it as a draft and send it later.
 
-## Steps
+1. Under **Request Details**, choose the **Type of Publicity Material** and the **Product**.
+2. Enter the **Quantity** you need. **Requested By** already shows your name.
+3. If you have a design, drop the file in the upload box or tap **or click to browse**. Add **Remarks** if needed.
+4. Under **Location**, check the **State**, **Region** and **Headquarter (HQ)**. They are filled from your profile.
+5. Press **Save as Draft** to keep it for later, or **Submit Request** and then **Submit** to send it to the RM.
 
-1. On the list page, press **Create New Request**.
-2. Under **Request Details**, choose the **Type of Publicity Material** and the **Product**.
-3. Enter the **Quantity** you need.
-4. Check **Requested By**. It shows your name already.
-5. If you have a design, drop the file in the upload box or tap **or click to browse**.
-6. Add **Remarks** if needed.
-7. Under **Location**, check the **State**, **Region** and **Headquarter (HQ)**. They are filled from your profile.
-8. Press **Save as Draft** to keep it for later, or **Submit Request** to send it to the RM.
-9. Press **Submit** in the confirm box.
+> Tip: You can come back to a draft from the list and finish it later.
 
 ## Fields explained
 
-- **Type of Publicity Material**: the item you need, for example a poster or banner. Required.
-- **Product**: the product the material is for. You can type to search. Required.
-- **Quantity**: number of pieces needed. Required.
-- **Requested By**: the person asking for the material.
-- **Design file**: one file, PDF, JPG, PNG, DOC or DOCX, up to 10 MB.
-- **State**, **Region**, **Headquarter (HQ)**: where the material must be delivered. Required.
+| Field | What to enter |
+|---|---|
+| **Type of Publicity Material** | The item you need, for example a poster or banner. Required. |
+| **Product** | The product the material is for. You can type to search. Required. |
+| **Quantity** | Number of pieces needed. Required. |
+| **Design file** | One file, PDF, JPG, PNG, DOC or DOCX, up to 10 MB. |
+| **State**, **Region**, **Headquarter (HQ)** | Where the material must be delivered. Required. |
 
 ## Common problems
 
@@ -97,11 +231,12 @@ Use the **Create Publicity Material Request** screen to ask for publicity materi
 ::: section track-request
 title: Track my request
 routes: /PublicityRequest/{id}
+minutes: 2
+screenshot: track-request.png
+screenshot-phone: track-request.phone.jpg
 
 **What this screen is for**
 The **My Publicity Material Request Details** screen shows everything about one request: where it is now, who approved it, the dispatch and the documents.
-
-## Steps
 
 1. Open a request from the list with the eye icon.
 2. At the top, see **Current Stage**, **Status** and who has the request now (**Pending With**).
@@ -122,11 +257,10 @@ The **My Publicity Material Request Details** screen shows everything about one 
 ::: section acknowledge-delivery
 title: Acknowledge received material
 routes: /PublicityRequest/{id}
+minutes: 3
 
 **What this screen is for**
 When the material reaches your HQ, you must confirm how many pieces you received and their condition. This closes the request or reports a problem to ADMIN-MD CS.
-
-## Steps
 
 1. Open the request and go to **Tracking & Delivery**.
 2. In the **Awaiting Acknowledgement** box, press **Acknowledge**. This opens the **Acknowledgement** tab.
@@ -140,11 +274,13 @@ When the material reaches your HQ, you must confirm how many pieces you received
 
 ## Fields explained
 
-- **Quantity Received**: pieces actually counted. Required.
-- **Material Condition**: good or damaged. Required.
-- **Damaged Quantity**: from 1 up to the received quantity.
-- **Acknowledged By**: the person who received the material. Required.
-- **Photos**: pictures of the received material, up to 10 MB each.
+| Field | What to enter |
+|---|---|
+| **Quantity Received** | Pieces actually counted. Required. |
+| **Material Condition** | Good or damaged. Required. |
+| **Damaged Quantity** | From 1 up to the received quantity. |
+| **Acknowledged By** | The person who received the material. Required. |
+| **Photos** | Pictures of the received material, up to 10 MB each. |
 
 ## Common problems
 
@@ -156,11 +292,10 @@ When the material reaches your HQ, you must confirm how many pieces you received
 ::: section transfer-proof
 title: Send extra stock to another HQ
 routes: /PublicityRequest/{id}/transfer/{dispatchId}, /PublicityRequest/done
+minutes: 3
 
 **What this screen is for**
 If your HQ received more material than needed, ADMIN-MD CS can ask you to send some of it to another HQ that is short. You send it by courier and upload the courier receipt here.
-
-## Steps
 
 1. Open **Notifications** and tap the stock transfer order, then press **View Transfer**. You can also open your request, go to **Tracking & Delivery** and press **Create Transfer** on the **Stock Transfer Order** card.
 2. Check the **Read Information (Read Only)** part: **Destination HQ** and **Transfer Quantity**.
@@ -173,9 +308,11 @@ If your HQ received more material than needed, ADMIN-MD CS can ask you to send s
 
 ## Fields explained
 
-- **Courier / Transporter**: courier company name. Required.
-- **Tracking No. / AWB**: number on the courier receipt. Required.
-- **Dispatch Date**: date you sent it. Required.
+| Field | What to enter |
+|---|---|
+| **Courier / Transporter** | Courier company name. Required. |
+| **Tracking No. / AWB** | Number on the courier receipt. Required. |
+| **Dispatch Date** | The date you sent it. Required. |
 
 ## Common problems
 
@@ -187,19 +324,21 @@ If your HQ received more material than needed, ADMIN-MD CS can ask you to send s
 ::: section requester-notifications
 title: My publicity notifications
 routes: /PublicityRequest/notifications
+minutes: 1
+tour: 1 > [data-help=pub-notif-tabs] | 2 > [data-help=pub-notif-list] | 3 > [data-help=pub-notif-list] | 4 > [data-help=pub-notif-readall] | 5 > [data-help=pub-notif-back]
+screenshot: requester-notifications.png
+hotspots: 1 @ 4.2,14.7,91.6,7 | 2 @ 4.2,23.6,91.6,76.4 | 3 @ 4.2,23.6,91.6,76.4 | 4 @ 84.5,1.9,13.3,4.8 | 5 @ 68.7,1.9,15.1,4.8
+screenshot-phone: requester-notifications.phone.jpg
+hotspots-phone: 1 @ 6.9,11,86.2,3.7 | 2 @ 6.9,15.8,86.2,84.2 | 3 @ 6.9,15.8,86.2,84.2 | 4 @ 46.4,5.4,36.4,2.8 | 5 @ 3.1,5.4,41.3,2.8
 
 **What this screen is for**
-The **Notifications** screen lists alerts about your requests: returns, dispatches, exceptions and stock transfer orders.
+The **Notifications** screen lists alerts about your requests: returns, dispatches, exceptions and stock transfer orders. Open it from the list page with **Notifications**.
 
-## Steps
-
-1. On the list page, press **Notifications**.
-2. Choose a tab: **All**, **Stock Transfer**, **Exception** or **Dispatch & Approvals**.
-3. Unread items have a dot. Tap an item to open its details.
-4. For a transfer order, see **Transfer Order Details**, **Source Excess Reference** and **Reason for Transfer**.
-5. Press **View Transfer** to upload the courier proof, or **View Details** to open the request.
-6. Press **Mark As Read** for one item, or **Mark All As Read** for all.
-7. Press **Back to List Page** to return.
+1. Choose a tab: **All**, **Stock Transfer**, **Exception** or **Dispatch & Approvals**.
+2. Unread items have a dot. Tap an item to open its details.
+3. For a transfer order, press **View Transfer** to upload the courier proof. Press **View Details** to open the request.
+4. Press **Mark As Read** for one item, or **Mark All As Read** for all.
+5. Press **Back to List Page** to return.
 
 ## Common problems
 
@@ -210,11 +349,12 @@ The **Notifications** screen lists alerts about your requests: returns, dispatch
 ::: section reviewer-list
 title: See requests sent for my review
 routes: /PublicityReview
+minutes: 2
+screenshot: reviewer-list.png
+screenshot-phone: reviewer-list.phone.jpg
 
 **What this screen is for**
 Approvers and MD CS staff use this list to see requests from their area. The title is **Submitted Requests** (for RM it is **My Publicity Material Request**).
-
-## Steps
 
 1. Look at the cards at the top. RM sees **Pending for My Approval**, **Approved by RM**, **Dispatch & Delivery**, **Completed** and **Returned**. Others see cards such as **Total Submitted**, **Pending Review**, **Dispatch Pending**, **Exceptions** and **Completed**.
 2. If a red **New Request for Review** box appears, press **View New Requests**. For RM, SMD, SMM and ADMIN-MD CS this opens the consolidation screen.
@@ -233,11 +373,10 @@ Approvers and MD CS staff use this list to see requests from their area. The tit
 ::: section review-approve
 title: Review and approve a request
 routes: /PublicityReview/{id}
+minutes: 2
 
 **What this screen is for**
 Open a request to check it and approve it, change it, or reject it. The buttons appear only when the request is waiting for you.
-
-## Steps
 
 1. Open the request from the list or the consolidation screen.
 2. Check the top strip, the **Request Timeline** and the **Approval History**.
@@ -245,6 +384,8 @@ Open a request to check it and approve it, change it, or reject it. The buttons 
 4. To change the material, quantity or location first, press **Edit**.
 5. To approve, press **Approve & Forward to** the next level (for example **Approve & Forward to SMD**), then confirm with **Approve & Forward**.
 6. To refuse, press **Reject**, write the **Reason for rejection**, and press **Reject** again.
+
+> Careful: Reject closes the request for good. The RMDO must raise a new request.
 
 ## Approval order
 
@@ -255,17 +396,15 @@ Open a request to check it and approve it, change it, or reject it. The buttons 
 
 - **No Approve button, title says "Request Details".** The request is not at your level now. You can only view, **Print** or **Download Report**.
 - **"Enter the reason for rejection."** The reason is required.
-- **Reject closes the request for good.** It cannot be undone. The RMDO must raise a new request.
 :::
 
 ::: section reviewer-edit
 title: Edit a request before forwarding
 routes: /PublicityReview/edit/{id}
+minutes: 2
 
 **What this screen is for**
 The **Edit Publicity Material Request** screen lets the approver whose turn it is correct a request. Saving the change also approves and forwards it.
-
-## Steps
 
 1. On the request, press **Edit**. On the consolidation screen, tap the pencil icon.
 2. Change the **Type of Publicity Material**, **Product**, **Quantity**, **Requested By** or **Remarks**.
@@ -273,11 +412,6 @@ The **Edit Publicity Material Request** screen lets the approver whose turn it i
 4. Check **State**, **Region** and **Headquarter (HQ)**.
 5. Press **Save & Forward to** the next level (for example **Save & Forward to SMM**).
 6. The change is saved, written in the **Approval History**, and the request moves to the next level.
-
-## Fields explained
-
-- **Quantity**: the approved number of pieces. Required.
-- **Type of Publicity Material**, **Product**, **Headquarter (HQ)**: required.
 
 ## Common problems
 
@@ -288,11 +422,12 @@ The **Edit Publicity Material Request** screen lets the approver whose turn it i
 ::: section consolidation
 title: Approve many requests together
 routes: /PublicityReview/consolidation
+minutes: 3
+screenshot: consolidation.png
+screenshot-phone: consolidation.phone.jpg
 
 **What this screen is for**
 The consolidation screen shows every request waiting at your level, grouped by region, so you can approve them all in one step. RM sees the region, SMD and SMM see the state, ADMIN-MD CS sees all India. DGM-MD CS does not use this screen.
-
-## Steps
 
 1. On the list page, press **Consolidation**.
 2. Check the cards: **Submission ID**, **Region** or **State**, **Total Region**, **Total Requests** and **Total Requirement**.
@@ -313,11 +448,10 @@ The consolidation screen shows every request waiting at your level, grouped by r
 title: Create a dispatch
 routes: /PublicityReview/{id}/dispatch, /PublicityReview/done
 designations: ADMIN MD CS, ADMIN-MD CS, DGM MD CS, DGM-MD CS
+minutes: 3
 
 **What this screen is for**
 After final approval, ADMIN-MD CS or DGM-MD CS records the dispatch from the vendor on the **Create Dispatch** screen. The same screen is used for a replacement (re-initiation) dispatch.
-
-## Steps
 
 1. Open a **Final Approved** request and press **Create Dispatch**.
 2. Check the **Read Information (Read Only)** part.
@@ -331,11 +465,13 @@ After final approval, ADMIN-MD CS or DGM-MD CS records the dispatch from the ven
 
 ## Fields explained
 
-- **Dispatch Quantity**: pieces sent now. For a replacement, it starts at the outstanding quantity.
-- **Vendor**: pick from the list or type a new name. Required.
-- **Responsible SMDO / RM / RMDO / MO**: the officer who will receive the material. Required.
-- **Dispatch / Note Approval Document**: required for the first dispatch.
-- **Delivery Address**: tap a saved address or type one. Required.
+| Field | What to enter |
+|---|---|
+| **Dispatch Quantity** | Pieces sent now. For a replacement, it starts at the outstanding quantity. |
+| **Vendor** | Pick from the list or type a new name. Required. |
+| **Responsible SMDO / RM / RMDO / MO** | The officer who will receive the material. Required. |
+| **Dispatch / Note Approval Document** | Required for the first dispatch. |
+| **Delivery Address** | Tap a saved address or type one. Required. |
 
 ## Common problems
 
@@ -347,11 +483,10 @@ After final approval, ADMIN-MD CS or DGM-MD CS records the dispatch from the ven
 title: Update dispatch and delivery status
 routes: /PublicityReview/{id}
 designations: ADMIN MD CS, ADMIN-MD CS, DGM MD CS, DGM-MD CS
+minutes: 2
 
 **What this screen is for**
 After a dispatch is made, MD CS updates its progress so the RMDO and approvers can see where the material is.
-
-## Steps
 
 1. Open the request and go to **Tracking & Delivery**.
 2. Find the dispatch card (**Dispatch 1**, **Dispatch 2** and so on).
@@ -361,9 +496,11 @@ After a dispatch is made, MD CS updates its progress so the RMDO and approvers c
 
 ## Fields explained
 
-- **Transporter / Courier** and **Tracking No. (AWB)**: required when confirming a transfer.
-- **Expected Delivery Date**: when the material should arrive.
-- **Current Location / Hub**: where the material is now, for example a courier hub.
+| Field | What to enter |
+|---|---|
+| **Transporter / Courier** and **Tracking No. (AWB)** | Required when confirming a transfer. |
+| **Expected Delivery Date** | When the material should arrive. |
+| **Current Location / Hub** | Where the material is now, for example a courier hub. |
 
 ## Common problems
 
@@ -375,20 +512,18 @@ After a dispatch is made, MD CS updates its progress so the RMDO and approvers c
 title: Solve a shortage or damage exception
 routes: /PublicityReview/{id}, /PublicityReview/done
 designations: ADMIN MD CS, ADMIN-MD CS, DGM MD CS, DGM-MD CS
+minutes: 3
 
 **What this screen is for**
 When the RMDO reports fewer pieces or damaged pieces, the request shows **Exception Raised**. You decide how to send the missing quantity.
 
-## Steps
-
 1. Open the request (the **Exceptions** card on the list helps you find them) and go to **Tracking & Delivery**.
 2. In the red **Exception Raised** box, read the **Exception Type**, **Raised By** and **Remarks**.
 3. Press **Resolve Exception**. The box shows the outstanding quantity.
-4. Choose one option:
-5. **Re-initiate dispatch from the vendor**: press **Continue to Dispatch** and fill the dispatch form for the replacement.
-6. **Stock transfer from another HQ's excess**: choose the **Source Request (Excess)**, check the **Transfer Quantity**, add **Remarks**, then press **Send Transfer Order**.
-7. For a transfer, the **Transfer Order Sent Successfully** screen opens. The source HQ RMDO is told to send the stock and upload courier proof.
-8. When the proof arrives, confirm it with **Update Dispatch Details** on the transfer card.
+4. To send the rest from the vendor, choose **Re-initiate dispatch from the vendor**, press **Continue to Dispatch** and fill the dispatch form for the replacement.
+5. To move extra stock from another HQ, choose **Stock transfer from another HQ's excess**, pick the **Source Request (Excess)**, check the **Transfer Quantity**, add **Remarks**, then press **Send Transfer Order**.
+6. For a transfer, the **Transfer Order Sent Successfully** screen opens. The source HQ RMDO is told to send the stock and upload courier proof.
+7. When the proof arrives, confirm it with **Update Dispatch Details** on the transfer card.
 
 ## Common problems
 
@@ -400,11 +535,10 @@ When the RMDO reports fewer pieces or damaged pieces, the request shows **Except
 ::: section reviewer-notifications
 title: Approver and MD CS notifications
 routes: /PublicityReview/notifications
+minutes: 1
 
 **What this screen is for**
 The **Notifications** screen lists alerts about requests in your area: new approvals, dispatches, exceptions and stock transfers.
-
-## Steps
 
 1. On the list page, press **Notifications**.
 2. Choose a tab: **All**, **Stock Transfer**, **Exception** or **Dispatch & Approvals**.

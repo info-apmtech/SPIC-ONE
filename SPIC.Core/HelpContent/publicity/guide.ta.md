@@ -4,39 +4,190 @@ title: விளம்பரப் பொருள் கண்காணிப�
 icon: bi-megaphone
 order: 40
 language: ta
+category: சந்தைப்படுத்தல்
+note: புதிய தோற்றம்: கோரிக்கையின் பயணம், நிலைகள் மற்றும் படிப்படியான வழிகாட்டல்
+meta-source-hash: 2abd562a1fb0baf2
 ---
 
 ::: section overview
-title: விளம்பரப் பொருள் கண்காணிப்பு எப்படி வேலை செய்கிறது
-routes: /PublicityRequest, /PublicityReview
+title: இந்த மாட்யூல் உங்களுக்கு என்ன செய்யும்
+routes: 
 for: 
 roles: 
 designations: 
-source-hash: f087f488522bb49d
+kind: overview
+source-hash: b68fc648b74d721b
 confidence: ok
 
-**இந்த மாட்யூல் எதற்கு**
-உங்கள் HQ-க்கு விளம்பரப் பொருள் (போஸ்டர், பேனர் போன்றவை) கேட்க, அதற்கு ஒப்புதல் வாங்க, பொருளைப் பெற, அது வந்து சேர்ந்ததை உறுதி செய்ய இந்த மாட்யூலைப் பயன்படுத்துங்கள். ஒவ்வொரு படியும் பதிவாகும். அதனால் ஒரு கோரிக்கை இப்போது எங்கே இருக்கிறது என்று எல்லோரும் பார்க்கலாம்.
+உங்கள் HQ-க்கு விளம்பரப் பொருள் (போஸ்டர், பேனர் போன்றவை) கேட்கலாம், அதற்கு ஒப்புதல் வாங்கலாம், பொருளைப் பெற்று அது வந்து சேர்ந்ததை உறுதி செய்யலாம். ஒவ்வொரு படியும் பதிவாகும். அதனால் ஒரு கோரிக்கை இப்போது எங்கே இருக்கிறது என்று எல்லோரும் பார்க்கலாம்.
 
-## ஒரு கோரிக்கையின் பயணம்
+- start | icon: bi-pencil-square | color: #0b6b3a
+  title: RMDO தொடங்குவார்
+  text: பொருள், product, அளவு ஆகியவற்றுடன் ஒரு கோரிக்கையைப் போடுங்கள்.
+- approve | icon: bi-shield-check | color: #d97706
+  title: ஐந்து ஒப்புதல்கள்
+  text: RM, SMD, SMM, ADMIN-MD CS, DGM-MD CS ஆகியோர் வரிசையாகச் சரிபார்ப்பார்கள்.
+- close | icon: bi-box-seam | color: #7c3aed
+  title: RMDO முடித்து வைப்பார்
+  text: என்ன வந்தது என்று உறுதி செய்யுங்கள். குறைவான அல்லது சேதமான பீஸ்களையும் சேர்த்துச் சொல்லுங்கள்.
+:::
 
-1. RMDO கோரிக்கையை நிரப்பி **Submit Request** அழுத்துவார்.
-2. கோரிக்கை இந்த வரிசையில் ஒப்புதலுக்குப் போகும்: RM, பிறகு SMD, பிறகு SMM, பிறகு ADMIN-MD CS, பிறகு DGM-MD CS (இறுதி ஒப்புதல்).
-3. ஒப்புதல் தருபவர் யார் வேண்டுமானாலும் (DGM-MD CS தவிர) அடுத்த நிலைக்கு அனுப்பும் முன் விவரங்களை மாற்றலாம். ஒப்புதல் தருபவர் கோரிக்கையை **Reject** செய்யவும் முடியும். அப்படிச் செய்தால் கோரிக்கை மூடப்படும்.
-4. இறுதி ஒப்புதல் கிடைத்த பிறகு, ADMIN-MD CS (அல்லது DGM-MD CS) வெண்டரிடமிருந்து dispatch-ஐ உருவாக்குவார்.
-5. பொருள் இப்படிப் பயணிக்கும்: **Dispatched**, பிறகு **In Transit**, பிறகு **Delivered**.
-6. RMDO பொருளைச் சரிபார்த்து, பெற்ற அளவையும் அதன் நிலையையும் சேர்த்து **Acknowledgement** சமர்ப்பிப்பார்.
-7. எல்லாம் சரியாக இருந்தால், கோரிக்கை **Completed** ஆகும்.
-8. சில பொருட்கள் குறைவாகவோ சேதமாகவோ இருந்தால், **Exception Raised** நிலை வரும். ADMIN-MD CS வெண்டரிடமிருந்து புதிய dispatch அனுப்பி, அல்லது வேறு HQ-வில் உள்ள கூடுதல் ஸ்டாக்கை மாற்றி, இதைச் சரி செய்வார்.
+::: section flow
+title: ஒரு கோரிக்கை எப்படி நகர்கிறது, யார் செயல்படுவார்கள்
+routes: 
+for: 
+roles: 
+designations: 
+kind: flow
+source-hash: 922a2e0da6a7ddbc
+confidence: ok
 
-## யார் என்ன செய்வார்கள்
+ஒவ்வொரு வரிசையும் ஒரு பணிப்பொறுப்பு (role), ஒவ்வொரு கட்டமும் ஒரு படி. உங்கள் வரிசையில் "You" (நீங்கள்) என்று குறிக்கப்பட்டிருக்கும். ஒரு படியில் என்ன நடக்கிறது என்று பார்க்க அதைத் தட்டுங்கள்.
 
-- **RMDO**: கோரிக்கைகளை உருவாக்குவார், டெலிவரியை உறுதி செய்வார், கூடுதல் ஸ்டாக்கை மாற்றச் சொன்னால் கூரியர் ஆதாரம் அனுப்புவார்.
-- **RM, SMD, SMM**: தங்கள் மண்டலம் அல்லது மாநிலத்தின் கோரிக்கைகளைச் சரிபார்த்து ஒப்புதல் தருவார்கள்.
-- **ADMIN-MD CS**: ஒப்புதல் தருவார், dispatch உருவாக்குவார், டெலிவரி நிலையைப் புதுப்பிப்பார், exception-களைச் சரி செய்வார்.
-- **DGM-MD CS**: இறுதி ஒப்புதல் தருவார். இவரும் dispatch உருவாக்கலாம்.
+- rmdo | type: lane | color: #0b6b3a | roles: RMD | designations: RMDO
+  title: RMDO
+  sub: உங்கள் HQ
+- approvers | type: lane | color: #0d9488 | roles: RM, SMD, SMM
+  title: ஒப்புதல் தருபவர்கள்
+  sub: RM · SMD · SMM
+- mdcs | type: lane | color: #ea580c | roles: MDAdmin, MDHOD | designations: ADMIN-MD CS, ADMIN MD CS, DGM-MD CS, DGM MD CS
+  title: MD CS
+  sub: ADMIN-MD CS · DGM-MD CS
+- vendor | type: lane | color: #64748b
+  title: வெண்டர்
+  sub: கூரியர்
+- raise | lane: rmdo | col: 1 | icon: bi-pencil-square | color: #64748b | next: approve | screen: raise-request
+  title: கோரிக்கை போட்டுச் சமர்ப்பித்தல்
+  status: Draft
+  text: கோரிக்கைப் படிவத்தை நிரப்பி **Submit Request** அழுத்துங்கள். அதுவரை அது உங்களுக்கு மட்டுமே தெரியும் டிராஃப்ட்.
+- approve | lane: approvers | col: 2 | icon: bi-hourglass-split | color: #d97706 | next: final | return: raise | screen: review-approve
+  title: சரிபார்த்து ஒப்புதல் தருதல்
+  status: Pending Approval
+  text: RM, பிறகு SMD, பிறகு SMM கோரிக்கையைச் சரிபார்ப்பார்கள். ஒவ்வொருவரும் அதை மாற்றலாம், ஒப்புதல் தந்து அடுத்தவருக்கு அனுப்பலாம், RMDO-க்குத் திருப்பி அனுப்பலாம், அல்லது நிராகரிக்கலாம்.
+- final | lane: mdcs | col: 3 | icon: bi-patch-check | color: #2563eb | next: dispatch | screen: review-approve
+  title: இறுதி ஒப்புதல்
+  status: Final Approved
+  text: ADMIN-MD CS ஒப்புதல் தந்து அனுப்புவார். பிறகு DGM-MD CS இறுதி ஒப்புதல் தருவார்.
+- dispatch | lane: mdcs | col: 4 | icon: bi-truck | color: #7c3aed | next: ship | screen: create-dispatch
+  title: Dispatch உருவாக்குதல்
+  status: In Dispatch
+  text: ADMIN-MD CS அல்லது DGM-MD CS, வெண்டரிடமிருந்து வரும் dispatch-ஐக் கூரியர் விவரங்களுடன் பதிவு செய்வார்.
+- ship | lane: vendor | col: 5 | icon: bi-box-seam | color: #0d9488 | next: ack | screen: update-delivery
+  title: HQ-க்கு அனுப்புதல்
+  status: Delivered
+  text: பொருள் வெண்டரிடமிருந்து பயணிக்கும். MD CS அதை முதலில் **In Transit** என்றும், பிறகு **Delivered** என்றும் குறிப்பார்.
+- ack | lane: rmdo | col: 6 | icon: bi-clipboard-check | color: #16a34a | screen: acknowledge-delivery
+  title: பெற்றதை உறுதி செய்தல்
+  status: Completed
+  text: RMDO பொருளை எண்ணிப் பார்த்து **Acknowledgement** சமர்ப்பிப்பார். எல்லாம் சரியாக இருந்தால், கோரிக்கை முடிவடையும்.
+- exception | lane: mdcs | col: 6 | icon: bi-exclamation-triangle | color: #dc2626 | kind: exception | from: ack | to: dispatch | screen: resolve-exception
+  title: குறைவு அல்லது சேதத்தைச் சரி செய்தல்
+  status: Exception Raised
+  text: பீஸ்கள் குறைவாகவோ சேதமாகவோ இருந்தால், MD CS மீதியை வெண்டரிடமிருந்து அனுப்புவார், அல்லது வேறு HQ-வில் உள்ள கூடுதல் ஸ்டாக்கை மாற்றுவார்.
+:::
 
-> புதிய ஒப்புதல்கள், dispatch-கள், transfer order-களைப் பார்க்க, பட்டியல் பக்கத்தில் உள்ள மணி பட்டன் **Notifications**-ஐத் தட்டுங்கள்.
+::: section statuses
+title: நீங்கள் பார்க்கக்கூடிய எல்லா நிலைகளும்
+routes: 
+for: 
+roles: 
+designations: 
+kind: statuses
+source-hash: 06524fbf96639e47
+confidence: ok
+
+- draft | color: #64748b
+  label: Draft
+  text: சேமிக்கப்பட்டது, ஆனால் அனுப்பப்படவில்லை. உங்களுக்கு மட்டுமே தெரியும்.
+- pending | color: #d97706
+  label: Pending Approval
+  text: இப்போது ஒப்புதல் தருபவரிடம் உள்ளது.
+- pending-final | color: #d97706
+  label: Pending Final Approval
+  text: கடைசி ஒப்புதலுக்காக DGM-MD CS-இடம் உள்ளது.
+- returned | color: #ea580c
+  label: Returned
+  text: RMDO-க்குத் திருப்பி அனுப்பப்பட்டது. திருத்தி மீண்டும் சமர்ப்பியுங்கள்.
+- final | color: #2563eb
+  label: Final Approved
+  text: ஒப்புதல் கிடைத்துவிட்டது. Dispatch-க்காகக் காத்திருக்கிறது.
+- dispatch | color: #7c3aed
+  label: In Dispatch
+  text: வெண்டர் பொருளை அனுப்பிவிட்டார்.
+- delivered | color: #0d9488
+  label: Delivered
+  text: பொருள் HQ-க்கு வந்து சேர்ந்தது.
+- ack-pending | color: #0891b2
+  label: Acknowledgement Pending
+  text: என்ன வந்தது என்று RMDO உறுதி செய்யக் காத்திருக்கிறது.
+- completed | color: #16a34a
+  label: Completed
+  text: எல்லாம் நல்ல நிலையில் வந்து சேர்ந்தது.
+- exception | color: #dc2626
+  label: Exception Raised
+  text: பீஸ்கள் குறைவாக அல்லது சேதமாக இருந்தன. MD CS அதைச் சரி செய்கிறார்.
+- transfer | color: #7c3aed
+  label: Transfer Order Received
+  text: கூடுதல் ஸ்டாக்கை வேறு HQ-க்கு அனுப்புமாறு உங்கள் HQ-விடம் கேட்கப்பட்டுள்ளது.
+- rejected | color: #475569
+  label: Rejected
+  text: ஒப்புதல் தருபவர் இதை மூடிவிட்டார். தேவைப்பட்டால் புதிய கோரிக்கை போடுங்கள்.
+:::
+
+::: section roles
+title: யார் என்ன செய்வார்கள்
+routes: 
+for: 
+roles: 
+designations: 
+kind: roles
+source-hash: 3570dd53fa8c80d1
+confidence: ok
+
+உங்கள் கார்டு தனியாக ஒளிர்ந்து தெரியும். உங்கள் பணிப்பொறுப்புக்கான திரைகள் மட்டுமே உங்களுக்குத் தெரியும்.
+
+- rmdo | color: #0b6b3a | roles: RMD | designations: RMDO
+  title: RMDO
+  - கோரிக்கைகளைப் போடுவது
+  - டெலிவரியை உறுதி செய்வது
+  - ஸ்டாக் transfer-க்குக் கூரியர் ஆதாரம் அனுப்புவது
+- approvers | color: #0d9488 | roles: RM, SMD, SMM
+  title: RM, SMD, SMM
+  - உங்கள் பகுதியின் கோரிக்கைகளைச் சரிபார்ப்பது
+  - ஒப்புதல் தருவது, திருப்பி அனுப்புவது அல்லது நிராகரிப்பது
+- admin | color: #ea580c | roles: MDAdmin | designations: ADMIN-MD CS, ADMIN MD CS
+  title: ADMIN-MD CS
+  - ஒப்புதல் தந்து அடுத்த நிலைக்கு அனுப்புவது
+  - Dispatch உருவாக்குவது, டெலிவரி நிலையைப் புதுப்பிப்பது
+  - குறைவு மற்றும் சேதத்தைச் சரி செய்வது
+- dgm | color: #7c3aed | roles: MDHOD | designations: DGM-MD CS, DGM MD CS
+  title: DGM-MD CS
+  - இறுதி ஒப்புதல் தருவது
+  - Dispatch உருவாக்குவது
+:::
+
+::: section faq
+title: பிரச்சனைகளும் பதில்களும்
+routes: 
+for: 
+roles: 
+designations: 
+kind: faq
+source-hash: a2321112e4f4d096
+confidence: ok
+
+- no-pencil | popular: true
+  q: என் கோரிக்கையைச் சமர்ப்பித்தேன், இப்போது பென்சில் ஐகான் இல்லை
+  a: சமர்ப்பித்த பிறகு, ஒப்புதல் தருபவர் மட்டுமே கோரிக்கையை உங்களுக்குத் திருப்பி அனுப்ப முடியும். அது **Returned** என்று காட்டியதும், பென்சில் மீண்டும் வரும்.
+- damaged | popular: true
+  q: சில பீஸ்கள் சேதமாக அல்லது குறைவாக வந்தன. நான் என்ன செய்வது?
+  a: உறுதி செய்யும்போது பெற்ற அளவையும் சேத அளவையும் உள்ளிட்டு, பரவாயில்லை, சமர்ப்பியுங்கள். ஒரு exception ADMIN-MD CS-க்குப் போகும். அவர் குறைந்த பீஸ்களை அனுப்புவார்.
+- who-has-it
+  q: என் கோரிக்கை இப்போது யாரிடம் உள்ளது?
+  a: கோரிக்கையைத் திறங்கள். மேலே **Current Stage** மற்றும் **Pending With** தெரியும். **Approval History**-ல் ஒவ்வொரு செயலும் தெரியும்.
+- no-rows
+  q: "No requests found" என்று வருகிறது
+  a: உங்கள் ஃபில்டர்கள் ரொம்பக் குறுகலாக இருக்கலாம். **Filters**-ஐத் திறந்து **Clear All** அழுத்துங்கள்.
 :::
 
 ::: section requester-list
@@ -45,29 +196,32 @@ routes: /PublicityRequest
 for: 
 roles: 
 designations: 
-source-hash: f32b121b5900212e
+screenshot: requester-list.png
+hotspots: 1 @ 2.2,12.2,95.5,33.6 | 2 @ 61.6,81.1,24.3,5.1 | 3 @ 2.2,48.2,95.5,27.9 | 4 @ 4.2,87.9,91.6,12.1 | 5 @ 86.9,81.2,8.9,4.8 | 6 @ 80.7,1.9,17,4.8
+screenshot-phone: requester-list.phone.jpg
+hotspots-phone: 1 @ 3.1,9.9,93.8,35.4 | 2 @ 6.9,86.1,59.1,3 | 3 @ 3.1,46.3,93.8,35.1 | 4 @ 6.9,90,86.2,10 | 5 @ 68.5,86.2,24.5,2.8 | 6 @ 17.4,5.4,46.7,2.8
+tour: 1 > [data-help=pub-cards] | 2 > [data-help=pub-search] | 3 > [data-help=pub-filters] | 4 > [data-help=pub-table] | 5 > [data-help=pub-export] | 6 > [data-help=pub-new]
+minutes: 2
+source-hash: 08092b10939e59ef
 confidence: ok
 
 **இந்தத் திரை எதற்கு**
 **My Publicity Material Request** திரையில் உங்கள் HQ-வின் எல்லாக் கோரிக்கைகளும் தெரியும். மேலே எண்ணிக்கைகளும், கீழே ஒரு அட்டவணையும் இருக்கும்.
 
-## படிகள்
+1. மேலே உள்ள **Draft**, **Pending Approval**, **Completed** போன்ற கார்டுகளைப் பாருங்கள். ஒரு கார்டைத் தட்டினால் அந்தக் கோரிக்கைகள் மட்டும் தெரியும். மீண்டும் தட்டினால் எல்லாமே தெரியும்.
+2. ஒரு கோரிக்கையை வேகமாகக் கண்டுபிடிக்க, தேடல் பெட்டியில் indent எண், product அல்லது பொருளின் பெயரை டைப் செய்யுங்கள்.
+3. **Filters**-ஐத் திறந்து **Date Range**, **Product**, **Publicity Material** அல்லது **Status** தேர்வு செய்து, **Apply Filters** அழுத்துங்கள். **Clear All** அவற்றை நீக்கும்.
+4. **Action** நெடுவரிசையில், கண் ஐகான் கோரிக்கையைத் திறக்கும். பென்சில் ஒரு **Draft** அல்லது **Returned** கோரிக்கையைத் திருத்தும். குப்பைத்தொட்டி ஒரு **Draft**-ஐ நீக்கும்.
+5. பட்டியலை Excel கோப்பாகப் பதிவிறக்க **Export** அழுத்துங்கள்.
+6. புதிய கோரிக்கை தொடங்க **Create New Request** அழுத்துங்கள்.
 
-1. மேலே உள்ள கார்டுகளைப் பாருங்கள்: **Total Request**, **Draft**, **Pending Approval**, **Final Approved**, **In Dispatch**, **Acknowledgement Pending**, **Completed** மற்றும் **Exception**.
-2. ஒரு கார்டைத் தட்டினால் அந்த நிலையில் உள்ள கோரிக்கைகள் மட்டும் தெரியும். மீண்டும் தட்டினால் எல்லாமே தெரியும்.
-3. இன்னும் விரிவாகத் தேட, **Filters**-ஐத் திறந்து **Date Range**, **Product**, **Publicity Material** அல்லது **Status** தேர்வு செய்து, **Apply Filters** அழுத்துங்கள். ஃபில்டர்களை நீக்க **Clear All** அழுத்துங்கள்.
-4. ஒரு கோரிக்கையை வேகமாகக் கண்டுபிடிக்க, தேடல் பெட்டியில் indent எண், product அல்லது பொருளின் பெயரை டைப் செய்யுங்கள்.
-5. **Action** நெடுவரிசையில் கண் ஐகானைத் தட்டி கோரிக்கையைத் திறங்கள்.
-6. **Draft** அல்லது **Returned** கோரிக்கையை மாற்ற, பென்சில் ஐகானைத் தட்டுங்கள்.
-7. **Draft**-ஐ மட்டும் நீக்க, குப்பைத்தொட்டி ஐகானைத் தட்டுங்கள். நீக்கியதைத் திரும்பப் பெற முடியாது.
-8. பட்டியலை Excel கோப்பாகப் பதிவிறக்க **Export** அழுத்துங்கள்.
-9. புதிய கோரிக்கை தொடங்க **Create New Request** அழுத்துங்கள்.
+> Careful: டிராஃப்டை நீக்கினால் அதைத் திரும்பப் பெற முடியாது.
 
 ## பொதுவான பிரச்சனைகள்
 
 - **"No requests found" என்று வருகிறது.** உங்கள் ஃபில்டர்கள் ரொம்பக் குறுகலாக இருக்கலாம். **Clear All** அழுத்துங்கள்.
 - **பென்சில் ஐகான் இல்லை.** சமர்ப்பித்த பிறகு, ஒப்புதல் தருபவர் கோரிக்கையைத் திருப்பி அனுப்பினால் மட்டுமே அதை மாற்ற முடியும்.
-- **Export பட்டன் சாம்பல் நிறத்தில் உள்ளது.** பட்டியலில் ஏற்றுமதி செய்ய எந்த வரிசையும் இல்லை.
+- **Export பட்டன் சாம்பல் நிறத்தில் உள்ளது.** பட்டியலில் பதிவிறக்க எந்த வரிசையும் இல்லை.
 :::
 
 ::: section raise-request
@@ -76,32 +230,35 @@ routes: /PublicityRequest/new, /PublicityRequest/edit/{id}
 for: 
 roles: 
 designations: 
-source-hash: f4c944427bc4be47
+screenshot: raise-request.png
+hotspots: 1 @ 4.2,20.2,21.5,8.5 | 2 @ 50.9,20.2,21.5,8.5 | 3 @ 4.2,30.4,91.6,20.7 | 4 @ 2.2,73.6,95.5,19.1 | 5 @ 2.2,95,95.5,4.8
+screenshot-phone: raise-request.phone.jpg
+hotspots-phone: 1 @ 6.9,15.5,86.2,4.9 | 2 @ 6.9,27.4,86.2,4.9 | 3 @ 6.9,39.2,86.2,14.7 | 4 @ 3.1,66.1,93.8,23.6 | 5 @ 0,87.5,100,8.4
+tour: 1 > [data-help=pub-material] | 2 > [data-help=pub-qty] | 3 > [data-help=pub-design] | 4 > [data-help=pub-location] | 5 > [data-help=pub-submit]
+minutes: 3
+source-hash: 74e6a60af7702e79
 confidence: ok
 
 **இந்தத் திரை எதற்கு**
 உங்கள் HQ-க்கு விளம்பரப் பொருள் கேட்க **Create Publicity Material Request** திரையைப் பயன்படுத்துங்கள். டிராஃப்டாகச் சேமித்து, பிறகு அனுப்பலாம்.
 
-## படிகள்
+1. **Request Details**-ன் கீழ், **Type of Publicity Material** மற்றும் **Product** தேர்வு செய்யுங்கள்.
+2. உங்களுக்குத் தேவையான **Quantity**-ஐ உள்ளிடுங்கள். **Requested By**-ல் உங்கள் பெயர் ஏற்கனவே இருக்கும்.
+3. உங்களிடம் டிசைன் இருந்தால், அந்தக் கோப்பை அப்லோட் பெட்டியில் போடுங்கள், அல்லது **or click to browse** தட்டுங்கள். தேவைப்பட்டால் **Remarks** சேருங்கள்.
+4. **Location**-ன் கீழ், **State**, **Region** மற்றும் **Headquarter (HQ)**-ஐச் சரிபாருங்கள். இவை உங்கள் புரொஃபைலில் இருந்து தானாக நிரப்பப்படும்.
+5. பிறகு முடிக்க வைத்துக்கொள்ள **Save as Draft** அழுத்துங்கள், அல்லது RM-க்கு அனுப்ப **Submit Request** அழுத்தி, பிறகு **Submit** அழுத்துங்கள்.
 
-1. பட்டியல் பக்கத்தில் **Create New Request** அழுத்துங்கள்.
-2. **Request Details**-ன் கீழ், **Type of Publicity Material** மற்றும் **Product** தேர்வு செய்யுங்கள்.
-3. உங்களுக்குத் தேவையான **Quantity**-ஐ உள்ளிடுங்கள்.
-4. **Requested By**-ஐச் சரிபாருங்கள். அதில் உங்கள் பெயர் ஏற்கனவே இருக்கும்.
-5. உங்களிடம் டிசைன் இருந்தால், அந்தக் கோப்பை அப்லோட் பெட்டியில் போடுங்கள், அல்லது **or click to browse** தட்டுங்கள்.
-6. தேவைப்பட்டால் **Remarks** சேருங்கள்.
-7. **Location**-ன் கீழ், **State**, **Region** மற்றும் **Headquarter (HQ)**-ஐச் சரிபாருங்கள். இவை உங்கள் புரொஃபைலில் இருந்து தானாக நிரப்பப்படும்.
-8. பிறகு முடிக்க வைத்துக்கொள்ள **Save as Draft** அழுத்துங்கள், அல்லது RM-க்கு அனுப்ப **Submit Request** அழுத்துங்கள்.
-9. உறுதி செய்யும் பெட்டியில் **Submit** அழுத்துங்கள்.
+> Tip: டிராஃப்டைப் பட்டியலில் இருந்து மீண்டும் திறந்து, பிறகு முடிக்கலாம்.
 
 ## புலங்களின் விளக்கம்
 
-- **Type of Publicity Material**: உங்களுக்குத் தேவையான பொருள், உதாரணமாக போஸ்டர் அல்லது பேனர். கட்டாயம்.
-- **Product**: இந்தப் பொருள் எந்த product-க்கானது. டைப் செய்து தேடலாம். கட்டாயம்.
-- **Quantity**: தேவையான எண்ணிக்கை (பீஸ்). கட்டாயம்.
-- **Requested By**: பொருள் கேட்கும் நபர்.
-- **Design file**: ஒரே ஒரு கோப்பு, PDF, JPG, PNG, DOC அல்லது DOCX, 10 MB வரை.
-- **State**, **Region**, **Headquarter (HQ)**: பொருள் எங்கே டெலிவரி ஆக வேண்டும். கட்டாயம்.
+| புலம் | என்ன உள்ளிட வேண்டும் |
+|---|---|
+| **Type of Publicity Material** | உங்களுக்குத் தேவையான பொருள், உதாரணமாக போஸ்டர் அல்லது பேனர். கட்டாயம். |
+| **Product** | இந்தப் பொருள் எந்த product-க்கானது. டைப் செய்து தேடலாம். கட்டாயம். |
+| **Quantity** | தேவையான பீஸ்களின் எண்ணிக்கை. கட்டாயம். |
+| **Design file** | ஒரே ஒரு கோப்பு, PDF, JPG, PNG, DOC அல்லது DOCX, 10 MB வரை. |
+| **State**, **Region**, **Headquarter (HQ)** | பொருள் எங்கே டெலிவரி ஆக வேண்டும். கட்டாயம். |
 
 ## பொதுவான பிரச்சனைகள்
 
@@ -116,13 +273,14 @@ routes: /PublicityRequest/{id}
 for: 
 roles: 
 designations: 
-source-hash: 2d926f137adb7d61
+screenshot: track-request.png
+screenshot-phone: track-request.phone.jpg
+minutes: 2
+source-hash: 533996d4d473e58d
 confidence: ok
 
 **இந்தத் திரை எதற்கு**
 **My Publicity Material Request Details** திரையில் ஒரு கோரிக்கையின் எல்லா விவரங்களும் தெரியும்: அது இப்போது எங்கே இருக்கிறது, யார் ஒப்புதல் தந்தார்கள், dispatch விவரம், ஆவணங்கள்.
-
-## படிகள்
 
 1. பட்டியலில் கண் ஐகானைத் தட்டி கோரிக்கையைத் திறங்கள்.
 2. மேலே **Current Stage**, **Status**, இப்போது கோரிக்கை யாரிடம் இருக்கிறது (**Pending With**) என்பதைப் பாருங்கள்.
@@ -146,13 +304,12 @@ routes: /PublicityRequest/{id}
 for: 
 roles: 
 designations: 
-source-hash: 3642d2f43fd54ffa
+minutes: 3
+source-hash: 2e6ce69978f16d26
 confidence: ok
 
 **இந்தத் திரை எதற்கு**
 பொருள் உங்கள் HQ-க்கு வந்ததும், எத்தனை பீஸ் வந்தது, அவை எந்த நிலையில் உள்ளன என்று நீங்கள் உறுதி செய்ய வேண்டும். இதனால் கோரிக்கை மூடப்படும், அல்லது பிரச்சனை இருந்தால் ADMIN-MD CS-க்குத் தெரிவிக்கப்படும்.
-
-## படிகள்
 
 1. கோரிக்கையைத் திறந்து **Tracking & Delivery**-க்குப் போங்கள்.
 2. **Awaiting Acknowledgement** பெட்டியில் **Acknowledge** அழுத்துங்கள். இது **Acknowledgement** டேபைத் திறக்கும்.
@@ -166,11 +323,13 @@ confidence: ok
 
 ## புலங்களின் விளக்கம்
 
-- **Quantity Received**: உண்மையில் எண்ணிய பீஸ்கள். கட்டாயம்.
-- **Material Condition**: நல்ல நிலை அல்லது சேதம். கட்டாயம்.
-- **Damaged Quantity**: 1 முதல் பெற்ற அளவு வரை.
-- **Acknowledged By**: பொருளைப் பெற்ற நபர். கட்டாயம்.
-- **Photos**: பெற்ற பொருளின் புகைப்படங்கள், ஒவ்வொன்றும் 10 MB வரை.
+| புலம் | என்ன உள்ளிட வேண்டும் |
+|---|---|
+| **Quantity Received** | உண்மையில் எண்ணிய பீஸ்கள். கட்டாயம். |
+| **Material Condition** | நல்ல நிலை அல்லது சேதம். கட்டாயம். |
+| **Damaged Quantity** | 1 முதல் பெற்ற அளவு வரை. |
+| **Acknowledged By** | பொருளைப் பெற்ற நபர். கட்டாயம். |
+| **Photos** | பெற்ற பொருளின் புகைப்படங்கள், ஒவ்வொன்றும் 10 MB வரை. |
 
 ## பொதுவான பிரச்சனைகள்
 
@@ -185,13 +344,12 @@ routes: /PublicityRequest/{id}/transfer/{dispatchId}, /PublicityRequest/done
 for: 
 roles: 
 designations: 
-source-hash: 5b649ad478721aa8
+minutes: 3
+source-hash: e7a33ab19f8314b5
 confidence: ok
 
 **இந்தத் திரை எதற்கு**
 உங்கள் HQ-க்குத் தேவையை விட அதிகப் பொருள் வந்திருந்தால், அதில் கொஞ்சத்தைக் குறைவாக உள்ள வேறு HQ-க்கு அனுப்பச் சொல்லி ADMIN-MD CS கேட்கலாம். நீங்கள் அதைக் கூரியரில் அனுப்பி, கூரியர் ரசீதை இங்கே அப்லோட் செய்ய வேண்டும்.
-
-## படிகள்
 
 1. **Notifications**-ஐத் திறந்து ஸ்டாக் transfer order-ஐத் தட்டி, **View Transfer** அழுத்துங்கள். அல்லது உங்கள் கோரிக்கையைத் திறந்து, **Tracking & Delivery**-க்குப் போய், **Stock Transfer Order** கார்டில் **Create Transfer** அழுத்தலாம்.
 2. **Read Information (Read Only)** பகுதியைச் சரிபாருங்கள்: **Destination HQ** மற்றும் **Transfer Quantity**.
@@ -204,9 +362,11 @@ confidence: ok
 
 ## புலங்களின் விளக்கம்
 
-- **Courier / Transporter**: கூரியர் நிறுவனத்தின் பெயர். கட்டாயம்.
-- **Tracking No. / AWB**: கூரியர் ரசீதில் உள்ள எண். கட்டாயம்.
-- **Dispatch Date**: நீங்கள் அனுப்பிய தேதி. கட்டாயம்.
+| புலம் | என்ன உள்ளிட வேண்டும் |
+|---|---|
+| **Courier / Transporter** | கூரியர் நிறுவனத்தின் பெயர். கட்டாயம். |
+| **Tracking No. / AWB** | கூரியர் ரசீதில் உள்ள எண். கட்டாயம். |
+| **Dispatch Date** | நீங்கள் அனுப்பிய தேதி. கட்டாயம். |
 
 ## பொதுவான பிரச்சனைகள்
 
@@ -221,21 +381,23 @@ routes: /PublicityRequest/notifications
 for: 
 roles: 
 designations: 
-source-hash: 3f380e63b29f62fe
+screenshot: requester-notifications.png
+hotspots: 1 @ 4.2,14.7,91.6,7 | 2 @ 4.2,23.6,91.6,76.4 | 3 @ 4.2,23.6,91.6,76.4 | 4 @ 84.5,1.9,13.3,4.8 | 5 @ 68.7,1.9,15.1,4.8
+screenshot-phone: requester-notifications.phone.jpg
+hotspots-phone: 1 @ 6.9,11,86.2,3.7 | 2 @ 6.9,15.8,86.2,84.2 | 3 @ 6.9,15.8,86.2,84.2 | 4 @ 46.4,5.4,36.4,2.8 | 5 @ 3.1,5.4,41.3,2.8
+tour: 1 > [data-help=pub-notif-tabs] | 2 > [data-help=pub-notif-list] | 3 > [data-help=pub-notif-list] | 4 > [data-help=pub-notif-readall] | 5 > [data-help=pub-notif-back]
+minutes: 1
+source-hash: 4cd27f470cab35ac
 confidence: ok
 
 **இந்தத் திரை எதற்கு**
-**Notifications** திரையில் உங்கள் கோரிக்கைகள் பற்றிய அறிவிப்புகள் இருக்கும்: திருப்பி அனுப்பியவை, dispatch-கள், exception-கள், ஸ்டாக் transfer order-கள்.
+**Notifications** திரையில் உங்கள் கோரிக்கைகள் பற்றிய அறிவிப்புகள் இருக்கும்: திருப்பி அனுப்பியவை, dispatch-கள், exception-கள், ஸ்டாக் transfer order-கள். பட்டியல் பக்கத்தில் **Notifications** அழுத்தி இதைத் திறங்கள்.
 
-## படிகள்
-
-1. பட்டியல் பக்கத்தில் **Notifications** அழுத்துங்கள்.
-2. ஒரு டேபைத் தேர்வு செய்யுங்கள்: **All**, **Stock Transfer**, **Exception** அல்லது **Dispatch & Approvals**.
-3. படிக்காதவற்றுக்கு ஒரு புள்ளி இருக்கும். விவரங்களைத் திறக்க ஒன்றைத் தட்டுங்கள்.
-4. Transfer order என்றால், **Transfer Order Details**, **Source Excess Reference**, **Reason for Transfer** ஆகியவற்றைப் பாருங்கள்.
-5. கூரியர் ஆதாரத்தை அப்லோட் செய்ய **View Transfer** அழுத்துங்கள், அல்லது கோரிக்கையைத் திறக்க **View Details** அழுத்துங்கள்.
-6. ஒன்றை மட்டும் படித்ததாகக் குறிக்க **Mark As Read** அழுத்துங்கள், எல்லாவற்றுக்கும் **Mark All As Read** அழுத்துங்கள்.
-7. திரும்பிப் போக **Back to List Page** அழுத்துங்கள்.
+1. ஒரு டேபைத் தேர்வு செய்யுங்கள்: **All**, **Stock Transfer**, **Exception** அல்லது **Dispatch & Approvals**.
+2. படிக்காதவற்றுக்கு ஒரு புள்ளி இருக்கும். விவரங்களைத் திறக்க ஒன்றைத் தட்டுங்கள்.
+3. Transfer order என்றால், கூரியர் ஆதாரத்தை அப்லோட் செய்ய **View Transfer** அழுத்துங்கள். கோரிக்கையைத் திறக்க **View Details** அழுத்துங்கள்.
+4. ஒன்றை மட்டும் படித்ததாகக் குறிக்க **Mark As Read** அழுத்துங்கள், எல்லாவற்றுக்கும் **Mark All As Read** அழுத்துங்கள்.
+5. திரும்பிப் போக **Back to List Page** அழுத்துங்கள்.
 
 ## பொதுவான பிரச்சனைகள்
 
@@ -249,13 +411,14 @@ routes: /PublicityReview
 for: 
 roles: 
 designations: 
-source-hash: 7ebd8194aa3f5ebd
+screenshot: reviewer-list.png
+screenshot-phone: reviewer-list.phone.jpg
+minutes: 2
+source-hash: 7eaa380f878c5c45
 confidence: ok
 
 **இந்தத் திரை எதற்கு**
 ஒப்புதல் தருபவர்களும் MD CS பணியாளர்களும் தங்கள் பகுதியின் கோரிக்கைகளைப் பார்க்க இந்தப் பட்டியலைப் பயன்படுத்துவார்கள். தலைப்பு **Submitted Requests** என்று இருக்கும் (RM-க்கு **My Publicity Material Request** என்று இருக்கும்).
-
-## படிகள்
 
 1. மேலே உள்ள கார்டுகளைப் பாருங்கள். RM-க்கு **Pending for My Approval**, **Approved by RM**, **Dispatch & Delivery**, **Completed** மற்றும் **Returned** தெரியும். மற்றவர்களுக்கு **Total Submitted**, **Pending Review**, **Dispatch Pending**, **Exceptions** மற்றும் **Completed** போன்ற கார்டுகள் தெரியும்.
 2. சிவப்பு நிற **New Request for Review** பெட்டி வந்தால், **View New Requests** அழுத்துங்கள். RM, SMD, SMM, ADMIN-MD CS ஆகியோருக்கு இது consolidation திரையைத் திறக்கும்.
@@ -277,13 +440,12 @@ routes: /PublicityReview/{id}
 for: 
 roles: 
 designations: 
-source-hash: c7fff9b7b3926213
+minutes: 2
+source-hash: 3d13e1d79363e813
 confidence: ok
 
 **இந்தத் திரை எதற்கு**
 ஒரு கோரிக்கையைத் திறந்து சரிபார்த்து, ஒப்புதல் தரலாம், மாற்றலாம், அல்லது நிராகரிக்கலாம். கோரிக்கை உங்களுக்காகக் காத்திருக்கும்போது மட்டுமே பட்டன்கள் தெரியும்.
-
-## படிகள்
 
 1. பட்டியலிலிருந்து அல்லது consolidation திரையிலிருந்து கோரிக்கையைத் திறங்கள்.
 2. மேலே உள்ள பட்டை, **Request Timeline**, **Approval History** ஆகியவற்றைச் சரிபாருங்கள்.
@@ -291,6 +453,8 @@ confidence: ok
 4. முதலில் பொருள், அளவு அல்லது இடத்தை மாற்ற வேண்டுமென்றால் **Edit** அழுத்துங்கள்.
 5. ஒப்புதல் தர, அடுத்த நிலைக்கான **Approve & Forward to** பட்டனை அழுத்துங்கள் (உதாரணமாக **Approve & Forward to SMD**). பிறகு **Approve & Forward** அழுத்தி உறுதி செய்யுங்கள்.
 6. நிராகரிக்க, **Reject** அழுத்தி, **Reason for rejection** எழுதி, மீண்டும் **Reject** அழுத்துங்கள்.
+
+> Careful: Reject செய்தால் கோரிக்கை நிரந்தரமாக மூடப்படும். RMDO புதிய கோரிக்கை போட வேண்டும்.
 
 ## ஒப்புதல் வரிசை
 
@@ -301,7 +465,6 @@ confidence: ok
 
 - **Approve பட்டன் இல்லை, தலைப்பில் "Request Details" என்று உள்ளது.** கோரிக்கை இப்போது உங்கள் நிலையில் இல்லை. நீங்கள் பார்க்க, **Print** செய்ய அல்லது **Download Report** செய்ய மட்டுமே முடியும்.
 - **"Enter the reason for rejection."** (நிராகரிப்பதற்கான காரணத்தை எழுதுங்கள்) காரணம் கட்டாயம்.
-- **Reject செய்தால் கோரிக்கை நிரந்தரமாக மூடப்படும்.** அதைத் திரும்பப் பெற முடியாது. RMDO புதிய கோரிக்கை போட வேண்டும்.
 :::
 
 ::: section reviewer-edit
@@ -310,13 +473,12 @@ routes: /PublicityReview/edit/{id}
 for: 
 roles: 
 designations: 
-source-hash: a0de34efb439462f
+minutes: 2
+source-hash: e76c7e9756536fde
 confidence: ok
 
 **இந்தத் திரை எதற்கு**
 **Edit Publicity Material Request** திரையில், யாருடைய முறையோ அந்த ஒப்புதல் தருபவர் கோரிக்கையைத் திருத்தலாம். மாற்றத்தைச் சேமித்தால், அதுவே ஒப்புதல் தந்து அடுத்த நிலைக்கு அனுப்பிவிடும்.
-
-## படிகள்
 
 1. கோரிக்கையில் **Edit** அழுத்துங்கள். Consolidation திரையில் பென்சில் ஐகானைத் தட்டுங்கள்.
 2. **Type of Publicity Material**, **Product**, **Quantity**, **Requested By** அல்லது **Remarks**-ஐ மாற்றுங்கள்.
@@ -324,11 +486,6 @@ confidence: ok
 4. **State**, **Region**, **Headquarter (HQ)**-ஐச் சரிபாருங்கள்.
 5. அடுத்த நிலைக்கான **Save & Forward to** பட்டனை அழுத்துங்கள் (உதாரணமாக **Save & Forward to SMM**).
 6. மாற்றம் சேமிக்கப்படும், **Approval History**-ல் எழுதப்படும், கோரிக்கை அடுத்த நிலைக்குப் போகும்.
-
-## புலங்களின் விளக்கம்
-
-- **Quantity**: ஒப்புதல் தரப்பட்ட பீஸ் எண்ணிக்கை. கட்டாயம்.
-- **Type of Publicity Material**, **Product**, **Headquarter (HQ)**: கட்டாயம்.
 
 ## பொதுவான பிரச்சனைகள்
 
@@ -342,13 +499,14 @@ routes: /PublicityReview/consolidation
 for: 
 roles: 
 designations: 
-source-hash: 92970d521f5da24b
+screenshot: consolidation.png
+screenshot-phone: consolidation.phone.jpg
+minutes: 3
+source-hash: abde9049ef5f5976
 confidence: ok
 
 **இந்தத் திரை எதற்கு**
 Consolidation திரையில், உங்கள் நிலையில் காத்திருக்கும் எல்லாக் கோரிக்கைகளும் மண்டல வாரியாகத் தெரியும். அதனால் எல்லாவற்றுக்கும் ஒரே முறையில் ஒப்புதல் தரலாம். RM தன் மண்டலத்தைப் பார்ப்பார், SMD மற்றும் SMM மாநிலத்தைப் பார்ப்பார்கள், ADMIN-MD CS முழு இந்தியாவையும் பார்ப்பார். DGM-MD CS இந்தத் திரையைப் பயன்படுத்துவதில்லை.
-
-## படிகள்
 
 1. பட்டியல் பக்கத்தில் **Consolidation** அழுத்துங்கள்.
 2. கார்டுகளைச் சரிபாருங்கள்: **Submission ID**, **Region** அல்லது **State**, **Total Region**, **Total Requests** மற்றும் **Total Requirement**.
@@ -371,13 +529,12 @@ routes: /PublicityReview/{id}/dispatch, /PublicityReview/done
 for: 
 roles: 
 designations: ADMIN MD CS, ADMIN-MD CS, DGM MD CS, DGM-MD CS
-source-hash: afa4604b42d3cf80
+minutes: 3
+source-hash: 039c89aba91e084f
 confidence: ok
 
 **இந்தத் திரை எதற்கு**
-இறுதி ஒப்புதலுக்குப் பிறகு, ADMIN-MD CS அல்லது DGM-MD CS வெண்டரிடமிருந்து வரும் dispatch-ஐ **Create Dispatch** திரையில் பதிவு செய்வார். மாற்றுப் பொருள் (மீண்டும் தொடங்கும்) dispatch-க்கும் இதே திரைதான்.
-
-## படிகள்
+இறுதி ஒப்புதலுக்குப் பிறகு, ADMIN-MD CS அல்லது DGM-MD CS வெண்டரிடமிருந்து வரும் dispatch-ஐ **Create Dispatch** திரையில் பதிவு செய்வார். மாற்றுப் பொருளுக்கான (மீண்டும் தொடங்கும்) dispatch-க்கும் இதே திரைதான்.
 
 1. **Final Approved** கோரிக்கையைத் திறந்து **Create Dispatch** அழுத்துங்கள்.
 2. **Read Information (Read Only)** பகுதியைச் சரிபாருங்கள்.
@@ -391,11 +548,13 @@ confidence: ok
 
 ## புலங்களின் விளக்கம்
 
-- **Dispatch Quantity**: இப்போது அனுப்பும் பீஸ்கள். மாற்றுப் பொருள் என்றால், நிலுவையில் உள்ள அளவிலிருந்து தொடங்கும்.
-- **Vendor**: பட்டியலில் இருந்து தேர்வு செய்யுங்கள், அல்லது புதிய பெயரை டைப் செய்யுங்கள். கட்டாயம்.
-- **Responsible SMDO / RM / RMDO / MO**: பொருளைப் பெறும் அதிகாரி. கட்டாயம்.
-- **Dispatch / Note Approval Document**: முதல் dispatch-க்குக் கட்டாயம்.
-- **Delivery Address**: சேமித்த முகவரியைத் தட்டுங்கள், அல்லது ஒன்றை டைப் செய்யுங்கள். கட்டாயம்.
+| புலம் | என்ன உள்ளிட வேண்டும் |
+|---|---|
+| **Dispatch Quantity** | இப்போது அனுப்பும் பீஸ்கள். மாற்றுப் பொருள் என்றால், நிலுவையில் உள்ள அளவிலிருந்து தொடங்கும். |
+| **Vendor** | பட்டியலில் இருந்து தேர்வு செய்யுங்கள், அல்லது புதிய பெயரை டைப் செய்யுங்கள். கட்டாயம். |
+| **Responsible SMDO / RM / RMDO / MO** | பொருளைப் பெறும் அதிகாரி. கட்டாயம். |
+| **Dispatch / Note Approval Document** | முதல் dispatch-க்குக் கட்டாயம். |
+| **Delivery Address** | சேமித்த முகவரியைத் தட்டுங்கள், அல்லது ஒன்றை டைப் செய்யுங்கள். கட்டாயம். |
 
 ## பொதுவான பிரச்சனைகள்
 
@@ -409,13 +568,12 @@ routes: /PublicityReview/{id}
 for: 
 roles: 
 designations: ADMIN MD CS, ADMIN-MD CS, DGM MD CS, DGM-MD CS
-source-hash: 377dc5ed807e6b17
+minutes: 2
+source-hash: 70a3a9c616c85eba
 confidence: ok
 
 **இந்தத் திரை எதற்கு**
 Dispatch செய்த பிறகு, பொருள் எங்கே இருக்கிறது என்று RMDO-வும் ஒப்புதல் தருபவர்களும் பார்க்க, MD CS அதன் முன்னேற்றத்தைப் புதுப்பிப்பார்.
-
-## படிகள்
 
 1. கோரிக்கையைத் திறந்து **Tracking & Delivery**-க்குப் போங்கள்.
 2. Dispatch கார்டைக் கண்டுபிடியுங்கள் (**Dispatch 1**, **Dispatch 2** இப்படி).
@@ -425,9 +583,11 @@ Dispatch செய்த பிறகு, பொருள் எங்கே இ
 
 ## புலங்களின் விளக்கம்
 
-- **Transporter / Courier** மற்றும் **Tracking No. (AWB)**: transfer-ஐ உறுதி செய்யும்போது கட்டாயம்.
-- **Expected Delivery Date**: பொருள் எப்போது வந்து சேர வேண்டும்.
-- **Current Location / Hub**: பொருள் இப்போது எங்கே இருக்கிறது, உதாரணமாக ஒரு கூரியர் hub.
+| புலம் | என்ன உள்ளிட வேண்டும் |
+|---|---|
+| **Transporter / Courier** மற்றும் **Tracking No. (AWB)** | Transfer-ஐ உறுதி செய்யும்போது கட்டாயம். |
+| **Expected Delivery Date** | பொருள் எப்போது வந்து சேர வேண்டும். |
+| **Current Location / Hub** | பொருள் இப்போது எங்கே இருக்கிறது, உதாரணமாக ஒரு கூரியர் hub. |
 
 ## பொதுவான பிரச்சனைகள்
 
@@ -441,22 +601,20 @@ routes: /PublicityReview/{id}, /PublicityReview/done
 for: 
 roles: 
 designations: ADMIN MD CS, ADMIN-MD CS, DGM MD CS, DGM-MD CS
-source-hash: 2d04fb4f99911b79
+minutes: 3
+source-hash: 981f49f742015d88
 confidence: ok
 
 **இந்தத் திரை எதற்கு**
 RMDO குறைவான பீஸ் அல்லது சேதமான பீஸ் என்று தெரிவித்தால், கோரிக்கையில் **Exception Raised** என்று காட்டும். குறைந்த அளவை எப்படி அனுப்புவது என்று நீங்கள் முடிவு செய்வீர்கள்.
 
-## படிகள்
-
 1. கோரிக்கையைத் திறந்து (பட்டியலில் உள்ள **Exceptions** கார்டு இவற்றைக் கண்டுபிடிக்க உதவும்) **Tracking & Delivery**-க்குப் போங்கள்.
 2. சிவப்பு நிற **Exception Raised** பெட்டியில், **Exception Type**, **Raised By**, **Remarks** ஆகியவற்றைப் படியுங்கள்.
 3. **Resolve Exception** அழுத்துங்கள். பெட்டியில் நிலுவையில் உள்ள அளவு தெரியும்.
-4. ஒரு வழியைத் தேர்வு செய்யுங்கள்:
-5. **Re-initiate dispatch from the vendor** (வெண்டரிடமிருந்து மீண்டும் dispatch): **Continue to Dispatch** அழுத்தி, மாற்றுப் பொருளுக்கான dispatch படிவத்தை நிரப்புங்கள்.
-6. **Stock transfer from another HQ's excess** (வேறு HQ-வின் கூடுதல் ஸ்டாக்கிலிருந்து மாற்றம்): **Source Request (Excess)**-ஐத் தேர்வு செய்து, **Transfer Quantity**-ஐச் சரிபார்த்து, **Remarks** சேர்த்து, **Send Transfer Order** அழுத்துங்கள்.
-7. Transfer என்றால், **Transfer Order Sent Successfully** திரை திறக்கும். ஸ்டாக்கை அனுப்பி கூரியர் ஆதாரம் அப்லோட் செய்யுமாறு source HQ-வின் RMDO-க்குத் தெரிவிக்கப்படும்.
-8. ஆதாரம் வந்ததும், transfer கார்டில் உள்ள **Update Dispatch Details** மூலம் அதை உறுதி செய்யுங்கள்.
+4. மீதியை வெண்டரிடமிருந்து அனுப்ப, **Re-initiate dispatch from the vendor** தேர்வு செய்து, **Continue to Dispatch** அழுத்தி, மாற்றுப் பொருளுக்கான dispatch படிவத்தை நிரப்புங்கள்.
+5. வேறு HQ-வின் கூடுதல் ஸ்டாக்கை மாற்ற, **Stock transfer from another HQ's excess** தேர்வு செய்து, **Source Request (Excess)**-ஐத் தேர்வு செய்து, **Transfer Quantity**-ஐச் சரிபார்த்து, **Remarks** சேர்த்து, **Send Transfer Order** அழுத்துங்கள்.
+6. Transfer என்றால், **Transfer Order Sent Successfully** திரை திறக்கும். ஸ்டாக்கை அனுப்பி கூரியர் ஆதாரம் அப்லோட் செய்யுமாறு source HQ-வின் RMDO-க்குத் தெரிவிக்கப்படும்.
+7. ஆதாரம் வந்ததும், transfer கார்டில் உள்ள **Update Dispatch Details** மூலம் அதை உறுதி செய்யுங்கள்.
 
 ## பொதுவான பிரச்சனைகள்
 
@@ -471,13 +629,12 @@ routes: /PublicityReview/notifications
 for: 
 roles: 
 designations: 
-source-hash: d08258d028c354d8
+minutes: 1
+source-hash: 3fcc7d3b610404d1
 confidence: ok
 
 **இந்தத் திரை எதற்கு**
 **Notifications** திரையில் உங்கள் பகுதியின் கோரிக்கைகள் பற்றிய அறிவிப்புகள் இருக்கும்: புதிய ஒப்புதல்கள், dispatch-கள், exception-கள், ஸ்டாக் transfer-கள்.
-
-## படிகள்
 
 1. பட்டியல் பக்கத்தில் **Notifications** அழுத்துங்கள்.
 2. ஒரு டேபைத் தேர்வு செய்யுங்கள்: **All**, **Stock Transfer**, **Exception** அல்லது **Dispatch & Approvals**.
