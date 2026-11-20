@@ -481,17 +481,125 @@ namespace SpicAPI.Controllers
             return Ok(dealer);
         }
 
+        private static bool IsMaintenanceEnclosuresComplete(
+            DealerRegistration dealer,
+            DealerRegistrationDocuments? docs,
+            List<DealerOwnershipInfo> partners,
+            List<DealerAssetLand> lands,
+            List<DealerAssetBuilding> buildings)
+        {
+            static bool Has(string? value) => !string.IsNullOrEmpty(value);
+
+            var required = new List<string?>
+            {
+                dealer.GSTFilePath,
+                dealer.PANFilePath,
+                dealer.AadhaarFilePath,
+                docs?.FY1ITReturnFilePath,
+                docs?.FY2ITReturnFilePath,
+            };
+
+            if (dealer.InSpic)
+                required.Add(docs?.SpecimanFilePath);
+            if (dealer.InGreenStar)
+                required.Add(docs?.GreenstarSpecimanFilePath);
+
+            var hasWholesaleLicense = !string.IsNullOrEmpty(dealer.WholeSaleFertilizerLicenseNumber);
+            var hasRetailLicense = !string.IsNullOrEmpty(dealer.RetailFertilizerLicenseNumber);
+
+            if (hasWholesaleLicense)
+                required.Add(dealer.WholesaleLicenseFilePath);
+            if (!hasRetailLicense || hasWholesaleLicense)
+                required.Add(docs?.RetailerListFilePath);
+            if (hasRetailLicense)
+                required.Add(dealer.RetailLicenseFilePath);
+
+            if (dealer.EntityType == EntityType.Partnership)
+                required.Add(docs?.PartnershipDeadFilePath);
+            if (dealer.EntityType == EntityType.LLP)
+                required.Add(docs?.LlpAgreementFilePath);
+            if (dealer.EntityType == EntityType.PvtLtd || dealer.EntityType == EntityType.PubLtd)
+            {
+                required.Add(docs?.BoardReasolutionFilePath);
+                required.Add(docs?.ArticlesOfAssociationFilePath);
+                required.Add(docs?.MemorandumOfAssociationFilePath);
+            }
+            if (dealer.EntityType == EntityType.Society)
+                required.Add(docs?.ByLaw);
+            if (dealer.EntityType != 0 && dealer.EntityType != EntityType.soleProprietor)
+                required.Add(docs?.AuthorizationLetterFilePath);
+
+            var isSoleProprietor = dealer.EntityType == EntityType.soleProprietor;
+            foreach (var p in partners)
+            {
+                required.Add(p.ProprietorImagePath);
+                if (!isSoleProprietor)
+                {
+                    required.Add(p.AadhaarFilePath);
+                    required.Add(p.PANFilePath);
+                }
+            }
+
+            foreach (var l in lands)
+            {
+                required.Add(l.UploadedECDocumentPath);
+                required.Add(l.UploadedLandDocumentPath);
+                required.Add(l.UploadedValuationCertificatePath);
+            }
+
+            foreach (var b in buildings)
+            {
+                required.Add(b.UploadedECDocumentPath);
+                required.Add(b.UploadedBuildingDocumentPath);
+                required.Add(b.UploadedValuationCertificatePath);
+            }
+
+            return required.All(Has);
+        }
+
         /// <summary>
         /// Returns a per-step completion summary for the given dealer.
         /// This consolidates multiple client calls into a single API.
         /// The response is an array of objects with StepNo (1-based) and IsComplete boolean.
+        /// For a verified approved New Dealer opened in existing-maintenance flow, steps 10/11/12
+        /// use existing maintenance validation rules (company/conditional applicability and required data).
         /// </summary>
         [HttpGet("{dealerId}/step-completion-summary")]
-        public async Task<IActionResult> GetStepCompletionSummary(int dealerId)
+        public async Task<IActionResult> GetStepCompletionSummary(int dealerId, [FromQuery] string? flow = null)
         {
             var result = new List<object>();
 
             var dealer = await _repo.GetByIdAsync(dealerId);
+            var maintenanceRequested = string.Equals(flow, "existing-maintenance", StringComparison.OrdinalIgnoreCase);
+            var isApprovedNewDealerMaintenance = maintenanceRequested
+                && dealer != null
+                && HasNewDealerRegistrationEvidence(dealer)
+                && dealer.AVPApproved == true
+                && !string.IsNullOrWhiteSpace(dealer.DealerCode);
+
+            DealerCreditLimitProposal? maintenanceProposal = null;
+            DealerRegistrationDocuments? maintenanceDocs = null;
+            var maintenancePartners = new List<DealerOwnershipInfo>();
+            var maintenanceLands = new List<DealerAssetLand>();
+            var maintenanceBuildings = new List<DealerAssetBuilding>();
+            if (isApprovedNewDealerMaintenance)
+            {
+                maintenanceProposal = _creditRepo != null
+                    ? await _creditRepo.GetAll().FirstOrDefaultAsync(x => EF.Property<int>(x, "DealerId") == dealerId)
+                    : null;
+                maintenanceDocs = _docsRepo != null
+                    ? await _docsRepo.GetAll().FirstOrDefaultAsync(x => EF.Property<int>(x, "DealerId") == dealerId)
+                    : null;
+                maintenancePartners = _ownerRepo != null
+                    ? await _ownerRepo.GetAll().Where(x => EF.Property<int>(x, "DealerId") == dealerId).ToListAsync()
+                    : new List<DealerOwnershipInfo>();
+                maintenanceLands = _landRepo != null
+                    ? await _landRepo.GetAll().Where(x => EF.Property<int>(x, "DealerId") == dealerId).ToListAsync()
+                    : new List<DealerAssetLand>();
+                maintenanceBuildings = _buildingRepo != null
+                    ? await _buildingRepo.GetAll().Where(x => EF.Property<int>(x, "DealerId") == dealerId).ToListAsync()
+                    : new List<DealerAssetBuilding>();
+            }
 
             // Step 1: Dealer basic info (DealerRegistration exists).
             // PinCode is only collected on the full registration flow; Terminated /
@@ -503,19 +611,41 @@ namespace SpicAPI.Controllers
                  (dealer.Status == DealerStatus.InActive && dealer.InactiveProposal == FutureBusinessProposal.Terminated));
             result.Add(new { StepNo = 1, IsComplete = step1 });
 
-            // Step 2: DealerExperience
-            bool step2 = _expRepo != null && await _expRepo.ExistsAsync(x => EF.Property<int>(x, "DealerId") == dealerId);
+            // Step 2: DealerExperience (existing maintenance validates years + at least one record)
+            bool step2;
+            if (isApprovedNewDealerMaintenance)
+                step2 = dealer!.YearsofExperiance > 0 && _expRepo != null && await _expRepo.ExistsAsync(x => EF.Property<int>(x, "DealerId") == dealerId);
+            else
+                step2 = _expRepo != null && await _expRepo.ExistsAsync(x => EF.Property<int>(x, "DealerId") == dealerId);
             result.Add(new { StepNo = 2, IsComplete = step2 });
 
-            // Step 3: AnnualSaleDataLastFYofDealerRegistration
-            bool step3 = _annualRepo != null && await _annualRepo.ExistsAsync(x => EF.Property<int>(x, "DealerId") == dealerId);
+            // Step 3: AnnualSaleDataLastFYofDealerRegistration (requires at least one non-zero row)
+            bool step3;
+            if (isApprovedNewDealerMaintenance)
+            {
+                var annualRows = _annualRepo != null
+                    ? await _annualRepo.GetAll().Where(x => EF.Property<int>(x, "DealerId") == dealerId).ToListAsync()
+                    : new List<AnnualSaleDataLastFYofDealerRegistration>();
+                step3 = annualRows.Any(r => r.OwnRetailsSaleQty != 0 || r.OwnRetailsSaleAmount != 0 || r.SaleToDealerQty != 0 || r.SaleToDealerAmount != 0);
+            }
+            else
+                step3 = _annualRepo != null && await _annualRepo.ExistsAsync(x => EF.Property<int>(x, "DealerId") == dealerId);
             result.Add(new { StepNo = 3, IsComplete = step3 });
 
-            // Step 4: Warehouse facilities (warehouse + rail + port combined)
+            // Step 4: Warehouse facilities (maintenance requires at least 2 of each type)
             bool wh = _whRepo != null && await _whRepo.ExistsAsync(x => EF.Property<int>(x, "DealerId") == dealerId);
             bool rail = _railRepo != null && await _railRepo.ExistsAsync(x => EF.Property<int>(x, "DealerId") == dealerId);
             bool port = _portRepo != null && await _portRepo.ExistsAsync(x => EF.Property<int>(x, "DealerId") == dealerId);
-            bool step4 = wh || rail || port;
+            bool step4;
+            if (isApprovedNewDealerMaintenance)
+            {
+                var whCount = _whRepo != null ? await _whRepo.GetAll().CountAsync(x => EF.Property<int>(x, "DealerId") == dealerId) : 0;
+                var railCount = _railRepo != null ? await _railRepo.GetAll().CountAsync(x => EF.Property<int>(x, "DealerId") == dealerId) : 0;
+                var portCount = _portRepo != null ? await _portRepo.GetAll().CountAsync(x => EF.Property<int>(x, "DealerId") == dealerId) : 0;
+                step4 = whCount >= 2 && railCount >= 2 && portCount >= 2;
+            }
+            else
+                step4 = wh || rail || port;
             result.Add(new { StepNo = 4, IsComplete = step4 });
 
             // Step 5: Market detail
@@ -530,8 +660,19 @@ namespace SpicAPI.Controllers
             bool step7 = _ownerRepo != null && await _ownerRepo.ExistsAsync(x => EF.Property<int>(x, "DealerId") == dealerId);
             result.Add(new { StepNo = 7, IsComplete = step7 });
 
-            // Step 8: Sales planning
-            bool step8 = _salesPlanRepo != null && await _salesPlanRepo.ExistsAsync(x => EF.Property<int>(x, "DealerId") == dealerId);
+            // Step 8: Sales planning (requires at least one non-zero row)
+            bool step8;
+            if (isApprovedNewDealerMaintenance)
+            {
+                var planRows = _salesPlanRepo != null
+                    ? await _salesPlanRepo.GetAll().Where(x => EF.Property<int>(x, "DealerId") == dealerId).ToListAsync()
+                    : new List<SalesPlanningInDealerRegistration>();
+                step8 = planRows.Any(r =>
+                    (r.AprilQty + r.MayQty + r.JuneQty + r.JulyQty + r.AugustQty + r.SeptemberQty + r.OctoberQty + r.NovemberQty + r.DecemberQty + r.JanuaryQty + r.FebruaryQty + r.MarchQty) != 0 ||
+                    (r.AprilAmount + r.MayAmount + r.JuneAmount + r.JulyAmount + r.AugustAmount + r.SeptemberAmount + r.OctoberAmount + r.NovemberAmount + r.DecemberAmount + r.JanuaryAmount + r.FebruaryAmount + r.MarchAmount) != 0);
+            }
+            else
+                step8 = _salesPlanRepo != null && await _salesPlanRepo.ExistsAsync(x => EF.Property<int>(x, "DealerId") == dealerId);
             result.Add(new { StepNo = 8, IsComplete = step8 });
 
             // Step 9: Assets (bank/land/building)
@@ -541,51 +682,69 @@ namespace SpicAPI.Controllers
             bool step9 = bank || land || building || dealer?.IsCreditLimitConsentGiven == true;
             result.Add(new { StepNo = 9, IsComplete = step9 });
 
-            // Step 10: Credit limit proposal (SPIC). New-dealer flow instead records
-            // the SPIC Trade Deposit Details (Dealership Application Fee + Trade Deposit DD).
-            // Consent dealers are marked complete here — they skip the CreditLimit pages.
-            bool credit = _creditRepo != null && await _creditRepo.ExistsAsync(x => EF.Property<int>(x, "DealerId") == dealerId);
-            bool step10 = credit;
-            if (dealer?.IsNewDealerRegistration == true)
+            if (isApprovedNewDealerMaintenance && dealer != null)
             {
-                step10 = dealer.InSpic
-                    && (!string.IsNullOrWhiteSpace(dealer.SpicTradeDepositDDNumber)
-                        || dealer.SpicTradeDepositDDBankId > 0
-                        || (dealer.SpicTradeDepositDDAmount ?? 0) > 0
-                        || !string.IsNullOrWhiteSpace(dealer.DealershipApplicationFeeDDNumber)
-                        || dealer.DealershipApplicationFeeBankId > 0
-                        || (dealer.DealershipApplicationFeeAmount ?? 0) > 0);
-            }
-            // Consent path: skip credit limit pages — mark as complete.
-            if (dealer?.IsCreditLimitConsentGiven == true)
-                step10 = true;
-            result.Add(new { StepNo = 10, IsComplete = step10 });
+                var consent = dealer.IsCreditLimitConsentGiven == true;
+                var step10 = !dealer.InSpic
+                    || consent
+                    || (maintenanceProposal != null && maintenanceProposal.SpicMonthlyAvgNetOverdues.HasValue && maintenanceProposal.SpicMonthlyAvgNetOverdues.Value >= 0);
+                result.Add(new { StepNo = 10, IsComplete = step10 });
 
-            // Step 11: Credit limit for GreenStar (same check as step 10).
-            // New-dealer flow instead records the GFL Trade Deposit Details.
-            // Consent dealers are marked complete here — they skip the CreditLimitForGreenStar page.
-            bool step11 = credit;
-            if (dealer?.IsNewDealerRegistration == true)
+                var step11 = !dealer.InGreenStar
+                    || consent
+                    || (maintenanceProposal != null && maintenanceProposal.GreenstarMonthlyAvgNetOverdues.HasValue && maintenanceProposal.GreenstarMonthlyAvgNetOverdues.Value >= 0);
+                result.Add(new { StepNo = 11, IsComplete = step11 });
+
+                var step12 = IsMaintenanceEnclosuresComplete(dealer, maintenanceDocs, maintenancePartners, maintenanceLands, maintenanceBuildings);
+                result.Add(new { StepNo = 12, IsComplete = step12 });
+            }
+            else
             {
-                step11 = dealer.InGreenStar
-                    && (!string.IsNullOrWhiteSpace(dealer.GflTradeDepositDDNumber)
-                        || dealer.GflTradeDepositDDBankId > 0
-                        || (dealer.GflTradeDepositDDAmount ?? 0) > 0);
-            }
-            // Consent path: skip credit limit pages — mark as complete.
-            if (dealer?.IsCreditLimitConsentGiven == true)
-                step11 = true;
-            result.Add(new { StepNo = 11, IsComplete = step11 });
+                // Step 10: Credit limit proposal (SPIC). New-dealer flow instead records
+                // the SPIC Trade Deposit Details (Dealership Application Fee + Trade Deposit DD).
+                // Consent dealers are marked complete here - they skip the CreditLimit pages.
+                bool credit = _creditRepo != null && await _creditRepo.ExistsAsync(x => EF.Property<int>(x, "DealerId") == dealerId);
+                bool step10 = credit;
+                if (dealer?.IsNewDealerRegistration == true)
+                {
+                    step10 = dealer.InSpic
+                        && (!string.IsNullOrWhiteSpace(dealer.SpicTradeDepositDDNumber)
+                            || dealer.SpicTradeDepositDDBankId > 0
+                            || (dealer.SpicTradeDepositDDAmount ?? 0) > 0
+                            || !string.IsNullOrWhiteSpace(dealer.DealershipApplicationFeeDDNumber)
+                            || dealer.DealershipApplicationFeeBankId > 0
+                            || (dealer.DealershipApplicationFeeAmount ?? 0) > 0);
+                }
+                // Consent path: skip credit limit pages - mark as complete.
+                if (dealer?.IsCreditLimitConsentGiven == true)
+                    step10 = true;
+                result.Add(new { StepNo = 10, IsComplete = step10 });
 
+                // Step 11: Credit limit for GreenStar (same check as step 10).
+                // New-dealer flow instead records the GFL Trade Deposit Details.
+                // Consent dealers are marked complete here - they skip the CreditLimitForGreenStar page.
+                bool step11 = credit;
+                if (dealer?.IsNewDealerRegistration == true)
+                {
+                    step11 = dealer.InGreenStar
+                        && (!string.IsNullOrWhiteSpace(dealer.GflTradeDepositDDNumber)
+                            || dealer.GflTradeDepositDDBankId > 0
+                            || (dealer.GflTradeDepositDDAmount ?? 0) > 0);
+                }
+                // Consent path: skip credit limit pages - mark as complete.
+                if (dealer?.IsCreditLimitConsentGiven == true)
+                    step11 = true;
+                result.Add(new { StepNo = 11, IsComplete = step11 });
 
-            // Step 12: Documents
-            bool step12 = _docsRepo != null && await _docsRepo.ExistsAsync(x => EF.Property<int>(x, "DealerId") == dealerId);
-            if (dealer?.IsNewDealerRegistration == true && _docsRepo != null)
-            {
-                var docsRow = await _docsRepo.GetAll().FirstOrDefaultAsync(x => EF.Property<int>(x, "DealerId") == dealerId);
-                step12 = docsRow != null && !string.IsNullOrWhiteSpace(docsRow.RequestLetterFilePath);
+                // Step 12: Documents
+                bool step12 = _docsRepo != null && await _docsRepo.ExistsAsync(x => EF.Property<int>(x, "DealerId") == dealerId);
+                if (dealer?.IsNewDealerRegistration == true && _docsRepo != null)
+                {
+                    var docsRow = await _docsRepo.GetAll().FirstOrDefaultAsync(x => EF.Property<int>(x, "DealerId") == dealerId);
+                    step12 = docsRow != null && !string.IsNullOrWhiteSpace(docsRow.RequestLetterFilePath);
+                }
+                result.Add(new { StepNo = 12, IsComplete = step12 });
             }
-            result.Add(new { StepNo = 12, IsComplete = step12 });
 
             // Step 13: Final submission (dealer record exists)
             bool step13 = dealer != null;
@@ -593,6 +752,7 @@ namespace SpicAPI.Controllers
 
             return Ok(result);
         }
+
         private async Task<int?> ResolveDealerDesignationIdAsync()
         {
             if (_designationRepo == null) return null;
