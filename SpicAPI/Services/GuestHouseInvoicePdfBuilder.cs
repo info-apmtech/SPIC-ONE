@@ -66,8 +66,8 @@ namespace SpicAPI.Services
         {
             header.Background(HeaderBandColor).Padding(12).Row(row =>
             {
-                row.ConstantItem(60).Height(60).Image(LogoBytes).FitArea();
-                row.RelativeItem().PaddingLeft(10).Column(col =>
+                row.ConstantItem(120).Height(120).Image(LogoBytes).FitArea();
+                row.RelativeItem().PaddingLeft(14).AlignMiddle().Column(col =>
                 {
                     col.Item().AlignCenter().Text("SPIC DEALERS' WELFARE ASSOCIATION").FontSize(17).Bold().FontColor(BrandNavy);
                     col.Item().AlignCenter().PaddingTop(3).Text("# 100, BAZULLAH ROAD, T.NAGAR, CHENNAI - 600017").FontSize(9.5f).FontColor(BrandNavy);
