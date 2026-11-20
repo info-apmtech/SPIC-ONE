@@ -1278,6 +1278,29 @@ public class JmdoTaskAllocationController : ControllerBase
             }
         }
 
+        // Book Collection & Payment Details (TaskDetail's SPCM-only close-out form) - required
+        // fields, validated server-side so a direct API call can't bypass the client's own
+        // required-field check. Screenshot has no existing file to fall back to on a brand-new
+        // record (unlike the update endpoint below), so dto.FilePath itself must be present.
+        if (dto.Kind == JmdoCloseoutKind.Spcm)
+        {
+            if (dto.AchievedTarget is not > 0)
+                return BadRequest(new { Success = false, Message = "No. of Books Collected is required and must be greater than zero." });
+            if (string.IsNullOrWhiteSpace(dto.ReceiptNumber))
+                return BadRequest(new { Success = false, Message = "Receipt Number is required." });
+            if (dto.Amount is not > 0)
+                return BadRequest(new { Success = false, Message = "Amount is required and must be greater than zero." });
+            if (dto.PaymentDate is null)
+                return BadRequest(new { Success = false, Message = "Payment Date is required." });
+            if (string.IsNullOrWhiteSpace(dto.FilePath))
+                return BadRequest(new { Success = false, Message = "Payment Screenshot is required." });
+
+            // The Book Collection & Payment Details form has no Outcome control - hardcode it
+            // server-side too (defense in depth beyond TaskDetail.razor already doing the same)
+            // rather than trust whatever the client happened to send.
+            dto.Outcome = "Completed";
+        }
+
         // Reject logging more than what's actually left on the weekly target, rather than
         // silently letting the running total blow past it - a prior closeout plus this one
         // can't add up to more than SpcmTarget/{Urea,Nps,Dap,Other}Target.
@@ -1314,6 +1337,13 @@ public class JmdoTaskAllocationController : ControllerBase
             Outcome = dto.Outcome,
             Remarks = dto.Remarks,
             AchievedTarget = dto.AchievedTarget,
+            ReceiptNumber = dto.ReceiptNumber,
+            Amount = dto.Amount,
+            PaymentDate = dto.PaymentDate,
+            TransactionNumber = dto.TransactionNumber,
+            BankName = dto.BankName,
+            PaymentByName = dto.PaymentByName,
+            BooksAccountedInFavourOf = dto.BooksAccountedInFavourOf,
             Urea = dto.Urea,
             Nps = dto.Nps,
             Dap = dto.Dap,
@@ -1369,6 +1399,146 @@ public class JmdoTaskAllocationController : ControllerBase
             Outcome = closeout.Outcome,
             Remarks = closeout.Remarks,
             AchievedTarget = closeout.AchievedTarget,
+            ReceiptNumber = closeout.ReceiptNumber,
+            Amount = closeout.Amount,
+            PaymentDate = closeout.PaymentDate,
+            TransactionNumber = closeout.TransactionNumber,
+            BankName = closeout.BankName,
+            PaymentByName = closeout.PaymentByName,
+            BooksAccountedInFavourOf = closeout.BooksAccountedInFavourOf,
+            Urea = closeout.Urea,
+            Nps = closeout.Nps,
+            Dap = closeout.Dap,
+            Other = closeout.Other,
+            FilePath = closeout.FilePath,
+            FileName = closeout.FileName,
+            CreatedAt = closeout.CreatedAt,
+            Products = closeout.Products.Select(p => new ProductLineDto
+            {
+                ProductGroupId = p.ProductGroupId,
+                ProductId = p.ProductId,
+                ProductGroupName = p.ProductGroupName,
+                ProductName = p.ProductName,
+                StockText = p.StockText
+            }).ToList()
+        });
+    }
+
+    // PUT api/JmdoTaskAllocation/closeouts/{id}/spcm
+    // SPCM-only real update-by-Id for TaskDetail's "Edit" flow on a saved Book Collection &
+    // Payment Details record - CreateCloseout only ever INSERTs, so without this endpoint
+    // "editing" meant removing the row from the client's in-memory list and re-POSTing, which
+    // left the original row behind in the database (silently duplicating it, double-counting
+    // AchievedTarget toward the weekly target, and orphaning its screenshot). This endpoint
+    // updates the existing row in place instead - the original record is never at risk from a
+    // cancelled or failed edit, since nothing is touched until this call actually succeeds.
+    [Authorize(Roles = "Admin,MO,MDO,JMDO")]
+    [HttpPut("closeouts/{id:int}/spcm")]
+    public async Task<ActionResult<JmdoTaskCloseoutDto>> UpdateSpcmCloseout(int id, [FromBody] CreateJmdoTaskCloseoutDto dto)
+    {
+        var userId = CurrentUserId();
+        if (string.IsNullOrWhiteSpace(userId))
+            return Unauthorized(new { Success = false, Message = "Could not identify the signed-in user." });
+
+        var closeout = await _db.JmdoTaskCloseouts
+            .Include(c => c.Allocation)
+            .ThenInclude(a => a!.Closeouts)
+            .FirstOrDefaultAsync(c => c.Id == id);
+        if (closeout == null)
+            return NotFound();
+
+        if (closeout.Kind != JmdoCloseoutKind.Spcm)
+            return BadRequest(new { Success = false, Message = "This endpoint only updates SPCM book collection records." });
+
+        // Same ownership rule DeleteCloseout already uses.
+        if (closeout.Allocation?.SubmittedByUserId != userId && !User.IsInRole("Admin"))
+            return Forbid();
+
+        var allocation = closeout.Allocation!;
+
+        // Same required-field validation as CreateCloseout's Spcm branch, except the screenshot
+        // check falls back to the record's OWN existing file when this update didn't stage a new
+        // one - an edit that doesn't touch the screenshot must not be forced to re-upload it.
+        if (dto.AchievedTarget is not > 0)
+            return BadRequest(new { Success = false, Message = "No. of Books Collected is required and must be greater than zero." });
+        if (string.IsNullOrWhiteSpace(dto.ReceiptNumber))
+            return BadRequest(new { Success = false, Message = "Receipt Number is required." });
+        if (dto.Amount is not > 0)
+            return BadRequest(new { Success = false, Message = "Amount is required and must be greater than zero." });
+        if (dto.PaymentDate is null)
+            return BadRequest(new { Success = false, Message = "Payment Date is required." });
+        var effectiveFilePath = string.IsNullOrWhiteSpace(dto.FilePath) ? closeout.FilePath : dto.FilePath;
+        if (string.IsNullOrWhiteSpace(effectiveFilePath))
+            return BadRequest(new { Success = false, Message = "Payment Screenshot is required." });
+
+        // Same weekly-target ceiling CreateCloseout enforces, adjusted for an in-place update:
+        // this record's OWN current contribution must be excluded from "already logged" first,
+        // otherwise re-saving the same (or a smaller) value would wrongly look like it exceeds
+        // what's left on the target.
+        if (allocation.SpcmTarget is > 0)
+        {
+            var achievedExcludingThis = SpcmAchievedCount(allocation) - (closeout.AchievedTarget ?? 0);
+            var remaining = allocation.SpcmTarget.Value - achievedExcludingThis;
+            if (dto.AchievedTarget.Value > remaining)
+                return BadRequest(new { Success = false, Message = $"Only {Math.Max(remaining, 0)} left on this week's SPCM target - cannot log {dto.AchievedTarget.Value}." });
+        }
+
+        closeout.AchievedTarget = dto.AchievedTarget;
+        closeout.ReceiptNumber = dto.ReceiptNumber;
+        closeout.Amount = dto.Amount;
+        closeout.PaymentDate = dto.PaymentDate;
+        closeout.TransactionNumber = dto.TransactionNumber;
+        closeout.BankName = dto.BankName;
+        closeout.PaymentByName = dto.PaymentByName;
+        closeout.BooksAccountedInFavourOf = dto.BooksAccountedInFavourOf;
+        closeout.Outcome = "Completed";
+
+        // Only overwrite the screenshot when this call actually supplied a new one - preserves
+        // the existing file when the client didn't replace it (or if an upload attempt failed
+        // before ever reaching this call, in which case dto.FilePath is never sent at all).
+        if (!string.IsNullOrWhiteSpace(dto.FilePath))
+        {
+            closeout.FilePath = dto.FilePath;
+            closeout.FileName = dto.FileName;
+        }
+
+        await _db.SaveChangesAsync();
+
+        // Same auto-complete/reopen logic CreateCloseout/DeleteCloseout already have - editing
+        // AchievedTarget can push the cumulative total either up to target or back below it.
+        if (allocation.SpcmTarget is > 0)
+        {
+            var achievedNow = SpcmAchievedCount(allocation);
+            if (allocation.SpcmStatus != AllocTaskStatus.Completed && achievedNow >= allocation.SpcmTarget)
+            {
+                allocation.SpcmStatus = AllocTaskStatus.Completed;
+                allocation.SpcmCompletedAt ??= DateTime.Now;
+                await _db.SaveChangesAsync();
+            }
+            else if (allocation.SpcmStatus == AllocTaskStatus.Completed && achievedNow < allocation.SpcmTarget)
+            {
+                allocation.SpcmStatus = AllocTaskStatus.InProgress;
+                allocation.SpcmCompletedAt = null;
+                await _db.SaveChangesAsync();
+            }
+        }
+
+        return Ok(new JmdoTaskCloseoutDto
+        {
+            Id = closeout.Id,
+            Kind = closeout.Kind,
+            SubDealerId = closeout.SubDealerId,
+            Csr1Id = closeout.Csr1Id,
+            Outcome = closeout.Outcome,
+            Remarks = closeout.Remarks,
+            AchievedTarget = closeout.AchievedTarget,
+            ReceiptNumber = closeout.ReceiptNumber,
+            Amount = closeout.Amount,
+            PaymentDate = closeout.PaymentDate,
+            TransactionNumber = closeout.TransactionNumber,
+            BankName = closeout.BankName,
+            PaymentByName = closeout.PaymentByName,
+            BooksAccountedInFavourOf = closeout.BooksAccountedInFavourOf,
             Urea = closeout.Urea,
             Nps = closeout.Nps,
             Dap = closeout.Dap,
@@ -2109,6 +2279,13 @@ public class JmdoTaskAllocationController : ControllerBase
             Outcome = c.Outcome,
             Remarks = c.Remarks,
             AchievedTarget = c.AchievedTarget,
+            ReceiptNumber = c.ReceiptNumber,
+            Amount = c.Amount,
+            PaymentDate = c.PaymentDate,
+            TransactionNumber = c.TransactionNumber,
+            BankName = c.BankName,
+            PaymentByName = c.PaymentByName,
+            BooksAccountedInFavourOf = c.BooksAccountedInFavourOf,
             Urea = c.Urea,
             Nps = c.Nps,
             Dap = c.Dap,

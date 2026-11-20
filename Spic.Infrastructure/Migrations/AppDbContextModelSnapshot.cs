@@ -6124,6 +6124,15 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<int>("AllocationId")
                         .HasColumnType("integer");
 
+                    b.Property<decimal?>("Amount")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<string>("BankName")
+                        .HasColumnType("text");
+
+                    b.Property<string>("BooksAccountedInFavourOf")
+                        .HasColumnType("text");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp without time zone");
 
@@ -6156,11 +6165,23 @@ namespace Spic.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("PaymentByName")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("PaymentDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("ReceiptNumber")
+                        .HasColumnType("text");
+
                     b.Property<string>("Remarks")
                         .HasColumnType("text");
 
                     b.Property<int?>("SubDealerId")
                         .HasColumnType("integer");
+
+                    b.Property<string>("TransactionNumber")
+                        .HasColumnType("text");
 
                     b.Property<int?>("Urea")
                         .HasColumnType("integer");

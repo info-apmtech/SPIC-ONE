@@ -7,6 +7,7 @@
 @inject SPIC.MauiBlazorApp.Shared.Services.ToastService Toast
 @inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
 @inject SPIC.MauiBlazorApp.Shared.Services.NavHistoryService NavHistory
+@inject SPIC.MauiBlazorApp.Shared.Services.LookupCacheService LookupCache
 @inject IJSRuntime JS
 
 <div class="container-fluid py-4 px-0 td-page">
@@ -214,114 +215,224 @@
                 }
 
                 <fieldset disabled="@(!isStarted || isClosed)" style="border: none; margin: 0; padding: 0;">
-                    <label class="td-field-label" for="td-outcome">Outcome<span class="td-required">*</span></label>
-                    <select id="td-outcome" class="td-input" @bind="outcome" disabled="@(!isStarted || isClosed)">
-                        <option value="Fully Completed">Fully Completed</option>
-                        <option value="Partially Completed">Partially Completed</option>
-                        <option value="Not Completed">Not Completed</option>
-                    </select>
-
-                    @if (kind == TaskKind.Dealer && LoginState.Can(PagePermission.TasksAllocation, "Update"))
-                    {
-                        <div class="d-flex justify-content-end mb-2 mt-3">
-                            <button type="button" class="btn btn-link text-success fw-bold p-0 text-decoration-none" disabled="@(!isStarted || isClosed)" @onclick="OpenAddProductPopup">
-                                + Add another Product
-                            </button>
-                        </div>
-
-                        @foreach (var prod in dealerProducts)
-                        {
-                            <div class="td-product-card">
-                                <div class="td-product-col">
-                                    <span class="td-product-label">Product Group</span>
-                                    <span class="td-product-val">@prod.Group</span>
-                                </div>
-                                <div class="td-product-col td-border-left">
-                                    <span class="td-product-label">Product Name</span>
-                                    <span class="td-product-val">@prod.Name</span>
-                                </div>
-                                <div class="td-product-col td-border-left">
-                                    <span class="td-product-label">Stock</span>
-                                    <span class="td-product-val">@prod.Stock</span>
-                                </div>
-                            </div>
-                        }
-                    }
-
                     @if (kind == TaskKind.Spcm)
                     {
-                        @if (SpcmTargetValue > 0)
-                        {
-                            <div class="td-target-progress">
-                                <span>Weekly Target <strong>@SpcmTargetValue</strong></span>
-                                <span>Achieved So Far <strong>@SpcmAchievedSoFar</strong></span>
-                                <span>Remaining <strong>@SpcmRemaining</strong></span>
-                            </div>
-                        }
-                        <label class="td-field-label" for="td-achieved">Achieved Target</label>
-                        <input id="td-achieved" type="number" min="0" max="@SpcmRemaining" class="td-input" placeholder="e.g. 1" @bind="achievedTarget" @bind:event="oninput" disabled="@(!isStarted || isClosed)" readonly="@(!isStarted || isClosed)" />
-                    }
-
-                    @if (kind == TaskKind.PosLiquidation)
-                    {
-                        <div class="td-pos-grid">
-                            <div>
-                                <label class="td-field-label" for="td-pos-urea">Urea</label>
-                                @if (PosUreaTargetValue > 0)
-                                {
-                                    <div class="td-target-progress td-target-progress-compact">Target <strong>@PosUreaTargetValue</strong> &middot; Done <strong>@PosUreaAchievedSoFar</strong> &middot; Left <strong>@(Math.Max(PosUreaTargetValue - PosUreaAchievedSoFar, 0))</strong></div>
-                                }
-                                <input id="td-pos-urea" type="number" min="0" class="td-input" placeholder="e.g. 1" @bind="posUrea" @bind:event="oninput" disabled="@(!isStarted || isClosed)" readonly="@(!isStarted || isClosed)" />
-                            </div>
-                            <div>
-                                <label class="td-field-label" for="td-pos-nps">NPKS</label>
-                                @if (PosNpsTargetValue > 0)
-                                {
-                                    <div class="td-target-progress td-target-progress-compact">Target <strong>@PosNpsTargetValue</strong> &middot; Done <strong>@PosNpsAchievedSoFar</strong> &middot; Left <strong>@(Math.Max(PosNpsTargetValue - PosNpsAchievedSoFar, 0))</strong></div>
-                                }
-                                <input id="td-pos-nps" type="number" min="0" class="td-input" placeholder="e.g. 1" @bind="posNps" @bind:event="oninput" disabled="@(!isStarted || isClosed)" readonly="@(!isStarted || isClosed)" />
-                            </div>
-                            <div>
-                                <label class="td-field-label" for="td-pos-dap">DAP</label>
-                                @if (PosDapTargetValue > 0)
-                                {
-                                    <div class="td-target-progress td-target-progress-compact">Target <strong>@PosDapTargetValue</strong> &middot; Done <strong>@PosDapAchievedSoFar</strong> &middot; Left <strong>@(Math.Max(PosDapTargetValue - PosDapAchievedSoFar, 0))</strong></div>
-                                }
-                                <input id="td-pos-dap" type="number" min="0" class="td-input" placeholder="e.g. 1" @bind="posDap" @bind:event="oninput" disabled="@(!isStarted || isClosed)" readonly="@(!isStarted || isClosed)" />
-                            </div>
-                            <div>
-                                <label class="td-field-label" for="td-pos-other">Other</label>
-                                @if (PosOtherTargetValue > 0)
-                                {
-                                    <div class="td-target-progress td-target-progress-compact">Target <strong>@PosOtherTargetValue</strong> &middot; Done <strong>@PosOtherAchievedSoFar</strong> &middot; Left <strong>@(Math.Max(PosOtherTargetValue - PosOtherAchievedSoFar, 0))</strong></div>
-                                }
-                                <input id="td-pos-other" type="number" min="0" class="td-input" placeholder="e.g. 1" @bind="posOther" @bind:event="oninput" disabled="@(!isStarted || isClosed)" readonly="@(!isStarted || isClosed)" />
+                        <div class="td-form-section">
+                            <h4 class="td-form-section-title">Employee Details</h4>
+                            <div class="td-form-grid">
+                                <div>
+                                    <label class="td-field-label" style="margin-top:0;">Name</label>
+                                    <input type="text" class="td-input" value="@employeeName" disabled readonly />
+                                </div>
+                                <div>
+                                    <label class="td-field-label" style="margin-top:0;">Designation</label>
+                                    <input type="text" class="td-input" value="@employeeDesignation" disabled readonly />
+                                </div>
+                                <div>
+                                    <label class="td-field-label" style="margin-top:0;">HQ</label>
+                                    <input type="text" class="td-input" value="@employeeHq" disabled readonly />
+                                </div>
+                                <div>
+                                    <label class="td-field-label" style="margin-top:0;">Region</label>
+                                    <input type="text" class="td-input" value="@employeeRegion" disabled readonly />
+                                </div>
                             </div>
                         </div>
-                    }
 
-                    <label class="td-field-label" for="td-remarks">Remarks</label>
-                    <textarea id="td-remarks" class="td-textarea" placeholder="What happened on this visit..." @bind="remarks" disabled="@(!isStarted || isClosed)" readonly="@(!isStarted || isClosed)"></textarea>
+                        <div class="td-form-section">
+                            <h4 class="td-form-section-title">Collection &amp; Payment Details</h4>
 
-                    <label class="td-field-label">@FileFieldLabel</label>
-                    @if (!isStarted || isClosed)
-                    {
-                        <input type="file" class="td-file-input" disabled />
+                            @if (SpcmTargetValue > 0)
+                            {
+                                <div class="td-target-progress">
+                                    <span>Weekly Target <strong>@SpcmTargetValue</strong></span>
+                                    <span>Achieved So Far <strong>@SpcmAchievedSoFar</strong></span>
+                                    <span>Remaining <strong>@SpcmRemaining</strong></span>
+                                </div>
+                            }
+
+                            <div class="td-form-grid">
+                                <div>
+                                    <label class="td-field-label" style="margin-top:0;" for="td-spcm-books">No. of Books Collected<span class="td-required">*</span></label>
+                                    <input id="td-spcm-books" type="number" min="1" max="@SpcmRemaining" class="td-input" placeholder="e.g. 1" @bind="achievedTarget" @bind:event="oninput" disabled="@(!isStarted || isClosed)" readonly="@(!isStarted || isClosed)" />
+                                </div>
+                                <div>
+                                    <label class="td-field-label" style="margin-top:0;" for="td-spcm-receipt">Receipt Number<span class="td-required">*</span></label>
+                                    <input id="td-spcm-receipt" type="text" class="td-input" @bind="spcmReceiptNumber" disabled="@(!isStarted || isClosed)" readonly="@(!isStarted || isClosed)" />
+                                </div>
+                                <div>
+                                    <label class="td-field-label" style="margin-top:0;" for="td-spcm-amount">Amount (&#8377;)<span class="td-required">*</span></label>
+                                    <input id="td-spcm-amount" type="number" min="0" step="0.01" class="td-input" @bind="spcmAmount" @bind:event="oninput" disabled="@(!isStarted || isClosed)" readonly="@(!isStarted || isClosed)" />
+                                </div>
+                                <div>
+                                    <label class="td-field-label" style="margin-top:0;" for="td-spcm-paydate">Payment Date<span class="td-required">*</span></label>
+                                    <input id="td-spcm-paydate" type="date" class="td-input" @bind="spcmPaymentDate" disabled="@(!isStarted || isClosed)" readonly="@(!isStarted || isClosed)" />
+                                </div>
+                                <div>
+                                    <label class="td-field-label" style="margin-top:0;" for="td-spcm-txn">Transaction Number</label>
+                                    <input id="td-spcm-txn" type="text" class="td-input" @bind="spcmTransactionNumber" disabled="@(!isStarted || isClosed)" readonly="@(!isStarted || isClosed)" />
+                                </div>
+                                <div>
+                                    <label class="td-field-label" style="margin-top:0;" for="td-spcm-bank">Bank Name</label>
+                                    <select id="td-spcm-bank" class="td-input" @bind="spcmBankName" disabled="@(!isStarted || isClosed)">
+                                        <option value="">-- Select Bank --</option>
+                                        @if (!string.IsNullOrWhiteSpace(spcmBankName) && !LookupCache.Banks.Any(b => string.Equals(b.Name, spcmBankName, StringComparison.OrdinalIgnoreCase)))
+                                        {
+                                            <!-- Preserves an older saved record's free-text bank name (from before this was a
+                                                 dropdown, or a bank no longer in the master list) instead of silently blanking it. -->
+                                            <option value="@spcmBankName">@spcmBankName</option>
+                                        }
+                                        @foreach (var bank in LookupCache.Banks.OrderBy(b => b.Name))
+                                        {
+                                            <option value="@bank.Name">@bank.Name</option>
+                                        }
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="td-field-label" style="margin-top:0;" for="td-spcm-payby">Payment By (Account Holder Name)</label>
+                                    <input id="td-spcm-payby" type="text" class="td-input" @bind="spcmPaymentByName" disabled="@(!isStarted || isClosed)" readonly="@(!isStarted || isClosed)" />
+                                </div>
+                                <div>
+                                    <label class="td-field-label" style="margin-top:0;" for="td-spcm-favour">Books Accounted in Favour Of</label>
+                                    <input id="td-spcm-favour" type="text" class="td-input" @bind="spcmBooksAccountedInFavourOf" disabled="@(!isStarted || isClosed)" readonly="@(!isStarted || isClosed)" />
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="td-form-section">
+                            <h4 class="td-form-section-title">Payment Proof</h4>
+                            <label class="td-field-label" style="margin-top:0;">Payment Screenshot<span class="td-required">*</span></label>
+
+                            @if (!string.IsNullOrWhiteSpace(spcmScreenshotPreviewUrl))
+                            {
+                                <div class="td-screenshot-preview">
+                                    <img src="@spcmScreenshotPreviewUrl" alt="Payment screenshot preview" />
+                                    @if (isStarted && !isClosed)
+                                    {
+                                        <button type="button" class="td-screenshot-remove" title="Remove" @onclick="RemoveSpcmScreenshot">
+                                            <i class="bi bi-x-lg"></i>
+                                        </button>
+                                    }
+                                </div>
+                            }
+
+                            @if (!isStarted || isClosed)
+                            {
+                                <input type="file" class="td-file-input" disabled />
+                            }
+                            else
+                            {
+                                <InputFile @key="fileInputKey" OnChange="OnSpcmFileSelected" accept="image/*" class="td-file-input" />
+                                <div class="td-selected-file text-muted">@(string.IsNullOrWhiteSpace(spcmScreenshotPreviewUrl) ? "Choose an image to attach as proof." : "Choose a different image to replace the one above.")</div>
+                            }
+                        </div>
+
+                        @if (editingSpcmRecordId is not null && isStarted && !isClosed)
+                        {
+                            <div class="d-flex justify-content-end mt-2">
+                                <button type="button" class="btn btn-link text-muted p-0 text-decoration-none" @onclick="CancelSpcmEdit">
+                                    Cancel editing this record
+                                </button>
+                            </div>
+                        }
                     }
                     else
                     {
-                        <InputFile @key="fileInputKey" OnChange="OnFileSelected" class="td-file-input" />
-                    }
-                    @if (selectedFile != null)
-                    {
-                        <div class="td-selected-file"><i class="bi bi-paperclip"></i> @selectedFile.Name</div>
+                        <label class="td-field-label" for="td-outcome">Outcome<span class="td-required">*</span></label>
+                        <select id="td-outcome" class="td-input" @bind="outcome" disabled="@(!isStarted || isClosed)">
+                            <option value="Fully Completed">Fully Completed</option>
+                            <option value="Partially Completed">Partially Completed</option>
+                            <option value="Not Completed">Not Completed</option>
+                        </select>
+
+                        @if (kind == TaskKind.Dealer && LoginState.Can(PagePermission.TasksAllocation, "Update"))
+                        {
+                            <div class="d-flex justify-content-end mb-2 mt-3">
+                                <button type="button" class="btn btn-link text-success fw-bold p-0 text-decoration-none" disabled="@(!isStarted || isClosed)" @onclick="OpenAddProductPopup">
+                                    + Add another Product
+                                </button>
+                            </div>
+
+                            @foreach (var prod in dealerProducts)
+                            {
+                                <div class="td-product-card">
+                                    <div class="td-product-col">
+                                        <span class="td-product-label">Product Group</span>
+                                        <span class="td-product-val">@prod.Group</span>
+                                    </div>
+                                    <div class="td-product-col td-border-left">
+                                        <span class="td-product-label">Product Name</span>
+                                        <span class="td-product-val">@prod.Name</span>
+                                    </div>
+                                    <div class="td-product-col td-border-left">
+                                        <span class="td-product-label">Stock</span>
+                                        <span class="td-product-val">@prod.Stock</span>
+                                    </div>
+                                </div>
+                            }
+                        }
+
+                        @if (kind == TaskKind.PosLiquidation)
+                        {
+                            <div class="td-pos-grid">
+                                <div>
+                                    <label class="td-field-label" for="td-pos-urea">Urea</label>
+                                    @if (PosUreaTargetValue > 0)
+                                    {
+                                        <div class="td-target-progress td-target-progress-compact">Target <strong>@PosUreaTargetValue</strong> &middot; Done <strong>@PosUreaAchievedSoFar</strong> &middot; Left <strong>@(Math.Max(PosUreaTargetValue - PosUreaAchievedSoFar, 0))</strong></div>
+                                    }
+                                    <input id="td-pos-urea" type="number" min="0" class="td-input" placeholder="e.g. 1" @bind="posUrea" @bind:event="oninput" disabled="@(!isStarted || isClosed)" readonly="@(!isStarted || isClosed)" />
+                                </div>
+                                <div>
+                                    <label class="td-field-label" for="td-pos-nps">NPKS</label>
+                                    @if (PosNpsTargetValue > 0)
+                                    {
+                                        <div class="td-target-progress td-target-progress-compact">Target <strong>@PosNpsTargetValue</strong> &middot; Done <strong>@PosNpsAchievedSoFar</strong> &middot; Left <strong>@(Math.Max(PosNpsTargetValue - PosNpsAchievedSoFar, 0))</strong></div>
+                                    }
+                                    <input id="td-pos-nps" type="number" min="0" class="td-input" placeholder="e.g. 1" @bind="posNps" @bind:event="oninput" disabled="@(!isStarted || isClosed)" readonly="@(!isStarted || isClosed)" />
+                                </div>
+                                <div>
+                                    <label class="td-field-label" for="td-pos-dap">DAP</label>
+                                    @if (PosDapTargetValue > 0)
+                                    {
+                                        <div class="td-target-progress td-target-progress-compact">Target <strong>@PosDapTargetValue</strong> &middot; Done <strong>@PosDapAchievedSoFar</strong> &middot; Left <strong>@(Math.Max(PosDapTargetValue - PosDapAchievedSoFar, 0))</strong></div>
+                                    }
+                                    <input id="td-pos-dap" type="number" min="0" class="td-input" placeholder="e.g. 1" @bind="posDap" @bind:event="oninput" disabled="@(!isStarted || isClosed)" readonly="@(!isStarted || isClosed)" />
+                                </div>
+                                <div>
+                                    <label class="td-field-label" for="td-pos-other">Other</label>
+                                    @if (PosOtherTargetValue > 0)
+                                    {
+                                        <div class="td-target-progress td-target-progress-compact">Target <strong>@PosOtherTargetValue</strong> &middot; Done <strong>@PosOtherAchievedSoFar</strong> &middot; Left <strong>@(Math.Max(PosOtherTargetValue - PosOtherAchievedSoFar, 0))</strong></div>
+                                    }
+                                    <input id="td-pos-other" type="number" min="0" class="td-input" placeholder="e.g. 1" @bind="posOther" @bind:event="oninput" disabled="@(!isStarted || isClosed)" readonly="@(!isStarted || isClosed)" />
+                                </div>
+                            </div>
+                        }
+
+                        <label class="td-field-label" for="td-remarks">Remarks</label>
+                        <textarea id="td-remarks" class="td-textarea" placeholder="What happened on this visit..." @bind="remarks" disabled="@(!isStarted || isClosed)" readonly="@(!isStarted || isClosed)"></textarea>
+
+                        <label class="td-field-label">@FileFieldLabel</label>
+                        @if (!isStarted || isClosed)
+                        {
+                            <input type="file" class="td-file-input" disabled />
+                        }
+                        else
+                        {
+                            <InputFile @key="fileInputKey" OnChange="OnFileSelected" class="td-file-input" />
+                        }
+                        @if (selectedFile != null)
+                        {
+                            <div class="td-selected-file"><i class="bi bi-paperclip"></i> @selectedFile.Name</div>
+                        }
                     }
 
                     @if (LoginState.Can(PagePermission.TasksAllocation, "Update"))
                     {
                     <div class="d-flex justify-content-end mt-4">
-                        <button type="button" class="td-btn td-btn-primary" disabled="@(!isStarted || isClosed || isSavingRecord)" @onclick="SaveRecordAsync">
-                            @(isSavingRecord ? "Saving..." : "Save Record")
+                        <button type="button" class="td-btn td-btn-primary" disabled="@(!isStarted || isClosed || isSavingRecord || (kind == TaskKind.Spcm && !SpcmFormIsValid))" @onclick="SaveRecordAsync">
+                            @(isSavingRecord ? "Saving..." : editingSpcmRecordId is not null ? "Update Record" : "Save Record")
                         </button>
                     </div>
                     }
@@ -394,9 +505,10 @@
                         <table class="table mb-0 td-spcm-table">
                             <thead>
                                 <tr>
-                                    <th>Outcome</th>
-                                    <th>Achieved Target</th>
-                                    <th>Remarks</th>
+                                    <th>Receipt No.</th>
+                                    <th>Amount</th>
+                                    <th>Payment Date</th>
+                                    <th>Books Collected</th>
                                     <th>Support Documents</th>
                                 </tr>
                             </thead>
@@ -404,11 +516,10 @@
                                 @foreach (var record in spcmRecords)
                                 {
                                     <tr>
-                                        <td>
-                                            <span class="td-spcm-badge">@record.Outcome</span>
-                                        </td>
+                                        <td>@(record.ReceiptNumber ?? "—")</td>
+                                        <td>@(record.Amount is { } amt ? $"₹{amt:N2}" : "—")</td>
+                                        <td>@(record.PaymentDate?.ToString("dd MMM yyyy") ?? "—")</td>
                                         <td>@(record.AchievedTarget?.ToString() ?? "—")</td>
-                                        <td>@record.Remarks</td>
                                         <td>
                                             <div class="td-spcm-doc d-flex align-items-center justify-content-between w-100 flex-wrap gap-2">
                                                 <div><i class="bi bi-paperclip text-muted"></i> <span class="text-dark small">@(record.FileName ?? "No file")</span></div>
@@ -672,6 +783,67 @@
     margin-bottom: 4px;
 }
 
+/* ---------- SPCM Book Collection & Payment Details form ---------- */
+.td-form-section {
+    margin-bottom: 20px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid #e5e7eb;
+}
+.td-form-section:last-of-type {
+    border-bottom: none;
+    padding-bottom: 0;
+    margin-bottom: 0;
+}
+.td-form-section-title {
+    margin: 0 0 12px;
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: #111827;
+}
+.td-form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0 16px;
+}
+@@media (max-width: 640px) {
+    .td-form-grid {
+        grid-template-columns: 1fr;
+    }
+}
+.td-screenshot-preview {
+    position: relative;
+    display: inline-block;
+    margin: 8px 0;
+}
+.td-screenshot-preview img {
+    max-width: 240px;
+    max-height: 240px;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    object-fit: contain;
+    display: block;
+}
+.td-screenshot-remove {
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    border: 1px solid #e5e7eb;
+    background: #fff;
+    color: #dc2626;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    cursor: pointer;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+}
+.td-screenshot-remove:hover {
+    background: #fef2f2;
+}
+
 .td-product-card {
     background: #f8fafc;
     border: 1px solid #86efac;
@@ -913,6 +1085,35 @@
                 _units = uTask.Result ?? new();
             }
             catch { }
+        }
+
+        // Employee Details on the Book Collection & Payment Details form - auto-filled from
+        // existing login data, never editable, never part of the submitted DTO. Same resolution
+        // Profile.razor's own EmployeeRegionName/EmployeeHQName already use: api/Profile for the
+        // ids (+ Name), LookupCache for the Region/Headquarter display names, LoginState for the
+        // Designation name (already resolved client-side, no extra call needed).
+        if (kind == TaskKind.Spcm)
+        {
+            try
+            {
+                await LookupCache.EnsureLoadedAsync();
+                var profile = await Http.GetFromJsonAsync<SPIC.Core.DTOs.ProfileDto>("api/Profile");
+                if (profile != null)
+                {
+                    employeeName = profile.Name;
+                    employeeHq = profile.HeadquartersId > 0
+                        ? LookupCache.Headquarters.FirstOrDefault(h => h.Id == profile.HeadquartersId)?.HeadquarterName ?? "—"
+                        : "—";
+                    employeeRegion = profile.RegionId > 0
+                        ? LookupCache.Regions.FirstOrDefault(r => r.Id == profile.RegionId)?.RegionName ?? "—"
+                        : "—";
+                }
+                employeeDesignation = LoginState.DesignationName ?? "—";
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Employee profile load failed: {ex.Message}");
+            }
         }
 
         currentAllocation = await FetchCurrentAllocationAsync();
@@ -1205,6 +1406,41 @@
     private string posDap = "";
     private string posOther = "";
 
+    // ---- SPCM Book Collection & Payment Details form ----
+    // Employee Details - display-only, auto-filled from existing login data (see
+    // OnInitializedAsync), never editable, never part of the submitted DTO.
+    private string employeeName = "";
+    private string employeeDesignation = "";
+    private string employeeHq = "";
+    private string employeeRegion = "";
+
+    // Collection & Payment Details.
+    private string spcmReceiptNumber = "";
+    private decimal? spcmAmount;
+    private DateTime? spcmPaymentDate;
+    private string spcmTransactionNumber = "";
+    private string spcmBankName = "";
+    private string spcmPaymentByName = "";
+    private string spcmBooksAccountedInFavourOf = "";
+
+    // Payment Proof - base64 data URL (new staged file) or the existing saved file's resolved
+    // URL (when editing) - whichever is currently showing in the preview.
+    private string? spcmScreenshotPreviewUrl;
+
+    // Null = creating a new record via POST; set = editing an existing one by Id via PUT
+    // closeouts/{id}/spcm instead - see EditSpcmRecord/CancelSpcmEdit/SaveRecordAsync.
+    private int? editingSpcmRecordId;
+
+    // Mirrors the server-side required-field validation in JmdoTaskAllocationController
+    // (CreateCloseout's Spcm branch / UpdateSpcmCloseout) - gates the Save button so an
+    // incomplete form can't even attempt a submit that the server would reject anyway.
+    private bool SpcmFormIsValid =>
+        int.TryParse(achievedTarget, out var books) && books > 0
+        && !string.IsNullOrWhiteSpace(spcmReceiptNumber)
+        && spcmAmount is > 0
+        && spcmPaymentDate.HasValue
+        && !string.IsNullOrWhiteSpace(spcmScreenshotPreviewUrl);
+
     private sealed record TimelineStep(string Label, string SubLabel, bool Done);
 
     private List<TimelineStep> TimelineSteps = new()
@@ -1470,14 +1706,47 @@
         Toast.Info("Record loaded for editing - save again to persist your changes.");
     }
 
+    // Real update-by-Id (see SaveRecordAsync/UpdateSpcmCloseout), unlike the other three
+    // Edit*Record methods above/below - the record is NOT removed from spcmRecords here, so a
+    // cancelled or failed edit leaves the original, already-saved row completely untouched.
     private void EditSpcmRecord(JmdoTaskCloseoutDto record)
     {
         if (!isStarted || isClosed) return;
-        outcome = record.Outcome;
-        remarks = record.Remarks ?? "";
+        editingSpcmRecordId = record.Id;
         achievedTarget = record.AchievedTarget?.ToString() ?? "";
-        spcmRecords.Remove(record);
-        Toast.Info("Record loaded for editing - save again to persist your changes.");
+        spcmReceiptNumber = record.ReceiptNumber ?? "";
+        spcmAmount = record.Amount;
+        spcmPaymentDate = record.PaymentDate;
+        spcmTransactionNumber = record.TransactionNumber ?? "";
+        spcmBankName = record.BankName ?? "";
+        spcmPaymentByName = record.PaymentByName ?? "";
+        spcmBooksAccountedInFavourOf = record.BooksAccountedInFavourOf ?? "";
+        spcmScreenshotPreviewUrl = !string.IsNullOrWhiteSpace(record.FilePath) ? ResolveFileUrl(record.FilePath) : null;
+        selectedFile = null;
+        fileInputKey++;
+        Toast.Info("Record loaded for editing - Save to update it, or Cancel to discard changes.");
+    }
+
+    // Pure client-side reset, no API call - always safe, since EditSpcmRecord above never
+    // deletes or removes anything to begin with.
+    private void CancelSpcmEdit()
+    {
+        editingSpcmRecordId = null;
+        ResetSpcmForm();
+    }
+
+    private void ResetSpcmForm()
+    {
+        achievedTarget = "";
+        spcmReceiptNumber = "";
+        spcmAmount = null;
+        spcmPaymentDate = null;
+        spcmTransactionNumber = "";
+        spcmBankName = "";
+        spcmPaymentByName = "";
+        spcmBooksAccountedInFavourOf = "";
+        spcmScreenshotPreviewUrl = null;
+        ResetFileSelection();
     }
 
     private void EditMdProgramRecord(JmdoTaskCloseoutDto record)
@@ -1544,6 +1813,40 @@
         fileInputKey++;
     }
 
+    // SPCM's Payment Proof uploader needs a real inline preview (not just a filename), so unlike
+    // OnFileSelected above, this also reads the file into memory right away to build a base64
+    // data URL - same technique DigitalLibraryContentForm.razor already uses for its own cover
+    // image preview. The actual upload-to-server still happens separately in SaveRecordAsync,
+    // via a second OpenReadStream call on the same IBrowserFile (Blazor supports reading it more
+    // than once), so nothing is sent to the server just from picking a file here.
+    private async Task OnSpcmFileSelected(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        selectedFile = file;
+        try
+        {
+            using var ms = new MemoryStream();
+            await file.OpenReadStream(MaxCloseoutFileSize).CopyToAsync(ms);
+            var contentType = string.IsNullOrWhiteSpace(file.ContentType) ? "image/jpeg" : file.ContentType;
+            spcmScreenshotPreviewUrl = $"data:{contentType};base64,{Convert.ToBase64String(ms.ToArray())}";
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Screenshot preview failed: {ex.Message}");
+            Toast.Error("Could not preview that image. Please pick a different file.");
+            selectedFile = null;
+        }
+    }
+
+    // Clears whatever is currently staged/previewed - purely client-side, nothing is sent to the
+    // server until Save is actually clicked, so this can never lose an already-saved screenshot
+    // (UpdateSpcmCloseout only overwrites FilePath/FileName when a new one is actually supplied).
+    private void RemoveSpcmScreenshot()
+    {
+        spcmScreenshotPreviewUrl = null;
+        ResetFileSelection();
+    }
+
     private const long MaxCloseoutFileSize = 5 * 1024 * 1024;
     private bool isSavingRecord;
 
@@ -1552,6 +1855,12 @@
         if (!isStarted || isClosed)
         {
             Toast.Warning("Please start the task before saving records.");
+            return;
+        }
+
+        if (kind == TaskKind.Spcm && !SpcmFormIsValid)
+        {
+            Toast.Warning("Please fill in Books Collected, Receipt Number, Amount, Payment Date, and attach a Payment Screenshot.");
             return;
         }
 
@@ -1572,6 +1881,8 @@
                 var uploadResponse = await Http.PostAsync("api/JmdoTaskAllocation/closeout-files/upload", content);
                 if (!uploadResponse.IsSuccessStatusCode)
                 {
+                    // Upload failed before any save attempt - nothing has been touched yet, the
+                    // existing record (if editing) and its existing screenshot are untouched.
                     Toast.Error("Could not upload the attached file.");
                     return;
                 }
@@ -1605,7 +1916,18 @@
             else if (kind == TaskKind.Spcm)
             {
                 dto.Kind = JmdoCloseoutKind.Spcm;
+                dto.Outcome = "Completed"; // no Outcome control on this form - server re-validates/enforces this too
                 dto.AchievedTarget = int.TryParse(achievedTarget, out var at) ? at : null;
+                dto.ReceiptNumber = spcmReceiptNumber;
+                dto.Amount = spcmAmount;
+                dto.PaymentDate = spcmPaymentDate;
+                dto.TransactionNumber = spcmTransactionNumber;
+                dto.BankName = spcmBankName;
+                dto.PaymentByName = spcmPaymentByName;
+                dto.BooksAccountedInFavourOf = spcmBooksAccountedInFavourOf;
+                // filePath stays null here when nothing new was staged (selectedFile == null) -
+                // UpdateSpcmCloseout preserves the existing screenshot in that case; CreateCloseout
+                // requires one be present on a brand-new record (enforced server-side either way).
             }
             else if (kind == TaskKind.MdProgram)
             {
@@ -1621,7 +1943,14 @@
                 dto.Other = int.TryParse(posOther, out var o) ? o : null;
             }
 
-            var response = await Http.PostAsJsonAsync("api/JmdoTaskAllocation/closeouts", dto);
+            // SPCM edit goes through a real update-by-Id (PUT) instead of the shared create
+            // (POST) path - everything else (Dealer/MdProgram/PosLiquidation, and a brand-new
+            // Spcm record) is unchanged.
+            var isSpcmUpdate = kind == TaskKind.Spcm && editingSpcmRecordId is not null;
+            var response = isSpcmUpdate
+                ? await Http.PutAsJsonAsync($"api/JmdoTaskAllocation/closeouts/{editingSpcmRecordId}/spcm", dto)
+                : await Http.PostAsJsonAsync("api/JmdoTaskAllocation/closeouts", dto);
+
             if (!response.IsSuccessStatusCode)
             {
                 var errorMsg = "Could not save the record. Please try again.";
@@ -1636,6 +1965,8 @@
                 }
                 catch { }
                 Toast.Error(errorMsg);
+                // Leave spcmRecords/the form/editingSpcmRecordId exactly as they were - a failed
+                // save (create or update) must never lose or duplicate the original record.
                 return;
             }
 
@@ -1643,7 +1974,21 @@
             if (saved != null)
             {
                 if (kind == TaskKind.Dealer) dealerRecords.Add(saved);
-                else if (kind == TaskKind.Spcm) spcmRecords.Add(saved);
+                else if (kind == TaskKind.Spcm)
+                {
+                    if (isSpcmUpdate)
+                    {
+                        // Replace in place (by Id), not remove+append - this is a real update,
+                        // not a duplicate.
+                        var idx = spcmRecords.FindIndex(r => r.Id == saved.Id);
+                        if (idx >= 0) spcmRecords[idx] = saved;
+                        else spcmRecords.Add(saved);
+                    }
+                    else
+                    {
+                        spcmRecords.Add(saved);
+                    }
+                }
                 else if (kind == TaskKind.MdProgram) mdProgramRecords.Add(saved);
                 else if (kind == TaskKind.PosLiquidation) posRecords.Add(saved);
             }
@@ -1654,10 +1999,22 @@
             outcome = "Fully Completed";
             remarks = "";
             ResetFileSelection();
+            if (kind == TaskKind.Spcm)
+            {
+                editingSpcmRecordId = null;
+                spcmReceiptNumber = "";
+                spcmAmount = null;
+                spcmPaymentDate = null;
+                spcmTransactionNumber = "";
+                spcmBankName = "";
+                spcmPaymentByName = "";
+                spcmBooksAccountedInFavourOf = "";
+                spcmScreenshotPreviewUrl = null;
+            }
 
             // SPCM/PoS can auto-complete server-side the instant this save pushes the logged
-            // count to the weekly target (see CreateCloseout) - re-sync local state right away
-            // so the form disables itself without waiting for a page reload.
+            // count to the weekly target (see CreateCloseout/UpdateSpcmCloseout) - re-sync local
+            // state right away so the form disables itself without waiting for a page reload.
             if (kind == TaskKind.Spcm || kind == TaskKind.PosLiquidation)
             {
                 var wasClosed = isClosed;

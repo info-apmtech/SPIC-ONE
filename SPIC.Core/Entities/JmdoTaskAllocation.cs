@@ -192,8 +192,19 @@ public class JmdoTaskCloseout
     public string Outcome { get; set; } = string.Empty;
     public string? Remarks { get; set; }
 
-    /// <summary>Kind == Spcm only.</summary>
+    /// <summary>Kind == Spcm only - also doubles as "No. of Books Collected" on the Book
+    /// Collection & Payment Details form.</summary>
     public int? AchievedTarget { get; set; }
+
+    /// <summary>Kind == Spcm only - Book Collection & Payment Details.</summary>
+    public string? ReceiptNumber { get; set; }
+    [System.ComponentModel.DataAnnotations.Schema.Column(TypeName = "numeric(18,2)")]
+    public decimal? Amount { get; set; }
+    public DateTime? PaymentDate { get; set; }
+    public string? TransactionNumber { get; set; }
+    public string? BankName { get; set; }
+    public string? PaymentByName { get; set; }
+    public string? BooksAccountedInFavourOf { get; set; }
 
     /// <summary>Kind == PosLiquidation only.</summary>
     public int? Urea { get; set; }

@@ -316,6 +316,14 @@ namespace SPIC.Core.DTOs
         public string Outcome { get; set; } = "";
         public string? Remarks { get; set; }
         public int? AchievedTarget { get; set; }
+        // Kind == Spcm only - Book Collection & Payment Details.
+        public string? ReceiptNumber { get; set; }
+        public decimal? Amount { get; set; }
+        public DateTime? PaymentDate { get; set; }
+        public string? TransactionNumber { get; set; }
+        public string? BankName { get; set; }
+        public string? PaymentByName { get; set; }
+        public string? BooksAccountedInFavourOf { get; set; }
         public int? Urea { get; set; }
         public int? Nps { get; set; }
         public int? Dap { get; set; }
@@ -326,6 +334,8 @@ namespace SPIC.Core.DTOs
         public List<ProductLineDto> Products { get; set; } = new();
     }
 
+    // Reused as the body for both POST closeouts (create) and PUT closeouts/{id}/spcm (update) -
+    // see JmdoTaskAllocationController.
     public class CreateJmdoTaskCloseoutDto
     {
         public JmdoCloseoutKind Kind { get; set; }
@@ -334,6 +344,14 @@ namespace SPIC.Core.DTOs
         public string Outcome { get; set; } = "";
         public string? Remarks { get; set; }
         public int? AchievedTarget { get; set; }
+        // Kind == Spcm only - Book Collection & Payment Details.
+        public string? ReceiptNumber { get; set; }
+        public decimal? Amount { get; set; }
+        public DateTime? PaymentDate { get; set; }
+        public string? TransactionNumber { get; set; }
+        public string? BankName { get; set; }
+        public string? PaymentByName { get; set; }
+        public string? BooksAccountedInFavourOf { get; set; }
         public int? Urea { get; set; }
         public int? Nps { get; set; }
         public int? Dap { get; set; }
