@@ -381,7 +381,12 @@
         if (d.RMApproved == true && d.SMApproved == null)
             return "In SMM";
         if (d.RMApproved == true && d.SMApproved == true && d.AVPApproved == null)
+        {
+            // New Dealers go to AVP Office after SM approval; Existing Dealers go to AVP.
+            if (d.IsNewDealerRegistration && !d.IsAvpOfficeSubmitted && !d.IsFinalAvpApproved)
+                return "In AVP Office";
             return "In AVP";
+        }
         return "Submitted";
     }
 
@@ -398,7 +403,8 @@
 
         if (LoginState.IsRegionRole && d.RMApproved == null) return true;
         if (LoginState.IsStateRole && d.RMApproved == true && d.SMApproved == null) return true;
-        if (LoginState.IsAdmin && d.RMApproved == true && d.SMApproved == true && d.AVPApproved == null) return true;
+        if (LoginState.IsAdmin && d.RMApproved == true && d.SMApproved == true && d.AVPApproved == null && !d.IsNewDealerRegistration) return true;
+        if (LoginState.IsAvpOffice && d.IsNewDealerRegistration && d.RMApproved == true && d.SMApproved == true && d.AVPApproved == null && !d.IsAvpOfficeSubmitted && !d.IsFinalAvpApproved) return true;
         return false;
     }
 

@@ -1435,7 +1435,13 @@
         }
         if (d.RMApproved == null) return "In RM";
         if (d.RMApproved == true && d.SMApproved == null) return "In SMM";
-        if (d.RMApproved == true && d.SMApproved == true && d.AVPApproved == null) return "In AVP";
+        if (d.RMApproved == true && d.SMApproved == true && d.AVPApproved == null)
+        {
+            // New Dealers go to AVP Office after SM approval; Existing Dealers go to AVP.
+            if (d.IsNewDealerRegistration && !d.IsAvpOfficeSubmitted && !d.IsFinalAvpApproved)
+                return "In AVP Office";
+            return "In AVP";
+        }
         return "Submitted";
     }
 
@@ -1477,7 +1483,13 @@
         // Normal forward flow.
         if (d.RMApproved == null) return OwnerLevel.RM;                                   // In RM
         if (d.RMApproved == true && d.SMApproved == null) return OwnerLevel.SMM;          // In SMM
-        if (d.RMApproved == true && d.SMApproved == true && d.AVPApproved == null) return OwnerLevel.AVP; // In AVP
+        if (d.RMApproved == true && d.SMApproved == true && d.AVPApproved == null)
+        {
+            // New Dealers go to AVP Office after SM approval; Existing Dealers go to AVP.
+            if (d.IsNewDealerRegistration && !d.IsAvpOfficeSubmitted && !d.IsFinalAvpApproved)
+                return OwnerLevel.AvpOffice;
+            return OwnerLevel.AVP; // In AVP
+        }
 
         return OwnerLevel.None;
     }
