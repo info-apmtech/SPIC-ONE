@@ -492,7 +492,11 @@
                         <div class="gb-kv"><span class="gb-kv-label">Subtotal</span><span class="gb-kv-value">@FormatMoney(Subtotal)</span></div>
                         <div class="gb-kv"><span class="gb-kv-label">CGST</span><span class="gb-kv-value">@FormatMoney(CgstTotal)</span></div>
                         <div class="gb-kv"><span class="gb-kv-label">SGST</span><span class="gb-kv-value">@FormatMoney(SgstTotal)</span></div>
-                        <div class="gb-kv"><span class="gb-kv-label">Grand Total</span><span class="gb-kv-value gb-total">@FormatMoney(GrandTotal)</span></div>
+                        <div class="gb-kv"><span class="gb-kv-label">Gross Amount</span><span class="gb-kv-value">@FormatMoney(GrandTotal)</span></div>
+                        <div class="gb-kv"><span class="gb-kv-label">Discount</span><span class="gb-kv-value">@FormatMoney(EffectiveDiscount)</span></div>
+                        <div class="gb-kv"><span class="gb-kv-label">Round Off</span><span class="gb-kv-value">@SignedMoney(Calc.RoundOff)</span></div>
+                        <div class="gb-kv"><span class="gb-kv-label">Grand Total</span><span class="gb-kv-value gb-total">@FormatMoney(Calc.RoundedPayable)</span></div>
+                        <div class="gb-kv"><span class="gb-kv-label">Advance Payment</span><span class="gb-kv-value">@FormatMoney(EffectiveAdvance)</span></div>
                     </div>
                     <div class="gb-right-col">
                         <div>
@@ -501,11 +505,11 @@
                         </div>
                         <div>
                             <label class="gb-label">Advance Payment</label>
-                            <input class="gb-input" type="number" step="0.01" min="0" @bind="_advance" />
+                            <input class="gb-input" type="text" readonly value="@FormatMoney(EffectiveAdvance)" title="Verified payments received for this booking. Cannot be edited here." />
                         </div>
                         <div>
                             <label class="gb-label">Round Off</label>
-                            <input class="gb-input" type="number" step="0.01" @bind="_roundOff" />
+                            <input class="gb-input" type="text" readonly value="@SignedMoney(EffectiveRoundOff)" title="Calculated automatically (nearest rupee)." />
                         </div>
                         <div>
                             <label class="gb-label">Payment Method</label>
@@ -667,8 +671,9 @@
                                     <td class="inv-r inv-strong">@InvAmt(_viewBill.TotalAmount)</td>
                                 </tr>
                                 @if (_viewBill.Discount != 0) { <tr><td class="inv-lbl">Discount (in Rs.)</td><td class="inv-r">@InvAmt(_viewBill.Discount)</td></tr> }
+                                @if (_viewBill.RoundOff != 0) { <tr><td class="inv-lbl">Round Off (in Rs.)</td><td class="inv-r">@((_viewBill.RoundOff < 0 ? "-" : "+") + InvAmt(Math.Abs(_viewBill.RoundOff)))</td></tr> }
+                                @if (_viewBill.Discount != 0 || _viewBill.RoundOff != 0) { <tr><td class="inv-lbl">Grand Total (in Rs.)</td><td class="inv-r inv-strong">@InvAmt(_viewBill.TotalAmount - _viewBill.Discount + _viewBill.RoundOff)</td></tr> }
                                 @if (_viewBill.AdvancePayment != 0) { <tr><td class="inv-lbl">Advance Payment (in Rs.)</td><td class="inv-r">@InvAmt(_viewBill.AdvancePayment)</td></tr> }
-                                @if (_viewBill.RoundOff != 0) { <tr><td class="inv-lbl">Round Off (in Rs.)</td><td class="inv-r">@InvAmt(_viewBill.RoundOff)</td></tr> }
                                 <tr>
                                     <td class="inv-lbl">Balance Amount (in Rs.)</td>
                                     <td class="inv-r inv-strong inv-navy">@InvAmt(_viewBill.BalanceAmount)</td>
@@ -791,11 +796,14 @@
     private decimal CgstTotal => _billItems.Sum(l => l.CgstAmount);
     private decimal SgstTotal => _billItems.Sum(l => l.SgstAmount);
     private decimal GrandTotal => Subtotal + CgstTotal + SgstTotal;
-    private decimal Balance => GrandTotal - (_discount ?? 0) - (_advance ?? 0) + (_roundOff ?? 0);
+    // One calculation (SPIC.Core GuestHouseBillMath, shared with the API, which is authoritative):
+    // payable = nearest rupee of (gross - discount); round off = payable - (gross - discount); balance = payable - verified advance.
+    private SPIC.Core.Billing.GuestHouseBillMath.Result Calc => SPIC.Core.Billing.GuestHouseBillMath.Compute(GrandTotal, EffectiveDiscount, EffectiveAdvance);
+    private decimal Balance => Calc.Balance;
 
     private decimal EffectiveDiscount => Math.Max(0, _discount ?? 0);
     private decimal EffectiveAdvance => Math.Max(0, _advance ?? 0);
-    private decimal EffectiveRoundOff => _roundOff ?? 0;
+    private decimal EffectiveRoundOff => Calc.RoundOff;
 
     private string? BillingValidationMessage
     {
@@ -1245,7 +1253,7 @@
                     }).ToList(),
                 Discount = _discount,
                 AdvancePayment = _advance,
-                RoundOff = _roundOff,
+                RoundOff = EffectiveRoundOff,
                 PaymentReceived = _paymentReceived,
                 PaymentMethod = _paymentMethod,
                 Remarks = string.IsNullOrWhiteSpace(_remarks) ? null : _remarks
@@ -1302,6 +1310,7 @@
     private static string FormatDateWithTime(DateTime? value) => value?.ToString("dd MMM yyyy hh:mm tt") ?? "-";
     private static string FormatDateOnly(DateTime value) => value.ToString("dd MMM yyyy", CultureInfo.InvariantCulture);
     private string FormatMoney(decimal value) => "₹" + value.ToString("N2", _ci);
+    private string SignedMoney(decimal value) => (value < 0 ? "-" : "+") + "₹" + Math.Abs(value).ToString("N2", _ci);
     private static string FormatBillDate(DateTime? value) => value.HasValue ? value.Value.ToString("dd MMM yyyy", CultureInfo.InvariantCulture) : "-";
 
     // ---- DataTable export columns (LocationMaster's SpicDataTable Copy/CSV/Excel/PDF/Print) ----

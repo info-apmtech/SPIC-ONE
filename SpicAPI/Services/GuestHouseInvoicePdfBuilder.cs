@@ -214,16 +214,24 @@ namespace SpicAPI.Services
                     table.Cell().Element(InfoValueCell).AlignRight().Text(bill.Discount.ToString("0.00"));
                 }
 
+                if (bill.RoundOff != 0)
+                {
+                    table.Cell().Element(InfoLabelCell).Text("Round Off (in Rs.)");
+                    table.Cell().Element(InfoValueCell).AlignRight().Text(bill.RoundOff.ToString("+0.00;-0.00"));
+                }
+
+                // Grand Total after Discount and Round Off (derived from the saved values; the same
+                // identity every stored bill satisfies: Balance = Total - Discount + RoundOff - Advance).
+                if (bill.Discount != 0 || bill.RoundOff != 0)
+                {
+                    table.Cell().Element(InfoLabelCell).Text("Grand Total (in Rs.)").Bold();
+                    table.Cell().Element(InfoValueCell).AlignRight().Text((bill.TotalAmount - bill.Discount + bill.RoundOff).ToString("0.00")).Bold();
+                }
+
                 if (bill.AdvancePayment != 0)
                 {
                     table.Cell().Element(InfoLabelCell).Text("Advance Payment (in Rs.)");
                     table.Cell().Element(InfoValueCell).AlignRight().Text(bill.AdvancePayment.ToString("0.00"));
-                }
-
-                if (bill.RoundOff != 0)
-                {
-                    table.Cell().Element(InfoLabelCell).Text("Round Off (in Rs.)");
-                    table.Cell().Element(InfoValueCell).AlignRight().Text(bill.RoundOff.ToString("0.00"));
                 }
 
                 table.Cell().Element(InfoLabelCell).Text("Balance Amount (in Rs.)").Bold();
