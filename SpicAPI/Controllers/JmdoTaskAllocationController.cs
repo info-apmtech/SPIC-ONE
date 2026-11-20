@@ -1732,6 +1732,15 @@ public class JmdoTaskAllocationController : ControllerBase
         if (dto.RequestedDate.Date < DateTime.Today)
             return BadRequest(new { Success = false, Message = "Cannot postpone to a past date." });
 
+        if (row.PlannedDate.HasValue)
+        {
+            if (dto.RequestedDate.Date == row.PlannedDate.Value.Date)
+                return BadRequest(new { Success = false, Message = "Cannot postpone to the same scheduled date." });
+
+            if (row.PlannedDate.Value.Date > DateTime.Today && dto.RequestedDate.Date < row.PlannedDate.Value.Date)
+                return BadRequest(new { Success = false, Message = "Cannot postpone a future visit to an earlier date." });
+        }
+
         if (string.IsNullOrWhiteSpace(dto.Reason))
             return BadRequest(new { Success = false, Message = "A reason is required." });
 
@@ -2220,6 +2229,7 @@ public class JmdoTaskAllocationController : ControllerBase
                 DealerName = d.DealerName,
                 DealerCode = d.DealerCode,
                 Day = d.PlannedDay,
+                PlannedDate = d.PlannedDate,
                 Status = d.Status,
                 StartedAt = d.StartedAt,
                 CompletedAt = d.CompletedAt,

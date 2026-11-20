@@ -1257,6 +1257,7 @@
         if (status == AllocTaskStatus.InProgress)
         {
             isStarted = true;
+            isClosed = false;
             var idx = TimelineSteps.FindIndex(s => s.Label == "Started");
             if (idx >= 0) TimelineSteps[idx] = TimelineSteps[idx] with { SubLabel = "Time & GPS logged", Done = true };
 
@@ -1289,6 +1290,8 @@
         {
             isStarted = true;
             isClosed = true;
+            StopTimer();
+
             var idx1 = TimelineSteps.FindIndex(s => s.Label == "Started");
             if (idx1 >= 0) TimelineSteps[idx1] = TimelineSteps[idx1] with { SubLabel = "Time & GPS logged", Done = true };
             var idx2 = TimelineSteps.FindIndex(s => s.Label == "Closed");
@@ -1302,7 +1305,16 @@
             {
                 elapsedSeconds = Math.Max(0, (int)(completed - started).TotalSeconds);
             }
-            else if (completedAt is null)
+            else if (startedAt is { } startedOnly)
+            {
+                elapsedSeconds = Math.Max(0, (int)(DateTime.Now - startedOnly).TotalSeconds);
+            }
+            else
+            {
+                elapsedSeconds = 0;
+            }
+
+            if (completedAt is null)
             {
                 var key = TaskKey;
                 try
@@ -1315,6 +1327,13 @@
                     Console.WriteLine($"Backfilling CompletedAt failed: {ex.Message}");
                 }
             }
+        }
+        else
+        {
+            isStarted = false;
+            isClosed = false;
+            StopTimer();
+            elapsedSeconds = 0;
         }
     }
 
@@ -1461,6 +1480,27 @@
     private string? capturedPlaceName;
     private int elapsedSeconds;
     private System.Timers.Timer? timer;
+    private readonly object timerLock = new();
+
+    private void StopTimer()
+    {
+        lock (timerLock)
+        {
+            if (timer != null)
+            {
+                try
+                {
+                    timer.Stop();
+                    timer.Dispose();
+                }
+                catch { }
+                finally
+                {
+                    timer = null;
+                }
+            }
+        }
+    }
 
     private sealed class GeoResult
     {
@@ -1505,7 +1545,20 @@
         }
     }
 
-    private string ElapsedDisplay => TimeSpan.FromSeconds(elapsedSeconds).ToString(@"mm\:ss");
+    private string ElapsedDisplay
+    {
+        get
+        {
+            if (elapsedSeconds <= 0) return "00:00";
+            var ts = TimeSpan.FromSeconds(elapsedSeconds);
+            var totalHours = (int)ts.TotalHours;
+            if (totalHours > 0)
+            {
+                return $"{totalHours:D2}:{ts.Minutes:D2}:{ts.Seconds:D2}";
+            }
+            return ts.ToString(@"mm\:ss");
+        }
+    }
 
     // SPCM/PoS are weekly count targets, not a single visit - these surface "how much is left"
     // so the JMDO can see progress before saving, instead of finding out only when a save is
@@ -1613,32 +1666,40 @@
         }
 
         isStarted = true;
+        isClosed = false;
 
         var idx = TimelineSteps.FindIndex(s => s.Label == "Started");
         if (idx >= 0) TimelineSteps[idx] = TimelineSteps[idx] with { SubLabel = "Time & GPS logged", Done = true };
 
+        elapsedSeconds = 0;
         StartTimer();
 
         Toast.Success("Task started - time and location are now being logged.");
     }
 
     // Shared by StartTask() (fresh start) and ApplyStatusFromAllocation (resuming a task
-    // that was already InProgress in the DB from an earlier session) - without this, a
-    // page reload/re-login on an in-progress task left isStarted=true but no timer ever
-    // running, so "Time on task" stayed frozen at 00:00 even though it was still active.
-    // There's no persisted start timestamp, so this counts from 0 on resume rather than
-    // recovering the true original elapsed time.
+    // that was already InProgress in the DB from an earlier session).
     private void StartTimer()
     {
-        if (timer != null) return;
+        if (isClosed) return;
 
-        timer = new System.Timers.Timer(1000) { AutoReset = true };
-        timer.Elapsed += (_, _) =>
+        lock (timerLock)
         {
-            elapsedSeconds++;
-            InvokeAsync(StateHasChanged);
-        };
-        timer.Start();
+            if (isClosed || timer != null) return;
+
+            timer = new System.Timers.Timer(1000) { AutoReset = true };
+            timer.Elapsed += (_, _) =>
+            {
+                if (isClosed)
+                {
+                    StopTimer();
+                    return;
+                }
+                elapsedSeconds++;
+                _ = InvokeAsync(StateHasChanged);
+            };
+            timer.Start();
+        }
     }
 
     private bool showStopConfirm;
@@ -1688,7 +1749,7 @@
 
         isStarted = false;
         isClosed = true;
-        timer?.Stop();
+        StopTimer();
         Toast.Success("Task stopped and closed.");
 
         var idx = TimelineSteps.FindIndex(s => s.Label == "Closed");
@@ -2052,7 +2113,6 @@
 
     public void Dispose()
     {
-        timer?.Stop();
-        timer?.Dispose();
+        StopTimer();
     }
 }

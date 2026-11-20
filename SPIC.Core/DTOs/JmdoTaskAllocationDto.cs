@@ -32,6 +32,7 @@ namespace SPIC.Core.DTOs
         public string DealerName { get; set; } = "";
         public string DealerCode { get; set; } = "";
         public DayOfWeek? Day { get; set; }
+        public DateTime? PlannedDate { get; set; }
         public AllocTaskStatus Status { get; set; }
         public DateTime? StartedAt { get; set; }
         public DateTime? CompletedAt { get; set; }
