@@ -39,6 +39,16 @@ namespace SPIC.Core.DTOs
         // Set by the MDO during review, not by the JMDO at submission - optional, defaults to Normal.
         public DealerTaskPriority Priority { get; set; }
 
+        /// <summary>JmdoTaskAllocationDealer.Id - the specific row, unlike DealerId (EffectiveDealerId)
+        /// which is ambiguous if the same dealer is scheduled more than once in a week. This is what
+        /// the postpone-request endpoints key on.</summary>
+        public int RowId { get; set; }
+
+        /// <summary>Non-null only while a postpone request for this row is Pending - lets the UI show
+        /// a "Postpone Requested" badge instead of the normal Start/Stop action.</summary>
+        public int? PendingPostponeRequestId { get; set; }
+        public DateTime? PendingPostponeRequestedDate { get; set; }
+
         // Resolved from this dealer's own Excel-upload transaction history (DptReport/
         // SalesCompanySale/SalesWholesaler/WholesalerStockAsOnToday/SalesAndReceipt), matched by
         // DealerRegistrationId - null when this dealer has no matching upload history yet.
@@ -231,6 +241,60 @@ namespace SPIC.Core.DTOs
         // the status change, so the server can cache it next to StartedAt - only meaningful when
         // Status is InProgress.
         public string? PlaceName { get; set; }
+    }
+
+    // Request body for POST api/JmdoTaskAllocation/postpone-requests - a JMDO asking to move
+    // one dealer visit to a different date (possibly a different week), pending MDO approval.
+    public class CreatePostponeRequestDto
+    {
+        public int DealerRowId { get; set; }
+        public DateTime RequestedDate { get; set; }
+        public string Reason { get; set; } = "";
+    }
+
+    // Request body for the Approve endpoint - ApprovedDate lets the MDO pin a different date
+    // than what the JMDO originally requested, same "reviewer can adjust before confirming"
+    // precedent as UpdateDealerPlannedDateDto; null means "use the JMDO's own RequestedDate".
+    public class ReviewPostponeRequestDto
+    {
+        public DateTime? ApprovedDate { get; set; }
+        public string? ReviewRemarks { get; set; }
+    }
+
+    public class RejectPostponeRequestDto
+    {
+        public string? ReviewRemarks { get; set; }
+    }
+
+    // One row on the MDO's "Postpone Requests" tab (AllocationRequests.razor) or the JMDO's own
+    // postpone history list.
+    public class PostponeRequestRowDto
+    {
+        public int Id { get; set; }
+        public int DealerRowId { get; set; }
+        public int DealerId { get; set; } // EffectiveDealerId, display only
+        public string DealerName { get; set; } = "";
+        public string DealerCode { get; set; } = "";
+        public string JmdoName { get; set; } = "";
+        public string? JmdoCode { get; set; }
+        public string? Location { get; set; }
+        public DayOfWeek? OriginalPlannedDay { get; set; }
+        public DateTime? OriginalPlannedDate { get; set; }
+        // The visit's CURRENT execution status (not the postpone request's own Status below) -
+        // lets the reviewer see e.g. "InProgress" so they know real progress is on the line.
+        public AllocTaskStatus DealerTaskStatus { get; set; }
+        public DateTime RequestedDate { get; set; }
+        public string Reason { get; set; } = "";
+        public DateTime RequestedAt { get; set; }
+        public string Status { get; set; } = ""; // PostponeRequestStatus as a string
+        public DateTime? ReviewedAt { get; set; }
+        public string? ReviewRemarks { get; set; }
+        public DateTime? ApprovedDate { get; set; }
+        // Null when the target week's own allocation doesn't exist yet (a fresh Approved one will
+        // be auto-provisioned on approval - always actionable) or when the request would stay
+        // within the same week (no target allocation to report on). "Pending" here means the
+        // reviewer should approve THAT allocation first - Approve blocks outright in that case.
+        public string? TargetWeekAllocationStatus { get; set; }
     }
 
     public class ProductLineDto
