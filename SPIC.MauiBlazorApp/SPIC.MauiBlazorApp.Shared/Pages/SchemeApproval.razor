@@ -7,18 +7,35 @@
 <style>
     /* Role-wise approval flow indicator (MO → RM → SM → AVP) — visual only */
     .ap-flow {
-        display: inline-flex;
-        align-items: flex-start;
-        gap: 0;
-        white-space: nowrap;
+        display: inline-grid;
+        grid-template-columns: repeat(5, 92px);
+        align-items: start;
     }
 
     .ap-flow-step {
+        position: relative;
         display: flex;
         flex-direction: column;
         align-items: center;
-        gap: 3px;
-        min-width: 26px;
+        gap: 6px;
+        width: 92px;
+        padding: 0 3px;
+        box-sizing: border-box;
+    }
+
+    /* Connector: runs from this stage's icon to the next stage's icon */
+    .ap-flow-step:not(:last-child)::after {
+        content: "";
+        position: absolute;
+        top: 10px;
+        left: calc(50% + 15px);
+        width: calc(100% - 30px);
+        height: 2px;
+        background: #E2E8F0;
+    }
+
+    .ap-flow-step-done:not(:last-child)::after {
+        background: #16A34A;
     }
 
     .ap-flow-node {
@@ -99,20 +116,12 @@
     }
 
     .ap-flow-label {
-        font-size: 0.58rem;
+        font-size: 0.7rem;
         font-weight: 600;
         color: #1f2937;
-    }
-
-    .ap-flow-link {
-        width: 14px;
-        height: 2px;
-        margin-top: 10px;
-        background: #E2E8F0;
-    }
-
-    .ap-flow-link-done {
-        background: #16A34A;
+        text-align: center;
+        line-height: 1.25;
+        overflow-wrap: anywhere;
     }
 </style>
 
@@ -169,7 +178,7 @@
     {
 
     <!-- STATS -->
-    <div class="ap-stats-grid">
+    <div class="ap-stats-grid" data-help="wf-ap-cards">
 
         <!-- Purple — Total Applications -->
         <div class="ap-stat-card ap-stat-purple">
@@ -251,7 +260,7 @@
 
     </div>
 
-    <div class="ap-tabs-row">
+    <div class="ap-tabs-row" data-help="wf-ap-tabs">
         @foreach (var t in _page.Tabs)
         {
             var key = t.Key;
@@ -263,7 +272,7 @@
 
         <div class="ap-table-header">
             <h3>@GetTableTitle()</h3>
-            <div class="ap-table-controls">
+            <div class="ap-table-controls" data-help="wf-ap-search">
                 <div class="ap-search-wrap">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <circle cx="11" cy="11" r="8" />
@@ -281,18 +290,18 @@
             </div>
         </div>
 
-        <div class="ap-table-wrap">
-            <table class="ap-table">
+            <div class="ap-table-wrap" data-help="wf-ap-table">
+            <table class="ap-table ap-table-approval">
                 <colgroup>
-                    <col style="width: 10%;" />
-                    <col style="width: 9%;" />
-                    <col style="width: 13%;" />
-                    <col style="width: 14%;" />
-                    <col style="width: 12%;" />
-                    <col style="width: 11%;" />
-                    <col style="width: 8%;" />
-                    <col style="width: 17%;" />
-                    <col style="width: 6%;" />
+                    <col style="width: 170px;" />
+                    <col style="width: 120px;" />
+                    <col style="width: 180px;" />
+                    <col style="width: 150px;" />
+                    <col style="width: 140px;" />
+                    <col style="width: 120px;" />
+                    <col style="width: 150px;" />
+                    <col style="width: 480px;" />
+                    <col style="width: 70px;" />
                 </colgroup>
                 <thead>
                     <tr>
@@ -303,7 +312,7 @@
                         <th>Beneficiary</th>
                         <th>Submitted Date</th>
                         <th>Status</th>
-                        <th>Approval Flow (MO → RM → SM → SDWA → SDWA Admin)</th>
+                        <th>Approval Flow (MO → RM → SM → DGM - MD&CS → SDWA Admin)</th>
                         <th>Action</th>
                     </tr>
                 </thead>
@@ -311,8 +320,8 @@
                     @foreach (var app in PagedApplications())
                     {
                         <tr>
-                            <td>@(app.ApplicationNumber ?? "-")</td>
-                            <td>@(app.DealerCode ?? "-")</td>
+                            <td title="@app.ApplicationNumber">@(app.ApplicationNumber ?? "-")</td>
+                            <td title="@app.DealerCode">@(app.DealerCode ?? "-")</td>
                             <td>
                                 <div class="ap-dealer-cell">
                                     <img src="_content/SPIC.MauiBlazorApp.Shared/Images/Gallery/Profile1.png" style="width: 24px; height: 24px; border-radius: 50%;" />
@@ -382,7 +391,7 @@
                 }
             }
         </div>
-        <div class="ap-pagination">
+        <div class="ap-pagination" data-help="wf-ap-pages">
             <div class="ap-page-size">
                 <span>Items Per Page</span>
                 <select class="ap-select-sm" @bind="_pageSize">
@@ -440,7 +449,7 @@
             @for (var i = 0; i < flowSteps.Count; i++)
             {
                 var step = flowSteps[i];
-                <div class="ap-flow-step">
+                <div class="ap-flow-step@(step.State == FlowState.Done ? " ap-flow-step-done" : "")">
                     <div class="@GetFlowNodeClass(step.State)">
                         @if (step.State == FlowState.Done)
                         {
@@ -452,15 +461,11 @@
                         }
                         else
                         {
-                            @step.Code
+                            @(i + 1)
                         }
                     </div>
-                    <div class="ap-flow-label">@step.Code</div>
+                    <div class="ap-flow-label">@FlowLabel(step.Code)</div>
                 </div>
-                @if (i < flowSteps.Count - 1)
-                {
-                    <div class="@(step.State == FlowState.Done ? "ap-flow-link ap-flow-link-done" : "ap-flow-link")"></div>
-                }
             }
         </div>
     };
@@ -472,7 +477,7 @@
     private string StageLabel => loginState.CanAccess(PagePermission.SDWAAdmin)
         ? "SDWA Admin"
         : loginState.CanAccess(PagePermission.SDWA)
-            ? "SDWA"
+            ? "DGM - MD&CS"
             : loginState.UserRole switch
             {
                 AppRole.MO => "MO",
@@ -590,6 +595,8 @@
 
     private sealed record ApprovalFlowStep(string Code, FlowState State);
 
+    private static string FlowLabel(string code) => code == "SDWA" ? "DGM - MD&CS" : code;
+
     private static readonly (string Code, int Index)[] FlowStageOrder =
         { ("MO", 0), ("RM", 1), ("SM", 2), ("SDWA", 3), ("SDWA Admin", 4) };
 
@@ -630,7 +637,7 @@
     private string GetFlowSummary(WelfareApprovalApplicationDto app)
     {
         if (app.Status == 5)
-            return "Approved by all levels (MO → RM → SM → SDWA → SDWA Admin)";
+            return "Approved by all levels (MO → RM → SM → DGM - MD&CS → SDWA Admin)";
 
         var rejection = app.Approvals?
             .Where(a => string.Equals(a.ApprovalStatus, "Rejected", StringComparison.OrdinalIgnoreCase))
@@ -649,7 +656,7 @@
             1 or 2 => "Pending at MO",
             3 => "Pending at RM",
             4 => "Pending at SM",
-            8 => "Pending at SDWA",
+            8 => "Pending at DGM - MD&CS",
             10 => "Pending at SDWA Admin",
             _ => "Approval flow"
         };

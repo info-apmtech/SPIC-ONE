@@ -17,13 +17,13 @@
         <style>
             .cp-wrapper * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
             .cp-modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.4); display: flex; align-items: center; justify-content: center; padding: 1rem; z-index: 1055; }
-            .cp-modal-content { background-color: #ffffff; width: 100%; max-width: 720px; border-radius: 12px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12); display: flex; flex-direction: column; }
-            .cp-modal-header { display: flex; justify-content: space-between; align-items: flex-start; padding: 18px 28px 10px; }
+            .cp-modal-content { background-color: #ffffff; width: 100%; max-width: 720px; max-height: calc(100vh - 2rem); border-radius: 12px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12); display: flex; flex-direction: column; overflow: hidden; }
+            .cp-modal-header { display: flex; justify-content: space-between; align-items: flex-start; padding: 18px 28px 10px; flex: 0 0 auto; }
             .cp-modal-title { font-size: 1.2rem; font-weight: 700; color: #1f2937; margin-bottom: 4px; }
             .cp-modal-subtitle { font-size: 0.85rem; color: #1f2937; }
             .cp-btn-close { background: transparent; border: none; color: #1f2937; cursor: pointer; padding: 2px; display: flex; align-items: center; justify-content: center; transition: color 0.2s; border-radius: 6px; }
             .cp-btn-close:hover { color: #374151; background: #f3f4f6; }
-            .cp-modal-body { padding: 0 28px; }
+            .cp-modal-body { padding: 0 28px; flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
             .cp-section-title { font-size: 0.85rem; font-weight: 600; color: #374151; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.4px; }
             .cp-optional-text { font-weight: 400; color: #1f2937; font-size: 0.8rem; text-transform: none; letter-spacing: 0; }
             .cp-summary-section { margin-bottom: 16px; }
@@ -60,7 +60,7 @@
             .cp-remarks-history li { font-size: 0.8rem; color: #4b5563; padding: 5px 0; }
             .cp-remarks-history li + li { border-top: 1px solid #e5e7eb; }
             .cp-remarks-history strong { color: #1f2937; }
-            .cp-modal-footer { display: flex; justify-content: flex-end; gap: 12px; padding: 12px 28px 18px; }
+            .cp-modal-footer { display: flex; justify-content: flex-end; gap: 12px; padding: 12px 28px 18px; flex: 0 0 auto; }
             .cp-btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 18px; border-radius: 6px; font-size: 0.85rem; font-weight: 500; cursor: pointer; transition: all 0.2s; }
             .cp-btn-cancel { background-color: #ffffff; border: 1px solid #d1d5db; color: #4b5563; }
             .cp-btn-cancel:hover { background-color: #f9fafb; color: #1f2937; }
@@ -80,7 +80,7 @@
                             <p class="cp-modal-subtitle">
                                 @if (IsAvpOfficeMode)
                                 {
-                                    <text>Enter both company Dealer IDs. The application will be forwarded to AVP for final approval.</text>
+                                    <text>@AvpOfficeSubtitle</text>
                                 }
                                 else if (IsFinalAvpMode)
                                 {
@@ -155,32 +155,59 @@
                         {
                             <section class="cp-code-section">
                                 <h2 class="cp-section-title">
-                                    @(IsAvpOfficeMode ? "Company Dealer IDs" : "Dealer IDs Submitted by AVP Office")
+                                    @(IsAvpOfficeMode ? "AVP Office Dealer Codes" : "Dealer Codes Submitted by AVP Office")
                                 </h2>
-                                <div class="cp-code-row">
+
+                                @if (IsAvpOfficeMode)
+                                {
+                                    <div class="cp-code-row">
+                                        <div class="cp-code-field" style="flex: 1 1 100%;">
+                                            <label>Customer / Dealer Code *</label>
+                                            <input class="cp-code-input" maxlength="50" value="@DealerCodeValue" @oninput="OnDealerCodeInput" placeholder="Enter Customer / Dealer Code" />
+                                        </div>
+                                    </div>
+
+                                    <div class="cp-code-row" style="margin-top: 8px; align-items: center;">
+                                        <label style="display:flex; align-items:center; gap:8px; font-weight:500;">
+                                            <input type="checkbox" checked="@SelectSpicValue" @onchange="OnSpicSelectionChanged" />
+                                            SPIC
+                                        </label>
+                                        <label style="display:flex; align-items:center; gap:8px; font-weight:500;">
+                                            <input type="checkbox" checked="@SelectGflValue" @onchange="OnGflSelectionChanged" />
+                                            GFL / GreenStar
+                                        </label>
+                                    </div>
+                                }
+
+                                <div class="cp-code-row" style="margin-top: @(IsAvpOfficeMode ? "10px" : "0");">
                                     <div class="cp-code-field">
-                                        <label>SPIC Dealer ID @(IsAvpOfficeMode ? "*" : "")</label>
+                                        <label>SPIC Code @(IsAvpOfficeMode && SelectSpicValue ? "*" : "")</label>
                                         @if (IsAvpOfficeMode)
                                         {
-                                            <input class="cp-code-input" maxlength="50" @bind="SpicValue" placeholder="Enter SPIC Dealer ID" />
+                                            <input class="cp-code-input" maxlength="50" @bind="SpicValue" @bind:event="oninput" placeholder="@(SelectSpicValue ? "Enter SPIC Code (e.g. D + Dealer Code)" : "Not selected")" disabled="@(!SelectSpicValue)" />
                                         }
                                         else
                                         {
-                                            <input class="cp-code-input" value="@SpicValue" readonly />
+                                            <input class="cp-code-input" value="@(SelectSpicValue && !string.IsNullOrWhiteSpace(SpicValue) ? SpicValue : "-")" readonly />
                                         }
                                     </div>
                                     <div class="cp-code-field">
-                                        <label>GFL Dealer ID @(IsAvpOfficeMode ? "*" : "")</label>
+                                        <label>GFL Code @(IsAvpOfficeMode && SelectGflValue ? "*" : "")</label>
                                         @if (IsAvpOfficeMode)
                                         {
-                                            <input class="cp-code-input" maxlength="50" @bind="GflValue" placeholder="Enter GFL Dealer ID" />
+                                            <input class="cp-code-input" maxlength="50" @bind="GflValue" @bind:event="oninput" placeholder="@(SelectGflValue ? "Enter GFL Code (e.g. Z + Dealer Code)" : "Not selected")" disabled="@(!SelectGflValue)" />
                                         }
                                         else
                                         {
-                                            <input class="cp-code-input" value="@GflValue" readonly />
+                                            <input class="cp-code-input" value="@(SelectGflValue && !string.IsNullOrWhiteSpace(GflValue) ? GflValue : "-")" readonly />
                                         }
                                     </div>
                                 </div>
+
+                                @if (IsAvpOfficeMode)
+                                {
+                                    <div class="cp-code-help">SPIC and GFL codes are prefilled with D/Z + Dealer Code and remain editable. Only selected company codes are required.</div>
+                                }
 
                                 @if (IsFinalAvpMode && !string.IsNullOrWhiteSpace(AvpOfficeRemarks))
                                 {
@@ -220,14 +247,14 @@
         {
             <div class="cp-credit-field">
                 <label>RM Credit Limit (SPIC)</label>
-                <input type="number" step="0.01" @bind="RmSpic" placeholder="Enter RM Credit Limit (SPIC)" />
+                <input type="number" step="0.01" class="cp-code-input" @bind="RmSpic" placeholder="Enter RM Credit Limit (SPIC)" />
             </div>
         }
         @if (ShowGreenstarCreditLimit)
         {
             <div class="cp-credit-field">
                 <label>RM Credit Limit (GFL)</label>
-                <input type="number" step="0.01" @bind="RmGfl" placeholder="Enter RM Credit Limit (GFL)" />
+                <input type="number" step="0.01" class="cp-code-input" @bind="RmGfl" placeholder="Enter RM Credit Limit (GFL)" />
             </div>
         }
     </section>
@@ -243,28 +270,28 @@
         {
             <div class="cp-credit-field">
                 <label>RM Credit Limit (SPIC) (Approved)</label>
-                <div class="cp-credit-readonly">₹ @rmSpicApproval.RmCreditLimit.Value.ToString("N2")</div>
+                <div class="cp-code-input cp-credit-readonly">₹ @rmSpicApproval.RmCreditLimit.Value.ToString("N2")</div>
             </div>
         }
         @if (ShowGreenstarCreditLimit && rmGflApproval?.RmCreditLimitGfl.HasValue == true)
         {
             <div class="cp-credit-field">
                 <label>RM Credit Limit (GFL) (Approved)</label>
-                <div class="cp-credit-readonly">₹ @rmGflApproval.RmCreditLimitGfl.Value.ToString("N2")</div>
+                <div class="cp-code-input cp-credit-readonly">₹ @rmGflApproval.RmCreditLimitGfl.Value.ToString("N2")</div>
             </div>
         }
         @if (ShowSpicCreditLimit)
         {
             <div class="cp-credit-field">
                 <label>SM Credit Limit (SPIC)</label>
-                <input type="number" step="0.01" @bind="SmSpic" placeholder="Enter SM Credit Limit (SPIC)" />
+                <input type="number" step="0.01" class="cp-code-input" @bind="SmSpic" placeholder="Enter SM Credit Limit (SPIC)" />
             </div>
         }
         @if (ShowGreenstarCreditLimit)
         {
             <div class="cp-credit-field">
                 <label>SM Credit Limit (GFL)</label>
-                <input type="number" step="0.01" @bind="SmGfl" placeholder="Enter SM Credit Limit (GFL)" />
+                <input type="number" step="0.01" class="cp-code-input" @bind="SmGfl" placeholder="Enter SM Credit Limit (GFL)" />
             </div>
         }
     </section>
@@ -282,42 +309,42 @@
         {
             <div class="cp-credit-field">
                 <label>RM Credit Limit (SPIC) (Approved)</label>
-                <div class="cp-credit-readonly">₹ @rmSpicApproval.RmCreditLimit.Value.ToString("N2")</div>
+                <div class="cp-code-input cp-credit-readonly">₹ @rmSpicApproval.RmCreditLimit.Value.ToString("N2")</div>
             </div>
         }
         @if (ShowGreenstarCreditLimit && rmGflApproval?.RmCreditLimitGfl.HasValue == true)
         {
             <div class="cp-credit-field">
                 <label>RM Credit Limit (GFL) (Approved)</label>
-                <div class="cp-credit-readonly">₹ @rmGflApproval.RmCreditLimitGfl.Value.ToString("N2")</div>
+                <div class="cp-code-input cp-credit-readonly">₹ @rmGflApproval.RmCreditLimitGfl.Value.ToString("N2")</div>
             </div>
         }
         @if (ShowSpicCreditLimit && smSpicApproval?.SmCreditLimit.HasValue == true)
         {
             <div class="cp-credit-field">
                 <label>SM Credit Limit (SPIC) (Approved)</label>
-                <div class="cp-credit-readonly">₹ @smSpicApproval.SmCreditLimit.Value.ToString("N2")</div>
+                <div class="cp-code-input cp-credit-readonly">₹ @smSpicApproval.SmCreditLimit.Value.ToString("N2")</div>
             </div>
         }
         @if (ShowGreenstarCreditLimit && smGflApproval?.SmCreditLimitGfl.HasValue == true)
         {
             <div class="cp-credit-field">
                 <label>SM Credit Limit (GFL) (Approved)</label>
-                <div class="cp-credit-readonly">₹ @smGflApproval.SmCreditLimitGfl.Value.ToString("N2")</div>
+                <div class="cp-code-input cp-credit-readonly">₹ @smGflApproval.SmCreditLimitGfl.Value.ToString("N2")</div>
             </div>
         }
         @if (ShowSpicCreditLimit)
         {
             <div class="cp-credit-field">
                 <label>AVP Credit Limit (SPIC)</label>
-                <input type="number" step="0.01" @bind="AvpSpic" placeholder="Enter AVP Credit Limit (SPIC)" />
+                <input type="number" step="0.01" class="cp-code-input" @bind="AvpSpic" placeholder="Enter AVP Credit Limit (SPIC)" />
             </div>
         }
         @if (ShowGreenstarCreditLimit)
         {
             <div class="cp-credit-field">
                 <label>AVP Credit Limit (GFL)</label>
-                <input type="number" step="0.01" @bind="AvpGfl" placeholder="Enter AVP Credit Limit (GFL)" />
+                <input type="number" step="0.01" class="cp-code-input" @bind="AvpGfl" placeholder="Enter AVP Credit Limit (GFL)" />
             </div>
         }
     </section>
@@ -332,7 +359,7 @@
                                    @foreach (var h in ApprovalHistory.OrderBy(x => x.ApprovedAt))
                                    {
                                        <li>
-                                           <strong>@h.Role</strong> (@h.ApprovedAt.ToString("dd-MMM-yyyy, hh:mm tt")): @(string.IsNullOrWhiteSpace(h.Remarks) ? "No remarks" : h.Remarks)
+                                           <strong>@GetDisplayRole(h)</strong> (@h.ApprovedAt.ToString("dd-MMM-yyyy, hh:mm tt")): @(string.IsNullOrWhiteSpace(h.Remarks) ? "No remarks" : h.Remarks)
                                        </li>
                                    }
                                </ul>
@@ -387,6 +414,12 @@
     [Parameter] public bool IsNewDealerFinalApproval { get; set; }
     [Parameter] public bool IsAvpOfficeMode { get; set; }
     [Parameter] public bool IsFinalAvpMode { get; set; }
+    [Parameter] public string DealerCode { get; set; } = "";
+    [Parameter] public EventCallback<string> DealerCodeChanged { get; set; }
+    [Parameter] public bool SelectSpic { get; set; }
+    [Parameter] public EventCallback<bool> SelectSpicChanged { get; set; }
+    [Parameter] public bool SelectGfl { get; set; }
+    [Parameter] public EventCallback<bool> SelectGflChanged { get; set; }
     [Parameter] public string SpicDealerId { get; set; } = "";
     [Parameter] public EventCallback<string> SpicDealerIdChanged { get; set; }
     [Parameter] public string GflDealerId { get; set; } = "";
@@ -461,6 +494,36 @@
         }
     }
 
+    private string DealerCodeValue
+    {
+        get => DealerCode;
+        set
+        {
+            DealerCode = value;
+            DealerCodeChanged.InvokeAsync(value);
+        }
+    }
+
+    private bool SelectSpicValue
+    {
+        get => SelectSpic;
+        set
+        {
+            SelectSpic = value;
+            SelectSpicChanged.InvokeAsync(value);
+        }
+    }
+
+    private bool SelectGflValue
+    {
+        get => SelectGfl;
+        set
+        {
+            SelectGfl = value;
+            SelectGflChanged.InvokeAsync(value);
+        }
+    }
+
     private string SpicValue
     {
         get => SpicDealerId;
@@ -471,6 +534,67 @@
     {
         get => GflDealerId;
         set { GflDealerId = value; GflDealerIdChanged.InvokeAsync(value); }
+    }
+
+    private async Task OnDealerCodeInput(ChangeEventArgs e)
+    {
+        if (!IsAvpOfficeMode) return;
+
+        var previous = DealerCode ?? string.Empty;
+        var next = e.Value?.ToString() ?? string.Empty;
+        DealerCodeValue = next;
+
+        if (SelectSpicValue && (string.IsNullOrWhiteSpace(SpicValue) || string.Equals(SpicValue, $"D{previous}", StringComparison.OrdinalIgnoreCase)))
+        {
+            SpicValue = string.IsNullOrWhiteSpace(next) ? string.Empty : $"D{next}";
+        }
+
+        if (SelectGflValue && (string.IsNullOrWhiteSpace(GflValue) || string.Equals(GflValue, $"Z{previous}", StringComparison.OrdinalIgnoreCase)))
+        {
+            GflValue = string.IsNullOrWhiteSpace(next) ? string.Empty : $"Z{next}";
+        }
+
+        await Task.CompletedTask;
+    }
+
+    private async Task OnSpicSelectionChanged(ChangeEventArgs e)
+    {
+        if (!IsAvpOfficeMode) return;
+
+        var selected = e.Value is bool b && b;
+        SelectSpicValue = selected;
+
+        if (selected)
+        {
+            if (string.IsNullOrWhiteSpace(SpicValue) && !string.IsNullOrWhiteSpace(DealerCodeValue))
+                SpicValue = $"D{DealerCodeValue}";
+        }
+        else
+        {
+            SpicValue = string.Empty;
+        }
+
+        await Task.CompletedTask;
+    }
+
+    private async Task OnGflSelectionChanged(ChangeEventArgs e)
+    {
+        if (!IsAvpOfficeMode) return;
+
+        var selected = e.Value is bool b && b;
+        SelectGflValue = selected;
+
+        if (selected)
+        {
+            if (string.IsNullOrWhiteSpace(GflValue) && !string.IsNullOrWhiteSpace(DealerCodeValue))
+                GflValue = $"Z{DealerCodeValue}";
+        }
+        else
+        {
+            GflValue = string.Empty;
+        }
+
+        await Task.CompletedTask;
     }
 
     private decimal? RmSpic
@@ -507,5 +631,26 @@
     {
         get => AvpCreditLimitGfl;
         set { AvpCreditLimitGfl = value; AvpCreditLimitGflChanged.InvokeAsync(value); }
+    }
+
+    private bool RequiresSpicId => IsAvpOfficeMode ? SelectSpicValue : (IsFinalAvpMode ? SelectSpicValue : Dealer?.InSpic == true);
+    private bool RequiresGflId => IsAvpOfficeMode ? SelectGflValue : (IsFinalAvpMode ? SelectGflValue : Dealer?.InGreenStar == true);
+
+    private string AvpOfficeSubtitle => (RequiresSpicId, RequiresGflId) switch
+    {
+        (true, true) => "Enter Customer/Dealer Code and selected SPIC/GFL codes. The application will be forwarded to AVP for final approval.",
+        (true, false) => "Enter Customer/Dealer Code and SPIC code. The application will be forwarded to AVP for final approval.",
+        (false, true) => "Enter Customer/Dealer Code and GFL code. The application will be forwarded to AVP for final approval.",
+        _ => "Enter Customer/Dealer Code and select at least one company code. The application will be forwarded to AVP for final approval."
+    };
+
+    private static string GetDisplayRole(DR.DealerApprovalHistory? history)
+    {
+        if (history is null)
+            return "-";
+
+        return string.Equals(history.Role, "CommonRole", StringComparison.OrdinalIgnoreCase)
+            ? "AVP Office"
+            : (history.Role ?? "-");
     }
 }

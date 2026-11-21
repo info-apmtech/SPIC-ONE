@@ -4,39 +4,190 @@ title: प्रचार सामग्री ट्रैकिंग
 icon: bi-megaphone
 order: 40
 language: hi
+category: मार्केटिंग
+note: नया रूप, साथ में रिक्वेस्ट का सफ़र, स्टेटस और गाइडेड टूर
+meta-source-hash: 2abd562a1fb0baf2
 ---
 
 ::: section overview
-title: प्रचार सामग्री ट्रैकिंग कैसे काम करती है
-routes: /PublicityRequest, /PublicityReview
+title: यह मॉड्यूल आपके लिए क्या करता है
+routes: 
 for: 
 roles: 
 designations: 
-source-hash: f087f488522bb49d
+kind: overview
+source-hash: b68fc648b74d721b
 confidence: ok
 
-**यह मॉड्यूल किस काम का है**
-इस मॉड्यूल से आप अपने HQ के लिए प्रचार सामग्री (पोस्टर, बैनर और ऐसी ही चीज़ें) माँग सकते हैं, उसकी मंज़ूरी ले सकते हैं, सामग्री ले सकते हैं और पक्का कर सकते हैं कि वह पहुँच गई। हर स्टेप रिकॉर्ड होता है, इसलिए सबको दिखता है कि रिक्वेस्ट अभी कहाँ है।
+अपने HQ के लिए प्रचार सामग्री (पोस्टर, बैनर और ऐसी ही चीज़ें) माँगें, उसकी मंज़ूरी लें, सामग्री लें और पक्का करें कि वह पहुँच गई। हर स्टेप रिकॉर्ड होता है, इसलिए सबको दिखता है कि रिक्वेस्ट अभी कहाँ है।
 
-## एक रिक्वेस्ट का सफ़र
+- start | icon: bi-pencil-square | color: #0b6b3a
+  title: RMDO इसे शुरू करता है
+  text: सामग्री, प्रोडक्ट और मात्रा के साथ रिक्वेस्ट डालें।
+- approve | icon: bi-shield-check | color: #d97706
+  title: पाँच मंज़ूरियाँ
+  text: RM, SMD, SMM, ADMIN-MD CS और DGM-MD CS बारी-बारी से इसे जाँचते हैं।
+- close | icon: bi-box-seam | color: #7c3aed
+  title: RMDO इसे बंद करता है
+  text: जो सामग्री पहुँची, उसकी पुष्टि करें, कम या खराब पीस भी बताएँ।
+:::
 
-1. RMDO रिक्वेस्ट भरता है और **Submit Request** दबाता है।
-2. रिक्वेस्ट इस क्रम में मंज़ूरी के लिए जाती है: पहले RM, फिर SMD, फिर SMM, फिर ADMIN-MD CS, फिर DGM-MD CS (आख़िरी मंज़ूरी)।
-3. मंज़ूरी देने वाला कोई भी व्यक्ति (DGM-MD CS को छोड़कर) आगे भेजने से पहले जानकारी बदल सकता है। मंज़ूरी देने वाला रिक्वेस्ट को **Reject** भी कर सकता है, इससे रिक्वेस्ट बंद हो जाती है।
-4. आख़िरी मंज़ूरी के बाद ADMIN-MD CS (या DGM-MD CS) वेंडर से डिस्पैच बनाता है।
-5. सामग्री रास्ते में इस तरह आगे बढ़ती है: **Dispatched**, फिर **In Transit**, फिर **Delivered**।
-6. RMDO सामग्री जाँचता है और मिली हुई मात्रा और उसकी हालत के साथ **Acknowledgement** सबमिट करता है।
-7. अगर सब कुछ सही है, तो रिक्वेस्ट **Completed** हो जाती है।
-8. अगर कुछ चीज़ें कम हैं या खराब हैं, तो **Exception Raised** स्टेटस आता है। ADMIN-MD CS इसे सुलझाता है: वेंडर से नया डिस्पैच भेजकर, या किसी दूसरे HQ का ज़्यादा (बचा हुआ) स्टॉक भिजवाकर।
+::: section flow
+title: रिक्वेस्ट कैसे आगे बढ़ती है, और कौन क्या करता है
+routes: 
+for: 
+roles: 
+designations: 
+kind: flow
+source-hash: 922a2e0da6a7ddbc
+confidence: ok
 
-## कौन क्या करता है
+हर लाइन एक रोल है और हर बॉक्स एक स्टेप है। आपकी लाइन पर "You" लिखा होता है। किसी स्टेप पर टैप करके देखें कि वहाँ क्या होता है।
 
-- **RMDO**: रिक्वेस्ट बनाता है, डिलीवरी मिलने की पुष्टि करता है, ज़्यादा स्टॉक भेजने को कहा जाए तो कूरियर का सबूत भेजता है।
-- **RM, SMD, SMM**: अपने रीजन या राज्य की रिक्वेस्ट जाँचते हैं और मंज़ूर करते हैं।
-- **ADMIN-MD CS**: मंज़ूरी देता है, डिस्पैच बनाता है, डिलीवरी अपडेट करता है, एक्सेप्शन (समस्या) सुलझाता है।
-- **DGM-MD CS**: आख़िरी मंज़ूरी देता है और डिस्पैच भी बना सकता है।
+- rmdo | type: lane | color: #0b6b3a | roles: RMD | designations: RMDO
+  title: RMDO
+  sub: आपका HQ
+- approvers | type: lane | color: #0d9488 | roles: RM, SMD, SMM
+  title: मंज़ूरी देने वाले
+  sub: RM · SMD · SMM
+- mdcs | type: lane | color: #ea580c | roles: MDAdmin, MDHOD | designations: ADMIN-MD CS, ADMIN MD CS, DGM-MD CS, DGM MD CS
+  title: MD CS
+  sub: ADMIN-MD CS · DGM-MD CS
+- vendor | type: lane | color: #64748b
+  title: वेंडर
+  sub: कूरियर
+- raise | lane: rmdo | col: 1 | icon: bi-pencil-square | color: #64748b | next: approve | screen: raise-request
+  title: रिक्वेस्ट भरें और सबमिट करें
+  status: Draft
+  text: रिक्वेस्ट फ़ॉर्म भरें और **Submit Request** दबाएँ। तब तक यह एक ड्राफ़्ट है, जो सिर्फ़ आपको दिखता है।
+- approve | lane: approvers | col: 2 | icon: bi-hourglass-split | color: #d97706 | next: final | return: raise | screen: review-approve
+  title: जाँच और मंज़ूरी
+  status: Pending Approval
+  text: पहले RM, फिर SMD, फिर SMM रिक्वेस्ट जाँचते हैं। हर कोई इसे बदल सकता है, मंज़ूर करके आगे भेज सकता है, RMDO को लौटा सकता है, या रिजेक्ट कर सकता है।
+- final | lane: mdcs | col: 3 | icon: bi-patch-check | color: #2563eb | next: dispatch | screen: review-approve
+  title: आख़िरी मंज़ूरी
+  status: Final Approved
+  text: ADMIN-MD CS इसे मंज़ूर करके आगे भेजता है, फिर DGM-MD CS आख़िरी मंज़ूरी देता है।
+- dispatch | lane: mdcs | col: 4 | icon: bi-truck | color: #7c3aed | next: ship | screen: create-dispatch
+  title: डिस्पैच बनाएँ
+  status: In Dispatch
+  text: ADMIN-MD CS या DGM-MD CS कूरियर की जानकारी के साथ वेंडर से हुए डिस्पैच को दर्ज करता है।
+- ship | lane: vendor | col: 5 | icon: bi-box-seam | color: #0d9488 | next: ack | screen: update-delivery
+  title: HQ तक भेजना
+  status: Delivered
+  text: सामग्री वेंडर के यहाँ से चलती है। MD CS इसे पहले **In Transit** और फिर **Delivered** मार्क करता है।
+- ack | lane: rmdo | col: 6 | icon: bi-clipboard-check | color: #16a34a | screen: acknowledge-delivery
+  title: पुष्टि करें
+  status: Completed
+  text: RMDO सामग्री गिनता है और **Acknowledgement** सबमिट करता है। अगर सब सही है, तो रिक्वेस्ट पूरी हो जाती है।
+- exception | lane: mdcs | col: 6 | icon: bi-exclamation-triangle | color: #dc2626 | kind: exception | from: ack | to: dispatch | screen: resolve-exception
+  title: कमी या नुकसान सुलझाएँ
+  status: Exception Raised
+  text: अगर पीस कम हैं या खराब हैं, तो MD CS बाकी सामग्री वेंडर से भिजवाता है, या किसी दूसरे HQ का ज़्यादा स्टॉक भिजवाता है।
+:::
 
-> नई मंज़ूरियाँ, डिस्पैच और ट्रांसफ़र ऑर्डर देखने के लिए लिस्ट पेज पर घंटी वाला बटन **Notifications** टैप करें।
+::: section statuses
+title: हर स्टेटस जो आपको दिख सकता है
+routes: 
+for: 
+roles: 
+designations: 
+kind: statuses
+source-hash: 06524fbf96639e47
+confidence: ok
+
+- draft | color: #64748b
+  label: Draft
+  text: सेव है पर भेजा नहीं गया। सिर्फ़ आपको दिखता है।
+- pending | color: #d97706
+  label: Pending Approval
+  text: अभी किसी मंज़ूरी देने वाले के पास है।
+- pending-final | color: #d97706
+  label: Pending Final Approval
+  text: आख़िरी मंज़ूरी के लिए DGM-MD CS के पास है।
+- returned | color: #ea580c
+  label: Returned
+  text: RMDO को लौटा दी गई है। इसे बदलें और फिर से सबमिट करें।
+- final | color: #2563eb
+  label: Final Approved
+  text: मंज़ूर हो गई। डिस्पैच का इंतज़ार है।
+- dispatch | color: #7c3aed
+  label: In Dispatch
+  text: वेंडर ने सामग्री भेज दी है।
+- delivered | color: #0d9488
+  label: Delivered
+  text: सामग्री HQ पहुँच गई है।
+- ack-pending | color: #0891b2
+  label: Acknowledgement Pending
+  text: RMDO के यह बताने का इंतज़ार है कि क्या पहुँचा।
+- completed | color: #16a34a
+  label: Completed
+  text: सब कुछ अच्छी हालत में पहुँच गया।
+- exception | color: #dc2626
+  label: Exception Raised
+  text: पीस कम थे या खराब थे। MD CS इसे सुलझा रहा है।
+- transfer | color: #7c3aed
+  label: Transfer Order Received
+  text: आपके HQ से कहा गया है कि ज़्यादा स्टॉक किसी दूसरे HQ को भेजें।
+- rejected | color: #475569
+  label: Rejected
+  text: मंज़ूरी देने वाले ने इसे बंद कर दिया। ज़रूरत हो तो नई रिक्वेस्ट डालें।
+:::
+
+::: section roles
+title: कौन क्या करता है
+routes: 
+for: 
+roles: 
+designations: 
+kind: roles
+source-hash: 3570dd53fa8c80d1
+confidence: ok
+
+आपका कार्ड हाइलाइट होता है। आपको सिर्फ़ वही स्क्रीन दिखती हैं जो आपका रोल इस्तेमाल करता है।
+
+- rmdo | color: #0b6b3a | roles: RMD | designations: RMDO
+  title: RMDO
+  - रिक्वेस्ट डालना
+  - डिलीवरी की पुष्टि करना
+  - स्टॉक ट्रांसफ़र के लिए कूरियर का सबूत भेजना
+- approvers | color: #0d9488 | roles: RM, SMD, SMM
+  title: RM, SMD, SMM
+  - अपने इलाके की रिक्वेस्ट जाँचना
+  - मंज़ूर करना, लौटाना या रिजेक्ट करना
+- admin | color: #ea580c | roles: MDAdmin | designations: ADMIN-MD CS, ADMIN MD CS
+  title: ADMIN-MD CS
+  - मंज़ूर करके आगे भेजना
+  - डिस्पैच बनाना और डिलीवरी अपडेट करना
+  - कमी और नुकसान सुलझाना
+- dgm | color: #7c3aed | roles: MDHOD | designations: DGM-MD CS, DGM MD CS
+  title: DGM-MD CS
+  - आख़िरी मंज़ूरी देना
+  - डिस्पैच बनाना
+:::
+
+::: section faq
+title: दिक्कतें और जवाब
+routes: 
+for: 
+roles: 
+designations: 
+kind: faq
+source-hash: a2321112e4f4d096
+confidence: ok
+
+- no-pencil | popular: true
+  q: मैंने अपनी रिक्वेस्ट सबमिट कर दी और अब पेंसिल आइकन नहीं दिख रहा
+  a: सबमिट करने के बाद सिर्फ़ मंज़ूरी देने वाला ही रिक्वेस्ट आपको लौटा सकता है। जब उस पर **Returned** दिखेगा, तब पेंसिल फिर से आ जाएगी।
+- damaged | popular: true
+  q: कुछ पीस खराब या कम पहुँचे। मैं क्या करूँ?
+  a: पुष्टि करते समय मिली हुई और खराब मात्रा भरें और फिर भी सबमिट करें। एक एक्सेप्शन ADMIN-MD CS के पास जाता है, जो कम पड़े पीस भेजता है।
+- who-has-it
+  q: मेरी रिक्वेस्ट अभी किसके पास है?
+  a: रिक्वेस्ट खोलें। ऊपर **Current Stage** और **Pending With** दिखते हैं, और **Approval History** में हर कार्रवाई दिखती है।
+- no-rows
+  q: मुझे "No requests found" दिख रहा है
+  a: हो सकता है आपके फ़िल्टर बहुत कड़े हों। **Filters** खोलें और **Clear All** दबाएँ।
 :::
 
 ::: section requester-list
@@ -45,27 +196,30 @@ routes: /PublicityRequest
 for: 
 roles: 
 designations: 
-source-hash: f32b121b5900212e
+screenshot: requester-list.png
+hotspots: 1 @ 2.2,12.2,95.5,33.6 | 2 @ 61.6,81.1,24.3,5.1 | 3 @ 2.2,48.2,95.5,27.9 | 4 @ 4.2,87.9,91.6,12.1 | 5 @ 86.9,81.2,8.9,4.8 | 6 @ 80.7,1.9,17,4.8
+screenshot-phone: requester-list.phone.jpg
+hotspots-phone: 1 @ 3.1,9.9,93.8,35.4 | 2 @ 6.9,86.1,59.1,3 | 3 @ 3.1,46.3,93.8,35.1 | 4 @ 6.9,90,86.2,10 | 5 @ 68.5,86.2,24.5,2.8 | 6 @ 17.4,5.4,46.7,2.8
+tour: 1 > [data-help=pub-cards] | 2 > [data-help=pub-search] | 3 > [data-help=pub-filters] | 4 > [data-help=pub-table] | 5 > [data-help=pub-export] | 6 > [data-help=pub-new]
+minutes: 2
+source-hash: 08092b10939e59ef
 confidence: ok
 
 **यह स्क्रीन किस काम की है**
 **My Publicity Material Request** स्क्रीन पर आपके HQ की हर रिक्वेस्ट दिखती है: ऊपर गिनती और नीचे टेबल।
 
-## स्टेप्स
+1. ऊपर के कार्ड देखें, जैसे **Draft**, **Pending Approval** और **Completed**। सिर्फ़ वही रिक्वेस्ट देखने के लिए किसी कार्ड पर टैप करें। सब देखने के लिए उस पर फिर से टैप करें।
+2. रिक्वेस्ट जल्दी ढूँढने के लिए सर्च बॉक्स में इंडेंट नंबर, प्रोडक्ट या सामग्री का नाम टाइप करें।
+3. **Filters** खोलकर **Date Range**, **Product**, **Publicity Material** या **Status** चुनें, फिर **Apply Filters** दबाएँ। **Clear All** दबाने से फ़िल्टर हट जाते हैं।
+4. **Action** कॉलम में आँख वाला आइकन रिक्वेस्ट खोलता है। पेंसिल से **Draft** या **Returned** रिक्वेस्ट बदली जाती है। डस्टबिन **Draft** को मिटाता है।
+5. लिस्ट को Excel फ़ाइल में डाउनलोड करने के लिए **Export** दबाएँ।
+6. नई रिक्वेस्ट शुरू करने के लिए **Create New Request** दबाएँ।
 
-1. ऊपर के कार्ड देखें: **Total Request**, **Draft**, **Pending Approval**, **Final Approved**, **In Dispatch**, **Acknowledgement Pending**, **Completed** और **Exception**।
-2. किसी कार्ड पर टैप करें, तो सिर्फ़ उस स्टेटस वाली रिक्वेस्ट दिखेंगी। फिर से टैप करें, तो सब दिखेंगी।
-3. और बारीकी से खोजने के लिए **Filters** खोलें, **Date Range**, **Product**, **Publicity Material** या **Status** चुनें, फिर **Apply Filters** दबाएँ। फ़िल्टर हटाने के लिए **Clear All** दबाएँ।
-4. रिक्वेस्ट जल्दी ढूँढने के लिए सर्च बॉक्स में इंडेंट नंबर, प्रोडक्ट या सामग्री का नाम टाइप करें।
-5. रिक्वेस्ट खोलने के लिए **Action** कॉलम में आँख वाले आइकन पर टैप करें।
-6. **Draft** या **Returned** रिक्वेस्ट बदलने के लिए पेंसिल आइकन पर टैप करें।
-7. सिर्फ़ **Draft** को मिटाने के लिए डस्टबिन आइकन पर टैप करें। मिटाने के बाद इसे वापस नहीं लाया जा सकता।
-8. लिस्ट को Excel फ़ाइल में डाउनलोड करने के लिए **Export** दबाएँ।
-9. नई रिक्वेस्ट शुरू करने के लिए **Create New Request** दबाएँ।
+> Careful: ड्राफ़्ट मिटाने के बाद उसे वापस नहीं लाया जा सकता।
 
 ## आम दिक्कतें
 
-- **मुझे "No requests found" दिख रहा है।** हो सकता है आपने बहुत ज़्यादा फ़िल्टर लगा रखे हों। **Clear All** दबाएँ।
+- **मुझे "No requests found" दिख रहा है।** हो सकता है आपके फ़िल्टर बहुत कड़े हों। **Clear All** दबाएँ।
 - **पेंसिल आइकन नहीं है।** सबमिट करने के बाद आप रिक्वेस्ट नहीं बदल सकते, जब तक मंज़ूरी देने वाला उसे आपको लौटा न दे।
 - **Export बटन ग्रे है।** लिस्ट में एक्सपोर्ट करने के लिए कोई लाइन नहीं है।
 :::
@@ -76,32 +230,35 @@ routes: /PublicityRequest/new, /PublicityRequest/edit/{id}
 for: 
 roles: 
 designations: 
-source-hash: f4c944427bc4be47
+screenshot: raise-request.png
+hotspots: 1 @ 4.2,20.2,21.5,8.5 | 2 @ 50.9,20.2,21.5,8.5 | 3 @ 4.2,30.4,91.6,20.7 | 4 @ 2.2,73.6,95.5,19.1 | 5 @ 2.2,95,95.5,4.8
+screenshot-phone: raise-request.phone.jpg
+hotspots-phone: 1 @ 6.9,15.5,86.2,4.9 | 2 @ 6.9,27.4,86.2,4.9 | 3 @ 6.9,39.2,86.2,14.7 | 4 @ 3.1,66.1,93.8,23.6 | 5 @ 0,87.5,100,8.4
+tour: 1 > [data-help=pub-material] | 2 > [data-help=pub-qty] | 3 > [data-help=pub-design] | 4 > [data-help=pub-location] | 5 > [data-help=pub-submit]
+minutes: 3
+source-hash: 74e6a60af7702e79
 confidence: ok
 
 **यह स्क्रीन किस काम की है**
 अपने HQ के लिए प्रचार सामग्री माँगने के लिए **Create Publicity Material Request** स्क्रीन का इस्तेमाल करें। आप इसे ड्राफ़्ट में सेव करके बाद में भेज सकते हैं।
 
-## स्टेप्स
+1. **Request Details** में **Type of Publicity Material** और **Product** चुनें।
+2. आपको जितनी **Quantity** चाहिए, वह भरें। **Requested By** में आपका नाम पहले से भरा होता है।
+3. अगर आपके पास डिज़ाइन है, तो फ़ाइल को अपलोड बॉक्स में डालें या **or click to browse** पर टैप करें। ज़रूरत हो तो **Remarks** लिखें।
+4. **Location** में **State**, **Region** और **Headquarter (HQ)** देख लें। ये आपकी प्रोफ़ाइल से भरे जाते हैं।
+5. बाद के लिए रखने को **Save as Draft** दबाएँ, या RM को भेजने के लिए **Submit Request** और फिर **Submit** दबाएँ।
 
-1. लिस्ट पेज पर **Create New Request** दबाएँ।
-2. **Request Details** में **Type of Publicity Material** और **Product** चुनें।
-3. आपको जितनी **Quantity** चाहिए, वह भरें।
-4. **Requested By** देख लें। इसमें आपका नाम पहले से भरा होता है।
-5. अगर आपके पास डिज़ाइन है, तो फ़ाइल को अपलोड बॉक्स में डालें या **or click to browse** पर टैप करें।
-6. ज़रूरत हो तो **Remarks** लिखें।
-7. **Location** में **State**, **Region** और **Headquarter (HQ)** देख लें। ये आपकी प्रोफ़ाइल से भरे जाते हैं।
-8. बाद के लिए रखने को **Save as Draft** दबाएँ, या RM को भेजने के लिए **Submit Request** दबाएँ।
-9. पुष्टि वाले बॉक्स में **Submit** दबाएँ।
+> Tip: आप लिस्ट से ड्राफ़्ट पर वापस आकर उसे बाद में पूरा कर सकते हैं।
 
 ## फ़ील्ड का मतलब
 
-- **Type of Publicity Material**: आपको जो चीज़ चाहिए, जैसे पोस्टर या बैनर। ज़रूरी है।
-- **Product**: जिस प्रोडक्ट के लिए सामग्री है। आप टाइप करके खोज सकते हैं। ज़रूरी है।
-- **Quantity**: कितने पीस चाहिए। ज़रूरी है।
-- **Requested By**: वह व्यक्ति जो सामग्री माँग रहा है।
-- **Design file**: एक फ़ाइल, PDF, JPG, PNG, DOC या DOCX, 10 MB तक।
-- **State**, **Region**, **Headquarter (HQ)**: सामग्री कहाँ पहुँचानी है। ज़रूरी है।
+| फ़ील्ड | क्या भरें |
+|---|---|
+| **Type of Publicity Material** | आपको जो चीज़ चाहिए, जैसे पोस्टर या बैनर। ज़रूरी है। |
+| **Product** | जिस प्रोडक्ट के लिए सामग्री है। आप टाइप करके खोज सकते हैं। ज़रूरी है। |
+| **Quantity** | कितने पीस चाहिए। ज़रूरी है। |
+| **Design file** | एक फ़ाइल, PDF, JPG, PNG, DOC या DOCX, 10 MB तक। |
+| **State**, **Region**, **Headquarter (HQ)** | सामग्री कहाँ पहुँचानी है। ज़रूरी है। |
 
 ## आम दिक्कतें
 
@@ -116,13 +273,14 @@ routes: /PublicityRequest/{id}
 for: 
 roles: 
 designations: 
-source-hash: 2d926f137adb7d61
+screenshot: track-request.png
+screenshot-phone: track-request.phone.jpg
+minutes: 2
+source-hash: 533996d4d473e58d
 confidence: ok
 
 **यह स्क्रीन किस काम की है**
 **My Publicity Material Request Details** स्क्रीन पर एक रिक्वेस्ट की पूरी जानकारी दिखती है: वह अभी कहाँ है, किसने मंज़ूर किया, डिस्पैच और दस्तावेज़।
-
-## स्टेप्स
 
 1. लिस्ट में आँख वाले आइकन से रिक्वेस्ट खोलें।
 2. ऊपर **Current Stage**, **Status** और यह देखें कि रिक्वेस्ट अभी किसके पास है (**Pending With**)।
@@ -146,13 +304,12 @@ routes: /PublicityRequest/{id}
 for: 
 roles: 
 designations: 
-source-hash: 3642d2f43fd54ffa
+minutes: 3
+source-hash: 2e6ce69978f16d26
 confidence: ok
 
 **यह स्क्रीन किस काम की है**
 जब सामग्री आपके HQ पहुँचे, तो आपको बताना होगा कि कितने पीस मिले और उनकी हालत कैसी है। इससे रिक्वेस्ट बंद हो जाती है, या ADMIN-MD CS को समस्या की खबर जाती है।
-
-## स्टेप्स
 
 1. रिक्वेस्ट खोलें और **Tracking & Delivery** पर जाएँ।
 2. **Awaiting Acknowledgement** बॉक्स में **Acknowledge** दबाएँ। इससे **Acknowledgement** टैब खुलता है।
@@ -166,11 +323,13 @@ confidence: ok
 
 ## फ़ील्ड का मतलब
 
-- **Quantity Received**: असल में गिने गए पीस। ज़रूरी है।
-- **Material Condition**: अच्छी या खराब। ज़रूरी है।
-- **Damaged Quantity**: 1 से लेकर मिली हुई मात्रा तक।
-- **Acknowledged By**: वह व्यक्ति जिसने सामग्री ली। ज़रूरी है।
-- **Photos**: मिली हुई सामग्री की तस्वीरें, हर एक 10 MB तक।
+| फ़ील्ड | क्या भरें |
+|---|---|
+| **Quantity Received** | असल में गिने गए पीस। ज़रूरी है। |
+| **Material Condition** | अच्छी या खराब। ज़रूरी है। |
+| **Damaged Quantity** | 1 से लेकर मिली हुई मात्रा तक। |
+| **Acknowledged By** | वह व्यक्ति जिसने सामग्री ली। ज़रूरी है। |
+| **Photos** | मिली हुई सामग्री की तस्वीरें, हर एक 10 MB तक। |
 
 ## आम दिक्कतें
 
@@ -185,13 +344,12 @@ routes: /PublicityRequest/{id}/transfer/{dispatchId}, /PublicityRequest/done
 for: 
 roles: 
 designations: 
-source-hash: 5b649ad478721aa8
+minutes: 3
+source-hash: e7a33ab19f8314b5
 confidence: ok
 
 **यह स्क्रीन किस काम की है**
 अगर आपके HQ को ज़रूरत से ज़्यादा सामग्री मिली है, तो ADMIN-MD CS आपसे उसमें से कुछ सामग्री किसी ऐसे दूसरे HQ को भेजने को कह सकता है जहाँ कमी है। आप इसे कूरियर से भेजते हैं और कूरियर की रसीद यहाँ अपलोड करते हैं।
-
-## स्टेप्स
 
 1. **Notifications** खोलें और स्टॉक ट्रांसफ़र ऑर्डर पर टैप करें, फिर **View Transfer** दबाएँ। आप अपनी रिक्वेस्ट खोलकर, **Tracking & Delivery** पर जाकर, **Stock Transfer Order** कार्ड पर **Create Transfer** भी दबा सकते हैं।
 2. **Read Information (Read Only)** वाला हिस्सा देखें: **Destination HQ** और **Transfer Quantity**।
@@ -204,9 +362,11 @@ confidence: ok
 
 ## फ़ील्ड का मतलब
 
-- **Courier / Transporter**: कूरियर कंपनी का नाम। ज़रूरी है।
-- **Tracking No. / AWB**: कूरियर रसीद पर लिखा नंबर। ज़रूरी है।
-- **Dispatch Date**: जिस दिन आपने भेजा। ज़रूरी है।
+| फ़ील्ड | क्या भरें |
+|---|---|
+| **Courier / Transporter** | कूरियर कंपनी का नाम। ज़रूरी है। |
+| **Tracking No. / AWB** | कूरियर रसीद पर लिखा नंबर। ज़रूरी है। |
+| **Dispatch Date** | जिस दिन आपने भेजा। ज़रूरी है। |
 
 ## आम दिक्कतें
 
@@ -221,21 +381,23 @@ routes: /PublicityRequest/notifications
 for: 
 roles: 
 designations: 
-source-hash: 3f380e63b29f62fe
+screenshot: requester-notifications.png
+hotspots: 1 @ 4.2,14.7,91.6,7 | 2 @ 4.2,23.6,91.6,76.4 | 3 @ 4.2,23.6,91.6,76.4 | 4 @ 84.5,1.9,13.3,4.8 | 5 @ 68.7,1.9,15.1,4.8
+screenshot-phone: requester-notifications.phone.jpg
+hotspots-phone: 1 @ 6.9,11,86.2,3.7 | 2 @ 6.9,15.8,86.2,84.2 | 3 @ 6.9,15.8,86.2,84.2 | 4 @ 46.4,5.4,36.4,2.8 | 5 @ 3.1,5.4,41.3,2.8
+tour: 1 > [data-help=pub-notif-tabs] | 2 > [data-help=pub-notif-list] | 3 > [data-help=pub-notif-list] | 4 > [data-help=pub-notif-readall] | 5 > [data-help=pub-notif-back]
+minutes: 1
+source-hash: 4cd27f470cab35ac
 confidence: ok
 
 **यह स्क्रीन किस काम की है**
-**Notifications** स्क्रीन पर आपकी रिक्वेस्ट से जुड़े अलर्ट दिखते हैं: लौटाई गई रिक्वेस्ट, डिस्पैच, एक्सेप्शन और स्टॉक ट्रांसफ़र ऑर्डर।
+**Notifications** स्क्रीन पर आपकी रिक्वेस्ट से जुड़े अलर्ट दिखते हैं: लौटाई गई रिक्वेस्ट, डिस्पैच, एक्सेप्शन और स्टॉक ट्रांसफ़र ऑर्डर। इसे लिस्ट पेज पर **Notifications** दबाकर खोलें।
 
-## स्टेप्स
-
-1. लिस्ट पेज पर **Notifications** दबाएँ।
-2. एक टैब चुनें: **All**, **Stock Transfer**, **Exception** या **Dispatch & Approvals**।
-3. बिना पढ़े आइटम पर एक बिंदी होती है। किसी आइटम की जानकारी खोलने के लिए उस पर टैप करें।
-4. ट्रांसफ़र ऑर्डर के लिए **Transfer Order Details**, **Source Excess Reference** और **Reason for Transfer** देखें।
-5. कूरियर का सबूत अपलोड करने के लिए **View Transfer** दबाएँ, या रिक्वेस्ट खोलने के लिए **View Details** दबाएँ।
-6. एक आइटम के लिए **Mark As Read** दबाएँ, या सबके लिए **Mark All As Read**।
-7. वापस जाने के लिए **Back to List Page** दबाएँ।
+1. एक टैब चुनें: **All**, **Stock Transfer**, **Exception** या **Dispatch & Approvals**।
+2. बिना पढ़े आइटम पर एक बिंदी होती है। किसी आइटम की जानकारी खोलने के लिए उस पर टैप करें।
+3. ट्रांसफ़र ऑर्डर में कूरियर का सबूत अपलोड करने के लिए **View Transfer** दबाएँ। रिक्वेस्ट खोलने के लिए **View Details** दबाएँ।
+4. एक आइटम के लिए **Mark As Read** दबाएँ, या सबके लिए **Mark All As Read**।
+5. वापस जाने के लिए **Back to List Page** दबाएँ।
 
 ## आम दिक्कतें
 
@@ -249,13 +411,14 @@ routes: /PublicityReview
 for: 
 roles: 
 designations: 
-source-hash: 7ebd8194aa3f5ebd
+screenshot: reviewer-list.png
+screenshot-phone: reviewer-list.phone.jpg
+minutes: 2
+source-hash: 7eaa380f878c5c45
 confidence: ok
 
 **यह स्क्रीन किस काम की है**
 मंज़ूरी देने वाले और MD CS स्टाफ़ इस लिस्ट में अपने इलाके की रिक्वेस्ट देखते हैं। इसका टाइटल **Submitted Requests** है (RM के लिए यह **My Publicity Material Request** है)।
-
-## स्टेप्स
 
 1. ऊपर के कार्ड देखें। RM को **Pending for My Approval**, **Approved by RM**, **Dispatch & Delivery**, **Completed** और **Returned** दिखते हैं। बाकी लोगों को **Total Submitted**, **Pending Review**, **Dispatch Pending**, **Exceptions** और **Completed** जैसे कार्ड दिखते हैं।
 2. अगर लाल रंग का **New Request for Review** बॉक्स दिखे, तो **View New Requests** दबाएँ। RM, SMD, SMM और ADMIN-MD CS के लिए इससे कंसॉलिडेशन स्क्रीन खुलती है।
@@ -277,13 +440,12 @@ routes: /PublicityReview/{id}
 for: 
 roles: 
 designations: 
-source-hash: c7fff9b7b3926213
+minutes: 2
+source-hash: 3d13e1d79363e813
 confidence: ok
 
 **यह स्क्रीन किस काम की है**
 रिक्वेस्ट खोलकर उसे जाँचें, और फिर मंज़ूर करें, बदलें या रिजेक्ट करें। बटन तभी दिखते हैं जब रिक्वेस्ट आपके पास इंतज़ार कर रही हो।
-
-## स्टेप्स
 
 1. लिस्ट या कंसॉलिडेशन स्क्रीन से रिक्वेस्ट खोलें।
 2. ऊपर की पट्टी, **Request Timeline** और **Approval History** देखें।
@@ -291,6 +453,8 @@ confidence: ok
 4. पहले सामग्री, मात्रा या जगह बदलनी हो, तो **Edit** दबाएँ।
 5. मंज़ूर करने के लिए अगले लेवल वाला **Approve & Forward to** दबाएँ (जैसे **Approve & Forward to SMD**), फिर **Approve & Forward** से पुष्टि करें।
 6. मना करने के लिए **Reject** दबाएँ, **Reason for rejection** लिखें, और फिर से **Reject** दबाएँ।
+
+> Careful: Reject करने से रिक्वेस्ट हमेशा के लिए बंद हो जाती है। RMDO को नई रिक्वेस्ट डालनी होगी।
 
 ## मंज़ूरी का क्रम
 
@@ -301,7 +465,6 @@ confidence: ok
 
 - **Approve बटन नहीं है, टाइटल में "Request Details" लिखा है।** रिक्वेस्ट अभी आपके लेवल पर नहीं है। आप सिर्फ़ देख सकते हैं, **Print** कर सकते हैं या **Download Report** कर सकते हैं।
 - **"Enter the reason for rejection."** (रिजेक्ट करने का कारण लिखें) कारण लिखना ज़रूरी है।
-- **Reject करने से रिक्वेस्ट हमेशा के लिए बंद हो जाती है।** इसे वापस नहीं किया जा सकता। RMDO को नई रिक्वेस्ट डालनी होगी।
 :::
 
 ::: section reviewer-edit
@@ -310,13 +473,12 @@ routes: /PublicityReview/edit/{id}
 for: 
 roles: 
 designations: 
-source-hash: a0de34efb439462f
+minutes: 2
+source-hash: e76c7e9756536fde
 confidence: ok
 
 **यह स्क्रीन किस काम की है**
 **Edit Publicity Material Request** स्क्रीन पर वह मंज़ूरी देने वाला, जिसकी अभी बारी है, रिक्वेस्ट ठीक कर सकता है। बदलाव सेव करने से रिक्वेस्ट मंज़ूर होकर आगे भी चली जाती है।
-
-## स्टेप्स
 
 1. रिक्वेस्ट पर **Edit** दबाएँ। कंसॉलिडेशन स्क्रीन पर पेंसिल आइकन पर टैप करें।
 2. **Type of Publicity Material**, **Product**, **Quantity**, **Requested By** या **Remarks** बदलें।
@@ -324,11 +486,6 @@ confidence: ok
 4. **State**, **Region** और **Headquarter (HQ)** देख लें।
 5. अगले लेवल वाला **Save & Forward to** दबाएँ (जैसे **Save & Forward to SMM**)।
 6. बदलाव सेव हो जाता है, **Approval History** में लिखा जाता है, और रिक्वेस्ट अगले लेवल पर चली जाती है।
-
-## फ़ील्ड का मतलब
-
-- **Quantity**: मंज़ूर किए गए पीस की संख्या। ज़रूरी है।
-- **Type of Publicity Material**, **Product**, **Headquarter (HQ)**: ज़रूरी हैं।
 
 ## आम दिक्कतें
 
@@ -342,13 +499,14 @@ routes: /PublicityReview/consolidation
 for: 
 roles: 
 designations: 
-source-hash: 92970d521f5da24b
+screenshot: consolidation.png
+screenshot-phone: consolidation.phone.jpg
+minutes: 3
+source-hash: abde9049ef5f5976
 confidence: ok
 
 **यह स्क्रीन किस काम की है**
 कंसॉलिडेशन स्क्रीन पर आपके लेवल पर इंतज़ार कर रही हर रिक्वेस्ट रीजन के हिसाब से दिखती है, ताकि आप सबको एक ही बार में मंज़ूर कर सकें। RM को अपना रीजन दिखता है, SMD और SMM को राज्य, और ADMIN-MD CS को पूरा भारत। DGM-MD CS यह स्क्रीन इस्तेमाल नहीं करता।
-
-## स्टेप्स
 
 1. लिस्ट पेज पर **Consolidation** दबाएँ।
 2. कार्ड देखें: **Submission ID**, **Region** या **State**, **Total Region**, **Total Requests** और **Total Requirement**।
@@ -371,13 +529,12 @@ routes: /PublicityReview/{id}/dispatch, /PublicityReview/done
 for: 
 roles: 
 designations: ADMIN MD CS, ADMIN-MD CS, DGM MD CS, DGM-MD CS
-source-hash: afa4604b42d3cf80
+minutes: 3
+source-hash: 039c89aba91e084f
 confidence: ok
 
 **यह स्क्रीन किस काम की है**
 आख़िरी मंज़ूरी के बाद ADMIN-MD CS या DGM-MD CS **Create Dispatch** स्क्रीन पर वेंडर से हुए डिस्पैच को दर्ज करता है। यही स्क्रीन बदले में भेजे जाने वाले (re-initiation) डिस्पैच के लिए भी इस्तेमाल होती है।
-
-## स्टेप्स
 
 1. **Final Approved** रिक्वेस्ट खोलें और **Create Dispatch** दबाएँ।
 2. **Read Information (Read Only)** वाला हिस्सा देखें।
@@ -391,11 +548,13 @@ confidence: ok
 
 ## फ़ील्ड का मतलब
 
-- **Dispatch Quantity**: अभी भेजे जा रहे पीस। बदले वाले डिस्पैच में यह बाकी बची मात्रा से शुरू होती है।
-- **Vendor**: लिस्ट से चुनें या नया नाम टाइप करें। ज़रूरी है।
-- **Responsible SMDO / RM / RMDO / MO**: वह अधिकारी जो सामग्री लेगा। ज़रूरी है।
-- **Dispatch / Note Approval Document**: पहले डिस्पैच के लिए ज़रूरी है।
-- **Delivery Address**: सेव किए गए पते पर टैप करें या पता टाइप करें। ज़रूरी है।
+| फ़ील्ड | क्या भरें |
+|---|---|
+| **Dispatch Quantity** | अभी भेजे जा रहे पीस। बदले वाले डिस्पैच में यह बाकी बची मात्रा से शुरू होती है। |
+| **Vendor** | लिस्ट से चुनें या नया नाम टाइप करें। ज़रूरी है। |
+| **Responsible SMDO / RM / RMDO / MO** | वह अधिकारी जो सामग्री लेगा। ज़रूरी है। |
+| **Dispatch / Note Approval Document** | पहले डिस्पैच के लिए ज़रूरी है। |
+| **Delivery Address** | सेव किए गए पते पर टैप करें या पता टाइप करें। ज़रूरी है। |
 
 ## आम दिक्कतें
 
@@ -409,13 +568,12 @@ routes: /PublicityReview/{id}
 for: 
 roles: 
 designations: ADMIN MD CS, ADMIN-MD CS, DGM MD CS, DGM-MD CS
-source-hash: 377dc5ed807e6b17
+minutes: 2
+source-hash: 70a3a9c616c85eba
 confidence: ok
 
 **यह स्क्रीन किस काम की है**
 डिस्पैच बनने के बाद MD CS उसकी प्रगति अपडेट करता है, ताकि RMDO और मंज़ूरी देने वाले देख सकें कि सामग्री कहाँ है।
-
-## स्टेप्स
 
 1. रिक्वेस्ट खोलें और **Tracking & Delivery** पर जाएँ।
 2. डिस्पैच कार्ड ढूँढें (**Dispatch 1**, **Dispatch 2** वगैरह)।
@@ -425,9 +583,11 @@ confidence: ok
 
 ## फ़ील्ड का मतलब
 
-- **Transporter / Courier** और **Tracking No. (AWB)**: ट्रांसफ़र की पुष्टि करते समय ज़रूरी हैं।
-- **Expected Delivery Date**: सामग्री कब तक पहुँचनी चाहिए।
-- **Current Location / Hub**: सामग्री अभी कहाँ है, जैसे कोई कूरियर हब।
+| फ़ील्ड | क्या भरें |
+|---|---|
+| **Transporter / Courier** और **Tracking No. (AWB)** | ट्रांसफ़र की पुष्टि करते समय ज़रूरी हैं। |
+| **Expected Delivery Date** | सामग्री कब तक पहुँचनी चाहिए। |
+| **Current Location / Hub** | सामग्री अभी कहाँ है, जैसे कोई कूरियर हब। |
 
 ## आम दिक्कतें
 
@@ -441,22 +601,20 @@ routes: /PublicityReview/{id}, /PublicityReview/done
 for: 
 roles: 
 designations: ADMIN MD CS, ADMIN-MD CS, DGM MD CS, DGM-MD CS
-source-hash: 2d04fb4f99911b79
+minutes: 3
+source-hash: 981f49f742015d88
 confidence: ok
 
 **यह स्क्रीन किस काम की है**
 जब RMDO बताता है कि पीस कम मिले या खराब मिले, तो रिक्वेस्ट पर **Exception Raised** दिखता है। आप तय करते हैं कि कम पड़ी मात्रा कैसे भेजनी है।
 
-## स्टेप्स
-
 1. रिक्वेस्ट खोलें (लिस्ट पर **Exceptions** कार्ड से ऐसी रिक्वेस्ट ढूँढने में मदद मिलती है) और **Tracking & Delivery** पर जाएँ।
 2. लाल **Exception Raised** बॉक्स में **Exception Type**, **Raised By** और **Remarks** पढ़ें।
 3. **Resolve Exception** दबाएँ। बॉक्स में बाकी बची मात्रा दिखती है।
-4. एक विकल्प चुनें:
-5. **Re-initiate dispatch from the vendor**: **Continue to Dispatch** दबाएँ और बदले की सामग्री के लिए डिस्पैच फ़ॉर्म भरें।
-6. **Stock transfer from another HQ's excess**: **Source Request (Excess)** चुनें, **Transfer Quantity** देखें, **Remarks** लिखें, फिर **Send Transfer Order** दबाएँ।
-7. ट्रांसफ़र के लिए **Transfer Order Sent Successfully** स्क्रीन खुलती है। भेजने वाले HQ के RMDO को स्टॉक भेजने और कूरियर का सबूत अपलोड करने के लिए कहा जाता है।
-8. सबूत आने पर ट्रांसफ़र कार्ड पर **Update Dispatch Details** से उसकी पुष्टि करें।
+4. बाकी सामग्री वेंडर से भिजवाने के लिए **Re-initiate dispatch from the vendor** चुनें, **Continue to Dispatch** दबाएँ और बदले की सामग्री के लिए डिस्पैच फ़ॉर्म भरें।
+5. किसी दूसरे HQ का ज़्यादा स्टॉक भिजवाने के लिए **Stock transfer from another HQ's excess** चुनें, **Source Request (Excess)** चुनें, **Transfer Quantity** देखें, **Remarks** लिखें, फिर **Send Transfer Order** दबाएँ।
+6. ट्रांसफ़र के लिए **Transfer Order Sent Successfully** स्क्रीन खुलती है। भेजने वाले HQ के RMDO को स्टॉक भेजने और कूरियर का सबूत अपलोड करने के लिए कहा जाता है।
+7. सबूत आने पर ट्रांसफ़र कार्ड पर **Update Dispatch Details** से उसकी पुष्टि करें।
 
 ## आम दिक्कतें
 
@@ -471,13 +629,12 @@ routes: /PublicityReview/notifications
 for: 
 roles: 
 designations: 
-source-hash: d08258d028c354d8
+minutes: 1
+source-hash: 3fcc7d3b610404d1
 confidence: ok
 
 **यह स्क्रीन किस काम की है**
 **Notifications** स्क्रीन पर आपके इलाके की रिक्वेस्ट से जुड़े अलर्ट दिखते हैं: नई मंज़ूरियाँ, डिस्पैच, एक्सेप्शन और स्टॉक ट्रांसफ़र।
-
-## स्टेप्स
 
 1. लिस्ट पेज पर **Notifications** दबाएँ।
 2. एक टैब चुनें: **All**, **Stock Transfer**, **Exception** या **Dispatch & Approvals**।

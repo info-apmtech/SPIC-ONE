@@ -159,7 +159,7 @@
                 Subtitle="Manage all draft, in-progress, submitted, and approved dealer applications"
                 CssClass="mb-0" />
 
-    <div class="dealer-header-actions">
+    <div class="dealer-header-actions" data-help="ma-dash-actions">
 
         @if (CanShowcreatebutton && CanCreateDealer)
         {
@@ -233,7 +233,7 @@
     </div>
 </div>
 
-    <div class="row g-3 mb-4 dashboard-kpi-row">
+    <div class="row g-3 mb-4 dashboard-kpi-row"  data-help="ma-dash-kpis">
         <div class="col-6 col-md-4 col-lg-3">
             <div class="kpi-card h-100">
                 <div class="kpi-header">
@@ -325,7 +325,7 @@
         </div>
     </div>
 
-    <div class="p-3 bg-white mb-4" style="border-radius: 12px; border: 1px solid #E5E7EB;">
+    <div class="p-3 bg-white mb-4" data-help="ma-dash-filters" style="border-radius: 12px; border: 1px solid #E5E7EB;">
         <div class="row g-3">
             <div class="col-12 col-md-6 col-lg-4 col-xxl-4">
                 <div class="search-wrap h-100 position-relative">
@@ -399,7 +399,7 @@
     }
     else
     {
-        <div class="row g-4">
+        <div class="row g-4" data-help="ma-dash-cards">
             @foreach (var dealer in _dealers)
             {
                 var approvalStatus = GetApprovalStatus(dealer);
@@ -607,7 +607,7 @@
                             }
                             @if (dealer.InSpic && dealer.InGreenStar)
                             {
-                                <span class="bullet-dot">â€¢</span>
+                                <span class="bullet-dot">&bull;</span>
                             }
                             @if (dealer.InGreenStar)
                             {
@@ -615,15 +615,15 @@
                             }
                             @if (!string.IsNullOrEmpty(dealer.BusinessEntityType))
                             {
-                                <span class="bullet-dot">â€¢</span> <span>@dealer.BusinessEntityType</span>
+                                <span class="bullet-dot">&bull;</span> <span>@dealer.BusinessEntityType</span>
                             }
                             @if (!string.IsNullOrEmpty(dealer.WholeSaleFertilizerLicenseNumber))
                             {
-                                <span class="bullet-dot">â€¢</span> <span>Wholesale</span>
+                                <span class="bullet-dot">&bull;</span> <span>Wholesale</span>
                             }
                             @if (!string.IsNullOrEmpty(dealer.RetailFertilizerLicenseNumber))
                             {
-                                <span class="bullet-dot">â€¢</span> <span>Retail</span>
+                                <span class="bullet-dot">&bull;</span> <span>Retail</span>
                             }
                         </div>
                         <div class="card-footer-note">Last Updated: @dealer.UpdatedAt.ToString("dd MMM yyyy")</div>
@@ -1435,7 +1435,13 @@
         }
         if (d.RMApproved == null) return "In RM";
         if (d.RMApproved == true && d.SMApproved == null) return "In SMM";
-        if (d.RMApproved == true && d.SMApproved == true && d.AVPApproved == null) return "In AVP";
+        if (d.RMApproved == true && d.SMApproved == true && d.AVPApproved == null)
+        {
+            // New Dealers go to AVP Office after SM approval; Existing Dealers go to AVP.
+            if (d.IsNewDealerRegistration && !d.IsAvpOfficeSubmitted && !d.IsFinalAvpApproved)
+                return "In AVP Office";
+            return "In AVP";
+        }
         return "Submitted";
     }
 
@@ -1477,7 +1483,13 @@
         // Normal forward flow.
         if (d.RMApproved == null) return OwnerLevel.RM;                                   // In RM
         if (d.RMApproved == true && d.SMApproved == null) return OwnerLevel.SMM;          // In SMM
-        if (d.RMApproved == true && d.SMApproved == true && d.AVPApproved == null) return OwnerLevel.AVP; // In AVP
+        if (d.RMApproved == true && d.SMApproved == true && d.AVPApproved == null)
+        {
+            // New Dealers go to AVP Office after SM approval; Existing Dealers go to AVP.
+            if (d.IsNewDealerRegistration && !d.IsAvpOfficeSubmitted && !d.IsFinalAvpApproved)
+                return OwnerLevel.AvpOffice;
+            return OwnerLevel.AVP; // In AVP
+        }
 
         return OwnerLevel.None;
     }

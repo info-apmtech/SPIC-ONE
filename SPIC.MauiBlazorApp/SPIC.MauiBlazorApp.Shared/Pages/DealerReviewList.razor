@@ -22,7 +22,7 @@
     <section>
 
         <!-- Summary Cards -->
-        <div class="drl-summary-grid mb-4">
+        <div class="drl-summary-grid mb-4" data-help="dr-list-cards">
             <div class="drl-summary-card drl-card-total">
                 <svg class="drl-summary-card-icon" viewBox="0 0 56 56" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <rect width="56" height="56" rx="12" fill="#ECF5FF"/>
@@ -75,11 +75,11 @@
             <div class="drl-applications-header">
                 <h2 class="drl-applications-title">Applications</h2>
                 <div class="drl-table-controls">
-                    <div class="drl-search-box">
+                    <div class="drl-search-box" data-help="dr-list-search">
                         <i class="bi bi-search"></i>
                         <input type="text" placeholder="Search applications..." @bind="_searchText" @bind:event="oninput" @bind:after="ApplyFilter">
                     </div>
-                    <select class="drl-filter-select" @bind="_statusFilter" @bind:after="ApplyFilter">
+                    <select class="drl-filter-select" data-help="dr-list-status" @bind="_statusFilter" @bind:after="ApplyFilter">
                         <option value="All">All Status</option>
                         <option value="Pending">Pending</option>
                         <option value="Verified">Verified</option>
@@ -89,7 +89,7 @@
             </div>
 
             <!-- Table -->
-            <div class="drl-table-container">
+            <div class="drl-table-container" data-help="dr-list-table">
                 @if (_isLoading)
                 {
                     <div class="p-3">
@@ -148,7 +148,7 @@
             </div>
 
             <!-- Footer: Items Per Page + Pagination -->
-            <div class="drl-table-footer">
+            <div class="drl-table-footer" data-help="dr-list-pages">
                 <div class="drl-items-per-page">
                     <span class="drl-items-per-page-label">Items Per Page</span>
                     <select @bind="_pageSize" @bind:after="ApplyFilter">
@@ -381,7 +381,12 @@
         if (d.RMApproved == true && d.SMApproved == null)
             return "In SMM";
         if (d.RMApproved == true && d.SMApproved == true && d.AVPApproved == null)
+        {
+            // New Dealers go to AVP Office after SM approval; Existing Dealers go to AVP.
+            if (d.IsNewDealerRegistration && !d.IsAvpOfficeSubmitted && !d.IsFinalAvpApproved)
+                return "In AVP Office";
             return "In AVP";
+        }
         return "Submitted";
     }
 
@@ -398,7 +403,8 @@
 
         if (LoginState.IsRegionRole && d.RMApproved == null) return true;
         if (LoginState.IsStateRole && d.RMApproved == true && d.SMApproved == null) return true;
-        if (LoginState.IsAdmin && d.RMApproved == true && d.SMApproved == true && d.AVPApproved == null) return true;
+        if (LoginState.IsAdmin && d.RMApproved == true && d.SMApproved == true && d.AVPApproved == null && !d.IsNewDealerRegistration) return true;
+        if (LoginState.IsAvpOffice && d.IsNewDealerRegistration && d.RMApproved == true && d.SMApproved == true && d.AVPApproved == null && !d.IsAvpOfficeSubmitted && !d.IsFinalAvpApproved) return true;
         return false;
     }
 

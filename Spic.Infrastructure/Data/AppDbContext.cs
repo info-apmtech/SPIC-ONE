@@ -339,6 +339,13 @@ namespace Spic.Infrastructure.Data
                 entity.Property(x => x.Kind).HasConversion<string>().HasMaxLength(20);
             });
 
+            // Help centre "Was this guide helpful?" (docs/superpowers/specs/2026-11-16-help-centre-redesign-design.md §6.7)
+            builder.Entity<HelpFeedback>(entity =>
+            {
+                entity.HasIndex(x => new { x.UserId, x.Module, x.SectionId, x.Day }).IsUnique();
+                entity.HasIndex(x => x.Day);
+            });
+
             // Publicity Material Tracking (docs/publicity-tracking-plan.md)
             builder.Entity<PublicityRequest>(entity =>
             {
@@ -1081,6 +1088,7 @@ namespace Spic.Infrastructure.Data
         //// Help Desk translation review
         public DbSet<HelpReviewItem> HelpReviewItems { get; set; }
         public DbSet<HelpReviewer> HelpReviewers { get; set; }
+        public DbSet<HelpFeedback> HelpFeedbacks { get; set; }
 
         //// JMDO Task Allocation
         public DbSet<JmdoTaskAllocation> JmdoTaskAllocations { get; set; }

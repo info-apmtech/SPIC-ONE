@@ -4,36 +4,175 @@ title: SAS మట్టి పరీక్ష ల్యాబ్
 icon: bi-eyedropper
 order: 60
 language: te
+category: మట్టి పరీక్ష
+note: ల్యాబ్ ప్రయాణం, స్టేటస్‌లు, గైడెడ్ టూర్‌లతో కొత్త రూపం
+meta-source-hash: 3e2288cb66a7506f
 ---
 
 ::: section overview
-title: మట్టి పరీక్ష ల్యాబ్ ఎలా పనిచేస్తుంది
-routes: /Lab
+title: ఈ మాడ్యూల్ మీకు ఏమి చేస్తుంది
+routes: 
 for: 
 roles: 
 designations: 
-source-hash: d196c24e61d998d8
+kind: overview
+source-hash: f1de7a25d0e196a5
 confidence: ok
 
-**ఈ మాడ్యూల్ దేనికి**
 ల్యాబ్ పోర్టల్ ప్రతి మట్టి, నీటి శాంపిల్‌ను అది ల్యాబ్‌కి చేరిన రోజు నుంచి రైతుకు రిపోర్ట్ అందే వరకు ఫాలో చేస్తుంది. ప్రతి వ్యక్తికి తమ పనికి సంబంధించిన స్క్రీన్‌లు మాత్రమే కనిపిస్తాయి.
 
-## ఒక కన్సైన్‌మెంట్ ప్రయాణం
+- receive | icon: bi-box-arrow-in-down | color: #0d9488
+  title: అందుకోవడం, బ్యాచ్ చేయడం
+  text: కోఆర్డినేటర్ ప్రతి పార్సిల్ అందుకుని, శాంపిల్స్‌ను ఒక అనలిస్ట్ కోసం బ్యాచ్‌లుగా కలుపుతారు.
+- test | icon: bi-eyedropper | color: #7c3aed
+  title: పరీక్షించి విలువలు ఎంటర్ చేయడం
+  text: అనలిస్ట్ పరీక్ష విలువలు టైప్ చేస్తారు. ఫలితాలు, సలహాను సిస్టమ్ తనంతట తానే లెక్కిస్తుంది.
+- report | icon: bi-file-earmark-pdf | color: #16a34a
+  title: చాలా భాషల్లో రిపోర్ట్‌లు
+  text: పూర్తయిన బ్యాచ్‌లో ప్రతి శాంపిల్‌కి ఒక రిపోర్ట్ వస్తుంది. అది ఇంగ్లీష్‌లో, భారతీయ భాషల్లో దొరుకుతుంది.
+:::
 
-1. ఫీల్డ్ సిబ్బంది రైతుల దగ్గర శాంపిల్స్ సేకరించి, వాటిని కొరియర్‌లో **consignment** (కన్సైన్‌మెంట్) గా ల్యాబ్‌కి పంపుతారు. దారిలో ఉన్నప్పుడు **In Transit** అని కనిపిస్తుంది.
-2. పార్సిల్ వచ్చినప్పుడు, ల్యాబ్ కోఆర్డినేటర్ **Mark received** నొక్కుతారు. కన్సైన్‌మెంట్ **Batch Pending** అవుతుంది.
-3. కోఆర్డినేటర్ ఒకటి లేదా ఎక్కువ Batch Pending కన్సైన్‌మెంట్‌లను ఒక **batch** (బ్యాచ్) లో పెట్టి, దాన్ని ఒక ల్యాబ్ అనలిస్ట్‌కి అప్పగిస్తారు. బ్యాచ్ **Taken for Analysis** అవుతుంది.
-4. అనలిస్ట్ బ్యాచ్ తెరిచి, ప్రతి శాంపిల్‌కి పరీక్ష విలువలు ఎంటర్ చేసి **Submit Values** నొక్కుతారు. ఫలితం, స్టేటస్, సిఫార్సును సిస్టమ్ తనంతట తానే లెక్కిస్తుంది.
-5. అన్ని శాంపిల్స్ సబ్మిట్ అయ్యాక, కోఆర్డినేటర్ **Complete Batch** నొక్కుతారు. దీనితో విలువలు లాక్ అవుతాయి, ప్రతి శాంపిల్‌కి ఒక రిపోర్ట్ తయారవుతుంది.
-6. రిపోర్ట్‌లను ఇంగ్లీష్, భారతీయ భాషల్లో PDF లేదా Excel గా డౌన్‌లోడ్ చేసి రైతుకు ఇవ్వవచ్చు. రైతు కూడా యాప్‌లో రిపోర్ట్ డౌన్‌లోడ్ చేసుకోవచ్చు.
+::: section flow
+title: ల్యాబ్‌లో కన్సైన్‌మెంట్ ఎలా ముందుకు వెళ్తుంది
+routes: 
+for: 
+roles: 
+designations: 
+kind: flow
+source-hash: 998b226207ae8a8b
+confidence: ok
 
-## ఎవరు ఏమి చేస్తారు
+ప్రతి వరుస ఒక రోల్, ప్రతి బాక్స్ ఒక దశ. అక్కడ ఏమి జరుగుతుందో చూడటానికి ఒక దశను నొక్కండి.
 
-- **Lab coordinator**: కన్సైన్‌మెంట్‌లు అందుకుంటారు, బ్యాచ్‌లు తయారు చేస్తారు, అనలిస్ట్‌లను అప్పగిస్తారు, బ్యాచ్‌లు పూర్తి చేస్తారు, ల్యాబ్ రిపోర్ట్‌లు డౌన్‌లోడ్ చేస్తారు.
-- **Lab analyst**: తమకు అప్పగించిన బ్యాచ్‌లకు పరీక్ష విలువలు ఎంటర్ చేస్తారు, శాంపిల్ రిపోర్ట్‌లు డౌన్‌లోడ్ చేస్తారు.
-- **Lab admin**: **Lab Tracking** లో అన్ని బ్యాచ్‌లను గమనిస్తారు. ఈ స్క్రీన్‌లో చూడటం మాత్రమే (read only).
+- field | type: lane | color: #64748b | roles: MDO, JMDO
+  title: ఫీల్డ్ సిబ్బంది
+  sub: MDO · JMDO
+- coordinator | type: lane | color: #0d9488
+  title: ల్యాబ్ కోఆర్డినేటర్
+  sub: అందుకుంటారు, బ్యాచ్ చేస్తారు
+- analyst | type: lane | color: #7c3aed
+  title: ల్యాబ్ అనలిస్ట్
+  sub: పరీక్ష విలువలు ఎంటర్ చేస్తారు
+- farmer | type: lane | color: #16a34a | roles: Farmer
+  title: రైతు
+  sub: రిపోర్ట్ పొందుతారు
+- send | lane: field | col: 1 | icon: bi-truck | color: #64748b | next: receive
+  title: పార్సిల్ పంపడం
+  status: In Transit
+  text: ఫీల్డ్ సిబ్బంది శాంపిల్స్‌ను కొరియర్‌లో కన్సైన్‌మెంట్‌గా ల్యాబ్‌కి పంపుతారు.
+- receive | lane: coordinator | col: 2 | icon: bi-box-arrow-in-down | color: #0d9488 | next: batch | screen: receive-consignments
+  title: అందినట్టు గుర్తించడం
+  status: Batch Pending
+  text: పార్సిల్ వచ్చినప్పుడు, కోఆర్డినేటర్ **Mark received** నొక్కుతారు.
+- batch | lane: coordinator | col: 3 | icon: bi-collection | color: #ea580c | next: test | screen: create-batch
+  title: బ్యాచ్ తయారు చేయడం
+  status: Taken for Analysis
+  text: కోఆర్డినేటర్ కన్సైన్‌మెంట్‌లను ఒక బ్యాచ్‌లో కలిపి, దాన్ని ఒక అనలిస్ట్‌కి అప్పగిస్తారు.
+- test | lane: analyst | col: 4 | icon: bi-eyedropper | color: #7c3aed | next: complete | screen: enter-test-values
+  title: పరీక్ష విలువలు ఎంటర్ చేయడం
+  status: Auto Result Ready
+  text: అనలిస్ట్ ప్రతి శాంపిల్ విలువలు టైప్ చేసి **Submit Values** నొక్కుతారు. ఫలితం, స్టేటస్, సలహా వాటంతట అవే నిండుతాయి.
+- complete | lane: coordinator | col: 5 | icon: bi-patch-check | color: #2563eb | next: report | screen: batch-details
+  title: బ్యాచ్ పూర్తి చేయడం
+  status: Report Generated
+  text: కోఆర్డినేటర్ **Complete Batch** నొక్కుతారు. విలువలు లాక్ అవుతాయి, ప్రతి శాంపిల్‌కి ఒక రిపోర్ట్ తయారవుతుంది.
+- report | lane: farmer | col: 6 | icon: bi-file-earmark-arrow-down | color: #16a34a
+  title: రైతుకు రిపోర్ట్
+  status: Completed
+  text: రిపోర్ట్‌ను రైతు కోసం PDF లేదా Excel గా డౌన్‌లోడ్ చేస్తారు. రైతు కూడా యాప్‌లో దాన్ని డౌన్‌లోడ్ చేసుకోవచ్చు.
+:::
 
-> మీ హోదాకు (designation) ల్యాబ్ పేజీలు ఉన్నప్పుడు మాత్రమే ల్యాబ్ స్క్రీన్‌లు తెరుచుకుంటాయి. Admin కి కూడా ఇది కావాలి. ల్యాబ్ మెనూ కనిపించకపోతే మీ అడ్మినిస్ట్రేటర్‌ని అడగండి.
+::: section statuses
+title: మీకు కనిపించే ప్రతి స్టేటస్
+routes: 
+for: 
+roles: 
+designations: 
+kind: statuses
+source-hash: 670249fe2e3bdb4d
+confidence: ok
+
+- in-transit | color: #64748b
+  label: In Transit
+  text: పార్సిల్ ల్యాబ్‌కి వెళ్తున్న దారిలో ఉంది.
+- batch-pending | color: #d97706
+  label: Batch Pending
+  text: అందింది, బ్యాచ్‌లో పెట్టడం కోసం ఎదురుచూస్తోంది.
+- batch-created | color: #0891b2
+  label: Batch Created
+  text: బ్యాచ్‌లో ఉంది, ఇంకా అనలిస్ట్‌ను అప్పగించలేదు.
+- taken | color: #ea580c
+  label: Taken for Analysis
+  text: ఒక అనలిస్ట్‌కి అప్పగించారు.
+- pending-entry | color: #d97706
+  label: Pending Entry
+  text: అనలిస్ట్ ఇంకా విలువలు ఎంటర్ చేయలేదు.
+- in-progress | color: #7c3aed
+  label: In Progress
+  text: కొన్ని విలువలు సేవ్ అయ్యాయి.
+- auto-result | color: #2563eb
+  label: Auto Result Ready
+  text: అన్ని విలువలు సబ్మిట్ అయ్యాయి; ఫలితాలు లెక్కించబడ్డాయి.
+- report | color: #16a34a
+  label: Report Generated
+  text: బ్యాచ్ పూర్తయింది, రిపోర్ట్‌లు సిద్ధంగా ఉన్నాయి.
+- delayed | color: #dc2626
+  label: Delayed
+  text: 5 రోజులకు పైగా అయినా అనాలిసిస్ పూర్తి కాలేదు.
+:::
+
+::: section roles
+title: ఎవరు ఏమి చేస్తారు
+routes: 
+for: 
+roles: 
+designations: 
+kind: roles
+source-hash: a82220da9f08df6e
+confidence: ok
+
+మీ రోల్ సరిపోతే మీ కార్డు హైలైట్ అయి కనిపిస్తుంది.
+
+- coordinator | color: #0d9488
+  title: ల్యాబ్ కోఆర్డినేటర్
+  - కన్సైన్‌మెంట్‌లు అందుకోవడం
+  - బ్యాచ్‌లు తయారు చేసి అనలిస్ట్‌లను అప్పగించడం
+  - బ్యాచ్‌లు పూర్తి చేసి రిపోర్ట్‌లు డౌన్‌లోడ్ చేయడం
+- analyst | color: #7c3aed
+  title: ల్యాబ్ అనలిస్ట్
+  - మీ బ్యాచ్‌లకు పరీక్ష విలువలు ఎంటర్ చేయడం
+  - శాంపిల్ రిపోర్ట్‌లు డౌన్‌లోడ్ చేయడం
+- admin | color: #2563eb | roles: Admin
+  title: ల్యాబ్ అడ్మిన్
+  - Lab Tracking లో అన్ని బ్యాచ్‌లను గమనించడం
+  - చూడటం మాత్రమే (read only)
+- field | color: #64748b | roles: MDO, JMDO
+  title: ఫీల్డ్ సిబ్బంది
+  - శాంపిల్స్‌ను ల్యాబ్‌కి పంపడం
+:::
+
+::: section faq
+title: సమస్యలు, జవాబులు
+routes: 
+for: 
+roles: 
+designations: 
+kind: faq
+source-hash: d8c921211d44aab6
+confidence: ok
+
+- no-lab-menu | popular: true
+  q: నాకు ల్యాబ్ మెనూ కనిపించడం లేదు
+  a: మీ హోదాకు (designation) ల్యాబ్ పేజీలు ఉన్నప్పుడు మాత్రమే ల్యాబ్ స్క్రీన్‌లు తెరుచుకుంటాయి. Admin కి కూడా ఇది కావాలి. మీ అడ్మినిస్ట్రేటర్‌ని అడగండి.
+- no-receive
+  q: Mark received బటన్ లేదు
+  a: కోఆర్డినేటర్లు మాత్రమే రిసీవ్ చేయగలరు, అది కూడా **In Transit** లో ఉన్న కన్సైన్‌మెంట్‌లను మాత్రమే.
+- delayed | popular: true
+  q: అనలిస్ట్ పూర్తి చేసినా బ్యాచ్ Delayed అని చూపిస్తోంది
+  a: అన్ని శాంపిల్స్ సబ్మిట్ అయి, అనాలిసిస్ పూర్తయ్యే వరకు అది Delayed గానే ఉంటుంది.
+- edit-values
+  q: సబ్మిట్ చేశాక విలువ మార్చవచ్చా?
+  a: అవును. ఆ శాంపిల్‌పై **Edit Values** నొక్కండి. బ్యాచ్ పూర్తయ్యే వరకు మాత్రమే ఇది పనిచేస్తుంది.
 :::
 
 ::: section coordinator-dashboard
@@ -42,13 +181,14 @@ routes: /Lab
 for: 
 roles: 
 designations: 
-source-hash: 17d85f22de7e96da
+screenshot: coordinator-dashboard.png
+screenshot-phone: coordinator-dashboard.phone.jpg
+minutes: 1
+source-hash: edeeb0d1e27dd744
 confidence: ok
 
 **ఈ స్క్రీన్ దేనికి**
 **Lab Coordinator Dashboard** ల్యాబ్ పరిస్థితిని ఒక్క చూపులో చూపిస్తుంది: ఎన్ని కన్సైన్‌మెంట్‌లు వచ్చాయి, ఇంకా ఎన్ని బ్యాచ్ కోసం ఎదురుచూస్తున్నాయి, అనాలిసిస్ ఎంతవరకు వచ్చింది. మీరు **Lab** తెరిచినప్పుడు, కోఆర్డినేటర్లకు యాప్ ఈ డ్యాష్‌బోర్డ్ చూపిస్తుంది. అనలిస్ట్‌లను బదులుగా వారి సొంత డ్యాష్‌బోర్డ్‌కి తీసుకెళ్తుంది.
-
-## దశలు
 
 1. పైన ఉన్న కార్డులు చూడండి: **Total Consignments Received**, **Pending Batch Creation**, **Total Batches Created**, **Taken for Analysis**, **Analysis Completed**, **Completed Batches**, **Reports Generated**.
 2. **Recent Consignments** టేబుల్ చివరి ఐదు కన్సైన్‌మెంట్‌లను వాటి **Status** (**Batch Pending** లేదా **Batch Created**) తో చూపిస్తుంది.
@@ -70,13 +210,14 @@ routes: /Lab/Consignments, /Lab/Consignments/{id}
 for: 
 roles: 
 designations: 
-source-hash: fc856d94c96b8437
+screenshot: receive-consignments.png
+screenshot-phone: receive-consignments.phone.jpg
+minutes: 2
+source-hash: 93cb533d61543543
 confidence: ok
 
 **ఈ స్క్రీన్ దేనికి**
 **Consignment Details** స్క్రీన్ ల్యాబ్‌కి పంపిన ప్రతి కన్సైన్‌మెంట్‌ను చూపిస్తుంది. పార్సిల్ అందినట్టు గుర్తించడానికి, దానిలో ఏముందో చెక్ చేయడానికి దీన్ని వాడండి.
-
-## దశలు
 
 1. పైన ఉన్న కార్డులు చూడండి: **Total Consignments**, **Pending Batch Creation**, **Batched Consignments**, **Water Samples**, **Soil Samples**.
 2. కన్సైన్‌మెంట్ కనుక్కోవడానికి, సెర్చ్ బాక్స్‌లో కన్సైన్‌మెంట్ నంబర్ లేదా AWB నంబర్ టైప్ చేయండి, లేదా **All Statuses** లో ఒక స్టేటస్ ఎంచుకోండి.
@@ -101,13 +242,12 @@ routes: /Lab/Consignments, /Lab/Consignments/{id}
 for: 
 roles: 
 designations: 
-source-hash: 90ca666972940c84
+minutes: 2
+source-hash: dcc40dda2df92781
 confidence: ok
 
 **ఈ స్క్రీన్ దేనికి**
 బ్యాచ్ అంటే ఒక అనలిస్ట్ కలిపి పరీక్షించే శాంపిల్స్ గుంపు. ఒక బ్యాచ్‌లో చాలా కన్సైన్‌మెంట్‌లు ఉండవచ్చు. మీరు దాన్ని **Consignment Details** లిస్ట్ నుంచి తయారు చేస్తారు.
-
-## దశలు
 
 1. **Consignment Details** తెరవండి. బ్యాచ్ కోసం ఎదురుచూస్తున్న కన్సైన్‌మెంట్‌లు మాత్రమే చూడటానికి **All Statuses** లో **Batch Pending** ఎంచుకోండి.
 2. బ్యాచ్‌లో పెట్టాలనుకున్న ప్రతి కన్సైన్‌మెంట్ మొదట్లో ఉన్న బాక్స్ టిక్ చేయండి. పైన ఉన్న బాక్స్ ఆ పేజీలోని అన్ని Batch Pending వరుసలను టిక్ చేస్తుంది.
@@ -136,23 +276,31 @@ routes: /Lab/Analysis
 for: 
 roles: 
 designations: 
-source-hash: eb674502e680b760
+screenshot: analysis-tracking.png
+hotspots: 1 @ 3.7,13.6,92.5,21.5 | 2 @ 16.1,39.1,78.2,5.3 | 3 @ 76.5,39.1,17.8,5.3 | 4 @ 5.7,46,88.6,54 | 5 @ 5.7,46,88.6,54
+screenshot-phone: analysis-tracking.phone.jpg
+hotspots-phone: 1 @ 6.2,7.4,87.7,27.5 | 2 @ 10,39.1,80,6.8 | 3 @ 10,42.8,80,3 | 4 @ 2,2,8,4 | 5 @ 2,2,8,4
+tour: 1 > [data-help=lab-at-cards] | 2 > [data-help=lab-at-search] | 3 > [data-help=lab-at-status] | 4 > [data-help=lab-at-table] | 5 > [data-help=lab-at-table]
+minutes: 2
+source-hash: 38d1f11b380940ea
 confidence: ok
 
 **ఈ స్క్రీన్ దేనికి**
 **Analysis Tracking** స్క్రీన్ ప్రతి బ్యాచ్‌ను చూపిస్తుంది. దీనితో బ్యాచ్ తయారైనప్పటి నుంచి అనాలిసిస్ పూర్తయ్యే వరకు ఫాలో చేయవచ్చు, ఆలస్యమైన బ్యాచ్‌లను గుర్తించవచ్చు.
 
-## దశలు
-
 1. పైన ఉన్న కార్డులు చూడండి: **Total Batches**, **Created**, **Taken for Analysis**, **Analysis Completed**, **Completed**, **Delayed Analysis**.
 2. సెర్చ్ బాక్స్‌లో బ్యాచ్ నంబర్, కన్సైన్‌మెంట్ నంబర్ లేదా అనలిస్ట్ పేరు టైప్ చేయండి.
 3. **All Statuses** లో ఒక స్టేటస్ ఎంచుకోండి. ఆలస్యమైన బ్యాచ్‌లు మాత్రమే చూడటానికి **Delayed** ఎంచుకోండి.
-4. **Analysis Days** కాలమ్ చదవండి:
-- **Pending** (పసుపు): అనాలిసిస్ ఇంకా మొదలు కాలేదు.
-- ఆకుపచ్చ రంగులో రోజుల సంఖ్య: అనాలిసిస్ సమయానికి జరుగుతోంది.
-- ఎరుపు రంగులో రోజుల సంఖ్య: బ్యాచ్ ఆలస్యమైంది (మామూలుగా 5 రోజుల కంటే ఎక్కువ అయినా పూర్తి కాలేదు).
-5. **Batch Details** తెరవడానికి బ్యాచ్ నంబర్ లేదా కన్ను ఐకాన్ నొక్కండి.
-6. ఇంకా బ్యాచ్‌లు చూడటానికి కింద ఉన్న పేజీ నంబర్లు వాడండి, లేదా ఒక్కో పేజీలో ఎన్ని వరుసలు కనిపించాలో మార్చండి.
+4. ఏ బ్యాచ్‌లు సమయానికి నడుస్తున్నాయో చూడటానికి **Analysis Days** కాలమ్ చదవండి (కింద ఉన్న టేబుల్ చూడండి).
+5. **Batch Details** తెరవడానికి బ్యాచ్ నంబర్ లేదా కన్ను ఐకాన్ నొక్కండి. ఇంకా బ్యాచ్‌లు చూడటానికి కింద ఉన్న పేజీ నంబర్లు వాడండి.
+
+## Analysis Days అర్థం
+
+| కనిపించేది | అర్థం |
+|---|---|
+| **Pending** (పసుపు) | అనాలిసిస్ ఇంకా మొదలు కాలేదు. |
+| ఆకుపచ్చ రంగులో రోజుల సంఖ్య | అనాలిసిస్ సమయానికి జరుగుతోంది. |
+| ఎరుపు రంగులో రోజుల సంఖ్య | బ్యాచ్ ఆలస్యమైంది (మామూలుగా 5 రోజుల కంటే ఎక్కువ అయినా పూర్తి కాలేదు). |
 
 ## సాధారణ సమస్యలు
 
@@ -166,13 +314,12 @@ routes: /Lab/Analysis/{id}
 for: 
 roles: 
 designations: 
-source-hash: ad50ad4baaed5137
+minutes: 2
+source-hash: 16c6bd2291162e28
 confidence: ok
 
 **ఈ స్క్రీన్ దేనికి**
 **Batch Details** స్క్రీన్ ఒక బ్యాచ్ గురించి అన్నీ చూపిస్తుంది: దాని శాంపిల్స్, పరీక్ష పారామీటర్‌లు, డాక్యుమెంట్లు, చరిత్ర. కోఆర్డినేటర్లు ఇక్కడే అనలిస్ట్‌ను అప్పగిస్తారు, బ్యాచ్‌ను పూర్తి చేస్తారు.
-
-## దశలు
 
 1. పైన ఉన్న పట్టీ **Batch No.**, **Consignment No.**, **Total Samples**, **Assigned Date**, **Current Status**, **Analysis Days** చూపిస్తుంది.
 2. ట్యాబ్‌లు వాడండి: **Overview** (పురోగతి, శాంపిల్ సమ్మరీ, టైమ్‌లైన్), **Samples**, **Parameters**, **Documents**, **Activity Log**.
@@ -196,13 +343,14 @@ routes: /Lab/Reports
 for: 
 roles: 
 designations: 
-source-hash: 4669cdab3bbe7c4e
+screenshot: lab-reports.png
+screenshot-phone: lab-reports.phone.jpg
+minutes: 2
+source-hash: bbe4683cfa84f8af
 confidence: ok
 
 **ఈ స్క్రీన్ దేనికి**
 బ్యాచ్ పూర్తయినప్పుడు తయారైన రిపోర్ట్‌లను **Lab Reports** స్క్రీన్ చూపిస్తుంది. ఇక్కడి నుంచి రిపోర్ట్ వివరాలు తెరిచి, రైతు చదివే భాషలో దాన్ని PDF లేదా Excel గా డౌన్‌లోడ్ చేయవచ్చు.
-
-## దశలు
 
 1. పైన ఉన్న కార్డులు చూడండి: **Total Reports**, **Batch Reports**, **Sample Reports**, **Generated Today**, **Downloads Completed**.
 2. లిస్ట్ తగ్గించడానికి, **Filters** నొక్కండి. **From**, **To** తేదీలు, **State**, **Sample Type** లేదా **Financial Year** ఎంచుకుని, **Apply Filters** నొక్కండి. వాటిని తీసేయడానికి **Clear All** నొక్కండి.
@@ -226,13 +374,14 @@ routes: /Lab/Analyst
 for: 
 roles: 
 designations: 
-source-hash: 976c980ff899d680
+screenshot: analyst-dashboard.png
+screenshot-phone: analyst-dashboard.phone.jpg
+minutes: 1
+source-hash: 84e531434d1c8d93
 confidence: ok
 
 **ఈ స్క్రీన్ దేనికి**
 **Lab Analyst Dashboard** మీకు అప్పగించిన పనిని, ముందు ఏమి చేయాలో చూపిస్తుంది. అనలిస్ట్ **Lab** తెరిచినప్పుడు, యాప్ ఈ స్క్రీన్ చూపిస్తుంది.
-
-## దశలు
 
 1. పైన ఉన్న కార్డులు చూడండి: **Assigned Batches**, **Pending Value Entry** (విలువల కోసం ఎదురుచూస్తున్న శాంపిల్స్), **Auto Result Ready** (ఫలితం లెక్కించబడిన శాంపిల్స్), **Reports Generated** (ఈ ఆర్థిక సంవత్సరంలో), **Previous FY Reports**.
 2. **Today's Work Priority** చెక్ చేయండి:
@@ -254,23 +403,31 @@ routes: /Lab/TestEntry
 for: 
 roles: 
 designations: 
-source-hash: 3ec8fc5442d5b1f7
+screenshot: analyst-batch-list.png
+hotspots: 1 @ 2.2,9.8,95.5,17.9 | 2 @ 2.2,30.1,95.5,34.9 | 3 @ 75.2,69.6,20.6,4.8 | 4 @ 4.2,76.1,91.6,23.9
+screenshot-phone: analyst-batch-list.phone.jpg
+hotspots-phone: 1 @ 3.1,5.8,93.8,16.9 | 2 @ 3.1,23.7,93.8,3.5 | 3 @ 6.9,31.2,86.2,3 | 4 @ 2,2,8,4
+tour: 1 > [data-help=lab-bl-cards] | 2 > [data-help=lab-bl-filters] | 3 > [data-help=lab-bl-search] | 4 > [data-help=lab-bl-table]
+minutes: 2
+source-hash: 42bf99c9e09c8175
 confidence: ok
 
 **ఈ స్క్రీన్ దేనికి**
 **Test Value Entry** స్క్రీన్ మీకు అప్పగించిన బ్యాచ్‌లను చూపిస్తుంది. ఇక్కడి నుంచి పరీక్ష విలువలు ఎంటర్ చేయడం మొదలుపెట్టండి లేదా కొనసాగించండి.
 
-## దశలు
-
 1. పైన ఉన్న కార్డులు చూడండి: **Assigned Batches**, **Pending Value Entry**, **Auto Result Ready**, **Report Generated**.
 2. లిస్ట్ తగ్గించడానికి, **Filters** తెరిచి **Date Range**, **Sample Type**, **Status**, **Priority**, **Financial Year** లేదా **Assigned By** ఎంచుకోండి. **Apply Filters** నొక్కండి. వాటిని తీసేయడానికి **Clear All** నొక్కండి.
 3. సెర్చ్ బాక్స్‌లో బ్యాచ్ లేదా కన్సైన్‌మెంట్ నంబర్ టైప్ చేయండి.
-4. **Assigned Batch List** లో **Pending Entries**, **Completed Entries**, **Priority**, **Status** చెక్ చేయండి. **High** ప్రాధాన్యత ఉన్న బ్యాచ్‌లు ముందు చేయండి.
-5. బ్యాచ్ తెరవడానికి ఒక వరుస, లేదా **Action** కాలమ్‌లోని ఐకాన్ నొక్కండి. ఐకాన్ అర్థం:
-- **Start entry**: స్టేటస్ **Pending Entry**, ఇంకా ఏమీ ఎంటర్ చేయలేదు.
-- **Continue entry**: స్టేటస్ **In Progress**, కొన్ని విలువలు సేవ్ అయ్యాయి.
-- **Preview results**: స్టేటస్ **Auto Result Ready**, అన్ని విలువలు సబ్మిట్ అయ్యాయి.
-- **View**: స్టేటస్ **Report Generated**, బ్యాచ్ మూసివేయబడింది.
+4. **Assigned Batch List** లో **Pending Entries**, **Completed Entries**, **Priority**, **Status** చెక్ చేయండి. **High** ప్రాధాన్యత ఉన్న బ్యాచ్‌లు ముందు చేయండి. బ్యాచ్ తెరవడానికి ఒక వరుస, లేదా **Action** కాలమ్‌లోని ఐకాన్ నొక్కండి.
+
+## Action ఐకాన్ అర్థం
+
+| ఐకాన్ | ఎప్పుడు కనిపిస్తుంది |
+|---|---|
+| **Start entry** | స్టేటస్ **Pending Entry**, ఇంకా ఏమీ ఎంటర్ చేయలేదు. |
+| **Continue entry** | స్టేటస్ **In Progress**, కొన్ని విలువలు సేవ్ అయ్యాయి. |
+| **Preview results** | స్టేటస్ **Auto Result Ready**, అన్ని విలువలు సబ్మిట్ అయ్యాయి. |
+| **View** | స్టేటస్ **Report Generated**, బ్యాచ్ మూసివేయబడింది. |
 
 ## సాధారణ సమస్యలు
 
@@ -284,13 +441,12 @@ routes: /Lab/TestEntry/{id}
 for: 
 roles: 
 designations: 
-source-hash: 0543541df7d26c4a
+minutes: 4
+source-hash: d752cb5b39f927f4
 confidence: ok
 
 **ఈ స్క్రీన్ దేనికి**
 **Sample-wise Entry** లో మీరు ఒక బ్యాచ్‌లోని ప్రతి శాంపిల్ పరీక్ష విలువలు టైప్ చేస్తారు. నార్మల్ రేంజ్, ఫలితం, స్టేటస్, సిఫార్సును సిస్టమ్ తనంతట తానే నింపుతుంది.
-
-## దశలు
 
 1. పైన **Batch Summary** చెక్ చేయండి.
 2. **Samples in this Batch** లో, మీరు పనిచేయాల్సిన శాంపిల్ ఐకాన్ నొక్కండి, లేదా **Next pending sample** నొక్కండి.
@@ -322,13 +478,12 @@ routes: /Lab/TestEntry/Reports, /Lab/TestEntry/Reports/Previous
 for: 
 roles: 
 designations: 
-source-hash: 40645f32067eb759
+minutes: 2
+source-hash: f0ab8dbc77d485c5
 confidence: ok
 
 **ఈ స్క్రీన్ దేనికి**
 **Test Reports** స్క్రీన్ ఈ ఆర్థిక సంవత్సరంలో (ఏప్రిల్ నుంచి మార్చి) మీ ప్రతి బ్యాచ్‌కి రిపోర్ట్ సమ్మరీ చూపిస్తుంది. **Previous FY Reports** ముందు సంవత్సరాలకు అదే చూపిస్తుంది.
-
-## దశలు
 
 1. పైన ఉన్న కార్డులు చూడండి: **Total Batches**, **Total Sample Reports**, **Reports Generated Today**, **Downloads Completed**.
 2. పాత రిపోర్ట్‌లు చూడటానికి, **Previous FY Reports** నొక్కండి. తిరిగి రావడానికి, **Current FY Reports** నొక్కండి.
@@ -350,13 +505,12 @@ routes: /Lab/TestEntry/Reports/{id}
 for: 
 roles: 
 designations: 
-source-hash: 683ffbc338437756
+minutes: 2
+source-hash: 8c8efa3d44f215ee
 confidence: ok
 
 **ఈ స్క్రీన్ దేనికి**
 **Batch Report Details** ఒక బ్యాచ్‌లోని ప్రతి శాంపిల్ రిపోర్ట్‌ను చూపిస్తుంది. ప్రతి శాంపిల్‌కి దాని రైతు కోసం సొంత రిపోర్ట్ ఉంటుంది. ఇక్కడ మీరు రిపోర్ట్‌లు చూడవచ్చు, డౌన్‌లోడ్ చేయవచ్చు, ప్రింట్ అయినట్టు గుర్తించవచ్చు.
-
-## దశలు
 
 1. కార్డులు చూడండి: **Total Samples**, **Soil Samples**, **Water Samples**, **Reports Generated**, **Downloads Completed**.
 2. **Batch Information** చెక్ చేయండి: బ్యాచ్, కన్సైన్‌మెంట్, State, Region, **Head Quarters**, **Date of Dispatch**, **Financial Year**.
@@ -383,13 +537,12 @@ routes: /Lab/Tracking
 for: 
 roles: 
 designations: 
-source-hash: dde8a3beb72cd9d3
+minutes: 2
+source-hash: 4713e37bae159d20
 confidence: ok
 
 **ఈ స్క్రీన్ దేనికి**
 **Lab Tracking** అనేది ల్యాబ్‌లోని అన్ని బ్యాచ్‌లను అడ్మిన్ చూసే స్క్రీన్. కన్సైన్‌మెంట్‌లు, బ్యాచ్‌లు, అనాలిసిస్ పురోగతి గమనించడానికి దీన్ని వాడండి. ఇక్కడ మీరు ఏమీ మార్చలేరు.
-
-## దశలు
 
 1. పైన ఉన్న కార్డులు చూడండి: **Total Batches**, **Batch Created**, **Taken for analysis**, **Analysis Completed**.
 2. ఒక దశ మాత్రమే చూడటానికి ట్యాబ్‌లు వాడండి: **All Batches**, **Batch Created**, **Taken for Analysis** లేదా **Analysis Completed**. ప్రతి ట్యాబ్ దాని లెక్క చూపిస్తుంది.
@@ -411,13 +564,12 @@ routes: /Lab/Tracking/{id}
 for: 
 roles: 
 designations: 
-source-hash: afb705e77b16edb3
+minutes: 1
+source-hash: 56cb817a9b7e82f1
 confidence: ok
 
 **ఈ స్క్రీన్ దేనికి**
 బ్యాచ్ వ్యూ ఒక బ్యాచ్ పూర్తి కథను అడ్మిన్‌కి ఒకే పేజీలో చూపిస్తుంది: శాంపిల్స్ ఎక్కడి నుంచి వచ్చాయి, కొరియర్, బ్యాచ్, అనాలిసిస్ పురోగతి, టైమ్‌లైన్. ఇందులో చూడటం మాత్రమే (read only).
-
-## దశలు
 
 1. పైన ఉన్న పట్టీ **Batch No.**, **Consignment No.**, **Test Samples**, **Samples**, **Assigned To (Analyst)**, **Batch Created On**, **Last Updated** చూపిస్తుంది.
 2. శాంపిల్స్ ఎవరు సేకరించారో, వారి **Mobile No.**, **Location**, **Collection Date** ను **Source Details** చూపిస్తుంది.
