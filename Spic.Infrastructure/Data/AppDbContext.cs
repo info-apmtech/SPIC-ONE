@@ -368,6 +368,9 @@ namespace Spic.Infrastructure.Data
             builder.Entity<PublicityAcknowledgement>(entity => entity.HasIndex(x => x.DispatchId).IsUnique());
             builder.Entity<PublicityFile>(entity => entity.HasIndex(x => x.RequestId));
             builder.Entity<PublicityEvent>(entity => entity.HasIndex(x => x.RequestId));
+            // One current finalization per Region - re-finalizing (ApproveRegion/ConfirmZeroRegion)
+            // overwrites it rather than appending, see PublicityRegionFinalization's own doc comment.
+            builder.Entity<PublicityRegionFinalization>(entity => entity.HasIndex(x => new { x.StateId, x.RegionId }).IsUnique());
             builder.Entity<PublicityNotification>(entity =>
             {
                 entity.HasIndex(x => x.TargetUserId);
@@ -1084,6 +1087,7 @@ namespace Spic.Infrastructure.Data
         public DbSet<PublicityFile> PublicityFiles { get; set; }
         public DbSet<PublicityEvent> PublicityEvents { get; set; }
         public DbSet<PublicityNotification> PublicityNotifications { get; set; }
+        public DbSet<PublicityRegionFinalization> PublicityRegionFinalizations { get; set; }
 
         //// Help Desk translation review
         public DbSet<HelpReviewItem> HelpReviewItems { get; set; }

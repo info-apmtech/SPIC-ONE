@@ -60,14 +60,21 @@ namespace SpicAPI.Controllers
         [HttpGet("lookups")]
         public async Task<IActionResult> Lookups([FromQuery] int? regionId)
         {
-            var region = regionId ?? ClaimInt("spic:region_id");
-            var peopleQuery = from u in _db.Users.AsNoTracking()
-                              join e in _db.Employeelogins.AsNoTracking() on u.Id equals e.UserId
-                              where e.IsActive && (region <= 0 || e.RegionId == region)
-                              select new { u.Id, u.Name, u.UserName, u.Role };
-            var people = (await peopleQuery.Take(500).ToListAsync())
-                .Select(p => new PubPerson { UserId = p.Id, Name = p.Name ?? p.UserName ?? p.Id, Role = RoleLabel(p.Role) })
-                .GroupBy(p => p.UserId).Select(g => g.First()).OrderBy(p => p.Name).ToList();
+            List<PubPerson> people;
+            if (regionId.HasValue && regionId.Value > 0 && await IsDispatcherAsync())
+            {
+                var query = from u in _db.Users.AsNoTracking()
+                            join e in _db.Employeelogins.AsNoTracking() on u.Id equals e.UserId
+                            where e.IsActive && e.RegionId == regionId.Value
+                            select new { u.Id, u.Name, u.UserName, u.Role };
+                people = (await query.ToListAsync())
+                    .Select(p => new PubPerson { UserId = p.Id, Name = p.Name ?? p.UserName ?? p.Id, Role = RoleLabel(p.Role) })
+                    .GroupBy(p => p.UserId).Select(g => g.First()).OrderBy(p => p.Name).ToList();
+            }
+            else
+            {
+                people = await GetAuthorizedPeopleAsync();
+            }
             var me = await MyNameAsync();
             if (people.All(p => p.UserId != Uid()))
                 people.Insert(0, new PubPerson { UserId = Uid(), Name = me, Role = RoleLabel(MyRole()) });
@@ -92,6 +99,84 @@ namespace SpicAPI.Controllers
                 MyHqId = ClaimInt("spic:hq_id"),
                 MyScope = await ScopeLabelAsync()
             });
+        }
+
+        private async Task<List<PubPerson>> GetAuthorizedPeopleAsync()
+        {
+            var myUserId = Uid();
+            var myName = await MyNameAsync();
+            var myRole = MyRole();
+
+            var result = new List<PubPerson>
+            {
+                new PubPerson { UserId = myUserId, Name = myName, Role = RoleLabel(myRole) }
+            };
+
+            var subLogins = _db.Employeelogins.AsNoTracking().Where(e => e.IsActive && e.UserId != myUserId);
+            bool hasSubordinates = false;
+
+            if (IsSuper())
+            {
+                hasSubordinates = true;
+            }
+            else if (myRole is AppRole.SMD or AppRole.SMM)
+            {
+                var myStateId = ClaimInt("spic:state_id");
+                if (myStateId > 0)
+                {
+                    hasSubordinates = true;
+                    var stateRoles = new[] { AppRole.RM, AppRole.RMD, AppRole.MDO, AppRole.MO, AppRole.JMDO };
+                    subLogins = subLogins.Where(e => e.StateId == myStateId && stateRoles.Contains(e.Role));
+                }
+            }
+            else if (myRole == AppRole.RM)
+            {
+                var myRegionId = ClaimInt("spic:region_id");
+                if (myRegionId > 0)
+                {
+                    hasSubordinates = true;
+                    var regionRoles = new[] { AppRole.RMD, AppRole.MDO, AppRole.MO, AppRole.JMDO };
+                    subLogins = subLogins.Where(e => e.RegionId == myRegionId && regionRoles.Contains(e.Role));
+                }
+            }
+            else if (myRole is AppRole.RMD or AppRole.MDO)
+            {
+                var myHqs = await MyHqIdsAsync();
+                if (myHqs.Count > 0)
+                {
+                    hasSubordinates = true;
+                    var hqRoles = new[] { AppRole.MO, AppRole.JMDO };
+                    subLogins = subLogins.Where(e => myHqs.Contains(e.HeadquartersId) && hqRoles.Contains(e.Role));
+                }
+            }
+            else if (myRole == AppRole.MO)
+            {
+                var myHqs = await MyHqIdsAsync();
+                if (myHqs.Count > 0)
+                {
+                    hasSubordinates = true;
+                    subLogins = subLogins.Where(e => myHqs.Contains(e.HeadquartersId) && e.Role == AppRole.JMDO);
+                }
+            }
+
+            if (hasSubordinates)
+            {
+                var subordinates = await (
+                    from e in subLogins
+                    join u in _db.Users.AsNoTracking() on e.UserId equals u.Id
+                    select new { u.Id, Name = u.Name ?? u.UserName ?? u.Id, e.Role }
+                ).Distinct().ToListAsync();
+
+                var sorted = subordinates
+                    .GroupBy(p => p.Id)
+                    .Select(g => g.First())
+                    .OrderBy(p => p.Name)
+                    .Select(p => new PubPerson { UserId = p.Id, Name = p.Name, Role = RoleLabel(p.Role) });
+
+                result.AddRange(sorted);
+            }
+
+            return result;
         }
 
         // ================================================================ list + stats
@@ -167,34 +252,16 @@ namespace SpicAPI.Controllers
         {
             var mine = stage.HasValue && IsSuper() ? (PublicityStage)stage.Value : await MyStageAsync();
             if (mine is null) return Forbid();
-            var scoped = (await ScopedAsync()).Where(r => r.Status != PublicityStatus.Draft &&
-                r.Status != PublicityStatus.Rejected && r.Status != PublicityStatus.Returned);
-            var pending = await scoped.Where(r => r.Stage == mine &&
-                (r.Status == PublicityStatus.PendingApproval || r.Status == PublicityStatus.PendingFinalApproval)).ToListAsync();
-            var below = await scoped.Where(r => r.Stage < mine && r.Stage >= PublicityStage.RmReview)
-                .Select(r => new { r.StateId, r.RegionId }).ToListAsync();
-            var rows = await RowsAsync(pending);
-            var names = await NamesAsync(pending.Select(r => r.StateId), pending.Select(r => r.RegionId), Array.Empty<int>());
 
-            var groups = pending.Select((r, i) => (r, row: rows[i]))
-                .GroupBy(x => (x.r.StateId, x.r.RegionId))
-                .Select(g => new PubRegionDto
-                {
-                    State = names.States.GetValueOrDefault(g.Key.StateId, ""),
-                    Region = names.Regions.GetValueOrDefault(g.Key.RegionId, ""),
-                    Hqs = g.Select(x => x.r.HeadquarterId).Distinct().Count(),
-                    Quantity = g.Sum(x => x.r.Quantity),
-                    Pending = g.Count(),
-                    Total = g.Count() + below.Count(b => b.StateId == g.Key.StateId && b.RegionId == g.Key.RegionId),
-                    LastUpdated = g.Max(x => x.r.UpdatedAt ?? x.r.SubmittedAt ?? x.r.CreatedAt),
-                    Rows = g.Select(x => x.row).ToList()
-                }).OrderBy(g => g.State).ThenBy(g => g.Region).ToList();
+            var groups = await BuildRegionGroupsAsync(mine.Value);
+            var allRows = groups.SelectMany(g => g.Rows).ToList();
 
             var scope = await ScopeLabelAsync();
             var nextIndex = Array.FindIndex(ChainStages, s => s == mine) + 1;
-            var lastSubmitted = pending.Select(r => r.SubmittedAt ?? r.UpdatedAt ?? r.CreatedAt).DefaultIfEmpty(DateTime.Now).Max();
-            var submissionId = pending.Count > 0
-                ? $"SUB-{lastSubmitted.Year}-{(pending.FirstOrDefault()?.Id ?? 12):D4}"
+            var lastSubmitted = groups.Select(g => g.LastUpdated).Where(d => d.HasValue).Select(d => d!.Value)
+                .DefaultIfEmpty(DateTime.Now).Max();
+            var submissionId = allRows.Count > 0
+                ? $"SUB-{lastSubmitted.Year}-{(allRows.FirstOrDefault()?.Id ?? 12):D4}"
                 : $"SUB-{DateTime.Now.Year}-0012";
 
             return Ok(new PubConsolidationDto
@@ -205,12 +272,256 @@ namespace SpicAPI.Controllers
                 SubmissionId = submissionId,
                 SubmittedAt = lastSubmitted,
                 Regions = groups.Count,
-                Hqs = pending.Select(r => r.HeadquarterId).Distinct().Count(),
-                Requests = pending.Count,
-                Quantity = pending.Sum(r => r.Quantity),
-                ReadyRegions = groups.Count(g => g.Pending == g.Total),
+                Hqs = groups.Sum(g => g.Hqs),
+                Requests = groups.Sum(g => g.EligibleCount),
+                Quantity = groups.Sum(g => g.Quantity),
+                RegionsFinalized = groups.Count(g => g.Status is PubRegionStatus.Approved or PubRegionStatus.ZeroConfirmed),
+                ApprovedRegions = groups.Count(g => g.Status == PubRegionStatus.Approved),
+                ZeroConfirmedRegions = groups.Count(g => g.Status == PubRegionStatus.ZeroConfirmed),
                 Groups = groups
             });
+        }
+
+        // SMD approves everything currently eligible in one Region as a block - this does NOT
+        // advance any request's Stage/Status (that only happens for the whole state at once, in
+        // ReviewBulk, once every Region is finalized - see ReviewBulk's own comment for why). Every
+        // precondition is re-derived from BuildRegionGroupsAsync's live data, never trusted from the
+        // client - the client's own enabled/disabled button is UX only.
+        [HttpPost("regions/{stateId:int}/{regionId:int}/approve")]
+        public async Task<IActionResult> ApproveRegion(int stateId, int regionId, [FromBody] PubRegionActionDto dto)
+        {
+            var mine = await MyStageAsync();
+            if (mine != PublicityStage.SmdReview) return Forbid();
+            var myStateId = ClaimInt("spic:state_id");
+            if (myStateId <= 0 || myStateId != stateId) return Forbid();
+
+            var groups = await BuildRegionGroupsAsync(mine.Value);
+            var region = groups.FirstOrDefault(g => g.StateId == stateId && g.RegionId == regionId);
+            if (region is null) return NotFound(new { Success = false, Message = "Region not found for your state." });
+            if (region.StillAtRmCount > 0)
+                return BadRequest(new { Success = false, Message = $"{region.StillAtRmCount} request(s) from this Region have not yet reached you from RM." });
+            if (region.EligibleCount == 0)
+                return BadRequest(new { Success = false, Message = "This Region has no requirements to approve." });
+            if (region.ReviewedCount < region.EligibleCount)
+                return BadRequest(new { Success = false, Message = $"{region.EligibleCount - region.ReviewedCount} request(s) in this Region still need to be reviewed." });
+
+            await UpsertRegionFinalizationAsync(stateId, regionId, PublicityRegionFinalizationStatus.Approved);
+            return Ok(new { Success = true });
+        }
+
+        // Finalize / Acknowledge a Zero-requirement Region: SMD can only finalize a zero-requirement
+        // region after the RM has explicitly submitted Zero Requirement (Status == ZeroSubmittedByRm).
+        [HttpPost("regions/{stateId:int}/{regionId:int}/finalize-zero")]
+        public async Task<IActionResult> FinalizeZeroRegion(int stateId, int regionId, [FromBody] PubRegionActionDto? dto = null)
+        {
+            var mine = await MyStageAsync();
+            if (mine != PublicityStage.SmdReview) return Forbid();
+            var myStateId = ClaimInt("spic:state_id");
+            if (myStateId <= 0 || myStateId != stateId) return Forbid();
+
+            var groups = await BuildRegionGroupsAsync(mine.Value);
+            var region = groups.FirstOrDefault(g => g.StateId == stateId && g.RegionId == regionId);
+            if (region is null) return NotFound(new { Success = false, Message = "Region not found for your state." });
+            if (region.EligibleCount > 0 || region.StillAtRmCount > 0)
+                return BadRequest(new { Success = false, Message = "This Region has requirements - review and approve them instead of finalizing zero." });
+            if (region.Status != PubRegionStatus.ZeroSubmittedByRm)
+                return BadRequest(new { Success = false, Message = "Cannot finalize zero requirement: the assigned RM has not submitted Zero Requirement for this Region." });
+
+            await UpsertRegionFinalizationAsync(stateId, regionId, PublicityRegionFinalizationStatus.ZeroConfirmed);
+            return Ok(new { Success = true });
+        }
+
+        // RM explicitly submits Zero Requirement for their assigned Region.
+        // SMD must NOT call this endpoint (rejected).
+        [HttpPost("regions/{stateId:int}/{regionId:int}/confirm-zero")]
+        [HttpPost("regions/{regionId:int}/confirm-zero")]
+        public async Task<IActionResult> ConfirmZeroRegion(int regionId, int? stateId = null, [FromBody] PubRegionActionDto? dto = null)
+        {
+            var role = MyRole();
+            if (role == AppRole.SMD)
+            {
+                return BadRequest(new { Success = false, Message = "SMD cannot confirm zero on behalf of a Region. Only the assigned RM can submit zero requirements." });
+            }
+            if (role != AppRole.RM && !IsSuper()) return Forbid();
+
+            var myStateId = ClaimInt("spic:state_id");
+            var myRegionId = ClaimInt("spic:region_id");
+            var targetStateId = stateId ?? myStateId;
+
+            if (!IsSuper())
+            {
+                if (myStateId <= 0 || myStateId != targetStateId || myRegionId <= 0 || myRegionId != regionId)
+                    return Forbid();
+            }
+
+            var groups = await BuildRegionGroupsAsync(PublicityStage.RmReview);
+            var region = groups.FirstOrDefault(g => g.RegionId == regionId);
+            if (region is not null && (region.EligibleCount > 0 || region.StillAtRmCount > 0))
+                return BadRequest(new { Success = false, Message = "This Region has active publicity requests - approve them instead of submitting zero requirement." });
+
+            await UpsertRegionFinalizationAsync(targetStateId, regionId, PublicityRegionFinalizationStatus.RmZeroSubmitted);
+            return Ok(new { Success = true });
+        }
+
+        private async Task UpsertRegionFinalizationAsync(int stateId, int regionId, PublicityRegionFinalizationStatus status)
+        {
+            var name = await MyNameAsync();
+            var uid = Uid();
+            var existing = await _db.PublicityRegionFinalizations.FirstOrDefaultAsync(f => f.StateId == stateId && f.RegionId == regionId);
+            if (existing is null)
+            {
+                var created = new PublicityRegionFinalization
+                {
+                    StateId = stateId, RegionId = regionId, Status = status,
+                    FinalizedByUserId = uid, FinalizedByName = name, FinalizedAt = DateTime.Now
+                };
+                _db.PublicityRegionFinalizations.Add(created);
+                try
+                {
+                    await _db.SaveChangesAsync();
+                    return;
+                }
+                catch (DbUpdateException)
+                {
+                    // Another concurrent request already finalized this exact Region first (the
+                    // unique index on (StateId, RegionId) is the real guarantee here, this check
+                    // above is only a best-effort reduction of how often the race is hit) - detach
+                    // the failed insert and fall through to update the row that won instead.
+                    _db.Entry(created).State = EntityState.Detached;
+                    existing = await _db.PublicityRegionFinalizations.FirstOrDefaultAsync(f => f.StateId == stateId && f.RegionId == regionId);
+                }
+            }
+            if (existing is not null)
+            {
+                existing.Status = status;
+                existing.FinalizedByUserId = uid;
+                existing.FinalizedByName = name;
+                existing.FinalizedAt = DateTime.Now;
+                await _db.SaveChangesAsync();
+            }
+        }
+
+        // Builds one PubRegionDto per Region that must be accounted for. For the SMD stage
+        // specifically, this is every Region still active in the state's master data, UNION any
+        // Region (active or not) that currently has a request somewhere at-or-before the SMD stage -
+        // so a request against a since-deactivated Region is never silently dropped, while a Region
+        // whose only history is already fully resolved (long past the SMD stage) doesn't force it to
+        // appear forever (there's no "cycle/batch" concept anywhere in this module - see
+        // PublicityRegionFinalization's own doc comment - so "has real, still-relevant data" is
+        // judged live, every call). Every OTHER stage keeps the original behaviour (one entry per
+        // Region that actually has a pending request) - only the SMD stage groups multiple Regions
+        // under one state-wide approver and needs the "zero Regions accounted for" treatment; RM's
+        // own ScopedAsync already narrows to a single Region, and SMM only ever receives work that
+        // already passed through this exact Region-finalization gate.
+        private async Task<List<PubRegionDto>> BuildRegionGroupsAsync(PublicityStage mine)
+        {
+            var scoped = (await ScopedAsync()).Where(r => r.Status != PublicityStatus.Draft &&
+                r.Status != PublicityStatus.Rejected && r.Status != PublicityStatus.Returned);
+            var pending = await scoped.Where(r => r.Stage == mine &&
+                (r.Status == PublicityStatus.PendingApproval || r.Status == PublicityStatus.PendingFinalApproval)).ToListAsync();
+            var below = await scoped.Where(r => r.Stage < mine && r.Stage >= PublicityStage.RmReview)
+                .Select(r => new { r.StateId, r.RegionId }).ToListAsync();
+
+            var rows = await RowsAsync(pending);
+            var rowByRequestId = pending.Select((r, i) => (r.Id, Row: rows[i])).ToDictionary(x => x.Id, x => x.Row);
+
+            var regionKeys = pending.Select(r => (r.StateId, r.RegionId))
+                .Concat(below.Select(b => (b.StateId, b.RegionId)))
+                .Distinct().ToHashSet();
+
+            if (mine == PublicityStage.SmdReview)
+            {
+                var myStateId = ClaimInt("spic:state_id");
+                if (myStateId is > 0)
+                {
+                    // 1. All regions in this state with an active RM assignment
+                    var rmRegionIds = await _db.Employeelogins.AsNoTracking()
+                        .Where(el => el.StateId == myStateId && el.Role == AppRole.RM && el.IsActive && el.RegionId > 0)
+                        .Select(el => el.RegionId)
+                        .Distinct()
+                        .ToListAsync();
+                    foreach (var rid in rmRegionIds) regionKeys.Add((StateId: myStateId, RegionId: rid));
+
+                    // 2. Active regions in this state that have active RM assignments or active requests
+                    var activeRegionIds = await _db.Regions.AsNoTracking()
+                        .Where(r => r.StateId == myStateId && r.IsActive &&
+                            (_db.Employeelogins.Any(el => el.RegionId == r.Id && el.Role == AppRole.RM && el.IsActive)
+                             || _db.PublicityRequests.Any(pr => pr.RegionId == r.Id && !pr.IsDeleted)))
+                        .Select(r => r.Id)
+                        .ToListAsync();
+                    foreach (var rid in activeRegionIds) regionKeys.Add((StateId: myStateId, RegionId: rid));
+                }
+            }
+            else if (mine == PublicityStage.RmReview)
+            {
+                var myStateId = ClaimInt("spic:state_id");
+                var myRegionId = ClaimInt("spic:region_id");
+                if (myStateId > 0 && myRegionId > 0)
+                {
+                    regionKeys.Add((StateId: myStateId, RegionId: myRegionId));
+                }
+            }
+
+            var names = await NamesAsync(regionKeys.Select(k => k.StateId), regionKeys.Select(k => k.RegionId), Array.Empty<int>());
+            var relevantStateIds = regionKeys.Select(k => k.StateId).Distinct().ToList();
+            var relevantRegionIds = regionKeys.Select(k => k.RegionId).Distinct().ToList();
+            var hqCountsByRegion = await _db.Headquarters.AsNoTracking()
+                .Where(h => relevantRegionIds.Contains(h.RegionId))
+                .GroupBy(h => h.RegionId)
+                .Select(g => new { RegionId = g.Key, Count = g.Count() })
+                .ToDictionaryAsync(x => x.RegionId, x => x.Count);
+            var finalizations = await _db.PublicityRegionFinalizations.AsNoTracking()
+                .Where(f => relevantStateIds.Contains(f.StateId)).ToListAsync();
+
+            var groups = new List<PubRegionDto>();
+            foreach (var key in regionKeys)
+            {
+                var regionPending = pending.Where(r => r.StateId == key.StateId && r.RegionId == key.RegionId).ToList();
+                var stillAtRm = below.Count(b => b.StateId == key.StateId && b.RegionId == key.RegionId);
+                var reviewedCount = regionPending.Count(r => r.SmdReviewedAt != null);
+                var finalization = finalizations.FirstOrDefault(f => f.StateId == key.StateId && f.RegionId == key.RegionId);
+
+                // Staleness: a Region finalized earlier is only still valid if nothing new/unreviewed
+                // has appeared for it since - see PublicityRegionFinalization's own doc comment.
+                var isStale = finalization is not null && (
+                    stillAtRm > 0 ||
+                    (finalization.Status == PublicityRegionFinalizationStatus.Approved && regionPending.Any(r => r.SmdReviewedAt is null)) ||
+                    (finalization.Status is PublicityRegionFinalizationStatus.ZeroConfirmed or PublicityRegionFinalizationStatus.RmZeroSubmitted && regionPending.Count > 0));
+                var effective = isStale ? null : finalization;
+
+                PubRegionStatus status;
+                if (effective?.Status == PublicityRegionFinalizationStatus.Approved) status = PubRegionStatus.Approved;
+                else if (effective?.Status == PublicityRegionFinalizationStatus.ZeroConfirmed) status = PubRegionStatus.ZeroConfirmed;
+                else if (effective?.Status == PublicityRegionFinalizationStatus.RmZeroSubmitted) status = PubRegionStatus.ZeroSubmittedByRm;
+                else if (stillAtRm > 0 || regionPending.Count == 0) status = PubRegionStatus.PendingReview;
+                else if (reviewedCount == 0) status = PubRegionStatus.Submitted;
+                else if (reviewedCount < regionPending.Count) status = PubRegionStatus.InReview;
+                else status = PubRegionStatus.Reviewed;
+
+                groups.Add(new PubRegionDto
+                {
+                    StateId = key.StateId,
+                    RegionId = key.RegionId,
+                    State = names.States.GetValueOrDefault(key.StateId, ""),
+                    Region = names.Regions.GetValueOrDefault(key.RegionId, ""),
+                    Hqs = hqCountsByRegion.TryGetValue(key.RegionId, out var hqc) && hqc > 0
+                        ? hqc
+                        : regionPending.Select(r => r.HeadquarterId).Distinct().Count(),
+                    Quantity = regionPending.Sum(r => r.Quantity),
+                    EligibleCount = regionPending.Count,
+                    ReviewedCount = reviewedCount,
+                    StillAtRmCount = stillAtRm,
+                    Status = status,
+                    FinalizedByName = effective?.FinalizedByName,
+                    FinalizedAt = effective?.FinalizedAt,
+                    LastUpdated = regionPending.Count > 0
+                        ? regionPending.Max(r => r.UpdatedAt ?? r.SubmittedAt ?? r.CreatedAt)
+                        : effective?.FinalizedAt,
+                    Rows = regionPending.Select(r => rowByRequestId[r.Id]).ToList()
+                });
+            }
+
+            return groups.OrderBy(g => g.State).ThenBy(g => g.Region).ToList();
         }
 
         // ================================================================ details
@@ -231,7 +542,7 @@ namespace SpicAPI.Controllers
             // Anyone in the workflow may raise a request (not only the RMDO); Submit() below starts
             // the chain at the right stage for whoever actually created it. Admin/SuperAdmin keep
             // the usual testing bypass.
-            var isChainRole = MyRole() is AppRole.RMD or AppRole.MDO or AppRole.RM or AppRole.SMD or AppRole.SMM;
+            var isChainRole = MyRole() is AppRole.RMD or AppRole.MDO or AppRole.MO or AppRole.JMDO or AppRole.RM or AppRole.SMD or AppRole.SMM;
             if (!isChainRole && !await IsAdminMdCsAsync() && !await IsDgmMdCsAsync() && !IsSuper()) return Forbid();
             var error = await ValidateAsync(dto);
             if (error != null) return BadRequest(new { Success = false, Message = error });
@@ -265,13 +576,18 @@ namespace SpicAPI.Controllers
             var approverEdit = !CanEdit(r) && r.Status is PublicityStatus.PendingApproval or PublicityStatus.PendingFinalApproval
                 && r.Stage != PublicityStage.DgmMdCsReview && await IsMyTurnAsync(r.Stage) && await CanReadAsync(r);
             if (!CanEdit(r) && !approverEdit) return BadRequest(new { Success = false, Message = "Only your draft or returned request can be edited." });
-            var error = await ValidateAsync(dto);
+            var error = await ValidateAsync(dto, id);
             if (error != null) return BadRequest(new { Success = false, Message = error });
             var before = new { r.MaterialTypeId, r.ProductId, r.Quantity, r.HeadquarterId, r.RequestedByUserId, r.Remarks };
             await ApplyAsync(r, dto);
             r.UpdatedAt = DateTime.UtcNow;
             if (approverEdit)
             {
+                if (r.Stage == PublicityStage.SmdReview && await IsMyTurnAsync(r.Stage))
+                {
+                    r.SmdReviewedAt = DateTime.Now;
+                    r.SmdReviewedByName = await MyNameAsync();
+                }
                 var changes = new List<string>();
                 if (before.Quantity != r.Quantity) changes.Add($"Quantity {before.Quantity} -> {r.Quantity}");
                 if (before.MaterialTypeId != r.MaterialTypeId) changes.Add("Material changed");
@@ -315,11 +631,68 @@ namespace SpicAPI.Controllers
             return Ok(new { Success = true, r.Stage, r.Status });
         }
 
+        // A toggle, not a one-way action (see PubMarkReviewedDto's own doc comment) - distinct from
+        // Review()'s edit/return/reject/approve: this never changes Stage/Status/Quantity, it only
+        // records "I looked at this" so the Region-level approval gate (ApproveRegion) has something
+        // to check beyond "did the quantity get edited". Only meaningful at the request's OWN stage
+        // (not every approver stage needs this concept - only SMD's Region-level grouping does
+        // today), so this is intentionally restricted to SmdReview requests only.
+        [HttpPost("requests/{id:int}/mark-reviewed")]
+        public async Task<IActionResult> MarkRequestReviewed(int id, [FromBody] PubMarkReviewedDto dto)
+        {
+            var r = await _db.PublicityRequests.FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted);
+            if (r is null || !await CanReadAsync(r)) return NotFound(new { Success = false, Message = "Request not found." });
+            if (r.Stage != PublicityStage.SmdReview || r.Status is not (PublicityStatus.PendingApproval or PublicityStatus.PendingFinalApproval))
+                return BadRequest(new { Success = false, Message = "This request is not waiting for SMD review." });
+            if (!await IsMyTurnAsync(r.Stage)) return BadRequest(new { Success = false, Message = "This request is not waiting for your review." });
+
+            if (dto.Reviewed)
+            {
+                r.SmdReviewedAt = DateTime.Now;
+                r.SmdReviewedByName = await MyNameAsync();
+            }
+            else
+            {
+                r.SmdReviewedAt = null;
+                r.SmdReviewedByName = null;
+            }
+            await _db.SaveChangesAsync();
+            return Ok(new { Success = true, r.SmdReviewedAt, r.SmdReviewedByName });
+        }
+
         [HttpPost("requests/review-bulk")]
         public async Task<IActionResult> ReviewBulk([FromBody] PubBulkReviewDto dto)
         {
+            // Real enforcement of "every region must be finalized before the SMD can forward to
+            // SMM" - the Razor page's disabled button is UX only; a direct call to this endpoint
+            // must be blocked here too, or the consolidation requirement has no actual teeth.
+            // ReviewBulk is always a bulk-approve-forward (see ReviewOneAsync(r, "Approve", ...)
+            // below - there is no other action this endpoint performs), so this check applies
+            // unconditionally whenever the caller is acting at the SMD stage.
+            var mine = await MyStageAsync();
+            List<int>? serverDerivedIds = null;
+            if (mine == PublicityStage.SmdReview)
+            {
+                var groups = await BuildRegionGroupsAsync(mine.Value);
+                var unfinalized = groups.Where(g => g.Status is not (PubRegionStatus.Approved or PubRegionStatus.ZeroConfirmed)).ToList();
+                if (unfinalized.Count > 0)
+                {
+                    var details = string.Join(", ", unfinalized.Select(u => $"{u.Region} ({RegionStatusDescription(u)})"));
+                    return BadRequest(new
+                    {
+                        Success = false,
+                        Message = $"{unfinalized.Count} of {groups.Count} region(s) are not yet finalized ({details}). Every Region must be Approved or have its RM Zero Requirement finalized before forwarding to SMM."
+                    });
+                }
+                // Never trust the client for WHICH requests to advance at this stage - derive them
+                // from the Regions this same call just confirmed are Approved (ZeroConfirmed regions
+                // have nothing to advance).
+                serverDerivedIds = groups.Where(g => g.Status == PubRegionStatus.Approved)
+                    .SelectMany(g => g.Rows).Select(r => r.Id).ToList();
+            }
+
             var scoped = await ScopedAsync();
-            var ids = dto.Ids.Distinct().ToList();
+            var ids = (serverDerivedIds ?? dto.Ids).Distinct().ToList();
             var items = await _db.PublicityRequests.Where(r => ids.Contains(r.Id) && !r.IsDeleted).ToListAsync();
             var allowed = (await scoped.Where(r => ids.Contains(r.Id)).Select(r => r.Id).ToListAsync()).ToHashSet();
             var done = 0;
@@ -346,6 +719,10 @@ namespace SpicAPI.Controllers
                 if (qty is not > 0) return "Enter a valid quantity.";
                 var note = $"Quantity changed from {r.Quantity} to {qty}." + (string.IsNullOrWhiteSpace(remarks) ? "" : " " + remarks.Trim());
                 r.Quantity = qty.Value;
+                // A changed request always needs a fresh look before its Region can be (re-)approved -
+                // see PublicityRequest.SmdReviewedAt's own doc comment.
+                r.SmdReviewedAt = null;
+                r.SmdReviewedByName = null;
                 await AddEvent(r, r.Stage, "Edited", name, note);
             }
             else if (normalized == "return")
@@ -843,7 +1220,10 @@ namespace SpicAPI.Controllers
                 Region = names.Regions.GetValueOrDefault(r.RegionId, ""),
                 Stage = r.Stage, Status = r.Status, CreatedAt = r.CreatedAt,
                 AwaitingMe = IsPendingAt(r.Status, r.Stage, mine),
-                StatusNote = r.Status == PublicityStatus.Returned ? $"Return by {StageLabel(r.Stage).Replace(" Review", "")}" : null
+                StatusNote = r.Status == PublicityStatus.Returned ? $"Return by {StageLabel(r.Stage).Replace(" Review", "")}" : null,
+                CreatedByName = r.CreatedByName,
+                SmdReviewedAt = r.SmdReviewedAt,
+                SmdReviewedByName = r.SmdReviewedByName
             }).ToList();
         }
 
@@ -881,6 +1261,8 @@ namespace SpicAPI.Controllers
                 CanReview = canReview,
                 CanDispatch = isDispatcher && r.Status == PublicityStatus.FinalApproved,
                 CanResolve = isDispatcher && r.Status == PublicityStatus.ExceptionRaised,
+                SmdReviewedAt = r.SmdReviewedAt,
+                SmdReviewedByName = r.SmdReviewedByName,
                 Files = files.Concat(transferFiles).Select(ToFile).ToList(),
                 Summary = await SummaryAsync(r)
             };
@@ -1226,13 +1608,33 @@ namespace SpicAPI.Controllers
 
         // ================================================================ write helpers
 
-        private async Task<string?> ValidateAsync(PubUpsertDto dto)
+        private async Task<string?> ValidateAsync(PubUpsertDto dto, int? requestId = null)
         {
             if (dto.Quantity <= 0) return "Enter the required quantity.";
             if (!await _db.PublicityMaterialTypes.AnyAsync(m => m.Id == dto.MaterialTypeId)) return "Select the type of publicity material.";
             if (!await _db.Products.AnyAsync(p => p.Id == dto.ProductId)) return "Select the product.";
             if (!await _db.Headquarters.AnyAsync(h => h.Id == dto.HeadquarterId && h.RegionId == dto.RegionId)) return "Select the headquarter.";
             if (!await _db.Regions.AnyAsync(x => x.Id == dto.RegionId && x.StateId == dto.StateId)) return "Select the region.";
+
+            if (!string.IsNullOrWhiteSpace(dto.RequestedByUserId) && dto.RequestedByUserId != Uid())
+            {
+                bool isExistingMatch = false;
+                if (requestId.HasValue && requestId.Value > 0)
+                {
+                    isExistingMatch = await _db.PublicityRequests.AsNoTracking()
+                        .AnyAsync(r => r.Id == requestId.Value && r.RequestedByUserId == dto.RequestedByUserId);
+                }
+
+                if (!isExistingMatch)
+                {
+                    var allowed = await GetAuthorizedPeopleAsync();
+                    if (allowed.All(p => p.UserId != dto.RequestedByUserId))
+                    {
+                        return "The selected requested-by employee is not authorized under your hierarchy.";
+                    }
+                }
+            }
+
             return null;
         }
 
@@ -1428,6 +1830,17 @@ namespace SpicAPI.Controllers
             PublicityStage.InterHqTransfer => "Inter-HQ Transfer",
             PublicityStage.TransferCreation => "Transfer Creation",
             _ => "Completed"
+        };
+
+        private static string RegionStatusDescription(PubRegionDto g) => g.Status switch
+        {
+            PubRegionStatus.Approved => "Finalized",
+            PubRegionStatus.ZeroConfirmed => "Finalized",
+            PubRegionStatus.ZeroSubmittedByRm => "Zero Submitted by RM",
+            PubRegionStatus.Reviewed => "Reviewed",
+            PubRegionStatus.InReview => "In Review",
+            PubRegionStatus.Submitted => "Submitted for SMD Review",
+            _ => "Pending RM Submission"
         };
 
         private static string? RoleLabel(AppRole? role) => role switch

@@ -99,7 +99,7 @@
                 <button type="button" class="pub-btn pub-btn--grey" disabled="@_busy" @onclick="() => SaveAsync(false)">Save as Draft</button>
             }
             <button type="button" class="pub-btn pub-btn--primary" disabled="@_busy" @onclick="() => SaveAsync(true)">
-                @(Approver && _detail is not null ? $"Save & Forward to {PubText.Next(_detail.Stage)}" : Approver ? "Save & Forward" : "Submit Request") <i class="bi bi-chevron-double-right"></i>
+                @(Approver && _detail is not null ? (FromConsolidation ? "Save Changes" : $"Save & Forward to {PubText.Next(_detail.Stage)}") : Approver ? "Save & Forward" : "Submit Request") <i class="bi bi-chevron-double-right"></i>
             </button>
         </div>
     }
@@ -109,8 +109,9 @@
     [Parameter] public int? Id { get; set; }
 
     private bool Approver => Nav.ToBaseRelativePath(Nav.Uri).StartsWith("PublicityReview", StringComparison.OrdinalIgnoreCase);
+    private bool FromConsolidation => Nav.Uri.Contains("back=consolidation");
     private string Back => !Approver ? "/PublicityRequest"
-        : Nav.Uri.Contains("back=consolidation") ? "/PublicityReview/consolidation" : $"/PublicityReview/{Id}";
+        : FromConsolidation ? "/PublicityReview/consolidation" : $"/PublicityReview/{Id}";
     private PubDetailDto? _detail;
     private PubLookupsDto? _lookups;
     private readonly PubUpsertDto _dto = new();
@@ -238,14 +239,27 @@
         if (error != null) { Toast.Error(error); return; }
         if (Approver)
         {
-            // Editing IS the approval here: no separate "Approve & Forward" click afterwards -
-            // saving the change immediately forwards the request to the next stage.
-            var next = PubText.Next(_detail!.Stage);
             _busy = true;
             _dto.Quantity = _qty!.Value;
             _dto.Submit = false;
             var ok = await Api.SaveAsync(Id, _dto) is not null;
             if (ok && _files.Count > 0) ok = await Api.UploadAsync(Id!.Value, PublicityFileKind.Design, _files) is not null;
+
+            if (FromConsolidation || _detail?.Stage == PublicityStage.SmdReview)
+            {
+                // In SMD consolidation, individual requests are reviewed and saved, not forwarded to SMM individually.
+                if (ok) await Api.MarkRequestReviewedAsync(Id!.Value, true);
+                _busy = false;
+                if (!ok) return;
+                _files = new();
+                Toast.Success("Changes saved and marked as reviewed.");
+                Nav.NavigateTo(Back);
+                return;
+            }
+
+            // Editing IS the approval here: no separate "Approve & Forward" click afterwards -
+            // saving the change immediately forwards the request to the next stage.
+            var next = PubText.Next(_detail!.Stage);
             if (ok) ok = await Api.ReviewAsync(Id!.Value, new PubReviewDto { Action = "Approve" });
             _busy = false;
             if (!ok) return;

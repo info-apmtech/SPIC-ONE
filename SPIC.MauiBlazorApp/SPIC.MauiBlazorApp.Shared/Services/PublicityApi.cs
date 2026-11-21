@@ -82,6 +82,14 @@ public sealed class PublicityApi : ApiClientBase
     public Task<bool> DeleteAsync(int id) => SendAsync(HttpMethod.Delete, $"requests/{id}", null, "delete the draft");
     public Task<bool> ReviewAsync(int id, PubReviewDto dto) => SendAsync(HttpMethod.Post, $"requests/{id}/review", dto, "update the request");
     public Task<bool> ReviewBulkAsync(PubBulkReviewDto dto) => SendAsync(HttpMethod.Post, "requests/review-bulk", dto, "approve the requests");
+    public Task<bool> MarkRequestReviewedAsync(int id, bool reviewed) =>
+        SendAsync(HttpMethod.Post, $"requests/{id}/mark-reviewed", new PubMarkReviewedDto { Reviewed = reviewed }, "update the review status");
+    public Task<bool> ApproveRegionAsync(int stateId, int regionId, string? remarks) =>
+        SendAsync(HttpMethod.Post, $"regions/{stateId}/{regionId}/approve", new PubRegionActionDto { Remarks = remarks }, "approve the Region");
+    public Task<bool> FinalizeZeroRegionAsync(int stateId, int regionId, string? remarks) =>
+        SendAsync(HttpMethod.Post, $"regions/{stateId}/{regionId}/finalize-zero", new PubRegionActionDto { Remarks = remarks }, "finalize zero requirement");
+    public Task<bool> ConfirmZeroRegionAsync(int stateId, int regionId, string? remarks) =>
+        SendAsync(HttpMethod.Post, $"regions/{stateId}/{regionId}/confirm-zero", new PubRegionActionDto { Remarks = remarks }, "confirm zero requirement");
     public Task<PubSaved?> CreateDispatchAsync(int id, PubDispatchCreateDto dto) => SendAsync<PubSaved>(HttpMethod.Post, $"requests/{id}/dispatches", dto, "create the dispatch");
     public Task<bool> DispatchStatusAsync(int dispatchId, PubDispatchStatusDto dto) => SendAsync(HttpMethod.Post, $"dispatches/{dispatchId}/status", dto, "update the dispatch");
     public Task<bool> ProofAsync(int dispatchId, PubProofDto dto) => SendAsync(HttpMethod.Post, $"dispatches/{dispatchId}/proof", dto, "submit the dispatch proof");
@@ -215,6 +223,28 @@ public static class PubText
         PublicityFileKind.CourierProof => "Courier Proof",
         PublicityFileKind.NoteApproval => "Note Approval Document",
         _ => "Document"
+    };
+
+    /// <summary>Region-level status on the consolidation screen reflecting the workflow state.</summary>
+    public static string RegionStatus(PubRegionDto g) => g.Status switch
+    {
+        PubRegionStatus.Approved => "Finalized",
+        PubRegionStatus.ZeroConfirmed => "Finalized",
+        PubRegionStatus.ZeroSubmittedByRm => "Zero Submitted by RM",
+        PubRegionStatus.Reviewed => "Reviewed",
+        PubRegionStatus.InReview => "In Review",
+        PubRegionStatus.Submitted => "Submitted for SMD Review",
+        _ => "Pending RM Submission"
+    };
+
+    public static string RegionStatusTone(PubRegionDto g) => g.Status switch
+    {
+        PubRegionStatus.Approved or PubRegionStatus.ZeroConfirmed => "green",
+        PubRegionStatus.ZeroSubmittedByRm => "violet",
+        PubRegionStatus.Reviewed => "cyan",
+        PubRegionStatus.InReview => "amber",
+        PubRegionStatus.Submitted => "blue",
+        _ => "grey"
     };
 
     public static string Size(long bytes) => bytes >= 1024 * 1024 ? $"{bytes / 1024d / 1024d:0.0} MB" : $"{Math.Max(1, bytes / 1024)} KB";

@@ -8832,6 +8832,43 @@ namespace Spic.Infrastructure.Migrations
                     b.ToTable("PublicityNotifications");
                 });
 
+            modelBuilder.Entity("SPIC.Core.Entities.PublicityRegionFinalization", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("FinalizedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("FinalizedByName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("FinalizedByUserId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("RegionId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("StateId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("StateId", "RegionId")
+                        .IsUnique();
+
+                    b.ToTable("PublicityRegionFinalizations");
+                });
+
             modelBuilder.Entity("SPIC.Core.Entities.PublicityRequest", b =>
                 {
                     b.Property<int>("Id")
@@ -8888,6 +8925,13 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<string>("RequestedByUserId")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime?>("SmdReviewedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("SmdReviewedByName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
 
                     b.Property<int>("Stage")
                         .HasColumnType("integer");
