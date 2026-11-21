@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Spic.Infrastructure.Data;
 using SPIC.Core.DTOs;
 using SPIC.Core.Entities;
+using SPIC.Core.Utilities;
 using System.Security.Claims;
 
 namespace SpicAPI.Controllers
@@ -101,26 +102,6 @@ namespace SpicAPI.Controllers
         }
 
         // POST /api/JMDOTracking/start
-        //
-        // "Manual Start/Stop is mobile-app-only" is enforced as a UI POLICY (FieldDashboard.razor's
-        // IsNativeApp gate on both the Start Live Tracking and Stop Tracking buttons), not as a
-        // server-side platform check - deliberately. The Web host and the native MAUI host both call
-        // this exact same endpoint over HTTP with the same bearer-token auth; nothing in the current
-        // request (User-Agent, a custom header, a client-supplied flag) is a non-spoofable signal of
-        // which host sent it - any of those could be set by a raw HTTP call from a browser's devtools
-        // or a tool like curl/Postman just as easily as by the real native app. Trusting such a
-        // header as authorization evidence would be worse than not checking at all (false sense of
-        // security), so none is added here. True device-level enforcement would need an app-
-        // attestation mechanism (e.g. Android Play Integrity / Apple DeviceCheck) verified server-side
-        // into a signed claim - that infrastructure does not exist in this codebase and is out of
-        // scope for a UI/navigation policy fix.
-        //
-        // This is a deliberately narrower exposure than it may first look: the only authorization
-        // this endpoint ever grants is a JMDO starting/stopping THEIR OWN session (userId is resolved
-        // from the caller's own token, never a parameter - see CurrentUserId() below) - the same
-        // capability they already have from the mobile app with the same account. A JMDO calling this
-        // directly from a browser is not a privilege escalation, just a bypass of a UX recommendation
-        // that only the UI layer can actually enforce given this architecture.
         [HttpPost("start")]
         public async Task<IActionResult> Start([FromBody] JMDOTrackingStartDto dto)
         {
@@ -280,6 +261,11 @@ namespace SpicAPI.Controllers
             if (dto == null || !IsValidCoordinate(dto.Latitude, dto.Longitude))
                 return BadRequest(new { Success = false, Message = "A valid latitude/longitude is required." });
 
+            var currentInterval = await GetEffectiveIntervalSecondsAsync();
+            // Coarse fixes (> 500m) are network/cell tower triangulation artifacts that create false jumps
+            if (dto.Accuracy.HasValue && dto.Accuracy.Value > 500)
+                return Ok(new { intervalSeconds = currentInterval, ignored = true });
+
             var userId = CurrentUserId();
             var session = await _db.JMDOTrackingSessions
                 .FirstOrDefaultAsync(s => s.Id == sessionId && s.UserId == userId);
@@ -293,7 +279,6 @@ namespace SpicAPI.Controllers
             _db.JMDOTrackingPoints.Add(NewPoint(session.Id, dto, now));
             await _db.SaveChangesAsync();
 
-            var currentInterval = await GetEffectiveIntervalSecondsAsync();
             return Ok(new { intervalSeconds = currentInterval });
         }
 
@@ -312,8 +297,14 @@ namespace SpicAPI.Controllers
                 return BadRequest(new { Success = false, Message = "At least one point is required." });
             if (points.Count > 500)
                 return BadRequest(new { Success = false, Message = "At most 500 points per batch." });
-            if (points.Any(p => !IsValidCoordinate(p.Latitude, p.Longitude)))
-                return BadRequest(new { Success = false, Message = "Every point requires a valid latitude/longitude." });
+
+            var currentInterval = await GetEffectiveIntervalSecondsAsync();
+            var validPoints = points
+                .Where(p => IsValidCoordinate(p.Latitude, p.Longitude) && (!p.Accuracy.HasValue || p.Accuracy.Value <= 500))
+                .ToList();
+
+            if (validPoints.Count == 0)
+                return Ok(new { intervalSeconds = currentInterval, ignored = true });
 
             var userId = CurrentUserId();
             var session = await _db.JMDOTrackingSessions
@@ -325,22 +316,19 @@ namespace SpicAPI.Controllers
                 return BadRequest(new { Success = false, Message = "This tracking session is no longer active." });
 
             var now = IndiaNow();
-            var ordered = points
+            var ordered = validPoints
                 .OrderBy(p => p.DeviceCapturedAt ?? now)
                 .Select(p => NewPoint(session.Id, p, now));
 
             _db.JMDOTrackingPoints.AddRange(ordered);
             await _db.SaveChangesAsync();
 
-            var currentInterval = await GetEffectiveIntervalSecondsAsync();
             return Ok(new { intervalSeconds = currentInterval });
         }
 
         // POST /api/JMDOTracking/stop
         // The ONLY path in this controller that sets Status=Completed. Never called by attendance,
-        // never called by any task-allocation event, never called automatically. Same "mobile-only
-        // is a UI policy, not a server platform check" note as Start() above applies here too - see
-        // that doc comment for the full reasoning.
+        // never called by any task-allocation event, never called automatically.
         [HttpPost("stop")]
         public async Task<IActionResult> Stop([FromBody] JMDOTrackingStopDto dto)
         {
@@ -534,21 +522,14 @@ namespace SpicAPI.Controllers
 
             var query = _db.JMDOTrackingPoints
                 .AsNoTracking()
-                .Where(p => p.TrackingSessionId == sessionId);
+                .Where(p => p.TrackingSessionId == sessionId && (p.Accuracy == null || p.Accuracy <= GpsTrajectoryFilter.DefaultMaxAccuracyMeters));
 
             if (sinceId is > 0)
                 query = query.Where(p => p.Id > sinceId.Value).OrderBy(p => p.Id);
             else
-                // ThenBy(Id) matters: an offline-queue batch flush (AddPointsBatch) stamps every
-                // point in the batch with the SAME RecordedAt (the moment the batch was received),
-                // so ordering by RecordedAt alone leaves their relative order among themselves
-                // undefined - Postgres can return ties in any order. Id ascending is a safe, stable
-                // tiebreaker here because AddPointsBatch inserts the batch pre-sorted by
-                // DeviceCapturedAt, so Id order within a tied RecordedAt group already matches real
-                // chronological (device-capture) order.
-                query = query.OrderBy(p => p.RecordedAt).ThenBy(p => p.Id);
+                query = query.OrderBy(p => p.RecordedAt);
 
-            var points = await query
+            var rawPoints = await query
                 .Take(3000)
                 .Select(p => new JMDOTrackingPointDto
                 {
@@ -560,6 +541,21 @@ namespace SpicAPI.Controllers
                     Accuracy = p.Accuracy
                 })
                 .ToListAsync();
+
+            // Run kinematic bounce outlier filter to remove impossible jumps (e.g. A -> B -> A),
+            // and segment points across any genuine tracking gaps/discontinuities.
+            var cleaned = GpsTrajectoryFilter.CleanPoints(rawPoints);
+            var segments = GpsTrajectoryFilter.SegmentPoints(cleaned);
+
+            var points = new List<JMDOTrackingPointDto>(cleaned.Count);
+            for (var s = 0; s < segments.Count; s++)
+            {
+                foreach (var pt in segments[s])
+                {
+                    pt.SegmentIndex = s;
+                    points.Add(pt);
+                }
+            }
 
             return Ok(points);
         }
@@ -723,12 +719,7 @@ namespace SpicAPI.Controllers
         private ObjectResult Forbid403(string message) =>
             StatusCode(403, new { Success = false, Message = message });
 
-        private static bool IsValidCoordinate(double? latitude, double? longitude)
-        {
-            if (latitude is null || longitude is null) return false;
-            if (double.IsNaN(latitude.Value) || double.IsInfinity(latitude.Value)) return false;
-            if (double.IsNaN(longitude.Value) || double.IsInfinity(longitude.Value)) return false;
-            return latitude.Value is >= -90 and <= 90 && longitude.Value is >= -180 and <= 180;
-        }
+        private static bool IsValidCoordinate(double? latitude, double? longitude) =>
+            GpsTrajectoryFilter.IsValidCoordinate(latitude, longitude);
     }
 }

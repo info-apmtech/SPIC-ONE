@@ -1,4 +1,5 @@
 using SPIC.Core.Entities;
+using SPIC.Core.Utilities;
 
 namespace SPIC.Core.DTOs;
 
@@ -131,7 +132,7 @@ public class JMDOTrackingTeamRowDto
 // drawing a session's route on a map. RecordedAt (server-received) is what orders/paginates the
 // data server-side; DeviceCapturedAt is exposed too since it's what actually reflects real movement
 // time for a point that was flushed from an offline queue well after it was captured.
-public class JMDOTrackingPointDto
+public class JMDOTrackingPointDto : IGpsPoint
 {
     // The incremental-fetch cursor for Live Tracking's polling (?sinceId=) - purely additive, History
     // playback's existing deserialization already ignores fields it doesn't know about.
@@ -141,4 +142,5 @@ public class JMDOTrackingPointDto
     public DateTime RecordedAt { get; set; }
     public DateTime DeviceCapturedAt { get; set; }
     public double? Accuracy { get; set; }
+    public int SegmentIndex { get; set; }
 }

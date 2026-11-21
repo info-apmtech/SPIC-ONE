@@ -1,3 +1,5 @@
+using SPIC.Core.Utilities;
+
 namespace SPIC.Core.Entities;
 
 // ------------------------------------------------------------------------------------------------
@@ -76,7 +78,7 @@ public class JMDOTrackingSession
 }
 
 /// <summary>One GPS point recorded within a JMDOTrackingSession.</summary>
-public class JMDOTrackingPoint
+public class JMDOTrackingPoint : IGpsPoint
 {
     public int Id { get; set; }
     public int TrackingSessionId { get; set; }

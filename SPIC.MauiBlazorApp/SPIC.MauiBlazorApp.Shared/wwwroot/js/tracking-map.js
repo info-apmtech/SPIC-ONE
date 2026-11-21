@@ -59,46 +59,176 @@ window.initTrackingRouteMap = function (elementId, startLat, startLng) {
 // arg, so its camera-framing behaviour is byte-for-byte unchanged. TrackPlayback's Live Tracking
 // tab passes false on every poll tick after the first, to follow the current-position marker
 // (panTo) without a jump-cut camera reframe every ~15s.
-window.updateTrackingRouteMap = function (elementId, points, fitBounds) {
+window.updateTrackingRouteMap = function (elementId, input, fitBounds) {
     var map = window.mapInstances ? window.mapInstances[elementId] : null;
-    if (!map || !points || points.length === 0) return;
+    if (!map || !input || input.length === 0) return;
 
-    var latLngs = points.map(function (p) { return [p.latitude, p.longitude]; });
-
-    if (map.trackRouteLine) {
-        map.trackRouteLine.setLatLngs(latLngs);
+    var segments = [];
+    if (Array.isArray(input[0])) {
+        // Multi-segment array: [[p1, p2, ...], [p3, p4, ...]]
+        segments = input;
     } else {
-        map.trackRouteLine = L.polyline(latLngs, { color: '#2D72D9', weight: 4, opacity: 0.85 }).addTo(map);
+        // Flat array of points
+        segments = [input];
     }
 
-    var current = latLngs[latLngs.length - 1];
+    // Convert to Leaflet latLngs structure: array of [lat, lng] arrays
+    var multiLatLngs = [];
+    var allBounds = [];
+
+    for (var s = 0; s < segments.length; s++) {
+        var seg = segments[s];
+        var segLatLngs = [];
+        for (var i = 0; i < seg.length; i++) {
+            var p = seg[i];
+            if (isPlausibleLatLng(p.latitude, p.longitude)) {
+                var ll = [p.latitude, p.longitude];
+                segLatLngs.push(ll);
+                allBounds.push(ll);
+            }
+        }
+        if (segLatLngs.length > 0) {
+            multiLatLngs.push(segLatLngs);
+        }
+    }
+
+    if (multiLatLngs.length === 0) return;
+
+    // Leaflet polyline: when given an array of LatLng arrays, it renders a multi-polyline
+    // where each segment is visually disconnected - no false straight line connects across gaps!
+    if (map.trackRouteLine) {
+        map.trackRouteLine.setLatLngs(multiLatLngs);
+    } else {
+        map.trackRouteLine = L.polyline(multiLatLngs, { color: '#2D72D9', weight: 4, opacity: 0.85 }).addTo(map);
+    }
+
+    // Start marker at the first point of the first valid segment
+    var startLL = multiLatLngs[0][0];
+    var startIcon = L.divIcon({
+        className: 'jt-map-pin-icon jt-map-pin-start',
+        iconSize: [30, 30],
+        iconAnchor: [15, 15],
+        html: '<i class="bi bi-flag-fill"></i>'
+    });
+    if (map.trackStartMarker) {
+        map.trackStartMarker.setLatLng(startLL);
+    } else {
+        map.trackStartMarker = L.marker(startLL, { icon: startIcon })
+            .bindPopup('<b>Start</b>')
+            .addTo(map);
+    }
+
+    // Current/End marker at the last point of the last valid segment
+    var lastSeg = multiLatLngs[multiLatLngs.length - 1];
+    var currentLL = lastSeg[lastSeg.length - 1];
     var currentIcon = L.divIcon({
         className: 'jt-map-pin-icon jt-map-pin-current',
         iconSize: [30, 30],
         iconAnchor: [15, 15],
         html: '<i class="bi bi-person-fill"></i>'
     });
-
     if (map.trackCurrentMarker) {
-        map.trackCurrentMarker.setLatLng(current);
+        map.trackCurrentMarker.setLatLng(currentLL);
     } else {
-        map.trackCurrentMarker = L.marker(current, { icon: currentIcon })
+        map.trackCurrentMarker = L.marker(currentLL, { icon: currentIcon })
             .bindPopup('<b>Current location</b>')
             .addTo(map);
     }
 
     if (fitBounds === false) {
-        map.panTo(current, { animate: true });
+        map.panTo(currentLL, { animate: true });
     } else {
-        var bounds = latLngs.slice();
-        if (map.trackStartMarker) {
-            var startLL = map.trackStartMarker.getLatLng();
-            // Only widen the frame to the Start marker if it's ever actually been placed at a real
-            // fix - never let a not-yet-repositioned (0,0) marker force the camera out to a world
-            // view that spans from it to the real route.
-            if (isPlausibleLatLng(startLL.lat, startLL.lng)) bounds.push(startLL);
-        }
-        map.fitBounds(bounds, { padding: [36, 36], maxZoom: 16 });
+        map.fitBounds(allBounds, { padding: [36, 36], maxZoom: 16 });
+    }
+};
+
+// ---------------------------------------------------------------------------
+// Live Tracking current-location-only view: ONE marker, no polyline, no start/end markers, no
+// fitBounds over historical points. Deliberately a separate function pair from
+// initTrackingRouteMap/updateTrackingRouteMap above (which stay completely unchanged for Playback
+// History) rather than a mode flag on the same functions, so there is no risk of the two modes'
+// behaviour bleeding into each other. Shares the same mapInstances registry, told apart only by
+// element id (TrackPlayback.razor uses "ma-live-tracking-map" for this, "ma-tracking-map" for
+// Playback History's route view).
+// ---------------------------------------------------------------------------
+
+window.initLiveLocationMap = function (elementId, lat, lng) {
+    if (!window.mapInstances) window.mapInstances = {};
+    if (!isPlausibleLatLng(lat, lng)) return; // nothing real to show yet - caller (RenderLiveMapAsync) already guards this, but stay defensive
+
+    if (!window.mapInstances[elementId]) {
+        var map = L.map(elementId).setView([lat, lng], 16);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap'
+        }).addTo(map);
+        // Only a user-initiated drag/zoom (never our own programmatic setView/panTo calls, which
+        // don't fire 'dragstart' and only fire 'zoomstart' if we ourselves changed zoom - we never
+        // do after this initial setView except via the explicit Recenter button, which resets this
+        // flag itself) marks the map as "being explored", so updateLiveLocationMarker's auto-pan
+        // backs off and lets the user look around without the camera fighting them.
+        map.on('dragstart zoomstart', function () { map._userInteracted = true; });
+        window.mapInstances[elementId] = map;
+    }
+
+    var map = window.mapInstances[elementId];
+    var icon = L.divIcon({
+        className: 'jt-map-pin-icon jt-map-pin-current',
+        iconSize: [30, 30],
+        iconAnchor: [15, 15],
+        html: '<i class="bi bi-person-fill"></i>'
+    });
+
+    if (map.liveLocationMarker) {
+        map.liveLocationMarker.setLatLng([lat, lng]);
+    } else {
+        map.liveLocationMarker = L.marker([lat, lng], { icon: icon })
+            .bindPopup('<b>Current location</b>')
+            .addTo(map);
+    }
+
+    map.setView([lat, lng], 16);
+};
+
+// Moves the existing marker only - never reinitializes the map, never calls fitBounds, never
+// touches zoom. Recenters the camera (panTo, not setView, so zoom is left alone) UNLESS the user
+// has manually panned/zoomed since the map was created or last explicitly recentered.
+window.updateLiveLocationMarker = function (elementId, lat, lng) {
+    var map = window.mapInstances ? window.mapInstances[elementId] : null;
+    if (!map || !isPlausibleLatLng(lat, lng)) return;
+
+    var icon = L.divIcon({
+        className: 'jt-map-pin-icon jt-map-pin-current',
+        iconSize: [30, 30],
+        iconAnchor: [15, 15],
+        html: '<i class="bi bi-person-fill"></i>'
+    });
+
+    if (map.liveLocationMarker) {
+        map.liveLocationMarker.setLatLng([lat, lng]);
+    } else {
+        map.liveLocationMarker = L.marker([lat, lng], { icon: icon })
+            .bindPopup('<b>Current location</b>')
+            .addTo(map);
+    }
+
+    if (!map._userInteracted) {
+        map.panTo([lat, lng], { animate: true });
+    }
+};
+
+// Explicit "Recenter" control - re-centers on the given location regardless of prior manual
+// interaction, then clears the flag so auto-follow resumes until the user pans/zooms again.
+window.recenterLiveLocationMap = function (elementId, lat, lng) {
+    var map = window.mapInstances ? window.mapInstances[elementId] : null;
+    if (!map || !isPlausibleLatLng(lat, lng)) return;
+    map._userInteracted = false;
+    map.setView([lat, lng], 16, { animate: true });
+};
+
+window.destroyLiveLocationMap = function (elementId) {
+    if (window.mapInstances && window.mapInstances[elementId]) {
+        window.mapInstances[elementId].remove();
+        delete window.mapInstances[elementId];
     }
 };
 
@@ -118,7 +248,16 @@ function calculateBearing(lat1, lng1, lat2, lng2) {
     return brng;
 }
 
-function getRouteBearing(points, index, map) {
+function getRouteBearing(points, index, map, isGap) {
+    if (isGap && index < points.length - 1) {
+        var p1 = points[index];
+        var p2 = points[index + 1];
+        if (p1 && p2 && isPlausibleLatLng(p1.latitude, p1.longitude) && isPlausibleLatLng(p2.latitude, p2.longitude)) {
+            var brng = calculateBearing(p1.latitude, p1.longitude, p2.latitude, p2.longitude);
+            map.lastBearing = brng;
+            return brng;
+        }
+    }
     var p1, p2;
     if (index > 0 && index < points.length) {
         p1 = points[index - 1];
@@ -146,17 +285,41 @@ window.setPlaybackPosition = function (elementId, points, index, isPlaying, spee
     if (!map || !points || points.length === 0) return;
 
     index = Math.max(0, Math.min(index, points.length - 1));
-    var latLngs = points.slice(0, index + 1).map(function (p) { return [p.latitude, p.longitude]; });
-    var current = latLngs[latLngs.length - 1];
-    var currentTarget = L.latLng(current[0], current[1]);
+    var currentPt = points[index];
+    if (!isPlausibleLatLng(currentPt.latitude, currentPt.longitude)) return;
 
-    if (map.playbackTrail) {
-        map.playbackTrail.setLatLngs(latLngs);
-    } else {
-        map.playbackTrail = L.polyline(latLngs, { color: '#f59e0b', weight: 5, opacity: 0.95 }).addTo(map);
+    var currentTarget = L.latLng(currentPt.latitude, currentPt.longitude);
+
+    // Build trail up to index, preserving segmentation so the trail does not draw lines across gaps
+    var trailSegments = [];
+    var currentSeg = [];
+    for (var i = 0; i <= index; i++) {
+        var pt = points[i];
+        if (!isPlausibleLatLng(pt.latitude, pt.longitude)) continue;
+        if (i > 0 && pt.segmentIndex !== undefined && points[i - 1].segmentIndex !== undefined && pt.segmentIndex !== points[i - 1].segmentIndex) {
+            if (currentSeg.length > 0) {
+                trailSegments.push(currentSeg);
+                currentSeg = [];
+            }
+        }
+        currentSeg.push([pt.latitude, pt.longitude]);
+    }
+    if (currentSeg.length > 0) {
+        trailSegments.push(currentSeg);
     }
 
-    var bearing = Math.round(getRouteBearing(points, index, map));
+    if (map.playbackTrail) {
+        map.playbackTrail.setLatLngs(trailSegments);
+    } else {
+        map.playbackTrail = L.polyline(trailSegments, { color: '#f59e0b', weight: 5, opacity: 0.95 }).addTo(map);
+    }
+
+    var isGap = false;
+    if (index > 0 && points[index].segmentIndex !== undefined && points[index - 1].segmentIndex !== undefined) {
+        isGap = points[index].segmentIndex !== points[index - 1].segmentIndex;
+    }
+
+    var bearing = Math.round(getRouteBearing(points, index, map, isGap));
 
     if (map.playbackMarker) {
         var el = map.playbackMarker.getElement();
@@ -186,16 +349,17 @@ window.setPlaybackPosition = function (elementId, points, index, isPlaying, spee
         map._markerAnimId = null;
     }
 
-    if (isPlaying) {
-        var prevPos = map.playbackMarker.getLatLng();
-        var startLat = prevPos.lat;
-        var startLng = prevPos.lng;
-        var destLat = currentTarget.lat;
-        var destLng = currentTarget.lng;
+    var prevPos = map.playbackMarker.getLatLng();
+    var startLat = prevPos.lat;
+    var startLng = prevPos.lng;
+    var destLat = currentTarget.lat;
+    var destLng = currentTarget.lng;
 
-        var distLat = Math.abs(destLat - startLat);
-        var distLng = Math.abs(destLng - startLng);
+    var distLat = Math.abs(destLat - startLat);
+    var distLng = Math.abs(destLng - startLng);
+    var isLargeJump = distLat > 0.005 || distLng > 0.005; // ~500m
 
+    if (isPlaying && !isGap && !isLargeJump) {
         if (distLat > 0.000001 || distLng > 0.000001) {
             var startTime = performance.now();
             function animateStep(now) {
@@ -228,9 +392,10 @@ window.setPlaybackPosition = function (elementId, points, index, isPlaying, spee
         }
         map._wasPlaying = true;
     } else {
+        // Discontinuity, manual scrub, or large jump: snap immediately without smooth interpolation across the gap
         map.playbackMarker.setLatLng(currentTarget);
         map.panTo(currentTarget, { animate: false });
-        map._wasPlaying = false;
+        map._wasPlaying = isPlaying;
     }
 };
 
