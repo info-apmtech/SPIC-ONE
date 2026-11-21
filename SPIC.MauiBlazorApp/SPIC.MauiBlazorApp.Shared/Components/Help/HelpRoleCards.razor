@@ -1,0 +1,31 @@
+@* Who does what: one card per role, the signed-in user's card highlighted. *@
+@using SPIC.Core.Help
+
+<div class="hc-roles">
+    @foreach (var c in HelpBlocks.Roles(Section, new List<string>()))
+    {
+        var me = c.Id == MyCard;
+        <div class="hc-role @(me ? "is-me" : null)" style="--c:@c.Color">
+            @if (me) { <span class="hc-role__badge">You</span> }
+            <div class="hc-role__av">@Initials(c.Title)</div>
+            <b>@c.Title</b>
+            <ul>
+                @foreach (var task in c.Tasks)
+                {
+                    <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i><span>@task</span></li>
+                }
+            </ul>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public HelpSection Section { get; set; } = default!;
+    [Parameter] public string? MyCard { get; set; }
+
+    private static string Initials(string title)
+    {
+        var letters = new string(title.Where(char.IsLetter).Take(2).ToArray()).ToUpperInvariant();
+        return letters.Length == 0 ? "•" : letters;
+    }
+}

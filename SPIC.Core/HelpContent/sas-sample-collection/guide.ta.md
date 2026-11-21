@@ -4,43 +4,185 @@ title: மண் மாதிரி சேகரிப்பு
 icon: bi-droplet
 order: 50
 language: ta
+category: மண் பரிசோதனை
+note: புதிய தோற்றம்: மாதிரியின் பயணம், நிலைகள் மற்றும் படிப்படியான வழிகாட்டல்
+meta-source-hash: 91cc9c6288b84a36
 ---
 
 ::: section overview
-title: மண் மாதிரி சேகரிப்பு எப்படி வேலை செய்கிறது
-routes: /SampleCollection
+title: இந்த மாட்யூல் உங்களுக்கு என்ன செய்யும்
+routes: 
 for: 
 roles: 
 designations: 
-source-hash: 690edb1b53c94744
+kind: overview
+source-hash: 722480765e5f4cad
 confidence: ok
 
-**இந்தத் திரை எதற்கு**
-SPIC விவசாயியின் நிலத்தில் இருந்து எடுக்கும் மண்ணையும் தண்ணீரையும் மாவட்ட லேபில் பரிசோதிக்கிறது. ஒவ்வொரு மாதிரியையும் வயலில் இருந்து விவசாயியின் அறிக்கை வரை ஆப் பின்தொடர்கிறது. ஒவ்வொரு சேகரிப்பும் இதே படிகளில்தான் போகும்.
+SPIC விவசாயியின் நிலத்தில் இருந்து எடுக்கும் மண்ணையும் தண்ணீரையும் மாவட்ட லேபில் பரிசோதிக்கிறது. ஒவ்வொரு மாதிரியையும் வயலில் இருந்து விவசாயியின் அறிக்கை வரை ஆப் பின்தொடர்கிறது. அதனால் மாதிரி எங்கே இருக்கிறது என்று எல்லோரும் பார்க்கலாம்.
 
-## படிகள்
+- collect | icon: bi-droplet | color: #0d9488
+  title: வயலில் சேகரித்தல்
+  text: MDO அல்லது JMDO விவசாயியையும் மாதிரிகளையும் பதிவு செய்வார்.
+- pay | icon: bi-qr-code | color: #d97706
+  title: பணம் கட்டுதல், ஒப்புதல்
+  text: பணம் கட்டும் மாதிரிக்கு UPI அல்லது வேறு வழியில் பணம் செலுத்தப்படும். பிறகு அதற்கு ஒப்புதல் தரப்பட்டு, Finance சரிபார்க்கும்.
+- report | icon: bi-file-earmark-text | color: #7c3aed
+  title: விவசாயிக்கு லேப் அறிக்கை
+  text: லேப் மாதிரிகளைப் பரிசோதிக்கும். விவசாயி அறிக்கையைத் தமிழிலோ ஆங்கிலத்திலோ பதிவிறக்கலாம்.
+:::
 
-1. **Collect.** (சேகரிப்பு) களப் பணியாளர் (MDO அல்லது JMDO) **New Sample Collection**-ஐத் திறந்து, விவசாயியைத் தேர்வு செய்து, ஒன்று அல்லது அதற்கு மேற்பட்ட மாதிரிகளைச் சேர்ப்பார்.
-2. **Pay.** (பணம் செலுத்துதல்) **Paid Sample**-க்குப் பணம் கட்ட வேண்டும். அதிகாரி UPI அல்லது வேறு வழியில் வந்த பணத்தைப் பதிவு செய்து, ரசீதின் புகைப்படத்தை அப்லோட் செய்வார். **Free Sample**-க்கு இந்தப் படி இல்லை.
-3. **Approve.** (ஒப்புதல்) ஒப்புதல் தருபவர் பணத்தையும் ரசீதையும் சரிபார்ப்பார். பிறகு Finance பணம் வந்து சேர்ந்ததா என்று சரிபார்க்கும்.
-4. **லேபுக்கு அனுப்புதல்.** அதிகாரி மாதிரிகளைக் கூரியரில் அனுப்பி, டிராக்கிங் எண்ணை உள்ளிடுவார். இதற்குப் பெயர் consignment.
-5. **Test.** (பரிசோதனை) லேப் மாதிரிகளைப் பெற்று பரிசோதிக்கும்.
-6. **Report.** (அறிக்கை) விவசாயி ஆப்பில் அறிக்கையைப் பார்க்கலாம், தமிழிலோ ஆங்கிலத்திலோ பதிவிறக்கலாம்.
+::: section flow
+title: ஒரு மாதிரி எப்படி நகர்கிறது, யார் செயல்படுவார்கள்
+routes: 
+for: 
+roles: 
+designations: 
+kind: flow
+source-hash: 8e557635907c2edf
+confidence: ok
 
-## நிலை (Status) என்றால் என்ன
+ஒவ்வொரு வரிசையும் ஒரு பணிப்பொறுப்பு (role), ஒவ்வொரு கட்டமும் ஒரு படி. இலவச மாதிரிக்குப் பணம் கட்டும் படிகள் இல்லை. ஒரு படியில் என்ன நடக்கிறது என்று பார்க்க அதைத் தட்டுங்கள்.
 
-- **Draft**: சேமிக்கப்பட்டது, இன்னும் சமர்ப்பிக்கவில்லை.
-- **Pending Payment**: பணம் பதிவு செய்யக் காத்திருக்கிறது.
-- **Pending Approval**: பணம் பதிவாகிவிட்டது, ஒப்புதலுக்குக் காத்திருக்கிறது.
-- **Ready consignment**: லேபுக்கு அனுப்பத் தயார்.
-- **Dispatched**, **In Transit**, **Delivered to Lab**: லேபுக்குப் போகும் வழியில் உள்ளது.
-- **In Progress**: லேப் பரிசோதித்துக்கொண்டிருக்கிறது.
-- **Completed**: முடிவுகள் கிடைத்துவிட்டன.
+- officer | type: lane | color: #0d9488 | roles: MDO, JMDO
+  title: களப் பணியாளர்
+  sub: MDO · JMDO
+- approver | type: lane | color: #ea580c | roles: Admin, CorporateAdmin
+  title: ஒப்புதல் தருபவர்
+  sub: பணத்துக்கு ஒப்புதல்
+- finance | type: lane | color: #2563eb
+  title: Finance
+  sub: பணச் சரிபார்ப்பு
+- lab | type: lane | color: #7c3aed
+  title: லேப்
+  sub: மாவட்ட லேப்
+- farmer | type: lane | color: #16a34a | roles: Farmer
+  title: விவசாயி
+  sub: மாதிரியின் உரிமையாளர்
+- collect | lane: officer | col: 1 | icon: bi-droplet | color: #64748b | next: pay | screen: collect-sample
+  title: மாதிரிகளைச் சேகரித்தல்
+  status: Draft
+  text: விவசாயியைத் தேர்வு செய்து, ஒவ்வொரு மண் அல்லது தண்ணீர் மாதிரியையும் சேர்த்துச் சேமியுங்கள். இலவச மாதிரி நேரடியாக consignment-க்குப் போகும்.
+- pay | lane: officer | col: 2 | icon: bi-qr-code | color: #d97706 | next: approve | screen: record-payment
+  title: பணத்தைப் பதிவு செய்தல்
+  status: Pending Payment
+  text: விவசாயி QR code-ஐ ஸ்கேன் செய்து பணம் கட்டுவார். அதிகாரி பரிவர்த்தனை விவரத்தை உள்ளிட்டு ரசீதை அப்லோட் செய்வார்.
+- approve | lane: approver | col: 3 | icon: bi-patch-check | color: #ea580c | next: send, verify | return: pay | screen: approve-payments
+  title: பணத்துக்கு ஒப்புதல் தருதல்
+  status: Pending Approval
+  text: ஒப்புதல் தருபவர் தொகையையும் ரசீதையும் சரிபார்த்து, ஒப்புதல் தந்து Finance-க்கு அனுப்புவார், அல்லது திருப்பி அனுப்புவார்.
+- send | lane: officer | col: 4 | icon: bi-truck | color: #0d9488 | next: test | screen: send-consignment
+  title: லேபுக்கு அனுப்புதல்
+  status: Dispatched
+  text: அதிகாரி மாதிரிகளைக் கூரியரிடம் கொடுத்து டிராக்கிங் எண்ணைப் பதிவு செய்வார். இதற்குப் பெயர் consignment.
+- verify | lane: finance | col: 4 | icon: bi-bank | color: #2563eb | screen: verify-payments
+  title: பணம் வந்ததைச் சரிபார்த்தல்
+  status: Finance Verified
+  text: பணம் கணக்குக்கு வந்து சேர்ந்ததை Finance உறுதி செய்யும், அல்லது பொருந்தவில்லை (mismatch) என்று குறிக்கும்.
+- test | lane: lab | col: 5 | icon: bi-eyedropper | color: #7c3aed | next: report
+  title: மாதிரிகளைப் பரிசோதித்தல்
+  status: In Progress
+  text: லேப் பார்சலைப் பெற்று, ஒவ்வொரு மாதிரியையும் பரிசோதித்து, முடிவுகளை வெளியிடும்.
+- report | lane: farmer | col: 6 | icon: bi-file-earmark-arrow-down | color: #16a34a | screen: farmer-my-reports
+  title: அறிக்கையைப் பதிவிறக்குதல்
+  status: Completed
+  text: விவசாயி ஆப்பில் அறிக்கையைப் பார்த்து, தமிழிலோ ஆங்கிலத்திலோ பதிவிறக்கலாம்.
+:::
 
-## பொதுவான பிரச்சனைகள்
+::: section statuses
+title: நீங்கள் பார்க்கக்கூடிய எல்லா நிலைகளும்
+routes: 
+for: 
+roles: 
+designations: 
+kind: statuses
+source-hash: 0771c49c0ffc8c78
+confidence: ok
 
-- மெனுவில் **Sample Collection** தெரியவில்லை: உங்கள் பதவிக்கு (designation) இந்தப் பக்கம் இல்லை. உங்கள் நிர்வாகியிடம் (administrator) கேளுங்கள்.
-- JMDO பயனர்களுக்கு இது மெனுவில் தெரியாது. அதற்குப் பதிலாக உங்கள் **Soil Sample** பணியிலிருந்து (task) திறங்கள்.
+- draft | color: #64748b
+  label: Draft
+  text: சேமிக்கப்பட்டது, இன்னும் சமர்ப்பிக்கவில்லை.
+- pending-payment | color: #d97706
+  label: Pending Payment
+  text: பணம் பதிவு செய்யக் காத்திருக்கிறது.
+- pending-approval | color: #ea580c
+  label: Pending Approval
+  text: பணம் பதிவாகிவிட்டது, ஒப்புதலுக்குக் காத்திருக்கிறது.
+- ready | color: #0891b2
+  label: Ready consignment
+  text: லேபுக்கு அனுப்பத் தயார்.
+- dispatched | color: #0d9488
+  label: Dispatched
+  text: கூரியரிடம் கொடுக்கப்பட்டது.
+- in-transit | color: #0d9488
+  label: In Transit
+  text: லேபுக்குப் போகும் வழியில் உள்ளது.
+- delivered | color: #2563eb
+  label: Delivered to Lab
+  text: பார்சல் லேபுக்கு வந்துவிட்டது.
+- in-progress | color: #7c3aed
+  label: In Progress
+  text: லேப் பரிசோதித்துக்கொண்டிருக்கிறது.
+- completed | color: #16a34a
+  label: Completed
+  text: முடிவுகள் கிடைத்துவிட்டன.
+:::
+
+::: section roles
+title: யார் என்ன செய்வார்கள்
+routes: 
+for: 
+roles: 
+designations: 
+kind: roles
+source-hash: 9c070a1e6fc377cf
+confidence: ok
+
+உங்கள் கார்டு தனியாக ஒளிர்ந்து தெரியும். உங்கள் பணிப்பொறுப்புக்கான திரைகள் மட்டுமே உங்களுக்குத் தெரியும்.
+
+- officer | color: #0d9488 | roles: MDO, JMDO
+  title: MDO, JMDO
+  - மாதிரிகளைச் சேகரிப்பது
+  - பணத்தைப் பதிவு செய்வது
+  - Consignment-களை லேபுக்கு அனுப்புவது
+- approver | color: #ea580c | roles: Admin, CorporateAdmin
+  title: ஒப்புதல் தருபவர்
+  - பணத்துக்கு ஒப்புதல் தருவது அல்லது திருப்பி அனுப்புவது
+  - Consignment-களை அடுத்த நிலைக்கு நகர்த்துவது
+  - லேப் முடிவுகளை உள்ளிடுவது
+- finance | color: #2563eb
+  title: Finance
+  - வந்த பணத்தைச் சரிபார்ப்பது
+  - பொருந்தாதவற்றை (mismatch) குறிப்பது
+- farmer | color: #16a34a | roles: Farmer
+  title: விவசாயி
+  - உங்கள் மாதிரிகளைப் பார்ப்பது
+  - உங்கள் அறிக்கைகளைப் பதிவிறக்குவது
+  - நீங்கள் கட்டிய பணத்தைச் சரிபார்ப்பது
+:::
+
+::: section faq
+title: பிரச்சனைகளும் பதில்களும்
+routes: 
+for: 
+roles: 
+designations: 
+kind: faq
+source-hash: b121292d9fb622a2
+confidence: ok
+
+- no-menu | popular: true
+  q: மெனுவில் Sample Collection தெரியவில்லை
+  a: உங்கள் பதவியில் (designation) இந்தப் பக்கம் இல்லை. உங்கள் நிர்வாகியிடம் (administrator) கேளுங்கள். JMDO பயனர்கள் இதை **Soil Sample** பணியிலிருந்து (task) திறக்க வேண்டும்.
+- payment-rejected | popular: true
+  q: என் பணம் நிராகரிக்கப்பட்டது. இப்போது என்ன செய்வது?
+  a: விவரங்கள் பக்கத்தில் காரணத்துடன் **Payment rejected** என்று காட்டும். அதைத் திருத்தி, மீண்டும் **Record payment** தட்டுங்கள்.
+- not-ready
+  q: "This collection is not ready to send" என்று வருகிறது
+  a: பணம் இன்னும் பதிவாகவில்லை அல்லது ஒப்புதல் கிடைக்கவில்லை. இலவச மாதிரிகளை உடனே அனுப்பலாம்.
+- report-language
+  q: அறிக்கையைத் தமிழில் எப்படிப் பெறுவது?
+  a: **Download PDF**-ன் பக்கத்தில் உள்ள சிறிய அம்புக்குறியைத் தட்டி, தமிழ் அல்லது ஆங்கிலம் தேர்வு செய்யுங்கள்.
 :::
 
 ::: section collection-list
@@ -49,22 +191,26 @@ routes: /SampleCollection
 for: 
 roles: 
 designations: 
-source-hash: 53f4f23e337f18d1
+screenshot: collection-list.png
+hotspots: 1 @ 2.2,68.5,95.5,15.1 | 2 @ 73.7,88,22.4,4.8 | 3 @ 2.2,30.7,95.5,35.4 | 4 @ 3.8,94.7,92.3,5.3 | 5 @ 62.1,1.9,8.1,4.8 | 6 @ 79.2,1.9,18.5,4.8
+screenshot-phone: collection-list.phone.jpg
+hotspots-phone: 1 @ 3.1,40.6,93.8,24.4 | 2 @ 6.4,69.4,87.2,3.2 | 3 @ 3.1,36,93.8,3.2 | 4 @ 2,2,8,4 | 5 @ 15.3,4.3,10.2,3 | 6 @ 39.7,4.3,48.8,3
+tour: 1 > [data-help=sc-tiles] | 2 > [data-help=sc-search] | 3 > [data-help=sc-filters] | 4 > [data-help=sc-table] | 5 > [data-help=sc-excel] | 6 > [data-help=sc-new]
+minutes: 2
+source-hash: 01315bd944ae112a
 confidence: ok
 
 **இந்தத் திரை எதற்கு**
 **Sample Collection** பக்கத்தில், நீங்கள் பார்க்க அனுமதியுள்ள எல்லாச் சேகரிப்புகளும், அவற்றின் பண நிலை மற்றும் லேப் நிலையுடன் தெரியும். ஒரு சேகரிப்பைக் கண்டுபிடித்து அதன் விவரங்களைத் திறக்க இதைப் பயன்படுத்துங்கள்.
 
-## படிகள்
+மேலே உள்ள கார்டுகள் எண்ணிக்கையைக் காட்டும்: **Total Samples**, **Free Samples**, **Paid Samples**, **Lab Level** மற்றும் **Ready to Submit**.
 
-1. மெனுவில் இருந்து **Sample Collection**-ஐத் திறங்கள்.
-2. மேலே உள்ள கார்டுகள் எண்ணிக்கையைக் காட்டும்: **Total Samples**, **Free Samples**, **Paid Samples**, **Lab Level** மற்றும் **Ready to Submit**.
-3. **Pending Payment** அல்லது **Draft** போன்ற வண்ணக் கட்டத்தைத் தட்டினால் அந்தச் சேகரிப்புகள் மட்டும் தெரியும். மீண்டும் தட்டினால் எல்லாம் தெரியும்.
-4. தேட, **Search collections...**-ல் விவசாயி பெயர் அல்லது collection ID-ஐ டைப் செய்யுங்கள்.
-5. மேலும் வசதிகளுக்கு, **Filters**-ஐத் திறந்து **Date Range**, **Location**, **Payment Type**, **Payment Status** அல்லது **Status** அமைத்து, **Apply Filters** தட்டுங்கள். அவற்றை நீக்க **Clear All** தட்டுங்கள்.
-6. சேகரிப்பைத் திறக்க கண் ஐகானைத் தட்டுங்கள் (போனில் கார்டைத் தட்டுங்கள்).
-7. திரையில் தெரியும் பட்டியலைப் பதிவிறக்க **Excel** அல்லது **PDF** தட்டுங்கள்.
-8. சமீபத்திய நிலையைப் பெற **Refresh Data** தட்டுங்கள்.
+1. **Pending Payment** அல்லது **Draft** போன்ற வண்ணக் கட்டத்தைத் தட்டினால் அந்தச் சேகரிப்புகள் மட்டும் தெரியும். மீண்டும் தட்டினால் எல்லாம் தெரியும்.
+2. தேட, **Search collections...**-ல் விவசாயி பெயர் அல்லது collection ID-ஐ டைப் செய்யுங்கள்.
+3. மேலும் வசதிகளுக்கு, **Filters**-ஐத் திறந்து **Date Range**, **Location**, **Payment Type**, **Payment Status** அல்லது **Status** அமைத்து, **Apply Filters** தட்டுங்கள். அவற்றை நீக்க **Clear All** தட்டுங்கள்.
+4. சேகரிப்பைத் திறக்க கண் ஐகானைத் தட்டுங்கள் (போனில் கார்டைத் தட்டுங்கள்).
+5. திரையில் தெரியும் பட்டியலைப் பதிவிறக்க **Excel** அல்லது **PDF** தட்டுங்கள். சமீபத்திய நிலையைப் பெற **Refresh Data** தட்டுங்கள்.
+6. மாதிரி சேகரிக்கத் தொடங்க **New Sample Collection** தட்டுங்கள்.
 
 ## பொதுவான பிரச்சனைகள்
 
@@ -80,24 +226,27 @@ routes: /SampleCollection/new
 for: SampleCollection.Entry
 roles: MDO, JMDO, Admin, CorporateAdmin
 designations: 
-source-hash: 4807aa811490f90c
+screenshot: collect-sample.png
+hotspots: 1 @ 66,1.9,31.8,5 | 2 @ 4,34.7,29.7,7.8 | 3 @ 35.2,81.7,29.7,8 | 4 @ 78.7,100,17.2,0 | 5 @ 81.8,100,16,0
+screenshot-phone: collect-sample.phone.jpg
+hotspots-phone: 1 @ 3.1,4.6,93.8,3.2 | 2 @ 6.9,33.7,86.2,8.5 | 3 @ 6.9,100,86.2,0 | 4 @ 6.9,100,86.2,0 | 5 @ 43.8,92.1,52.1,3
+tour: 1 > [data-help=sc-paytype] | 2 > [data-help=sc-farmer] | 3 > [data-help=sc-soil] | 4 > [data-help=sc-add] | 5 > [data-help=sc-save]
+minutes: 4
+source-hash: 3ae93abc0337f008
 confidence: ok
 
 **இந்தத் திரை எதற்கு**
 விவசாயிகளிடம் இருந்து நீங்கள் எடுக்கும் மாதிரிகளைப் பதிவு செய்ய **New Sample Collection**-ஐப் பயன்படுத்துங்கள். ஒரு சேகரிப்பில் பல விவசாயிகளின் மாதிரிகள் இருக்கலாம்.
 
-## படிகள்
+**Sample Collection** பக்கத்தில் **New Sample Collection** தட்டி இதைத் திறங்கள். JMDO: **Tasks Allocation**-ல் உள்ள **Soil Sample** கார்டில் **Start** தட்டுங்கள், அல்லது ஒரு பணியின் **Quick actions**-ல் **Soil Sample Collection** தட்டுங்கள்.
 
-1. **Sample Collection**-ல் **New Sample Collection** தட்டுங்கள். JMDO: **Tasks Allocation**-ல் உள்ள **Soil Sample** கார்டில் **Start** தட்டுங்கள், அல்லது ஒரு பணியின் **Quick actions**-ல் **Soil Sample Collection** தட்டுங்கள்.
-2. மேலே **Free Sample** அல்லது **Paid Sample** தேர்வு செய்யுங்கள்.
-3. **Farmer Name**-ல் குறைந்தது இரண்டு எழுத்துக்கள் டைப் செய்து விவசாயியைத் தேர்வு செய்யுங்கள். புதிய விவசாயி என்றால் **New Farmer** தட்டுங்கள்.
-4. பணம் கட்டும் மாதிரி என்றால், **Paid Sample Category**-ன் கீழ் **Farmer** அல்லது **NGO** தேர்வு செய்யுங்கள்.
-5. **Soil Sample** மற்றும் **Water Sample**-ஐ **Yes** அல்லது **No** என்று அமையுங்கள்.
-6. **Crop 1**, **Crop 2** தேர்வு செய்யுங்கள். தேவைப்பட்டால் **Remarks** சேருங்கள்.
-7. **Add Another Sample** தட்டுங்கள். மாதிரி அதன் தொகையுடன் **Sample Added (Preview)**-ல் தெரியும்.
-8. ஒவ்வொரு மாதிரிக்கும் இதையே செய்யுங்கள். ஒரு வரிசையை மாற்ற பென்சிலையும், நீக்க குப்பைத்தொட்டியையும் பயன்படுத்துங்கள்.
-9. பிறகு முடிக்க **Save Draft** தட்டுங்கள், அல்லது **Sample Summary**-ஐப் பார்க்க **Save and Continue** தட்டுங்கள்.
-10. சுருக்கத்தைச் சரிபார்த்து **Continue to payment** (பணம் கட்டும் மாதிரி) அல்லது **Continue to consignment** (இலவச மாதிரி) தட்டுங்கள்.
+1. மேலே **Free Sample** அல்லது **Paid Sample** தேர்வு செய்யுங்கள்.
+2. **Farmer Name**-ல் குறைந்தது இரண்டு எழுத்துக்கள் டைப் செய்து விவசாயியைத் தேர்வு செய்யுங்கள். புதிய விவசாயி என்றால் **New Farmer** தட்டுங்கள். பணம் கட்டும் மாதிரி என்றால், **Paid Sample Category**-ன் கீழ் **Farmer** அல்லது **NGO** தேர்வு செய்யுங்கள்.
+3. **Soil Sample** மற்றும் **Water Sample**-ஐ **Yes** அல்லது **No** என்று அமையுங்கள். **Crop 1**, **Crop 2** தேர்வு செய்து, தேவைப்பட்டால் **Remarks** சேருங்கள்.
+4. **Add Another Sample** தட்டுங்கள். மாதிரி அதன் தொகையுடன் **Sample Added (Preview)**-ல் தெரியும். ஒவ்வொரு மாதிரிக்கும் இதையே செய்யுங்கள்; பென்சில் ஒரு வரிசையை மாற்றும், குப்பைத்தொட்டி அதை நீக்கும்.
+5. பிறகு முடிக்க **Save Draft** தட்டுங்கள், அல்லது **Save and Continue** தட்டுங்கள். **Sample Summary**-ஐச் சரிபார்த்து **Continue to payment** (பணம் கட்டும் மாதிரி) அல்லது **Continue to consignment** (இலவச மாதிரி) தட்டுங்கள்.
+
+> Tip: ஒரு சேகரிப்பில் பல விவசாயிகளின் மாதிரிகள் இருக்கலாம்.
 
 ## புலங்களின் விளக்கம்
 
@@ -119,13 +268,12 @@ routes: /SampleCollection/new, /SampleCollection/view/{id}
 for: SampleCollection.Update
 roles: MDO, JMDO, Admin, CorporateAdmin
 designations: 
-source-hash: 1e935425e9054d62
+minutes: 2
+source-hash: 2699d934a7f0674d
 confidence: ok
 
 **இந்தத் திரை எதற்கு**
 **Save Draft** மூலம் சேமித்த சேகரிப்பு **Draft** ஆகவே இருக்கும். நீங்கள் சமர்ப்பிக்கும் வரை எதுவும் பணம் கட்டும் நிலைக்கோ லேபுக்கோ போகாது. அதை மீண்டும் திறந்து முடிக்கலாம்.
-
-## படிகள்
 
 1. **Sample Collection**-ஐத் திறந்து **Draft** கட்டத்தைத் தட்டுங்கள்.
 2. கண் ஐகான் மூலம் சேகரிப்பைத் திறங்கள்.
@@ -149,13 +297,12 @@ routes: /SampleCollection/payment/{id}
 for: 
 roles: MDO, JMDO, Admin, CorporateAdmin
 designations: 
-source-hash: 67de9290d8256a0c
+minutes: 3
+source-hash: c5b827bf8559be23
 confidence: ok
 
 **இந்தத் திரை எதற்கு**
 **Payments** திரையில் எவ்வளவு பணம் வசூலிக்க வேண்டும், விவசாயி ஸ்கேன் செய்ய ஒரு UPI QR code, பண விவரங்களுக்கும் ரசீதுக்குமான ஒரு படிவம் ஆகியவை இருக்கும்.
-
-## படிகள்
 
 1. **Continue to payment**-க்குப் பிறகு **Payments** திரை திறக்கும். சேகரிப்பு விவரங்களில் **Record payment** தட்டியும் திறக்கலாம்.
 2. **Total Amount to Collect**-ஐச் சரிபாருங்கள். மாதிரிகளைப் பார்க்க **View Sample Summary** தட்டுங்கள்.
@@ -188,13 +335,12 @@ routes: /SampleCollection/consignment/{id}, /SampleCollection/submitted/{id}
 for: 
 roles: MDO, JMDO, Admin, CorporateAdmin
 designations: 
-source-hash: 1820125bf239140d
+minutes: 3
+source-hash: de0b21e8f58ece6a
 confidence: ok
 
 **இந்தத் திரை எதற்கு**
 சேகரிப்பு இலவசமாக இருந்தால், அல்லது அதன் பணத்துக்கு ஒப்புதல் கிடைத்தால், மாதிரிகளை பேக் செய்து கூரியரிடம் கொடுப்பீர்கள். என்ன வருகிறது என்று லேபுக்குத் தெரிய, **Upload Consignment** கூரியர் விவரங்களையும் புகைப்படங்களையும் பதிவு செய்யும்.
-
-## படிகள்
 
 1. சேகரிப்பைத் திறந்து **Upload consignment** தட்டுங்கள். இலவச மாதிரிக்கு, **Continue to consignment** நேரடியாக இதைத் திறக்கும்.
 2. **Courier Details**-ன் கீழ், **Courier Service**-ஐத் தேர்வு செய்து **Tracking Number (AWB)**-ஐ டைப் செய்யுங்கள்.
@@ -224,13 +370,14 @@ routes: /SampleCollection/view/{id}
 for: 
 roles: 
 designations: 
-source-hash: c0ff9ecbae88fe84
+screenshot: collection-details.png
+screenshot-phone: collection-details.phone.jpg
+minutes: 2
+source-hash: 0b6c9585e9bd5ccc
 confidence: ok
 
 **இந்தத் திரை எதற்கு**
 **Sample Collection Details** ஒரு சேகரிப்பின் எல்லா விவரங்களையும் காட்டும்: பணம், கூரியர், லேப் முடிவுகள், வரலாறு. களப் பணியாளர்கள், டீலர்கள், மேலாளர்கள் இங்கே முன்னேற்றத்தைப் பின்தொடரலாம்.
-
-## படிகள்
 
 1. **Sample Collection**-ஐத் திறந்து, ஒரு சேகரிப்பில் கண் ஐகானைத் தட்டுங்கள்.
 2. மேல் வரியில் collection ID, **Paid Sample** அல்லது **Free Sample**, இப்போதைய நிலை ஆகியவை தெரியும்.
@@ -259,13 +406,12 @@ routes: /SampleCollection/view/{id}, /ConsignmentHistory/view/{id}
 for: 
 roles: Admin, CorporateAdmin
 designations: 
-source-hash: 71850d4b14d9d073
+minutes: 3
+source-hash: 16838640fb4dadb0
 confidence: ok
 
 **இந்தத் திரை எதற்கு**
 நிர்வாகிகள் சேகரிப்பு விவரங்கள் பக்கத்தில் பணத்தைப் பரிசீலிக்கலாம், ஒரு consignment-ஐ அடுத்த நிலைக்கு நகர்த்தலாம், லேப் முடிவுகளை டைப் செய்யலாம்.
-
-## படிகள்
 
 ### சேகரிப்பில் பணத்துக்கு ஒப்புதல் தருவது
 
@@ -299,13 +445,14 @@ routes: /ConsignmentHistory, /ConsignmentHistory/view/{id}
 for: 
 roles: 
 designations: 
-source-hash: c0eb73648ebf3b77
+screenshot: consignment-history.png
+screenshot-phone: consignment-history.phone.jpg
+minutes: 2
+source-hash: c4455c0c6e2c1ab2
 confidence: ok
 
 **இந்தத் திரை எதற்கு**
 **Consignment History**-ல் லேபுக்கு அனுப்பிய மாதிரிகளின் ஒவ்வொரு பார்சலும், கூரியர், டிராக்கிங் எண், இப்போதைய நிலையுடன் இருக்கும்.
-
-## படிகள்
 
 1. மெனுவில் இருந்து **Consignment History**-ஐத் திறங்கள்.
 2. கார்டுகள் **Total Consignments**, **Total Consignment Sent**, **Total Samples**, **Delivered** மற்றும் **Pending**-ஐக் காட்டும்.
@@ -335,13 +482,14 @@ routes: /Sas/MySamples, /SampleCollection/view/{id}
 for: 
 roles: Farmer
 designations: 
-source-hash: fa5d1d2f177d288c
+screenshot: farmer-my-samples.png
+screenshot-phone: farmer-my-samples.phone.jpg
+minutes: 2
+source-hash: eac7ad7b8677316c
 confidence: ok
 
 **இந்தத் திரை எதற்கு**
 உங்கள் MO அதிகாரி உங்களிடம் இருந்து சேகரித்த ஒவ்வொரு மண் அல்லது தண்ணீர் மாதிரியையும், அது இப்போது எங்கே இருக்கிறது என்பதையும் **My Samples** காட்டும்.
-
-## படிகள்
 
 1. மெனுவில் இருந்து **My Samples**-ஐத் திறங்கள்.
 2. ஒவ்வொரு கார்டிலும் மாதிரி எண், consignment, சேகரித்த அதிகாரி, தேதி, பயிர் ஆகியவை இருக்கும்.
@@ -371,13 +519,14 @@ routes: /Sas/MyReports
 for: 
 roles: Farmer
 designations: 
-source-hash: 810f0b093cade052
+screenshot: farmer-my-reports.png
+screenshot-phone: farmer-my-reports.phone.jpg
+minutes: 2
+source-hash: 40b826ab2246cad3
 confidence: ok
 
 **இந்தத் திரை எதற்கு**
 உங்கள் மாதிரிகளுக்கு லேப் தயாரித்த பரிசோதனை அறிக்கைகளை **My Reports** பட்டியலிடும். ஒவ்வொரு அறிக்கையையும் தமிழிலோ ஆங்கிலத்திலோ பதிவிறக்கலாம்.
-
-## படிகள்
 
 1. மெனுவில் இருந்து **My Reports**-ஐத் திறங்கள்.
 2. கார்டுகள் **Total Reports**, **Ready to Download**, **Downloaded** மற்றும் **Under Process**-ஐக் காட்டும்.
@@ -405,13 +554,12 @@ routes: /Sas/Payments, /Sas/Payments/{id}
 for: 
 roles: Farmer
 designations: 
-source-hash: 41753a10de9d41d6
+minutes: 2
+source-hash: f07974a161df2664
 confidence: ok
 
 **இந்தத் திரை எதற்கு**
 உங்கள் பணம் கட்டும் மண் மாதிரிகளுக்குச் செலுத்திய பணத்தையும், SPIC அதற்கு ஒப்புதல் தந்து பெற்றுக்கொண்டதா என்பதையும் **Payments** காட்டும். இங்கே நீங்கள் பார்க்க மட்டுமே செய்வீர்கள்; எதையும் நிரப்ப வேண்டியதில்லை.
-
-## படிகள்
 
 1. மெனுவில் இருந்து **Payments**-ஐத் திறங்கள்.
 2. கார்டுகள் **Total Paid Samples**, **Finance Verified**, **Approval Pending** மற்றும் **Payment Issues**-ஐக் காட்டும்.
@@ -438,13 +586,12 @@ routes: /Sas/Payments, /Sas/Payments/{id}
 for: SasPaymentApproval.View
 roles: 
 designations: 
-source-hash: 4a8d8dd3f9015aa4
+minutes: 3
+source-hash: 2c0a5e7b4b9a51d2
 confidence: ok
 
 **இந்தத் திரை எதற்கு**
 பணம் கட்டும் மாதிரிகளுக்குக் களப் பணியாளர்கள் பதிவு செய்த பணத்தை **Payment Approval** பட்டியலிடும். ஒவ்வொரு ரசீதையும் தொகையையும் சரிபார்த்து, ஒப்புதல் தந்து Finance-க்கு அனுப்புவீர்கள், அல்லது அதிகாரிக்குத் திருப்பி அனுப்புவீர்கள்.
-
-## படிகள்
 
 1. மெனுவில் இருந்து **Payment Approval**-ஐத் திறங்கள்.
 2. **Pending Admin Approval** டேபைத் தட்டுங்கள்.
@@ -474,13 +621,12 @@ routes: /Sas/Payments, /Sas/Payments/{id}, /Sas/Payments/History
 for: SasPaymentVerification.View
 roles: 
 designations: 
-source-hash: ec36e4e58f4e4b58
+minutes: 3
+source-hash: 788890513e2baf14
 confidence: ok
 
 **இந்தத் திரை எதற்கு**
 ஒப்புதல் தருபவர் Finance-க்கு அனுப்பிய பணத்தை **Payment Verification** பட்டியலிடும். பணம் கணக்குக்கு வந்து சேர்ந்ததை நீங்கள் உறுதி செய்வீர்கள். நீங்கள் முடித்த எல்லாப் பணப் பதிவுகளும் **Payment History**-ல் இருக்கும்.
-
-## படிகள்
 
 1. மெனுவில் இருந்து **Payment Verification**-ஐத் திறங்கள்.
 2. **Pending Verification** டேபைத் தட்டுங்கள்.

@@ -239,8 +239,9 @@ public class JmdoTaskAllocationController : ControllerBase
             .Select(c => new { c.Id, c.SanctionNo, c.CSR1Date })
             .ToDictionaryAsync(c => c.Id, c => (SanctionNo: c.SanctionNo, CSR1Date: (DateTime?)c.CSR1Date));
         var dealerInsights = await _dealerInsightService.GetInsightsAsync(DealerRegistrationIdsOf(allocation.Dealers));
+        var pendingPostpone = await GetPendingPostponeByRowIdAsync(allocation.Dealers.Select(d => d.Id));
 
-        return Ok(ToResponseDto(allocation, allocation.Dealers.ToList(), allocation.Programs.ToList(), allocation.Closeouts.ToList(), csr1Lookup, dealerInsights));
+        return Ok(ToResponseDto(allocation, allocation.Dealers.ToList(), allocation.Programs.ToList(), allocation.Closeouts.ToList(), csr1Lookup, dealerInsights, pendingPostpone));
     }
 
     // GET api/JmdoTaskAllocation/mine/summary?latitude=&longitude=
@@ -527,9 +528,10 @@ public class JmdoTaskAllocationController : ControllerBase
             .Select(c => new { c.Id, c.SanctionNo, c.CSR1Date })
             .ToDictionaryAsync(c => c.Id, c => (SanctionNo: c.SanctionNo, CSR1Date: (DateTime?)c.CSR1Date));
         var dealerInsights = await _dealerInsightService.GetInsightsAsync(DealerRegistrationIdsOf(allocations.SelectMany(a => a.Dealers)));
+        var pendingPostpone = await GetPendingPostponeByRowIdAsync(allocations.SelectMany(a => a.Dealers).Select(d => d.Id));
 
         var result = allocations
-            .Select(a => ToResponseDto(a, a.Dealers.ToList(), a.Programs.ToList(), a.Closeouts.ToList(), csr1Lookup, dealerInsights))
+            .Select(a => ToResponseDto(a, a.Dealers.ToList(), a.Programs.ToList(), a.Closeouts.ToList(), csr1Lookup, dealerInsights, pendingPostpone))
             .ToList();
 
         return Ok(result);
@@ -936,6 +938,9 @@ public class JmdoTaskAllocationController : ControllerBase
         if (row == null)
             return NotFound();
 
+        if (await HasPendingPostponeRequestAsync(row.Id))
+            return BadRequest(new { Success = false, Message = "This dealer has a postponement request awaiting review - resolve it before removing the task." });
+
         _db.JmdoTaskAllocationDealers.Remove(row);
         await _db.SaveChangesAsync();
         return NoContent();
@@ -952,6 +957,9 @@ public class JmdoTaskAllocationController : ControllerBase
         var row = await _db.JmdoTaskAllocationDealers.FirstOrDefaultAsync(d => d.Id == rowId && d.AllocationId == id);
         if (row == null)
             return NotFound();
+
+        if (await HasPendingPostponeRequestAsync(row.Id))
+            return BadRequest(new { Success = false, Message = "This dealer has a postponement request awaiting review - resolve it before editing the date." });
 
         if (dto.PlannedDate.HasValue)
         {
@@ -1154,6 +1162,8 @@ public class JmdoTaskAllocationController : ControllerBase
         {
             var dealer = allocation.Dealers.FirstOrDefault(d => EffectiveDealerId(d) == dealerId);
             if (dealer == null) return NotFound(new { Success = false, Message = "Dealer task not found." });
+            if (await HasPendingPostponeRequestAsync(dealer.Id))
+                return BadRequest(new { Success = false, Message = "A postponement request for this visit is awaiting review - actions are disabled until it's resolved." });
             dealer.Status = dto.Status;
             if (startedAt.HasValue && dealer.StartedAt is null) dealer.StartedAt = startedAt;
             if (completedAt.HasValue && dealer.CompletedAt is null) dealer.CompletedAt = completedAt;
@@ -1220,6 +1230,8 @@ public class JmdoTaskAllocationController : ControllerBase
             var dealer = allocation.Dealers.FirstOrDefault();
             if (dealer != null)
             {
+                if (await HasPendingPostponeRequestAsync(dealer.Id))
+                    return BadRequest(new { Success = false, Message = "A postponement request for this visit is awaiting review - actions are disabled until it's resolved." });
                 dealer.Status = dto.Status;
                 if (startedAt.HasValue && dealer.StartedAt is null) dealer.StartedAt = startedAt;
                 if (completedAt.HasValue && dealer.CompletedAt is null) dealer.CompletedAt = completedAt;
@@ -1255,6 +1267,39 @@ public class JmdoTaskAllocationController : ControllerBase
         var allocation = await GetMyCurrentAllocationAsync(userId);
         if (allocation == null)
             return NotFound(new { Success = false, Message = "No current allocation found." });
+
+        if (dto.Kind == JmdoCloseoutKind.Dealer && dto.SubDealerId is { } closeoutDealerId)
+        {
+            var dealerRows = allocation.Dealers.Where(d => EffectiveDealerId(d) == closeoutDealerId).ToList();
+            foreach (var dealerRow in dealerRows)
+            {
+                if (await HasPendingPostponeRequestAsync(dealerRow.Id))
+                    return BadRequest(new { Success = false, Message = "A postponement request for this visit is awaiting review - actions are disabled until it's resolved." });
+            }
+        }
+
+        // Book Collection & Payment Details (TaskDetail's SPCM-only close-out form) - required
+        // fields, validated server-side so a direct API call can't bypass the client's own
+        // required-field check. Screenshot has no existing file to fall back to on a brand-new
+        // record (unlike the update endpoint below), so dto.FilePath itself must be present.
+        if (dto.Kind == JmdoCloseoutKind.Spcm)
+        {
+            if (dto.AchievedTarget is not > 0)
+                return BadRequest(new { Success = false, Message = "No. of Books Collected is required and must be greater than zero." });
+            if (string.IsNullOrWhiteSpace(dto.ReceiptNumber))
+                return BadRequest(new { Success = false, Message = "Receipt Number is required." });
+            if (dto.Amount is not > 0)
+                return BadRequest(new { Success = false, Message = "Amount is required and must be greater than zero." });
+            if (dto.PaymentDate is null)
+                return BadRequest(new { Success = false, Message = "Payment Date is required." });
+            if (string.IsNullOrWhiteSpace(dto.FilePath))
+                return BadRequest(new { Success = false, Message = "Payment Screenshot is required." });
+
+            // The Book Collection & Payment Details form has no Outcome control - hardcode it
+            // server-side too (defense in depth beyond TaskDetail.razor already doing the same)
+            // rather than trust whatever the client happened to send.
+            dto.Outcome = "Completed";
+        }
 
         // Reject logging more than what's actually left on the weekly target, rather than
         // silently letting the running total blow past it - a prior closeout plus this one
@@ -1292,6 +1337,13 @@ public class JmdoTaskAllocationController : ControllerBase
             Outcome = dto.Outcome,
             Remarks = dto.Remarks,
             AchievedTarget = dto.AchievedTarget,
+            ReceiptNumber = dto.ReceiptNumber,
+            Amount = dto.Amount,
+            PaymentDate = dto.PaymentDate,
+            TransactionNumber = dto.TransactionNumber,
+            BankName = dto.BankName,
+            PaymentByName = dto.PaymentByName,
+            BooksAccountedInFavourOf = dto.BooksAccountedInFavourOf,
             Urea = dto.Urea,
             Nps = dto.Nps,
             Dap = dto.Dap,
@@ -1347,6 +1399,146 @@ public class JmdoTaskAllocationController : ControllerBase
             Outcome = closeout.Outcome,
             Remarks = closeout.Remarks,
             AchievedTarget = closeout.AchievedTarget,
+            ReceiptNumber = closeout.ReceiptNumber,
+            Amount = closeout.Amount,
+            PaymentDate = closeout.PaymentDate,
+            TransactionNumber = closeout.TransactionNumber,
+            BankName = closeout.BankName,
+            PaymentByName = closeout.PaymentByName,
+            BooksAccountedInFavourOf = closeout.BooksAccountedInFavourOf,
+            Urea = closeout.Urea,
+            Nps = closeout.Nps,
+            Dap = closeout.Dap,
+            Other = closeout.Other,
+            FilePath = closeout.FilePath,
+            FileName = closeout.FileName,
+            CreatedAt = closeout.CreatedAt,
+            Products = closeout.Products.Select(p => new ProductLineDto
+            {
+                ProductGroupId = p.ProductGroupId,
+                ProductId = p.ProductId,
+                ProductGroupName = p.ProductGroupName,
+                ProductName = p.ProductName,
+                StockText = p.StockText
+            }).ToList()
+        });
+    }
+
+    // PUT api/JmdoTaskAllocation/closeouts/{id}/spcm
+    // SPCM-only real update-by-Id for TaskDetail's "Edit" flow on a saved Book Collection &
+    // Payment Details record - CreateCloseout only ever INSERTs, so without this endpoint
+    // "editing" meant removing the row from the client's in-memory list and re-POSTing, which
+    // left the original row behind in the database (silently duplicating it, double-counting
+    // AchievedTarget toward the weekly target, and orphaning its screenshot). This endpoint
+    // updates the existing row in place instead - the original record is never at risk from a
+    // cancelled or failed edit, since nothing is touched until this call actually succeeds.
+    [Authorize(Roles = "Admin,MO,MDO,JMDO")]
+    [HttpPut("closeouts/{id:int}/spcm")]
+    public async Task<ActionResult<JmdoTaskCloseoutDto>> UpdateSpcmCloseout(int id, [FromBody] CreateJmdoTaskCloseoutDto dto)
+    {
+        var userId = CurrentUserId();
+        if (string.IsNullOrWhiteSpace(userId))
+            return Unauthorized(new { Success = false, Message = "Could not identify the signed-in user." });
+
+        var closeout = await _db.JmdoTaskCloseouts
+            .Include(c => c.Allocation)
+            .ThenInclude(a => a!.Closeouts)
+            .FirstOrDefaultAsync(c => c.Id == id);
+        if (closeout == null)
+            return NotFound();
+
+        if (closeout.Kind != JmdoCloseoutKind.Spcm)
+            return BadRequest(new { Success = false, Message = "This endpoint only updates SPCM book collection records." });
+
+        // Same ownership rule DeleteCloseout already uses.
+        if (closeout.Allocation?.SubmittedByUserId != userId && !User.IsInRole("Admin"))
+            return Forbid();
+
+        var allocation = closeout.Allocation!;
+
+        // Same required-field validation as CreateCloseout's Spcm branch, except the screenshot
+        // check falls back to the record's OWN existing file when this update didn't stage a new
+        // one - an edit that doesn't touch the screenshot must not be forced to re-upload it.
+        if (dto.AchievedTarget is not > 0)
+            return BadRequest(new { Success = false, Message = "No. of Books Collected is required and must be greater than zero." });
+        if (string.IsNullOrWhiteSpace(dto.ReceiptNumber))
+            return BadRequest(new { Success = false, Message = "Receipt Number is required." });
+        if (dto.Amount is not > 0)
+            return BadRequest(new { Success = false, Message = "Amount is required and must be greater than zero." });
+        if (dto.PaymentDate is null)
+            return BadRequest(new { Success = false, Message = "Payment Date is required." });
+        var effectiveFilePath = string.IsNullOrWhiteSpace(dto.FilePath) ? closeout.FilePath : dto.FilePath;
+        if (string.IsNullOrWhiteSpace(effectiveFilePath))
+            return BadRequest(new { Success = false, Message = "Payment Screenshot is required." });
+
+        // Same weekly-target ceiling CreateCloseout enforces, adjusted for an in-place update:
+        // this record's OWN current contribution must be excluded from "already logged" first,
+        // otherwise re-saving the same (or a smaller) value would wrongly look like it exceeds
+        // what's left on the target.
+        if (allocation.SpcmTarget is > 0)
+        {
+            var achievedExcludingThis = SpcmAchievedCount(allocation) - (closeout.AchievedTarget ?? 0);
+            var remaining = allocation.SpcmTarget.Value - achievedExcludingThis;
+            if (dto.AchievedTarget.Value > remaining)
+                return BadRequest(new { Success = false, Message = $"Only {Math.Max(remaining, 0)} left on this week's SPCM target - cannot log {dto.AchievedTarget.Value}." });
+        }
+
+        closeout.AchievedTarget = dto.AchievedTarget;
+        closeout.ReceiptNumber = dto.ReceiptNumber;
+        closeout.Amount = dto.Amount;
+        closeout.PaymentDate = dto.PaymentDate;
+        closeout.TransactionNumber = dto.TransactionNumber;
+        closeout.BankName = dto.BankName;
+        closeout.PaymentByName = dto.PaymentByName;
+        closeout.BooksAccountedInFavourOf = dto.BooksAccountedInFavourOf;
+        closeout.Outcome = "Completed";
+
+        // Only overwrite the screenshot when this call actually supplied a new one - preserves
+        // the existing file when the client didn't replace it (or if an upload attempt failed
+        // before ever reaching this call, in which case dto.FilePath is never sent at all).
+        if (!string.IsNullOrWhiteSpace(dto.FilePath))
+        {
+            closeout.FilePath = dto.FilePath;
+            closeout.FileName = dto.FileName;
+        }
+
+        await _db.SaveChangesAsync();
+
+        // Same auto-complete/reopen logic CreateCloseout/DeleteCloseout already have - editing
+        // AchievedTarget can push the cumulative total either up to target or back below it.
+        if (allocation.SpcmTarget is > 0)
+        {
+            var achievedNow = SpcmAchievedCount(allocation);
+            if (allocation.SpcmStatus != AllocTaskStatus.Completed && achievedNow >= allocation.SpcmTarget)
+            {
+                allocation.SpcmStatus = AllocTaskStatus.Completed;
+                allocation.SpcmCompletedAt ??= DateTime.Now;
+                await _db.SaveChangesAsync();
+            }
+            else if (allocation.SpcmStatus == AllocTaskStatus.Completed && achievedNow < allocation.SpcmTarget)
+            {
+                allocation.SpcmStatus = AllocTaskStatus.InProgress;
+                allocation.SpcmCompletedAt = null;
+                await _db.SaveChangesAsync();
+            }
+        }
+
+        return Ok(new JmdoTaskCloseoutDto
+        {
+            Id = closeout.Id,
+            Kind = closeout.Kind,
+            SubDealerId = closeout.SubDealerId,
+            Csr1Id = closeout.Csr1Id,
+            Outcome = closeout.Outcome,
+            Remarks = closeout.Remarks,
+            AchievedTarget = closeout.AchievedTarget,
+            ReceiptNumber = closeout.ReceiptNumber,
+            Amount = closeout.Amount,
+            PaymentDate = closeout.PaymentDate,
+            TransactionNumber = closeout.TransactionNumber,
+            BankName = closeout.BankName,
+            PaymentByName = closeout.PaymentByName,
+            BooksAccountedInFavourOf = closeout.BooksAccountedInFavourOf,
             Urea = closeout.Urea,
             Nps = closeout.Nps,
             Dap = closeout.Dap,
@@ -1509,6 +1701,351 @@ public class JmdoTaskAllocationController : ControllerBase
         return PhysicalFile(requestedFile, contentType, downloadName);
     }
 
+    // ============================================================================================
+    // Dealer-visit postpone requests: a JMDO asking to move ONE dealer visit to a different date
+    // (possibly a different week), pending MDO approval - see JmdoDealerVisitPostponeRequest's own
+    // doc comment for why this is a separate approval workflow from JmdoTaskAllocationStatus (the
+    // whole week's submission) and from AllocTaskStatus (the visit's own execution progress).
+    // ============================================================================================
+
+    // POST api/JmdoTaskAllocation/postpone-requests
+    [Authorize(Roles = "JMDO")]
+    [HttpPost("postpone-requests")]
+    public async Task<ActionResult<PostponeRequestRowDto>> CreatePostponeRequest([FromBody] CreatePostponeRequestDto dto)
+    {
+        var userId = CurrentUserId();
+        if (string.IsNullOrWhiteSpace(userId))
+            return Unauthorized(new { Success = false, Message = "Could not identify the signed-in user." });
+
+        var row = await _db.JmdoTaskAllocationDealers.Include(d => d.Allocation)
+            .FirstOrDefaultAsync(d => d.Id == dto.DealerRowId);
+        if (row?.Allocation == null)
+            return NotFound(new { Success = false, Message = "Dealer task not found." });
+
+        // A JMDO can only postpone their own visit.
+        if (row.Allocation.SubmittedByUserId != userId)
+            return Forbid();
+
+        if (row.Status == AllocTaskStatus.Completed)
+            return BadRequest(new { Success = false, Message = "This visit is already completed - nothing to postpone." });
+
+        if (dto.RequestedDate.Date < DateTime.Today)
+            return BadRequest(new { Success = false, Message = "Cannot postpone to a past date." });
+
+        if (string.IsNullOrWhiteSpace(dto.Reason))
+            return BadRequest(new { Success = false, Message = "A reason is required." });
+
+        // A prior Approved/Rejected request never blocks a new one - only an open Pending request
+        // does. This is what makes postponing the same visit more than once possible.
+        if (await HasPendingPostponeRequestAsync(row.Id))
+            return BadRequest(new { Success = false, Message = "A postponement request for this visit is already awaiting review." });
+
+        var request = new JmdoDealerVisitPostponeRequest
+        {
+            DealerRowId = row.Id,
+            OriginalAllocationId = row.AllocationId,
+            OriginalPlannedDate = row.PlannedDate,
+            OriginalPlannedDay = row.PlannedDay,
+            RequestedByUserId = userId,
+            RequestedAt = DateTime.Now,
+            RequestedDate = dto.RequestedDate.Date,
+            Reason = dto.Reason.Trim(),
+            Status = PostponeRequestStatus.Pending
+        };
+
+        _db.JmdoDealerVisitPostponeRequests.Add(request);
+        await _db.SaveChangesAsync();
+
+        return StatusCode(201, await ToPostponeRowDtoAsync(request, row, row.Allocation));
+    }
+
+    // GET api/JmdoTaskAllocation/postpone-requests/mine
+    // The JMDO's own full postpone history (every status, not just Pending) - each request row is
+    // immutable once created, so this naturally reconstructs the full "originally X -> requested Y
+    // (rejected) -> requested Z (approved)" chain for a visit postponed more than once.
+    [Authorize(Roles = "JMDO")]
+    [HttpGet("postpone-requests/mine")]
+    public async Task<ActionResult<List<PostponeRequestRowDto>>> GetMyPostponeRequests()
+    {
+        var userId = CurrentUserId();
+        if (string.IsNullOrWhiteSpace(userId))
+            return Unauthorized(new { Success = false, Message = "Could not identify the signed-in user." });
+
+        var requests = await _db.JmdoDealerVisitPostponeRequests.AsNoTracking()
+            .Where(r => r.RequestedByUserId == userId)
+            .OrderByDescending(r => r.RequestedAt)
+            .ToListAsync();
+
+        return Ok(await ToPostponeRowDtosAsync(requests));
+    }
+
+    // GET api/JmdoTaskAllocation/postpone-requests/pending
+    // Feeds the MDO's "Postpone Requests" tab on AllocationRequests.razor - HQ-scoped the same way
+    // GetPending/GetMonitoring are.
+    [Authorize(Roles = "Admin,MO,MDO")]
+    [HttpGet("postpone-requests/pending")]
+    public async Task<ActionResult<List<PostponeRequestRowDto>>> GetPendingPostponeRequests()
+    {
+        var isAdmin = User.IsInRole("Admin");
+        var hqId = CurrentHqId();
+        if (!isAdmin && hqId is not > 0)
+            return Ok(new List<PostponeRequestRowDto>());
+
+        var requests = await _db.JmdoDealerVisitPostponeRequests.AsNoTracking()
+            .Where(r => r.Status == PostponeRequestStatus.Pending)
+            .OrderBy(r => r.RequestedAt)
+            .ToListAsync();
+
+        return Ok(await ToPostponeRowDtosAsync(requests, isAdmin ? null : hqId));
+    }
+
+    // POST api/JmdoTaskAllocation/postpone-requests/{id}/approve
+    [Authorize(Roles = "Admin,MO,MDO")]
+    [HttpPost("postpone-requests/{id:int}/approve")]
+    public async Task<IActionResult> ApprovePostponeRequest(int id, [FromBody] ReviewPostponeRequestDto dto)
+    {
+        await using var tx = await _db.Database.BeginTransactionAsync();
+
+        // Everything below is re-loaded fresh inside this transaction - never decided from a read
+        // taken before it opened, so a race with another review of the same request, the visit
+        // being completed, or an MDO's own manual edit on the same row is caught, not overwritten.
+        var request = await _db.JmdoDealerVisitPostponeRequests.FirstOrDefaultAsync(r => r.Id == id);
+        if (request == null) return NotFound();
+        if (request.Status != PostponeRequestStatus.Pending)
+            return BadRequest(new { Success = false, Message = "This request has already been reviewed." });
+
+        var dealerRow = await _db.JmdoTaskAllocationDealers.Include(d => d.Allocation)
+            .FirstOrDefaultAsync(d => d.Id == request.DealerRowId);
+        if (dealerRow?.Allocation == null)
+            return NotFound(new { Success = false, Message = "The original dealer task no longer exists." });
+
+        var forbidden = CheckHqScope(dealerRow.Allocation);
+        if (forbidden != null) return forbidden;
+
+        if (dealerRow.Status == AllocTaskStatus.Completed)
+            return BadRequest(new { Success = false, Message = "This visit was completed before the request could be reviewed." });
+
+        var finalDate = (dto.ApprovedDate ?? request.RequestedDate).Date;
+        if (finalDate < DateTime.Today)
+            return BadRequest(new { Success = false, Message = "Cannot postpone to a past date." });
+
+        var sourceAllocation = dealerRow.Allocation;
+        var sourceWeekStart = WeekStartFor(sourceAllocation.AllocationDate);
+        var targetWeekStart = WeekStartFor(finalDate);
+
+        JmdoTaskAllocation targetAllocation;
+        if (targetWeekStart == sourceWeekStart)
+        {
+            // Same week - just move the date in place, no re-parenting, no other allocation touched.
+            targetAllocation = sourceAllocation;
+        }
+        else
+        {
+            // Rejected is excluded - same "doesn't count as already submitted" rule Create() uses.
+            // Reusing a Rejected row here would be actively harmful: GetMineToday explicitly filters
+            // Rejected allocations out, so if that week ever becomes "current" the JMDO's Today's
+            // Allocation tab would show NoContent again - recreating the exact bug this feature fixes.
+            var found = await _db.JmdoTaskAllocations
+                .FirstOrDefaultAsync(a => a.SubmittedByUserId == sourceAllocation.SubmittedByUserId
+                    && a.AllocationDate >= targetWeekStart && a.AllocationDate < targetWeekStart.AddDays(7)
+                    && a.Status != JmdoTaskAllocationStatus.Rejected);
+
+            if (found == null)
+            {
+                // Born Approved, same as GetMyCurrentAllocationAsync's auto-provision branch - a
+                // postponed task must stay actionable, never blocked behind an approval it never asked for.
+                targetAllocation = new JmdoTaskAllocation
+                {
+                    AllocationDate = targetWeekStart,
+                    SubmittedByUserId = sourceAllocation.SubmittedByUserId,
+                    SubmittedByRole = sourceAllocation.SubmittedByRole,
+                    HeadquarterId = sourceAllocation.HeadquarterId,
+                    RegionId = sourceAllocation.RegionId,
+                    StateId = sourceAllocation.StateId,
+                    Status = JmdoTaskAllocationStatus.Approved,
+                    CreatedAt = DateTime.Now,
+                    SubmittedAt = DateTime.Now
+                };
+                _db.JmdoTaskAllocations.Add(targetAllocation);
+                await _db.SaveChangesAsync(); // need its Id before re-parenting FK rows onto it
+            }
+            else if (found.Status == JmdoTaskAllocationStatus.Pending)
+            {
+                // Block outright rather than warn-and-proceed - approving here would leave the
+                // visit stuck behind an approval nobody has resolved yet.
+                return BadRequest(new { Success = false, Message = "The target week's own allocation is still awaiting approval - approve that first before moving this visit there." });
+            }
+            else
+            {
+                targetAllocation = found;
+            }
+        }
+
+        var effectiveDealerId = EffectiveDealerId(dealerRow);
+
+        // Same uniqueness rule AddDealer/UpdateDealerPlannedDate already enforce, now across allocations.
+        var collision = await _db.JmdoTaskAllocationDealers.AnyAsync(d =>
+            d.AllocationId == targetAllocation.Id && d.Id != dealerRow.Id
+            && (d.DealerRegistrationId ?? -d.SubDealerId) == effectiveDealerId
+            && d.PlannedDate.HasValue && d.PlannedDate.Value.Date == finalDate);
+        if (collision)
+            return BadRequest(new { Success = false, Message = "This dealer is already scheduled on that date in the target week." });
+
+        var oldAllocationId = dealerRow.AllocationId;
+
+        // Re-parent - Status/StartedAt/CompletedAt/StartPlaceName/Priority are left untouched, which
+        // is what preserves partial progress (an InProgress visit stays InProgress on the new date).
+        // No field on either allocation header (SpcmTarget/SoilSampleTarget/PoS targets, their
+        // *Status) is ever touched here - only this one dealer row, and its closeouts, move.
+        dealerRow.AllocationId = targetAllocation.Id;
+        dealerRow.PlannedDate = finalDate;
+        dealerRow.PlannedDay = finalDate.DayOfWeek;
+
+        if (oldAllocationId != targetAllocation.Id)
+        {
+            // JmdoTaskCloseout is scoped by (AllocationId, SubDealerId) everywhere it's read
+            // (GetMineToday/GetMineAll/GetMyReports.LatestOutcome) - leaving old closeouts under the
+            // old AllocationId would silently hide real visit history from every view of the new
+            // allocation. Only safe to bulk-move when no OTHER row for this same dealer remains
+            // under the old allocation (otherwise which closeout belonged to which row is ambiguous -
+            // the same pre-existing limitation GetMyReports.LatestOutcome already has); when
+            // ambiguous, closeouts are left in place rather than guessed.
+            var siblingRowExists = await _db.JmdoTaskAllocationDealers.AnyAsync(d =>
+                d.AllocationId == oldAllocationId && d.Id != dealerRow.Id
+                && (d.DealerRegistrationId ?? -d.SubDealerId) == effectiveDealerId);
+
+            if (!siblingRowExists)
+            {
+                var closeoutsToMove = await _db.JmdoTaskCloseouts.Where(c =>
+                    c.AllocationId == oldAllocationId && c.Kind == JmdoCloseoutKind.Dealer
+                    && c.SubDealerId == effectiveDealerId).ToListAsync();
+                foreach (var c in closeoutsToMove) c.AllocationId = targetAllocation.Id;
+            }
+        }
+
+        request.Status = PostponeRequestStatus.Approved;
+        request.ReviewedByUserId = CurrentUserId();
+        request.ReviewedAt = DateTime.Now;
+        request.ReviewRemarks = dto.ReviewRemarks;
+        request.ApprovedDate = finalDate;
+        request.ResultingAllocationId = targetAllocation.Id;
+
+        await _db.SaveChangesAsync();
+        await tx.CommitAsync();
+        return NoContent();
+    }
+
+    // POST api/JmdoTaskAllocation/postpone-requests/{id}/reject
+    [Authorize(Roles = "Admin,MO,MDO")]
+    [HttpPost("postpone-requests/{id:int}/reject")]
+    public async Task<IActionResult> RejectPostponeRequest(int id, [FromBody] RejectPostponeRequestDto dto)
+    {
+        await using var tx = await _db.Database.BeginTransactionAsync();
+
+        var request = await _db.JmdoDealerVisitPostponeRequests.FirstOrDefaultAsync(r => r.Id == id);
+        if (request == null) return NotFound();
+        if (request.Status != PostponeRequestStatus.Pending)
+            return BadRequest(new { Success = false, Message = "This request has already been reviewed." });
+
+        var dealerRow = await _db.JmdoTaskAllocationDealers.Include(d => d.Allocation)
+            .FirstOrDefaultAsync(d => d.Id == request.DealerRowId);
+        if (dealerRow?.Allocation == null)
+            return NotFound(new { Success = false, Message = "The original dealer task no longer exists." });
+
+        var forbidden = CheckHqScope(dealerRow.Allocation);
+        if (forbidden != null) return forbidden;
+
+        // The dealer row is completely untouched - stays overdue, still visible in Task History,
+        // JMDO can submit a new request afterward (building more history, never erasing this one).
+        request.Status = PostponeRequestStatus.Rejected;
+        request.ReviewedByUserId = CurrentUserId();
+        request.ReviewedAt = DateTime.Now;
+        request.ReviewRemarks = dto.ReviewRemarks;
+
+        await _db.SaveChangesAsync();
+        await tx.CommitAsync();
+        return NoContent();
+    }
+
+    // Shared by Create/Mine/Pending above - batches dealer-row and allocation lookups instead of
+    // querying per request row.
+    private async Task<List<PostponeRequestRowDto>> ToPostponeRowDtosAsync(
+        List<JmdoDealerVisitPostponeRequest> requests, int? hqScopeFilter = null)
+    {
+        if (requests.Count == 0) return new();
+
+        var dealerRowIds = requests.Select(r => r.DealerRowId).Distinct().ToList();
+        var dealerRows = await _db.JmdoTaskAllocationDealers.AsNoTracking()
+            .Where(d => dealerRowIds.Contains(d.Id))
+            .ToListAsync();
+        var dealerRowsById = dealerRows.ToDictionary(d => d.Id);
+
+        var allocationIds = dealerRows.Select(d => d.AllocationId).Distinct().ToList();
+        var allocations = await _db.JmdoTaskAllocations.AsNoTracking()
+            .Where(a => allocationIds.Contains(a.Id))
+            .ToListAsync();
+        var allocationsById = allocations.ToDictionary(a => a.Id);
+
+        var result = new List<PostponeRequestRowDto>();
+        foreach (var request in requests)
+        {
+            if (!dealerRowsById.TryGetValue(request.DealerRowId, out var dealerRow)) continue;
+            if (!allocationsById.TryGetValue(dealerRow.AllocationId, out var allocation)) continue;
+            if (hqScopeFilter is { } hq && allocation.HeadquarterId != hq) continue;
+            result.Add(await ToPostponeRowDtoAsync(request, dealerRow, allocation));
+        }
+
+        return result;
+    }
+
+    private async Task<PostponeRequestRowDto> ToPostponeRowDtoAsync(
+        JmdoDealerVisitPostponeRequest request, JmdoTaskAllocationDealer dealerRow, JmdoTaskAllocation allocation)
+    {
+        var info = await GetJmdoInfoAsync(allocation.SubmittedByUserId);
+
+        // Only meaningful while still Pending and crossing into a different week - lets the MDO see
+        // a blocking condition (target week's own allocation not yet approved) before they even
+        // open the approval dialog, instead of discovering it only on a failed Approve call.
+        string? targetWeekStatus = null;
+        if (request.Status == PostponeRequestStatus.Pending)
+        {
+            var sourceWeekStart = WeekStartFor(allocation.AllocationDate);
+            var targetWeekStart = WeekStartFor(request.RequestedDate);
+            if (targetWeekStart != sourceWeekStart)
+            {
+                var targetAllocation = await _db.JmdoTaskAllocations.AsNoTracking()
+                    .Where(a => a.SubmittedByUserId == allocation.SubmittedByUserId
+                        && a.AllocationDate >= targetWeekStart && a.AllocationDate < targetWeekStart.AddDays(7)
+                        && a.Status != JmdoTaskAllocationStatus.Rejected)
+                    .FirstOrDefaultAsync();
+                targetWeekStatus = targetAllocation?.Status.ToString();
+            }
+        }
+
+        return new PostponeRequestRowDto
+        {
+            Id = request.Id,
+            DealerRowId = dealerRow.Id,
+            DealerId = EffectiveDealerId(dealerRow),
+            DealerName = dealerRow.DealerName,
+            DealerCode = dealerRow.DealerCode,
+            JmdoName = info?.Name ?? "Unknown JMDO",
+            JmdoCode = info?.EmployeeCode,
+            Location = info?.HeadquarterName,
+            OriginalPlannedDay = request.OriginalPlannedDay,
+            OriginalPlannedDate = request.OriginalPlannedDate,
+            DealerTaskStatus = dealerRow.Status,
+            RequestedDate = request.RequestedDate,
+            Reason = request.Reason,
+            RequestedAt = request.RequestedAt,
+            Status = request.Status.ToString(),
+            ReviewedAt = request.ReviewedAt,
+            ReviewRemarks = request.ReviewRemarks,
+            ApprovedDate = request.ApprovedDate,
+            TargetWeekAllocationStatus = targetWeekStatus
+        };
+    }
+
     // Shared by every edit/approve endpoint: loads the allocation, enforces HQ
     // scope, and rejects edits once it's no longer Pending (already reviewed) -
     // except for Admin, who the business wants to still be able to adjust a
@@ -1634,13 +2171,34 @@ public class JmdoTaskAllocationController : ControllerBase
     private static IEnumerable<int> DealerRegistrationIdsOf(IEnumerable<JmdoTaskAllocationDealer> dealers) =>
         dealers.Where(d => d.DealerRegistrationId.HasValue).Select(d => d.DealerRegistrationId!.Value);
 
+    // Batched lookup of "does this dealer row have a Pending postpone request", keyed by
+    // JmdoTaskAllocationDealer.Id - one query per response-building call site, not per row.
+    private async Task<Dictionary<int, (int Id, DateTime RequestedDate)>> GetPendingPostponeByRowIdAsync(
+        IEnumerable<int> dealerRowIds)
+    {
+        var ids = dealerRowIds.Distinct().ToList();
+        if (ids.Count == 0) return new();
+
+        return await _db.JmdoDealerVisitPostponeRequests.AsNoTracking()
+            .Where(r => r.Status == PostponeRequestStatus.Pending && ids.Contains(r.DealerRowId))
+            .ToDictionaryAsync(r => r.DealerRowId, r => (r.Id, r.RequestedDate));
+    }
+
+    // Server-side enforcement that a dealer row with an open postpone request can't be acted on
+    // by any other write path (Start/Stop, close-out, MDO's own date edit/removal) while that
+    // request is unresolved - the UI hiding those actions is a courtesy, not the real guard.
+    private async Task<bool> HasPendingPostponeRequestAsync(int dealerRowId) =>
+        await _db.JmdoDealerVisitPostponeRequests.AnyAsync(
+            r => r.DealerRowId == dealerRowId && r.Status == PostponeRequestStatus.Pending);
+
     private static JmdoTaskAllocationResponseDto ToResponseDto(
         JmdoTaskAllocation allocation,
         List<JmdoTaskAllocationDealer> dealers,
         List<JmdoTaskAllocationProgram> programs,
         List<JmdoTaskCloseout>? closeouts = null,
         Dictionary<int, (string? SanctionNo, DateTime? CSR1Date)>? csr1Lookup = null,
-        Dictionary<int, DealerInsightDto>? dealerInsights = null) => new()
+        Dictionary<int, DealerInsightDto>? dealerInsights = null,
+        Dictionary<int, (int Id, DateTime RequestedDate)>? pendingPostponeByRowId = null) => new()
     {
         Id = allocation.Id,
         AllocationDate = allocation.AllocationDate,
@@ -1653,6 +2211,9 @@ public class JmdoTaskAllocationController : ControllerBase
             DealerInsightDto? insight = null;
             if (d.DealerRegistrationId.HasValue)
                 dealerInsights?.TryGetValue(d.DealerRegistrationId.Value, out insight);
+            (int Id, DateTime RequestedDate)? pending = null;
+            if (pendingPostponeByRowId != null && pendingPostponeByRowId.TryGetValue(d.Id, out var pendingValue))
+                pending = pendingValue;
             return new JmdoDealerAssignmentResponseDto
             {
                 DealerId = EffectiveDealerId(d),
@@ -1667,7 +2228,10 @@ public class JmdoTaskAllocationController : ControllerBase
                 IfmsId = insight?.IfmsId,
                 PosLiquidationQty = insight?.PosLiquidationQty,
                 PosLiquidationDate = insight?.PosLiquidationDate,
-                PendingAckQty = insight?.PendingAckQty
+                PendingAckQty = insight?.PendingAckQty,
+                RowId = d.Id,
+                PendingPostponeRequestId = pending?.Id,
+                PendingPostponeRequestedDate = pending?.RequestedDate
             };
         }).ToList(),
         Programs = programs.Select(p =>
@@ -1715,6 +2279,13 @@ public class JmdoTaskAllocationController : ControllerBase
             Outcome = c.Outcome,
             Remarks = c.Remarks,
             AchievedTarget = c.AchievedTarget,
+            ReceiptNumber = c.ReceiptNumber,
+            Amount = c.Amount,
+            PaymentDate = c.PaymentDate,
+            TransactionNumber = c.TransactionNumber,
+            BankName = c.BankName,
+            PaymentByName = c.PaymentByName,
+            BooksAccountedInFavourOf = c.BooksAccountedInFavourOf,
             Urea = c.Urea,
             Nps = c.Nps,
             Dap = c.Dap,

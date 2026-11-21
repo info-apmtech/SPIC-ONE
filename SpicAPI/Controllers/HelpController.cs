@@ -46,18 +46,32 @@ namespace SpicAPI.Controllers
         /// <summary>The clip key for a section; the client adds it to the audio URL (?v=key) so
         /// devices cache the clip and re-download only when the text changes.</summary>
         [HttpGet("audio/key/{module}/{sectionId}/{lang}")]
-        public IActionResult AudioKey(string module, string sectionId, string lang)
+        public IActionResult AudioKey(string module, string sectionId, string lang) => Key(module, sectionId, lang, null);
+
+        /// <summary>The clip key for one tour step (step N of the section's numbered list).</summary>
+        [HttpGet("audio/key/{module}/{sectionId}/{lang}/step/{step:int}")]
+        public IActionResult AudioStepKey(string module, string sectionId, string lang, int step) => Key(module, sectionId, lang, step);
+
+        private IActionResult Key(string module, string sectionId, string lang, int? step)
         {
             if (!_speech.Enabled) return NotFound();
-            var clip = ClipFor(module, sectionId, lang);
+            var clip = ClipFor(module, sectionId, lang, step);
             return clip is null ? NotFound() : Ok(new { key = HelpAudioCache.KeyFor(clip.Value.Ssml) });
         }
 
         [HttpGet("audio/{module}/{sectionId}/{lang}")]
-        public async Task<IActionResult> Audio(string module, string sectionId, string lang, CancellationToken ct)
+        public Task<IActionResult> Audio(string module, string sectionId, string lang, CancellationToken ct) =>
+            Clip(module, sectionId, lang, null, ct);
+
+        /// <summary>The voice clip for one tour step.</summary>
+        [HttpGet("audio/{module}/{sectionId}/{lang}/step/{step:int}")]
+        public Task<IActionResult> AudioStep(string module, string sectionId, string lang, int step, CancellationToken ct) =>
+            Clip(module, sectionId, lang, step, ct);
+
+        private async Task<IActionResult> Clip(string module, string sectionId, string lang, int? step, CancellationToken ct)
         {
             if (!_speech.Enabled) return NotFound();
-            var clip = ClipFor(module, sectionId, lang);
+            var clip = ClipFor(module, sectionId, lang, step);
             if (clip is null) return NotFound();
             var (voiceLang, ssml) = clip.Value;
 
@@ -97,8 +111,16 @@ namespace SpicAPI.Controllers
                     {
                         // An untranslated section is spoken by its English voice, not a mismatched one.
                         var effective = EffectiveLanguage(lang, s);
-                        var ssml = HelpSpeech.BuildSsml(HelpMarkdown.ToSpeech(s.Title, s.Body), effective, _library.GlossaryFor(effective.Code));
+                        var ssml = HelpSpeech.BuildSsml(HelpBlocks.SpeechText(s), effective, _library.GlossaryFor(effective.Code));
                         if (_audio.Existing(effective.Code, ssml) is null) jobs.Add((effective.Code, ssml));
+
+                        // Tour sections also get one short clip per step.
+                        if (s.Screen is { Tour.Count: > 0 })
+                            foreach (var stepText in HelpSteps.Of(s.Body))
+                            {
+                                var stepSsml = HelpSpeech.BuildSsml(StepSpeech(stepText), effective, _library.GlossaryFor(effective.Code));
+                                if (_audio.Existing(effective.Code, stepSsml) is null) jobs.Add((effective.Code, stepSsml));
+                            }
                     }
                 }
 
@@ -117,7 +139,9 @@ namespace SpicAPI.Controllers
         }
 
         /// <summary>The voice language actually used (English for an untranslated section) and the SSML.</summary>
-        private (string Lang, string Ssml)? ClipFor(string module, string sectionId, string lang)
+        private static string StepSpeech(string stepText) => HelpMarkdown.ToSpeech(string.Empty, stepText).Trim();
+
+        private (string Lang, string Ssml)? ClipFor(string module, string sectionId, string lang, int? step = null)
         {
             var language = _library.Config.Languages.FirstOrDefault(l => string.Equals(l.Code, lang, StringComparison.OrdinalIgnoreCase));
             if (language is null) return null;
@@ -126,7 +150,15 @@ namespace SpicAPI.Controllers
             if (section is null) return null;
 
             var effective = EffectiveLanguage(language, section);
-            return (effective.Code, HelpSpeech.BuildSsml(HelpMarkdown.ToSpeech(section.Title, section.Body), effective, _library.GlossaryFor(effective.Code)));
+            string text;
+            if (step is { } n)
+            {
+                var steps = HelpSteps.Of(section.Body);
+                if (n < 1 || n > steps.Count) return null;
+                text = StepSpeech(steps[n - 1]);
+            }
+            else text = HelpBlocks.SpeechText(section);
+            return (effective.Code, HelpSpeech.BuildSsml(text, effective, _library.GlossaryFor(effective.Code)));
         }
 
         // A non-English view of an untranslated section shows English text, so it uses the English voice.

@@ -36,11 +36,16 @@ public sealed class HelpApi : ApiClientBase
     /// caches it until the text changes, and the access token so an &lt;audio&gt; tag can play it.
     /// Null when the voice is unavailable.
     /// </summary>
-    public async Task<string?> AudioUrlAsync(string module, string sectionId, string lang, CancellationToken ct = default)
+    public async Task<string?> AudioUrlAsync(string module, string sectionId, string lang, CancellationToken ct = default) =>
+        await AudioUrlAsync(module, sectionId, lang, null, ct);
+
+    /// <summary>As above; with <paramref name="step"/> the clip of that one tour step.</summary>
+    public async Task<string?> AudioUrlAsync(string module, string sectionId, string lang, int? step, CancellationToken ct = default)
     {
         try
         {
             var path = $"audio/{Uri.EscapeDataString(module)}/{Uri.EscapeDataString(sectionId)}/{Uri.EscapeDataString(lang)}";
+            if (step is { } n) path += $"/step/{n}";
             var response = await Http.GetAsync(Url("audio/key/" + path["audio/".Length..]), ct);
             if (!response.IsSuccessStatusCode) return null;
             var key = (await response.Content.ReadFromJsonAsync<ClipKey>(Json, ct))?.Key;
@@ -100,6 +105,23 @@ public sealed class HelpApi : ApiClientBase
 
     public Task<SPIC.Core.DTOs.HelpReviewExportDto?> ReviewExportAsync(string lang, CancellationToken ct = default) =>
         GetAsync<SPIC.Core.DTOs.HelpReviewExportDto>($"review/export/{Uri.EscapeDataString(lang)}", "corrections", ct);
+
+    /// <summary>"Was this guide helpful?" — quiet: a failed vote never shows an error.</summary>
+    public async Task<bool> SendFeedbackAsync(SPIC.Core.DTOs.HelpFeedbackDto dto, CancellationToken ct = default)
+    {
+        try
+        {
+            var response = await Http.PostAsJsonAsync(Url("review/feedback"), dto, Json, ct);
+            return response.IsSuccessStatusCode;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    public Task<List<SPIC.Core.DTOs.HelpFeedbackSummaryDto>?> FeedbackSummaryAsync(int days = 90, CancellationToken ct = default) =>
+        GetAsync<List<SPIC.Core.DTOs.HelpFeedbackSummaryDto>>($"review/feedback?days={days}", "feedback", ct);
 
     public Task<List<SPIC.Core.DTOs.HelpReviewerDto>?> ReviewersAsync(CancellationToken ct = default) =>
         GetAsync<List<SPIC.Core.DTOs.HelpReviewerDto>>("review/reviewers", "reviewers", ct);

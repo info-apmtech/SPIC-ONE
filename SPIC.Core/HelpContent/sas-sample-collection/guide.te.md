@@ -4,43 +4,185 @@ title: మట్టి శాంపిల్ సేకరణ
 icon: bi-droplet
 order: 50
 language: te
+category: మట్టి పరీక్ష
+note: శాంపిల్ ప్రయాణం, స్టేటస్‌లు, గైడెడ్ టూర్‌లతో కొత్త రూపం
+meta-source-hash: 91cc9c6288b84a36
 ---
 
 ::: section overview
-title: మట్టి శాంపిల్ సేకరణ ఎలా పనిచేస్తుంది
-routes: /SampleCollection
+title: ఈ మాడ్యూల్ మీకు ఏమి చేస్తుంది
+routes: 
 for: 
 roles: 
 designations: 
-source-hash: 690edb1b53c94744
+kind: overview
+source-hash: 722480765e5f4cad
 confidence: ok
 
-**ఈ స్క్రీన్ దేనికి**
-SPIC రైతు పొలంలోని మట్టిని, నీటిని జిల్లా ల్యాబ్‌లో పరీక్షిస్తుంది. పొలం నుంచి రైతు రిపోర్ట్ వరకు ప్రతి శాంపిల్‌ను యాప్ ఫాలో చేస్తుంది. ప్రతి సేకరణ ఇవే దశల గుండా వెళ్తుంది.
+SPIC రైతు పొలంలోని మట్టిని, నీటిని జిల్లా ల్యాబ్‌లో పరీక్షిస్తుంది. పొలం నుంచి రైతు రిపోర్ట్ వరకు ప్రతి శాంపిల్‌ను యాప్ ఫాలో చేస్తుంది. కాబట్టి అది ఎక్కడ ఉందో అందరూ చూడగలరు.
 
-## దశలు
+- collect | icon: bi-droplet | color: #0d9488
+  title: పొలంలో సేకరణ
+  text: MDO లేదా JMDO రైతు వివరాలు, శాంపిల్స్ నమోదు చేస్తారు.
+- pay | icon: bi-qr-code | color: #d97706
+  title: చెల్లింపు, ఆమోదం
+  text: పెయిడ్ శాంపిల్‌కి UPI లేదా వేరే పద్ధతిలో డబ్బు చెల్లిస్తారు. తర్వాత దానికి ఆమోదం వస్తుంది, Finance దాన్ని చెక్ చేస్తుంది.
+- report | icon: bi-file-earmark-text | color: #7c3aed
+  title: రైతుకు ల్యాబ్ రిపోర్ట్
+  text: ల్యాబ్ శాంపిల్స్‌ను పరీక్షిస్తుంది. రైతు రిపోర్ట్‌ను తమిళం లేదా ఇంగ్లీష్‌లో డౌన్‌లోడ్ చేసుకుంటారు.
+:::
 
-1. **Collect.** (సేకరణ) ఫీల్డ్ ఆఫీసర్ (MDO లేదా JMDO) **New Sample Collection** తెరిచి, రైతును ఎంచుకుని, ఒకటి లేదా ఎక్కువ శాంపిల్స్ జోడిస్తారు.
-2. **Pay.** (చెల్లింపు) **Paid Sample** కి చెల్లింపు కావాలి. ఆఫీసర్ UPI లేదా ఇతర చెల్లింపును నమోదు చేసి, రసీదు ఫోటో అప్‌లోడ్ చేస్తారు. **Free Sample** కి ఈ దశ ఉండదు.
-3. **Approve.** (ఆమోదం) ఆమోదించేవారు చెల్లింపును, రసీదును చెక్ చేస్తారు. తర్వాత డబ్బు అందిందో లేదో Finance చెక్ చేస్తుంది.
-4. **ల్యాబ్‌కి పంపండి.** ఆఫీసర్ శాంపిల్స్‌ను కొరియర్‌లో పంపి, ట్రాకింగ్ నంబర్ ఎంటర్ చేస్తారు. దీన్ని కన్సైన్‌మెంట్ అంటారు.
-5. **Test.** (పరీక్ష) ల్యాబ్ శాంపిల్స్ అందుకుని వాటిని పరీక్షిస్తుంది.
-6. **Report.** (రిపోర్ట్) రైతు యాప్‌లో రిపోర్ట్ చూస్తారు, దాన్ని తమిళం లేదా ఇంగ్లీష్‌లో డౌన్‌లోడ్ చేసుకోవచ్చు.
+::: section flow
+title: శాంపిల్ ఎలా ముందుకు వెళ్తుంది, ఎవరు ఏమి చేస్తారు
+routes: 
+for: 
+roles: 
+designations: 
+kind: flow
+source-hash: 8e557635907c2edf
+confidence: ok
 
-## స్టేటస్ అర్థం
+ప్రతి వరుస ఒక రోల్, ప్రతి బాక్స్ ఒక దశ. ఫ్రీ శాంపిల్‌కి చెల్లింపు దశలు ఉండవు. అక్కడ ఏమి జరుగుతుందో చూడటానికి ఒక దశను నొక్కండి.
 
-- **Draft**: సేవ్ అయ్యింది, ఇంకా సబ్మిట్ కాలేదు.
-- **Pending Payment**: చెల్లింపు నమోదు కోసం ఎదురుచూస్తోంది.
-- **Pending Approval**: చెల్లింపు నమోదైంది, ఆమోదం కోసం ఎదురుచూస్తోంది.
-- **Ready consignment**: ల్యాబ్‌కి పంపడానికి సిద్ధంగా ఉంది.
-- **Dispatched**, **In Transit**, **Delivered to Lab**: ల్యాబ్‌కి వెళ్తున్న దారిలో ఉంది.
-- **In Progress**: ల్యాబ్ పరీక్షిస్తోంది.
-- **Completed**: ఫలితాలు వచ్చాయి.
+- officer | type: lane | color: #0d9488 | roles: MDO, JMDO
+  title: ఫీల్డ్ ఆఫీసర్
+  sub: MDO · JMDO
+- approver | type: lane | color: #ea580c | roles: Admin, CorporateAdmin
+  title: ఆమోదించేవారు
+  sub: చెల్లింపు ఆమోదం
+- finance | type: lane | color: #2563eb
+  title: Finance
+  sub: చెల్లింపు నిర్ధారణ
+- lab | type: lane | color: #7c3aed
+  title: ల్యాబ్
+  sub: జిల్లా ల్యాబ్
+- farmer | type: lane | color: #16a34a | roles: Farmer
+  title: రైతు
+  sub: శాంపిల్ యజమాని
+- collect | lane: officer | col: 1 | icon: bi-droplet | color: #64748b | next: pay | screen: collect-sample
+  title: శాంపిల్స్ సేకరించడం
+  status: Draft
+  text: రైతును ఎంచుకుని, ప్రతి మట్టి లేదా నీటి శాంపిల్ జోడించి, సేవ్ చేయండి. ఫ్రీ శాంపిల్ నేరుగా కన్సైన్‌మెంట్‌కి వెళ్తుంది.
+- pay | lane: officer | col: 2 | icon: bi-qr-code | color: #d97706 | next: approve | screen: record-payment
+  title: చెల్లింపు నమోదు చేయడం
+  status: Pending Payment
+  text: రైతు QR కోడ్ స్కాన్ చేసి డబ్బు చెల్లిస్తారు. ఆఫీసర్ ట్రాన్సాక్షన్ వివరాలు ఎంటర్ చేసి, రసీదు అప్‌లోడ్ చేస్తారు.
+- approve | lane: approver | col: 3 | icon: bi-patch-check | color: #ea580c | next: send, verify | return: pay | screen: approve-payments
+  title: చెల్లింపు ఆమోదించడం
+  status: Pending Approval
+  text: ఆమోదించేవారు అమౌంట్, రసీదు చెక్ చేస్తారు. తర్వాత ఆమోదించి Finance కి పంపుతారు, లేదా తిరిగి పంపుతారు.
+- send | lane: officer | col: 4 | icon: bi-truck | color: #0d9488 | next: test | screen: send-consignment
+  title: ల్యాబ్‌కి పంపడం
+  status: Dispatched
+  text: ఆఫీసర్ శాంపిల్స్‌ను కొరియర్‌కి ఇచ్చి, ట్రాకింగ్ నంబర్ నమోదు చేస్తారు. దీన్నే కన్సైన్‌మెంట్ అంటారు.
+- verify | lane: finance | col: 4 | icon: bi-bank | color: #2563eb | screen: verify-payments
+  title: డబ్బు అందిందని నిర్ధారించడం
+  status: Finance Verified
+  text: డబ్బు అకౌంట్‌లోకి వచ్చిందని Finance నిర్ధారిస్తుంది, లేదా సరిపోలలేదు (mismatch) అని గుర్తిస్తుంది.
+- test | lane: lab | col: 5 | icon: bi-eyedropper | color: #7c3aed | next: report
+  title: శాంపిల్స్ పరీక్షించడం
+  status: In Progress
+  text: ల్యాబ్ పార్సిల్ అందుకుని, ప్రతి శాంపిల్‌ను పరీక్షించి, ఫలితాలు ప్రచురిస్తుంది.
+- report | lane: farmer | col: 6 | icon: bi-file-earmark-arrow-down | color: #16a34a | screen: farmer-my-reports
+  title: రిపోర్ట్ డౌన్‌లోడ్ చేయడం
+  status: Completed
+  text: రైతు యాప్‌లో రిపోర్ట్ చూసి, దాన్ని తమిళం లేదా ఇంగ్లీష్‌లో డౌన్‌లోడ్ చేసుకుంటారు.
+:::
 
-## సాధారణ సమస్యలు
+::: section statuses
+title: మీకు కనిపించే ప్రతి స్టేటస్
+routes: 
+for: 
+roles: 
+designations: 
+kind: statuses
+source-hash: 0771c49c0ffc8c78
+confidence: ok
 
-- మెనూలో **Sample Collection** కనిపించడం లేదు: మీ హోదాకు (designation) ఈ పేజీ లేదు. మీ అడ్మినిస్ట్రేటర్‌ని అడగండి.
-- JMDO వాళ్లకు ఇది మెనూలో కనిపించదు. బదులుగా మీ **Soil Sample** టాస్క్ నుంచి తెరవండి.
+- draft | color: #64748b
+  label: Draft
+  text: సేవ్ అయ్యింది, ఇంకా సబ్మిట్ కాలేదు.
+- pending-payment | color: #d97706
+  label: Pending Payment
+  text: చెల్లింపు నమోదు కోసం ఎదురుచూస్తోంది.
+- pending-approval | color: #ea580c
+  label: Pending Approval
+  text: చెల్లింపు నమోదైంది, ఆమోదం కోసం ఎదురుచూస్తోంది.
+- ready | color: #0891b2
+  label: Ready consignment
+  text: ల్యాబ్‌కి పంపడానికి సిద్ధంగా ఉంది.
+- dispatched | color: #0d9488
+  label: Dispatched
+  text: కొరియర్‌కి ఇచ్చారు.
+- in-transit | color: #0d9488
+  label: In Transit
+  text: ల్యాబ్‌కి వెళ్తున్న దారిలో ఉంది.
+- delivered | color: #2563eb
+  label: Delivered to Lab
+  text: పార్సిల్ ల్యాబ్‌కి చేరింది.
+- in-progress | color: #7c3aed
+  label: In Progress
+  text: ల్యాబ్ పరీక్షిస్తోంది.
+- completed | color: #16a34a
+  label: Completed
+  text: ఫలితాలు వచ్చాయి.
+:::
+
+::: section roles
+title: ఎవరు ఏమి చేస్తారు
+routes: 
+for: 
+roles: 
+designations: 
+kind: roles
+source-hash: 9c070a1e6fc377cf
+confidence: ok
+
+మీ కార్డు హైలైట్ అయి కనిపిస్తుంది. మీ రోల్ వాడే స్క్రీన్‌లు మాత్రమే మీకు కనిపిస్తాయి.
+
+- officer | color: #0d9488 | roles: MDO, JMDO
+  title: MDO, JMDO
+  - శాంపిల్స్ సేకరించడం
+  - చెల్లింపులు నమోదు చేయడం
+  - కన్సైన్‌మెంట్‌లను ల్యాబ్‌కి పంపడం
+- approver | color: #ea580c | roles: Admin, CorporateAdmin
+  title: ఆమోదించేవారు
+  - చెల్లింపులను ఆమోదించడం లేదా తిరిగి పంపడం
+  - కన్సైన్‌మెంట్‌లను తర్వాతి దశకు మార్చడం
+  - ల్యాబ్ ఫలితాలు ఎంటర్ చేయడం
+- finance | color: #2563eb
+  title: Finance
+  - అందిన డబ్బును నిర్ధారించడం
+  - సరిపోలని (mismatch) చెల్లింపులను గుర్తించడం
+- farmer | color: #16a34a | roles: Farmer
+  title: రైతు
+  - మీ శాంపిల్స్ చూడటం
+  - మీ రిపోర్ట్‌లు డౌన్‌లోడ్ చేయడం
+  - మీ చెల్లింపులు చెక్ చేయడం
+:::
+
+::: section faq
+title: సమస్యలు, జవాబులు
+routes: 
+for: 
+roles: 
+designations: 
+kind: faq
+source-hash: b121292d9fb622a2
+confidence: ok
+
+- no-menu | popular: true
+  q: మెనూలో Sample Collection కనిపించడం లేదు
+  a: మీ హోదాకు (designation) ఈ పేజీ లేదు. మీ అడ్మినిస్ట్రేటర్‌ని అడగండి. JMDO వాళ్లు బదులుగా **Soil Sample** టాస్క్ నుంచి దీన్ని తెరవాలి.
+- payment-rejected | popular: true
+  q: నా చెల్లింపు తిరస్కరించబడింది. ఇప్పుడు ఏమి చేయాలి?
+  a: వివరాల పేజీలో కారణంతో పాటు **Payment rejected** అని కనిపిస్తుంది. సరిచేసి మళ్లీ **Record payment** నొక్కండి.
+- not-ready
+  q: "This collection is not ready to send" అని వస్తోంది
+  a: చెల్లింపు ఇంకా నమోదు కాలేదు, లేదా ఆమోదం రాలేదు. ఫ్రీ శాంపిల్స్‌ను వెంటనే పంపవచ్చు.
+- report-language
+  q: రిపోర్ట్‌ను తమిళంలో ఎలా పొందాలి?
+  a: **Download PDF** పక్కన ఉన్న చిన్న బాణం నొక్కి, తమిళం లేదా ఇంగ్లీష్ ఎంచుకోండి.
 :::
 
 ::: section collection-list
@@ -49,22 +191,26 @@ routes: /SampleCollection
 for: 
 roles: 
 designations: 
-source-hash: 53f4f23e337f18d1
+screenshot: collection-list.png
+hotspots: 1 @ 2.2,68.5,95.5,15.1 | 2 @ 73.7,88,22.4,4.8 | 3 @ 2.2,30.7,95.5,35.4 | 4 @ 3.8,94.7,92.3,5.3 | 5 @ 62.1,1.9,8.1,4.8 | 6 @ 79.2,1.9,18.5,4.8
+screenshot-phone: collection-list.phone.jpg
+hotspots-phone: 1 @ 3.1,40.6,93.8,24.4 | 2 @ 6.4,69.4,87.2,3.2 | 3 @ 3.1,36,93.8,3.2 | 4 @ 2,2,8,4 | 5 @ 15.3,4.3,10.2,3 | 6 @ 39.7,4.3,48.8,3
+tour: 1 > [data-help=sc-tiles] | 2 > [data-help=sc-search] | 3 > [data-help=sc-filters] | 4 > [data-help=sc-table] | 5 > [data-help=sc-excel] | 6 > [data-help=sc-new]
+minutes: 2
+source-hash: 01315bd944ae112a
 confidence: ok
 
 **ఈ స్క్రీన్ దేనికి**
 **Sample Collection** పేజీ మీరు చూడగలిగే ప్రతి సేకరణను, దాని చెల్లింపు, ల్యాబ్ స్టేటస్‌తో చూపిస్తుంది. ఒక సేకరణను కనుక్కుని, దాని వివరాలు తెరవడానికి దీన్ని వాడండి.
 
-## దశలు
+పైన ఉన్న కార్డులు లెక్కలు చూపిస్తాయి: **Total Samples**, **Free Samples**, **Paid Samples**, **Lab Level**, **Ready to Submit**.
 
-1. మెనూ నుంచి **Sample Collection** తెరవండి.
-2. పైన ఉన్న కార్డులు లెక్కలు చూపిస్తాయి: **Total Samples**, **Free Samples**, **Paid Samples**, **Lab Level**, **Ready to Submit**.
-3. **Pending Payment** లేదా **Draft** లాంటి రంగు టైల్ నొక్కితే ఆ సేకరణలు మాత్రమే కనిపిస్తాయి. మళ్లీ నొక్కితే అన్నీ కనిపిస్తాయి.
-4. వెతకడానికి, **Search collections...** లో రైతు పేరు లేదా సేకరణ ID టైప్ చేయండి.
-5. ఇంకా ఆప్షన్‌ల కోసం, **Filters** తెరిచి, **Date Range**, **Location**, **Payment Type**, **Payment Status** లేదా **Status** సెట్ చేసి, **Apply Filters** నొక్కండి. వాటిని తీసేయడానికి **Clear All** నొక్కండి.
-6. సేకరణ తెరవడానికి కన్ను ఐకాన్ నొక్కండి (ఫోన్‌లో అయితే కార్డు నొక్కండి).
-7. స్క్రీన్‌పై కనిపిస్తున్న లిస్ట్ డౌన్‌లోడ్ చేయడానికి **Excel** లేదా **PDF** నొక్కండి.
-8. తాజా స్టేటస్ లోడ్ చేయడానికి **Refresh Data** నొక్కండి.
+1. **Pending Payment** లేదా **Draft** లాంటి రంగు టైల్ నొక్కితే ఆ సేకరణలు మాత్రమే కనిపిస్తాయి. మళ్లీ నొక్కితే అన్నీ కనిపిస్తాయి.
+2. వెతకడానికి, **Search collections...** లో రైతు పేరు లేదా సేకరణ ID టైప్ చేయండి.
+3. ఇంకా ఆప్షన్‌ల కోసం, **Filters** తెరిచి, **Date Range**, **Location**, **Payment Type**, **Payment Status** లేదా **Status** సెట్ చేసి, **Apply Filters** నొక్కండి. వాటిని తీసేయడానికి **Clear All** నొక్కండి.
+4. సేకరణ తెరవడానికి కన్ను ఐకాన్ నొక్కండి (ఫోన్‌లో అయితే కార్డు నొక్కండి).
+5. స్క్రీన్‌పై కనిపిస్తున్న లిస్ట్ డౌన్‌లోడ్ చేయడానికి **Excel** లేదా **PDF** నొక్కండి. తాజా స్టేటస్ లోడ్ చేయడానికి **Refresh Data** నొక్కండి.
+6. శాంపిల్స్ సేకరించడం మొదలుపెట్టడానికి **New Sample Collection** నొక్కండి.
 
 ## సాధారణ సమస్యలు
 
@@ -80,24 +226,27 @@ routes: /SampleCollection/new
 for: SampleCollection.Entry
 roles: MDO, JMDO, Admin, CorporateAdmin
 designations: 
-source-hash: 4807aa811490f90c
+screenshot: collect-sample.png
+hotspots: 1 @ 66,1.9,31.8,5 | 2 @ 4,34.7,29.7,7.8 | 3 @ 35.2,81.7,29.7,8 | 4 @ 78.7,100,17.2,0 | 5 @ 81.8,100,16,0
+screenshot-phone: collect-sample.phone.jpg
+hotspots-phone: 1 @ 3.1,4.6,93.8,3.2 | 2 @ 6.9,33.7,86.2,8.5 | 3 @ 6.9,100,86.2,0 | 4 @ 6.9,100,86.2,0 | 5 @ 43.8,92.1,52.1,3
+tour: 1 > [data-help=sc-paytype] | 2 > [data-help=sc-farmer] | 3 > [data-help=sc-soil] | 4 > [data-help=sc-add] | 5 > [data-help=sc-save]
+minutes: 4
+source-hash: 3ae93abc0337f008
 confidence: ok
 
 **ఈ స్క్రీన్ దేనికి**
 రైతుల దగ్గర మీరు తీసుకున్న శాంపిల్స్ నమోదు చేయడానికి **New Sample Collection** వాడండి. ఒక సేకరణలో చాలా మంది రైతుల శాంపిల్స్ ఉండవచ్చు.
 
-## దశలు
+**Sample Collection** పేజీలో **New Sample Collection** నొక్కి దీన్ని తెరవండి. JMDO: **Tasks Allocation** లో **Soil Sample** కార్డుపై **Start** నొక్కండి, లేదా ఒక టాస్క్ యొక్క **Quick actions** లో **Soil Sample Collection** నొక్కండి.
 
-1. **Sample Collection** లో **New Sample Collection** నొక్కండి. JMDO: **Tasks Allocation** లో **Soil Sample** కార్డుపై **Start** నొక్కండి, లేదా ఒక టాస్క్ యొక్క **Quick actions** లో **Soil Sample Collection** నొక్కండి.
-2. పైన **Free Sample** లేదా **Paid Sample** ఎంచుకోండి.
-3. **Farmer Name** లో కనీసం రెండు అక్షరాలు టైప్ చేసి రైతును ఎంచుకోండి. రైతు కొత్తవారైతే, **New Farmer** నొక్కండి.
-4. పెయిడ్ శాంపిల్ అయితే, **Paid Sample Category** కింద **Farmer** లేదా **NGO** ఎంచుకోండి.
-5. **Soil Sample**, **Water Sample** ను **Yes** లేదా **No** గా సెట్ చేయండి.
-6. **Crop 1**, **Crop 2** ఎంచుకుని, అవసరమైతే **Remarks** రాయండి.
-7. **Add Another Sample** నొక్కండి. శాంపిల్ దాని ధరతో **Sample Added (Preview)** లో కనిపిస్తుంది.
-8. ప్రతి శాంపిల్‌కి ఇలాగే చేయండి. ఒక వరుస మార్చడానికి పెన్సిల్, తీసేయడానికి బిన్ (చెత్తబుట్ట) వాడండి.
-9. తర్వాత పూర్తి చేయడానికి **Save Draft** నొక్కండి, లేదా **Sample Summary** చూడటానికి **Save and Continue** నొక్కండి.
-10. సమ్మరీ చెక్ చేసి, **Continue to payment** (పెయిడ్) లేదా **Continue to consignment** (ఫ్రీ) నొక్కండి.
+1. పైన **Free Sample** లేదా **Paid Sample** ఎంచుకోండి.
+2. **Farmer Name** లో కనీసం రెండు అక్షరాలు టైప్ చేసి రైతును ఎంచుకోండి. రైతు కొత్తవారైతే, **New Farmer** నొక్కండి. పెయిడ్ శాంపిల్ అయితే, **Paid Sample Category** కింద **Farmer** లేదా **NGO** ఎంచుకోండి.
+3. **Soil Sample**, **Water Sample** ను **Yes** లేదా **No** గా సెట్ చేయండి. **Crop 1**, **Crop 2** ఎంచుకుని, అవసరమైతే **Remarks** రాయండి.
+4. **Add Another Sample** నొక్కండి. శాంపిల్ దాని ధరతో **Sample Added (Preview)** లో కనిపిస్తుంది. ప్రతి శాంపిల్‌కి ఇలాగే చేయండి. పెన్సిల్ ఒక వరుసను మారుస్తుంది, బిన్ (చెత్తబుట్ట) దాన్ని తీసేస్తుంది.
+5. తర్వాత పూర్తి చేయడానికి **Save Draft** నొక్కండి, లేదా **Save and Continue** నొక్కండి. **Sample Summary** చెక్ చేసి, **Continue to payment** (పెయిడ్) లేదా **Continue to consignment** (ఫ్రీ) నొక్కండి.
+
+> Tip: ఒక సేకరణలో చాలా మంది రైతుల శాంపిల్స్ ఉండవచ్చు.
 
 ## ఫీల్డ్‌ల వివరాలు
 
@@ -119,13 +268,12 @@ routes: /SampleCollection/new, /SampleCollection/view/{id}
 for: SampleCollection.Update
 roles: MDO, JMDO, Admin, CorporateAdmin
 designations: 
-source-hash: 1e935425e9054d62
+minutes: 2
+source-hash: 2699d934a7f0674d
 confidence: ok
 
 **ఈ స్క్రీన్ దేనికి**
 **Save Draft** తో సేవ్ చేసిన సేకరణ **Draft** గానే ఉంటుంది. మీరు సబ్మిట్ చేసే వరకు ఏదీ చెల్లింపుకు గానీ ల్యాబ్‌కి గానీ వెళ్లదు. దాన్ని మళ్లీ తెరిచి పూర్తి చేయవచ్చు.
-
-## దశలు
 
 1. **Sample Collection** తెరిచి **Draft** టైల్ నొక్కండి.
 2. కన్ను ఐకాన్‌తో సేకరణ తెరవండి.
@@ -149,13 +297,12 @@ routes: /SampleCollection/payment/{id}
 for: 
 roles: MDO, JMDO, Admin, CorporateAdmin
 designations: 
-source-hash: 67de9290d8256a0c
+minutes: 3
+source-hash: c5b827bf8559be23
 confidence: ok
 
 **ఈ స్క్రీన్ దేనికి**
 **Payments** స్క్రీన్ ఎంత వసూలు చేయాలో, రైతు స్కాన్ చేయడానికి UPI QR కోడ్, చెల్లింపు వివరాలు, రసీదు కోసం ఒక ఫారం చూపిస్తుంది.
-
-## దశలు
 
 1. **Continue to payment** తర్వాత, **Payments** స్క్రీన్ తెరుచుకుంటుంది. సేకరణ వివరాల్లో **Record payment** నొక్కి కూడా తెరవవచ్చు.
 2. **Total Amount to Collect** చెక్ చేయండి. శాంపిల్స్ చూడటానికి **View Sample Summary** నొక్కండి.
@@ -188,13 +335,12 @@ routes: /SampleCollection/consignment/{id}, /SampleCollection/submitted/{id}
 for: 
 roles: MDO, JMDO, Admin, CorporateAdmin
 designations: 
-source-hash: 1820125bf239140d
+minutes: 3
+source-hash: de0b21e8f58ece6a
 confidence: ok
 
 **ఈ స్క్రీన్ దేనికి**
 సేకరణ ఫ్రీ అయినప్పుడు లేదా దాని చెల్లింపుకు ఆమోదం వచ్చినప్పుడు, మీరు శాంపిల్స్ ప్యాక్ చేసి కొరియర్‌కి ఇస్తారు. ఏమి వస్తోందో ల్యాబ్‌కి తెలిసేలా **Upload Consignment** కొరియర్ వివరాలు, ఫోటోలు నమోదు చేస్తుంది.
-
-## దశలు
 
 1. సేకరణ తెరిచి **Upload consignment** నొక్కండి. ఫ్రీ శాంపిల్ అయితే, **Continue to consignment** నేరుగా దీన్ని తెరుస్తుంది.
 2. **Courier Details** కింద, **Courier Service** ఎంచుకుని **Tracking Number (AWB)** టైప్ చేయండి.
@@ -224,13 +370,14 @@ routes: /SampleCollection/view/{id}
 for: 
 roles: 
 designations: 
-source-hash: c0ff9ecbae88fe84
+screenshot: collection-details.png
+screenshot-phone: collection-details.phone.jpg
+minutes: 2
+source-hash: 0b6c9585e9bd5ccc
 confidence: ok
 
 **ఈ స్క్రీన్ దేనికి**
 **Sample Collection Details** ఒక సేకరణ గురించి అన్నీ చూపిస్తుంది: చెల్లింపు, కొరియర్, ల్యాబ్ ఫలితాలు, చరిత్ర. ఫీల్డ్ సిబ్బంది, డీలర్లు, మేనేజర్లు ఇక్కడ పురోగతిని ఫాలో చేయవచ్చు.
-
-## దశలు
 
 1. **Sample Collection** తెరిచి ఒక సేకరణపై కన్ను ఐకాన్ నొక్కండి.
 2. పై లైన్‌లో సేకరణ ID, **Paid Sample** లేదా **Free Sample**, ప్రస్తుత స్టేటస్ కనిపిస్తాయి.
@@ -259,13 +406,12 @@ routes: /SampleCollection/view/{id}, /ConsignmentHistory/view/{id}
 for: 
 roles: Admin, CorporateAdmin
 designations: 
-source-hash: 71850d4b14d9d073
+minutes: 3
+source-hash: 16838640fb4dadb0
 confidence: ok
 
 **ఈ స్క్రీన్ దేనికి**
 అడ్మినిస్ట్రేటర్లు సేకరణ వివరాల పేజీలో చెల్లింపును రివ్యూ చేయవచ్చు, కన్సైన్‌మెంట్‌ను తర్వాతి దశకు మార్చవచ్చు, ల్యాబ్ ఫలితాలు టైప్ చేయవచ్చు.
-
-## దశలు
 
 ### సేకరణలో చెల్లింపును ఆమోదించడం
 
@@ -299,13 +445,14 @@ routes: /ConsignmentHistory, /ConsignmentHistory/view/{id}
 for: 
 roles: 
 designations: 
-source-hash: c0eb73648ebf3b77
+screenshot: consignment-history.png
+screenshot-phone: consignment-history.phone.jpg
+minutes: 2
+source-hash: c4455c0c6e2c1ab2
 confidence: ok
 
 **ఈ స్క్రీన్ దేనికి**
 **Consignment History** ల్యాబ్‌కి పంపిన ప్రతి శాంపిల్ పార్సిల్‌ను, కొరియర్, ట్రాకింగ్ నంబర్, ప్రస్తుత స్టేటస్‌తో చూపిస్తుంది.
-
-## దశలు
 
 1. మెనూ నుంచి **Consignment History** తెరవండి.
 2. కార్డులు **Total Consignments**, **Total Consignment Sent**, **Total Samples**, **Delivered**, **Pending** చూపిస్తాయి.
@@ -335,13 +482,14 @@ routes: /Sas/MySamples, /SampleCollection/view/{id}
 for: 
 roles: Farmer
 designations: 
-source-hash: fa5d1d2f177d288c
+screenshot: farmer-my-samples.png
+screenshot-phone: farmer-my-samples.phone.jpg
+minutes: 2
+source-hash: eac7ad7b8677316c
 confidence: ok
 
 **ఈ స్క్రీన్ దేనికి**
 మీ MO ఆఫీసర్ మీ దగ్గర సేకరించిన ప్రతి మట్టి లేదా నీటి శాంపిల్‌ను, ఒక్కొక్కటి ఇప్పుడు ఎక్కడ ఉందో **My Samples** చూపిస్తుంది.
-
-## దశలు
 
 1. మెనూ నుంచి **My Samples** తెరవండి.
 2. ప్రతి కార్డులో శాంపిల్ నంబర్, కన్సైన్‌మెంట్, సేకరించిన ఆఫీసర్, తేదీ, పంట కనిపిస్తాయి.
@@ -371,13 +519,14 @@ routes: /Sas/MyReports
 for: 
 roles: Farmer
 designations: 
-source-hash: 810f0b093cade052
+screenshot: farmer-my-reports.png
+screenshot-phone: farmer-my-reports.phone.jpg
+minutes: 2
+source-hash: 40b826ab2246cad3
 confidence: ok
 
 **ఈ స్క్రీన్ దేనికి**
 మీ శాంపిల్స్ కోసం ల్యాబ్ తయారు చేసిన పరీక్ష రిపోర్ట్‌లను **My Reports** చూపిస్తుంది. ప్రతి రిపోర్ట్‌ను తమిళం లేదా ఇంగ్లీష్‌లో డౌన్‌లోడ్ చేసుకోవచ్చు.
-
-## దశలు
 
 1. మెనూ నుంచి **My Reports** తెరవండి.
 2. కార్డులు **Total Reports**, **Ready to Download**, **Downloaded**, **Under Process** చూపిస్తాయి.
@@ -405,13 +554,12 @@ routes: /Sas/Payments, /Sas/Payments/{id}
 for: 
 roles: Farmer
 designations: 
-source-hash: 41753a10de9d41d6
+minutes: 2
+source-hash: f07974a161df2664
 confidence: ok
 
 **ఈ స్క్రీన్ దేనికి**
 మీ పెయిడ్ మట్టి శాంపిల్స్ కోసం చేసిన చెల్లింపులను, వాటిని SPIC ఆమోదించిందా, అందుకుందా అనేది **Payments** చూపిస్తుంది. ఇక్కడ మీరు చూడటం మాత్రమే; ఏమీ నింపాల్సిన అవసరం లేదు.
-
-## దశలు
 
 1. మెనూ నుంచి **Payments** తెరవండి.
 2. కార్డులు **Total Paid Samples**, **Finance Verified**, **Approval Pending**, **Payment Issues** చూపిస్తాయి.
@@ -438,13 +586,12 @@ routes: /Sas/Payments, /Sas/Payments/{id}
 for: SasPaymentApproval.View
 roles: 
 designations: 
-source-hash: 4a8d8dd3f9015aa4
+minutes: 3
+source-hash: 2c0a5e7b4b9a51d2
 confidence: ok
 
 **ఈ స్క్రీన్ దేనికి**
 పెయిడ్ శాంపిల్స్ కోసం ఫీల్డ్ ఆఫీసర్లు నమోదు చేసిన చెల్లింపులను **Payment Approval** చూపిస్తుంది. మీరు ప్రతి రసీదు, అమౌంట్ చెక్ చేసి, ఆమోదించి Finance కి పంపుతారు, లేదా ఆఫీసర్‌కి తిరిగి పంపుతారు.
-
-## దశలు
 
 1. మెనూ నుంచి **Payment Approval** తెరవండి.
 2. **Pending Admin Approval** ట్యాబ్ నొక్కండి.
@@ -474,13 +621,12 @@ routes: /Sas/Payments, /Sas/Payments/{id}, /Sas/Payments/History
 for: SasPaymentVerification.View
 roles: 
 designations: 
-source-hash: ec36e4e58f4e4b58
+minutes: 3
+source-hash: 788890513e2baf14
 confidence: ok
 
 **ఈ స్క్రీన్ దేనికి**
 ఆమోదించేవారు Finance కి పంపిన చెల్లింపులను **Payment Verification** చూపిస్తుంది. డబ్బు అకౌంట్‌లోకి వచ్చిందని మీరు నిర్ధారిస్తారు. మీరు పూర్తి చేసిన ప్రతి చెల్లింపు **Payment History** లో ఉంటుంది.
-
-## దశలు
 
 1. మెనూ నుంచి **Payment Verification** తెరవండి.
 2. **Pending Verification** ట్యాబ్ నొక్కండి.

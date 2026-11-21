@@ -5513,6 +5513,57 @@ namespace Spic.Infrastructure.Migrations
                     b.ToTable("HeadquarterBudgetSummaryHistories");
                 });
 
+            modelBuilder.Entity("SPIC.Core.Entities.HelpFeedback", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Comment")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateOnly>("Day")
+                        .HasColumnType("date");
+
+                    b.Property<bool>("Helpful")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Language")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)");
+
+                    b.Property<string>("Module")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<string>("SectionId")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Day");
+
+                    b.HasIndex("UserId", "Module", "SectionId", "Day")
+                        .IsUnique();
+
+                    b.ToTable("HelpFeedbacks");
+                });
+
             modelBuilder.Entity("SPIC.Core.Entities.HelpReviewItem", b =>
                 {
                     b.Property<int>("Id")
@@ -5837,6 +5888,69 @@ namespace Spic.Infrastructure.Migrations
                     b.ToTable("JMDOTrackingSessions");
                 });
 
+            modelBuilder.Entity("SPIC.Core.Entities.JmdoDealerVisitPostponeRequest", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime?>("ApprovedDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int>("DealerRowId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("OriginalAllocationId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("OriginalPlannedDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int?>("OriginalPlannedDay")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("RequestedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("RequestedByUserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("RequestedDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int?>("ResultingAllocationId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ReviewRemarks")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("ReviewedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("ReviewedByUserId")
+                        .HasColumnType("text");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DealerRowId")
+                        .IsUnique()
+                        .HasFilter("\"Status\" = 0");
+
+                    b.HasIndex("RequestedByUserId");
+
+                    b.ToTable("JmdoDealerVisitPostponeRequests");
+                });
+
             modelBuilder.Entity("SPIC.Core.Entities.JmdoTaskAllocation", b =>
                 {
                     b.Property<int>("Id")
@@ -6061,6 +6175,15 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<int>("AllocationId")
                         .HasColumnType("integer");
 
+                    b.Property<decimal?>("Amount")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<string>("BankName")
+                        .HasColumnType("text");
+
+                    b.Property<string>("BooksAccountedInFavourOf")
+                        .HasColumnType("text");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp without time zone");
 
@@ -6093,11 +6216,23 @@ namespace Spic.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("PaymentByName")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("PaymentDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("ReceiptNumber")
+                        .HasColumnType("text");
+
                     b.Property<string>("Remarks")
                         .HasColumnType("text");
 
                     b.Property<int?>("SubDealerId")
                         .HasColumnType("integer");
+
+                    b.Property<string>("TransactionNumber")
+                        .HasColumnType("text");
 
                     b.Property<int?>("Urea")
                         .HasColumnType("integer");
@@ -13138,6 +13273,17 @@ namespace Spic.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("Attendance");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.JmdoDealerVisitPostponeRequest", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.JmdoTaskAllocationDealer", "DealerRow")
+                        .WithMany()
+                        .HasForeignKey("DealerRowId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("DealerRow");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.JmdoTaskAllocationDealer", b =>

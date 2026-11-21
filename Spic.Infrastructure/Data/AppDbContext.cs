@@ -201,6 +201,21 @@ namespace Spic.Infrastructure.Data
                     .OnDelete(DeleteBehavior.SetNull);
             });
 
+            builder.Entity<JmdoDealerVisitPostponeRequest>(entity =>
+            {
+                entity.HasOne(x => x.DealerRow)
+                    .WithMany()
+                    .HasForeignKey(x => x.DealerRowId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasIndex(x => x.RequestedByUserId);
+                // Belt-and-suspenders against two near-simultaneous requests for the same dealer
+                // row - the app-level check in the create endpoint is the primary guard, this is
+                // the race-proof backstop.
+                entity.HasIndex(x => x.DealerRowId)
+                    .HasFilter("\"Status\" = 0")
+                    .IsUnique();
+            });
+
             // JMDO Attendance and Tracking: one attendance row per (UserId, Date); a session is a
             // continuous GPS tracking window within a day's attendance; a point is one GPS fix
             // within a session. Tracking sessions/points are not written yet (next step), but the
@@ -302,6 +317,13 @@ namespace Spic.Infrastructure.Data
                 entity.HasIndex(x => new { x.Module, x.SectionId, x.Language });
                 entity.HasIndex(x => x.Language);
                 entity.Property(x => x.Kind).HasConversion<string>().HasMaxLength(20);
+            });
+
+            // Help centre "Was this guide helpful?" (docs/superpowers/specs/2026-11-16-help-centre-redesign-design.md §6.7)
+            builder.Entity<HelpFeedback>(entity =>
+            {
+                entity.HasIndex(x => new { x.UserId, x.Module, x.SectionId, x.Day }).IsUnique();
+                entity.HasIndex(x => x.Day);
             });
 
             // Publicity Material Tracking (docs/publicity-tracking-plan.md)
@@ -1045,6 +1067,7 @@ namespace Spic.Infrastructure.Data
         //// Help Desk translation review
         public DbSet<HelpReviewItem> HelpReviewItems { get; set; }
         public DbSet<HelpReviewer> HelpReviewers { get; set; }
+        public DbSet<HelpFeedback> HelpFeedbacks { get; set; }
 
         //// JMDO Task Allocation
         public DbSet<JmdoTaskAllocation> JmdoTaskAllocations { get; set; }
@@ -1052,6 +1075,7 @@ namespace Spic.Infrastructure.Data
         public DbSet<JmdoTaskAllocationProgram> JmdoTaskAllocationPrograms { get; set; }
         public DbSet<JmdoTaskCloseout> JmdoTaskCloseouts { get; set; }
         public DbSet<JmdoTaskCloseoutProduct> JmdoTaskCloseoutProducts { get; set; }
+        public DbSet<JmdoDealerVisitPostponeRequest> JmdoDealerVisitPostponeRequests { get; set; }
         public DbSet<JmdoYearlyTarget> JmdoYearlyTargets { get; set; }
 
         //// Knowledge Community

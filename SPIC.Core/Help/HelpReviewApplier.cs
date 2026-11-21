@@ -25,6 +25,12 @@ namespace SPIC.Core.Help
 
             if (!string.IsNullOrWhiteSpace(translated.Title) && translated.Title != translated.Module)
                 result[HelpGuideWriter.GuideTitleKey] = (translated.Title, string.Empty, HelpConfidence.Ok);
+            // Keep the translated category and note with the hash they were made from.
+            if (!string.IsNullOrWhiteSpace(translated.Category))
+                result[HelpGuideWriter.CategoryKey] = (translated.Category, string.Empty, HelpConfidence.Ok);
+            if (!string.IsNullOrWhiteSpace(translated.Note))
+                result[HelpGuideWriter.NoteKey] = (translated.Note, string.Empty, HelpConfidence.Ok);
+            keptHashes[HelpGuideWriter.MetaKey] = translated.MetaSourceHash ?? "missing";
             foreach (var t in translated.Sections)
             {
                 result[t.Id] = (t.Title, t.Body, t.Confidence);
@@ -50,7 +56,20 @@ namespace SPIC.Core.Help
                     skipped.Add($"{c.Module}/{c.Language}/{c.SectionId}: English changed after this correction (by {c.ReviewerName})");
                     continue;
                 }
-                result[source.Id] = (string.IsNullOrWhiteSpace(c.SuggestedTitle) ? source.Title : c.SuggestedTitle, c.SuggestedBody, HelpConfidence.Ok);
+                var body = c.SuggestedBody;
+                if (source.Kind != "screen")
+                {
+                    // Blocks: keep English layout lines; refuse a correction whose text lines can't be read.
+                    var problems = new List<string>();
+                    HelpBlocks.Items(body, problems);
+                    if (problems.Count > 0)
+                    {
+                        skipped.Add($"{c.Module}/{c.Language}/{c.SectionId}: correction could not be read ({string.Join("; ", problems)})");
+                        continue;
+                    }
+                    body = HelpBlocks.MergeLayout(source.Body, body);
+                }
+                result[source.Id] = (string.IsNullOrWhiteSpace(c.SuggestedTitle) ? source.Title : c.SuggestedTitle, body, HelpConfidence.Ok);
                 keptHashes.Remove(source.Id); // corrected against the current English: stamp the current hash
             }
 

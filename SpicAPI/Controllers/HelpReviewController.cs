@@ -49,6 +49,54 @@ namespace SpicAPI.Controllers
             return Ok(keys);
         }
 
+        // =====================================================================
+        //  "Was this guide helpful?" (every signed-in user votes; reviewers read)
+        // =====================================================================
+
+        /// <summary>Stores a vote; a second vote by the same user on the same guide/screen and day replaces it.</summary>
+        [HttpPost("feedback")]
+        public async Task<IActionResult> Feedback([FromBody] HelpFeedbackDto dto)
+        {
+            var error = HelpFeedbackRules.Validate(dto, _library);
+            if (error is not null) return BadRequest(Fail(error));
+            var userId = CurrentUserId;
+            if (string.IsNullOrWhiteSpace(userId)) return Unauthorized();
+
+            var module = dto.Module.Trim().ToLowerInvariant();
+            var section = (dto.SectionId ?? string.Empty).Trim();
+            var day = DateOnly.FromDateTime(DateTime.UtcNow);
+            var row = await _db.HelpFeedbacks.FirstOrDefaultAsync(f => f.UserId == userId && f.Module == module && f.SectionId == section && f.Day == day);
+            if (row is null) _db.HelpFeedbacks.Add(row = new HelpFeedback { UserId = userId, Module = module, SectionId = section, Day = day });
+            row.Language = dto.Language.Trim().ToLowerInvariant();
+            row.Helpful = dto.Helpful;
+            row.Comment = Trim(dto.Comment, HelpFeedbackRules.MaxComment);
+            row.CreatedAtUtc = DateTime.UtcNow;
+            await _db.SaveChangesAsync();
+            return Ok(new { Success = true });
+        }
+
+        /// <summary>Vote totals per guide/screen over the last <paramref name="days"/> days, most "No" first.</summary>
+        [HttpGet("feedback")]
+        public async Task<IActionResult> FeedbackSummary([FromQuery] int days = 90)
+        {
+            var (isReviewer, _, _) = await ReviewerScope();
+            if (!isReviewer) return Forbidden();
+
+            var since = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-Math.Clamp(days, 1, 3650)));
+            var rows = await _db.HelpFeedbacks.AsNoTracking().Where(f => f.Day >= since).ToListAsync();
+            var summary = rows
+                .GroupBy(f => (f.Module, f.SectionId))
+                .Select(g => new HelpFeedbackSummaryDto(
+                    g.Key.Module,
+                    g.Key.SectionId.Length == 0 ? null : g.Key.SectionId,
+                    g.Count(f => f.Helpful),
+                    g.Count(f => !f.Helpful),
+                    g.Where(f => !string.IsNullOrWhiteSpace(f.Comment)).OrderByDescending(f => f.CreatedAtUtc).Take(5).Select(f => f.Comment!).ToList()))
+                .OrderByDescending(x => x.No).ThenBy(x => x.Module).ThenBy(x => x.SectionId)
+                .ToList();
+            return Ok(summary);
+        }
+
         [HttpGet("access")]
         public async Task<IActionResult> Access()
         {

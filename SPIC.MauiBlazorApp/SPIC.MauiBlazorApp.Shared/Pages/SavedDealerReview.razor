@@ -182,9 +182,12 @@
             _isLoading = true;
             try
             {
-               _dealer = await Http.GetFromJsonAsync<DR.DealerRegistration>($"api/DealerRegistration/{dealerId}");
+                _dealer = await Http.GetFromJsonAsync<DR.DealerRegistration>($"api/DealerRegistration/{dealerId}");
                 if (_dealer != null)
                 {
+                    _avpOfficeDealerCode = _dealer.DealerCode ?? string.Empty;
+                    _avpOfficeSelectSpic = _dealer.InSpic;
+                    _avpOfficeSelectGfl = _dealer.InGreenStar;
                     _avpOfficeSpicDealerId = _dealer.SPICCode ?? string.Empty;
                     _avpOfficeGflDealerId = _dealer.GreenStarCode ?? _dealer.NCode ?? _dealer.TnCode ?? string.Empty;
                     await FetchRelatedData(_dealer.Id);
@@ -669,8 +672,11 @@
     private string _successTitle = "";
     private string _successSubtitle = "";
 
-    // AVP Office Dealer ID submission and final AVP review share the approval popup.
-    // Values are saved to the existing SPICCode / GreenStarCode fields by the server.
+    // AVP Office manual code submission and final AVP review share the approval popup.
+    // Values are saved to existing DealerCode / SPICCode / GreenStarCode / InSpic / InGreenStar fields.
+    private string _avpOfficeDealerCode = string.Empty;
+    private bool _avpOfficeSelectSpic;
+    private bool _avpOfficeSelectGfl;
     private string _avpOfficeSpicDealerId = string.Empty;
     private string _avpOfficeGflDealerId = string.Empty;
     private string _avpOfficeRemarks = string.Empty;
@@ -697,8 +703,11 @@
     private bool IsAwaitingAvpOffice =>
         _dealer != null
         && _dealer.IsNewDealerRegistration
-        && _dealer.AVPApproved == true
-        && !IsAvpOfficeSubmitted;
+        && _dealer.RMApproved == true
+        && _dealer.SMApproved == true
+        && _dealer.AVPApproved != false
+        && !IsAvpOfficeSubmitted
+        && !IsFinalAvpApproved;
 
     private bool IsAwaitingFinalAvp =>
         _showNewDealerSavedDetails && IsAvpOfficeSubmitted && !IsFinalAvpApproved;
@@ -709,8 +718,9 @@
         && _showNewDealerSavedDetails
         && _dealer.RMApproved == true
         && _dealer.SMApproved == true
-        && _dealer.AVPApproved == true
-        && !IsAvpOfficeSubmitted;
+        && _dealer.AVPApproved != false
+        && !IsAvpOfficeSubmitted
+        && !IsFinalAvpApproved;
 
     private bool CanShowFinalAvpApproval =>
         (LoginState.IsDirectorOrAVP || LoginState.IsAdmin) && IsAwaitingFinalAvp;
@@ -724,8 +734,21 @@ private async Task OpenApprovalPopup()
 
     if (_isAvpOfficePopupMode || _isFinalAvpPopupMode)
     {
-        _avpOfficeSpicDealerId = _dealer?.SPICCode ?? string.Empty;
-        _avpOfficeGflDealerId = _dealer?.GreenStarCode ?? _dealer?.NCode ?? _dealer?.TnCode ?? string.Empty;
+        _avpOfficeDealerCode = _dealer?.DealerCode ?? string.Empty;
+        _avpOfficeSelectSpic = _dealer?.InSpic == true;
+        _avpOfficeSelectGfl = _dealer?.InGreenStar == true;
+
+        _avpOfficeSpicDealerId = _dealer?.SPICCode
+            ?? (_avpOfficeSelectSpic && !string.IsNullOrWhiteSpace(_avpOfficeDealerCode) ? $"D{_avpOfficeDealerCode}" : string.Empty);
+        _avpOfficeGflDealerId = _dealer?.GreenStarCode ?? _dealer?.NCode ?? _dealer?.TnCode
+            ?? (_avpOfficeSelectGfl && !string.IsNullOrWhiteSpace(_avpOfficeDealerCode) ? $"Z{_avpOfficeDealerCode}" : string.Empty);
+
+        if (_isAvpOfficePopupMode)
+        {
+            if (!_avpOfficeSelectSpic) _avpOfficeSpicDealerId = string.Empty;
+            if (!_avpOfficeSelectGfl) _avpOfficeGflDealerId = string.Empty;
+        }
+
         _avpOfficeRemarks = _approvalHistory
             .Where(h => string.Equals(h.Role, "AVP Office", StringComparison.OrdinalIgnoreCase))
             .OrderBy(h => h.ApprovedAt)
@@ -784,18 +807,33 @@ private async Task SubmitAvpOfficeIds()
 
     _avpOfficeError = null;
 
-    var spicDealerId = _avpOfficeSpicDealerId?.Trim();
-    var gflDealerId = _avpOfficeGflDealerId?.Trim();
+    var dealerCode = _avpOfficeDealerCode?.Trim();
+    var selectSpic = _avpOfficeSelectSpic;
+    var selectGfl = _avpOfficeSelectGfl;
+    var spicDealerId = selectSpic ? _avpOfficeSpicDealerId?.Trim() : null;
+    var gflDealerId = selectGfl ? _avpOfficeGflDealerId?.Trim() : null;
 
-    if (string.IsNullOrWhiteSpace(spicDealerId))
+    if (string.IsNullOrWhiteSpace(dealerCode))
     {
-        _avpOfficeError = "SPIC Dealer ID is required for this application.";
+        _avpOfficeError = "Customer/Dealer Code is required.";
         return;
     }
 
-    if (string.IsNullOrWhiteSpace(gflDealerId))
+    if (!selectSpic && !selectGfl)
     {
-        _avpOfficeError = "GFL Dealer ID is required for this application.";
+        _avpOfficeError = "Select at least one company (SPIC or GFL).";
+        return;
+    }
+
+    if (selectSpic && string.IsNullOrWhiteSpace(spicDealerId))
+    {
+        _avpOfficeError = "SPIC Code is required when SPIC is selected.";
+        return;
+    }
+
+    if (selectGfl && string.IsNullOrWhiteSpace(gflDealerId))
+    {
+        _avpOfficeError = "GFL Code is required when GFL is selected.";
         return;
     }
 
@@ -808,6 +846,9 @@ private async Task SubmitAvpOfficeIds()
             $"api/DealerRegistration/{_dealer.Id}/avp-office-submit",
             new
             {
+                DealerCode = dealerCode,
+                InSpic = selectSpic,
+                InGreenStar = selectGfl,
                 SpicDealerId = spicDealerId,
                 GflDealerId = gflDealerId,
                 Remarks = _avpOfficeRemarks
@@ -826,7 +867,7 @@ private async Task SubmitAvpOfficeIds()
         MarkDataChanged();
         IsConfirmProceedPopupVisible = false;
         _successTitle = "Forwarded to AVP for Final Approval!";
-        _successSubtitle = "Dealer IDs captured. AVP will complete the final approval.";
+        _successSubtitle = "Dealer codes captured. AVP will complete the final approval.";
         _showSuccessNotification = true;
         StateHasChanged();
         await Task.Delay(3000);
@@ -1572,6 +1613,9 @@ private async Task ApproveDealer()
                               IsNewDealerFinalApproval="IsNewDealerFinalApproval"
                               IsAvpOfficeMode="_isAvpOfficePopupMode"
                               IsFinalAvpMode="_isFinalAvpPopupMode"
+                              @bind-DealerCode="_avpOfficeDealerCode"
+                              @bind-SelectSpic="_avpOfficeSelectSpic"
+                              @bind-SelectGfl="_avpOfficeSelectGfl"
                               @bind-SpicDealerId="_avpOfficeSpicDealerId"
                               @bind-GflDealerId="_avpOfficeGflDealerId"
                               @bind-AvpOfficeRemarks="_avpOfficeRemarks"
@@ -1762,12 +1806,13 @@ private async Task ApproveDealer()
         <Secondary>
             <button type="button"
                     class="btn btn-outline-warning px-3"
+                    data-help="dr-rev-sendback"
                     @onclick="@ShowSendBackPopup">
                 <i class="bi bi-arrow-counterclockwise me-1"></i> Send Back
             </button>
         </Secondary>
         <ChildContent>
-            <button class="btn-submit px-3" @onclick="OpenApprovalPopup" disabled="@_isApproving">
+            <button class="btn-submit px-3" data-help="dr-rev-approve" @onclick="OpenApprovalPopup" disabled="@_isApproving">
                 @(_isApproving ? "Processing..." : ApprovalButtonText())
             </button>
         </ChildContent>
