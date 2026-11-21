@@ -5806,6 +5806,9 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<DateTime?>("EndTime")
                         .HasColumnType("timestamp without time zone");
 
+                    b.Property<int>("Ownership")
+                        .HasColumnType("integer");
+
                     b.Property<double?>("StartLatitude")
                         .HasColumnType("double precision");
 
@@ -5832,7 +5835,9 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasIndex("AttendanceId");
 
-                    b.HasIndex("UserId");
+                    b.HasIndex("UserId")
+                        .IsUnique()
+                        .HasFilter("\"Status\" = 0");
 
                     b.ToTable("JMDOTrackingSessions");
                 });
@@ -6227,6 +6232,41 @@ namespace Spic.Infrastructure.Migrations
                     b.HasIndex("CloseoutId");
 
                     b.ToTable("JmdoTaskCloseoutProducts");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.JmdoTaskTrackingLink", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("AllocationId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("TaskKey")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("TrackingSessionId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TrackingSessionId");
+
+                    b.HasIndex("AllocationId", "TaskKey")
+                        .IsUnique();
+
+                    b.ToTable("JmdoTaskTrackingLinks");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.JmdoYearlyTarget", b =>
@@ -13282,6 +13322,17 @@ namespace Spic.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("Closeout");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.JmdoTaskTrackingLink", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.JMDOTrackingSession", "TrackingSession")
+                        .WithMany()
+                        .HasForeignKey("TrackingSessionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("TrackingSession");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.LabActivity", b =>

@@ -3,11 +3,27 @@
 // Stopped" view. Reuses the same mapInstances registry app-interop.js's initLeafletMap already
 // keeps, so this map is just another entry in it, told apart only by its element id.
 
+// Rejects the (0,0)-ish "no GPS fix yet" sentinel - defense in depth against a map ever being
+// anchored/marked at Null Island (Gulf of Guinea), which is exactly what produced the Live
+// Tracking "Africa + India" bug: a caller passing a zero-default while a real fix was still
+// loading planted a Start marker there, which then poisoned every later fitBounds() call since it
+// never gets fixed up once the map is marked initialized. Both call sites (TrackPlayback's history
+// and Live Tracking tabs) are protected the same way here, with no change needed at either's own
+// call site when they do have a real coordinate (the overwhelmingly common case).
+function isPlausibleLatLng(lat, lng) {
+    return typeof lat === 'number' && typeof lng === 'number' &&
+        lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180 &&
+        (Math.abs(lat) > 0.01 || Math.abs(lng) > 0.01);
+}
+
 window.initTrackingRouteMap = function (elementId, startLat, startLng) {
     if (!window.mapInstances) window.mapInstances = {};
+    var hasValidStart = isPlausibleLatLng(startLat, startLng);
 
     if (!window.mapInstances[elementId]) {
-        var map = L.map(elementId).setView([startLat, startLng], 15);
+        var map = hasValidStart
+            ? L.map(elementId).setView([startLat, startLng], 15)
+            : L.map(elementId).setView([20, 0], 2); // no real fix yet - start zoomed out, not pinned anywhere specific
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '© OpenStreetMap'
         }).addTo(map);
@@ -15,6 +31,7 @@ window.initTrackingRouteMap = function (elementId, startLat, startLng) {
     }
 
     var map = window.mapInstances[elementId];
+    if (!hasValidStart) return; // nothing plausible to place a Start marker at yet
 
     var startIcon = L.divIcon({
         className: 'jt-map-pin-icon jt-map-pin-start',
@@ -37,7 +54,12 @@ window.initTrackingRouteMap = function (elementId, startLat, startLng) {
 // points: array of { latitude, longitude }, oldest first. Redraws the full route each call - point
 // counts here (at most a few thousand per session, see JMDOTrackingController.GetSessionPoints) are
 // small enough that Leaflet re-rendering the whole polyline is cheaper than diffing it.
-window.updateTrackingRouteMap = function (elementId, points) {
+//
+// fitBounds (optional, defaults true): Playback History's existing call site never passes a 3rd
+// arg, so its camera-framing behaviour is byte-for-byte unchanged. TrackPlayback's Live Tracking
+// tab passes false on every poll tick after the first, to follow the current-position marker
+// (panTo) without a jump-cut camera reframe every ~15s.
+window.updateTrackingRouteMap = function (elementId, points, fitBounds) {
     var map = window.mapInstances ? window.mapInstances[elementId] : null;
     if (!map || !points || points.length === 0) return;
 
@@ -65,9 +87,19 @@ window.updateTrackingRouteMap = function (elementId, points) {
             .addTo(map);
     }
 
-    var bounds = latLngs.slice();
-    if (map.trackStartMarker) bounds.push(map.trackStartMarker.getLatLng());
-    map.fitBounds(bounds, { padding: [36, 36], maxZoom: 16 });
+    if (fitBounds === false) {
+        map.panTo(current, { animate: true });
+    } else {
+        var bounds = latLngs.slice();
+        if (map.trackStartMarker) {
+            var startLL = map.trackStartMarker.getLatLng();
+            // Only widen the frame to the Start marker if it's ever actually been placed at a real
+            // fix - never let a not-yet-repositioned (0,0) marker force the camera out to a world
+            // view that spans from it to the real route.
+            if (isPlausibleLatLng(startLL.lat, startLL.lng)) bounds.push(startLL);
+        }
+        map.fitBounds(bounds, { padding: [36, 36], maxZoom: 16 });
+    }
 };
 
 // ---------------------------------------------------------------------------

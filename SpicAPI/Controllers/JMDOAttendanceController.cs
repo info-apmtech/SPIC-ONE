@@ -275,11 +275,16 @@ namespace SpicAPI.Controllers
 
         private AppRole? CurrentRole()
         {
-            var raw = User.FindFirst(ClaimTypes.Role)?.Value;
+            var raw = User.FindFirst(ClaimTypes.Role)?.Value ??
+                      User.FindFirst("Role")?.Value ??
+                      User.FindFirst("role")?.Value;
             return Enum.TryParse<AppRole>(raw, true, out var role) ? role : null;
         }
 
-        private bool IsJmdo() => CurrentRole() == AppRole.JMDO;
+        private bool IsJmdo() =>
+            User.IsInRole("JMDO") ||
+            User.IsInRole("jmdo") ||
+            CurrentRole() == AppRole.JMDO;
 
         // The API container runs on UTC (no TZ is set in the Docker image), but "today" here must
         // mean the JMDO's own India day - otherwise, between 00:00 and 05:30 IST, DateTime.Today
