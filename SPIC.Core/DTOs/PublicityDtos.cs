@@ -99,7 +99,11 @@ namespace SPIC.Core.DTOs
     // RM's submission is complete and SMD simply hasn't started reviewing it yet. ZeroSubmittedByRm
     // means the RM has explicitly submitted Zero Requirement, awaiting SMD finalization. ZeroConfirmed
     // means SMD has finalized/acknowledged the zero requirement.
-    public enum PubRegionStatus { PendingReview = 0, InReview = 1, Reviewed = 2, Approved = 3, ZeroConfirmed = 4, Submitted = 5, ZeroSubmittedByRm = 6 }
+    // SubmittedToSmm means this Region's Approved/ZeroConfirmed decision has already been forwarded
+    // to SMM (PublicityRegionFinalization.SubmittedAt is set) and nothing new has arrived for it
+    // since - distinct from Approved/ZeroConfirmed so an already-submitted Region never keeps
+    // counting toward RegionsFinalized or re-enabling "Approve & Submit to SMM" for a closed round.
+    public enum PubRegionStatus { PendingReview = 0, InReview = 1, Reviewed = 2, Approved = 3, ZeroConfirmed = 4, Submitted = 5, ZeroSubmittedByRm = 6, SubmittedToSmm = 7 }
 
     public sealed class PubPageDto
     {

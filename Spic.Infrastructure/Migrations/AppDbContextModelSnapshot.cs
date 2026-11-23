@@ -8861,6 +8861,9 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<int>("Status")
                         .HasColumnType("integer");
 
+                    b.Property<DateTime?>("SubmittedAt")
+                        .HasColumnType("timestamp without time zone");
+
                     b.HasKey("Id");
 
                     b.HasIndex("StateId", "RegionId")

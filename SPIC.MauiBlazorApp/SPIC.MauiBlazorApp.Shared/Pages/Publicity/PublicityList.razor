@@ -8,6 +8,7 @@
 @inject NavigationManager Nav
 @inject FileDownloadService Downloads
 @inject ToastService Toast
+@inject IJSRuntime JS
 @implements IDisposable
 
 @*
@@ -23,7 +24,7 @@
         <Actions>
             @if (Review && !string.IsNullOrEmpty(_lookups?.MyScope)) { <span class="pub-pill pub-pill--green pub-pill--lg pub-hide-sm"><i class="bi bi-geo-alt"></i> @_lookups.MyScope</span> }
             <a class="pub-btn pub-btn--ghost" href="@($"{Api.Home}/notifications")"><i class="bi bi-bell"></i> <span class="pub-hide-sm">Notifications</span></a>
-            @if (Review && Api.MyStageLabel is not null && (Api.Role is AppRole.RM or AppRole.SMD or AppRole.SMM || Api.IsAdminMdCs))
+            @if (Review && Api.MyStageLabel is not null && (Api.Role is AppRole.RM or AppRole.SMD or AppRole.SMM || Api.IsAdminMdCs || Api.IsDgmMdCs))
             {
                 <a class="pub-btn pub-btn--line" href="/PublicityReview/consolidation"><i class="bi bi-diagram-3"></i> <span class="pub-hide-sm">Consolidation</span></a>
             }
@@ -139,7 +140,7 @@
         }
     </section>
 
-    <section class="pub-card">
+    <section class="pub-card" id="pub-request-list">
         <div class="pub-card__head">
             <h2 class="pub-h2">@(_awaitingMe ? "Awaiting My Review" : "Submitted Request")</h2>
             <div class="pub-card__tools">
@@ -351,16 +352,39 @@
         return LoadAsync(1);
     }
 
-    private Task ShowMine()
+    // Set by ShowMine() once its data load has actually finished; consumed by OnAfterRenderAsync
+    // below. Scrolling can only happen AFTER Blazor has rendered the new _page into the DOM - calling
+    // the JS interop directly from ShowMine, right after awaiting LoadAsync, would race the render
+    // and frequently scroll to the list's old, pre-filter contents (or scroll to nothing new at all,
+    // which is exactly the "click does nothing" symptom this exists to fix).
+    private bool _scrollToResultsPending;
+
+    private async Task ShowMine()
     {
-        if (Api.Role is AppRole.RM or AppRole.SMD or AppRole.SMM || Api.IsAdminMdCs)
+        if (Api.Role is AppRole.RM or AppRole.SMD or AppRole.SMM || Api.IsAdminMdCs || Api.IsDgmMdCs)
         {
             Nav.NavigateTo("/PublicityReview/consolidation");
-            return Task.CompletedTask;
+            return;
         }
+        // Any filter left over from an earlier search (state/region/HQ/stage/date-range/text) would
+        // otherwise stack on top of awaitingMe=true and silently narrow the result to nothing - a
+        // DGM-MD CS reviewer's pending requests span every state/region, so a stale state/region/HQ
+        // filter in particular would reliably hide all of them. "View New Requests" must always show
+        // every one of the caller's own pending requests, not whatever was still filtered.
+        _from = _to = null;
+        _product = _material = _state = _region = _hq = 0;
+        _stage = _q = "";
         _awaitingMe = true;
         _status = null;
-        return LoadAsync(1);
+        await LoadAsync(1);
+        _scrollToResultsPending = true;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_scrollToResultsPending) return;
+        _scrollToResultsPending = false;
+        try { await JS.InvokeVoidAsync("scrollToElementId", "pub-request-list"); } catch (JSException) { }
     }
 
     private async Task SearchKey(KeyboardEventArgs e)

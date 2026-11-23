@@ -108,14 +108,14 @@
                                         </span>
                                     </td>
                                     <td class="text-center" data-label="Region Status">
-                                        <span class="pub-pill pub-pill--@CompactStatusTone(g)" title="@RegionStatusText(g)">@CompactStatus(g)</span>
+                                        <span class="pub-pill pub-pill--@RegionStatusTone(g)">@RegionStatusText(g)</span>
                                     </td>
                                     <td class="text-center" data-label="Last Updated">@PubText.Date(g.LastUpdated)</td>
                                     <td class="text-center" data-label="Action">
                                         <div class="pub-inner-actions">
                                             @if (canFinalize && g.Status == PubRegionStatus.Reviewed)
                                             {
-                                                <button type="button" class="pub-btn pub-btn--sm pub-btn--primary" disabled="@_busy" @onclick="() => ApproveRegionAsync(g)">Approve Region</button>
+                                                <button type="button" class="pub-btn pub-btn--sm pub-btn--primary" disabled="@_busy" @onclick="() => ApproveRegionAsync(g)">Mark Region as Reviewed</button>
                                             }
                                             @if (canFinalize && g.Status == PubRegionStatus.ZeroSubmittedByRm)
                                             {
@@ -175,6 +175,17 @@
                                                                         <td data-label="Approved Qty">@r.Quantity</td>
                                                                         <td data-label="Status">
                                                                             <span class="pub-pill pub-pill--green">Approved</span>
+                                                                            @if (IsSmd)
+                                                                            {
+                                                                                @if (r.SmdReviewedAt is not null)
+                                                                                {
+                                                                                    <span class="pub-review-subtag pub-review-subtag--done"><i class="bi bi-check-circle-fill"></i> Reviewed</span>
+                                                                                }
+                                                                                else
+                                                                                {
+                                                                                    <span class="pub-review-subtag pub-review-subtag--pending">Pending Review</span>
+                                                                                }
+                                                                            }
                                                                         </td>
                                                                         <td data-label="Action" class="pub-inner-actions">
                                                                             <a class="pub-inner-action-link pub-action-view" href="@($"/PublicityReview/{r.Id}?back=consolidation")" title="View @r.IndentNo" aria-label="View @r.IndentNo"><i class="bi bi-eye"></i></a>
@@ -261,9 +272,17 @@
     // everything that will ever arrive at my stage already arrived" signal the page always showed
     // before - purely informational there, since the backend never blocked those stages on it.
     private bool Ready => IsSmd ? _c!.RegionsFinalized == _c!.Regions : _c!.Groups.All(g => g.StillAtRmCount == 0);
-    private int ReviewedRegionCount => _c?.Groups.Count(g => g.Status is PubRegionStatus.Reviewed or PubRegionStatus.Approved or PubRegionStatus.ZeroConfirmed) ?? 0;
+    // Only an explicit, persisted SMD decision counts as "reviewed" (Approved via Mark Region as
+    // Reviewed, or ZeroConfirmed via Finalize) - PubRegionStatus.Reviewed on its own just means "the
+    // button is now available", not that SMD has actually clicked it. Reuses the same count the
+    // backend already enforces for the SMM-submission gate (Consolidation()'s RegionsFinalized), so
+    // the KPI and the real readiness gate can never disagree.
+    private int ReviewedRegionCount => _c?.RegionsFinalized ?? 0;
     private IEnumerable<string> UnresolvedRegionNames => _c!.Groups.Where(g => g.Status is not (PubRegionStatus.Approved or PubRegionStatus.ZeroConfirmed)).Select(g => g.Region);
-    private IEnumerable<string> UnresolvedRegionDetails => _c!.Groups.Where(g => g.Status is not (PubRegionStatus.Approved or PubRegionStatus.ZeroConfirmed)).Select(g => $"{g.Region} ({PubText.RegionStatus(g)})");
+    private IEnumerable<string> UnresolvedRegionDetails => _c!.Groups.Where(g => g.Status is not (PubRegionStatus.Approved or PubRegionStatus.ZeroConfirmed))
+        .Select(g => g.StillAtRmCount > 0
+            ? $"{g.Region} ({PubText.RegionStatus(g)} — {g.StillAtRmCount} more awaiting RM)"
+            : $"{g.Region} ({PubText.RegionStatus(g)})");
 
     private bool RegionFullyArrived(PubRegionDto g) => g.StillAtRmCount == 0;
     // SMD: exclude not-yet-arrived requests from the denominator (the "3 of 6" confusion this page
@@ -271,16 +290,6 @@
     private string ReviewFraction(PubRegionDto g) => IsSmd ? $"{g.ReviewedCount} / {g.EligibleCount}" : $"{g.EligibleCount} / {g.EligibleCount + g.StillAtRmCount}";
     private string RegionStatusText(PubRegionDto g) => PubText.RegionStatus(g);
     private string RegionStatusTone(PubRegionDto g) => PubText.RegionStatusTone(g);
-    private static string CompactStatus(PubRegionDto g) => g.Status switch
-    {
-        PubRegionStatus.Approved or PubRegionStatus.ZeroConfirmed or PubRegionStatus.Reviewed => "Reviewed",
-        _ => "Pending"
-    };
-    private static string CompactStatusTone(PubRegionDto g) => g.Status switch
-    {
-        PubRegionStatus.Approved or PubRegionStatus.ZeroConfirmed or PubRegionStatus.Reviewed => "green",
-        _ => "amber"
-    };
 
     private IEnumerable<PubRegionDto> Groups => string.IsNullOrWhiteSpace(_q) ? _c!.Groups
         : _c!.Groups.Where(g => g.Region.Contains(_q, StringComparison.OrdinalIgnoreCase) || g.Rows.Any(r => r.Hq.Contains(_q, StringComparison.OrdinalIgnoreCase) || r.IndentNo.Contains(_q, StringComparison.OrdinalIgnoreCase)));
@@ -311,12 +320,12 @@
 
     private async Task ApproveRegionAsync(PubRegionDto g)
     {
-        if (!await Toast.ConfirmAsync("Approve Region", $"Approve {g.Region} — {g.EligibleCount} request(s), {g.Quantity} Nos — as fully reviewed?", "Approve Region")) return;
+        if (!await Toast.ConfirmAsync("Mark Region as Reviewed", $"Mark {g.Region} — {g.EligibleCount} request(s), {g.Quantity} Nos — as reviewed and ready for State submission?", "Mark as Reviewed")) return;
         _busy = true;
         var ok = await Api.ApproveRegionAsync(g.StateId, g.RegionId, null);
         _busy = false;
         if (!ok) return;
-        Toast.Success($"{g.Region} approved.");
+        Toast.Success($"{g.Region} marked as reviewed.");
         await LoadAsync();
     }
 
@@ -345,15 +354,34 @@
     private async Task ApproveAllAsync()
     {
         var ids = _c!.Groups.SelectMany(g => g.Rows).Select(r => r.Id).ToList();
+        // "Approved" (PublicityRegionFinalizationStatus.Approved) is a Region-level workflow status,
+        // never a statement about quantity - an authorized reviewer can legitimately edit a request's
+        // quantity down to 0 (fully audited via PublicityEvent) and the Region is still Approved, not
+        // RM-Declared Zero (that label is reserved for PublicityRegionFinalizationStatus.ZeroConfirmed,
+        // which only an RM's own RmZeroSubmitted can ever produce - see ConfirmZeroRegion). So Approved
+        // Regions is shown as a plain count, with the live-Quantity-based positive/zero split broken
+        // out separately beneath it, computed fresh from each Region's current summed Quantity (never
+        // the original requested quantity) - this is purely a label/classification fix, nothing here
+        // touches Status, writes a finalization row, or alters any request.
+        var approvedGroups = _c.Groups.Where(g => g.Status == PubRegionStatus.Approved).ToList();
+        var positiveQtyRegions = approvedGroups.Count(g => g.Quantity > 0);
+        var zeroQtyRegions = approvedGroups.Count(g => g.Quantity == 0);
         var message = IsSmd
-            ? $"State: {CleanScope}\nTotal Regions: {_c.Regions}\nApproved Regions: {_c.ApprovedRegions}\nZero Confirmed Regions: {_c.ZeroConfirmedRegions}\nTotal Requests: {_c.Requests}\nFinal Consolidated Quantity: {_c.Quantity:N0} Nos\n\nSubmit the consolidated State requirement to {Next}?"
+            ? $"State: {CleanScope}\nTotal Regions: {_c.Regions}\nApproved Regions: {_c.ApprovedRegions}\nRegions with Positive Approved Quantity: {positiveQtyRegions}\nRegions with Zero Approved Quantity: {zeroQtyRegions}\nRM-Declared Zero Regions: {_c.ZeroConfirmedRegions}\nTotal Finalized Regions: {_c.RegionsFinalized}\nTotal Requests: {_c.Requests}\nFinal Consolidated Quantity: {_c.Quantity:N0} Nos\n\nSubmit the consolidated State requirement to {Next}?"
             : $"Approve {ids.Count} request(s) ({_c.Quantity} Nos) and submit them to {Next}?";
         if (!await Toast.ConfirmAsync("Approve & submit", message, "Approve & Submit")) return;
         _busy = true;
         var ok = await Api.ReviewBulkAsync(new PubBulkReviewDto { Ids = ids });
         _busy = false;
+        // SendAsync already toasts the actual server error and returns false on failure (see
+        // ApiClientBase) - staying on this page in that case needs no extra handling here. Only on
+        // confirmed backend success do we leave: the same "View Submitted Request" route the page
+        // header already links to, reused rather than inventing a new one. A refreshed/re-submitted
+        // consolidation can't duplicate anything either way - ReviewBulk always re-derives its ids
+        // from Regions still sitting at SmdReview, and every request this call just advanced is no
+        // longer at that stage, so a repeat call has nothing left to submit.
         if (!ok) return;
         Toast.Success($"{ids.Count} request(s) submitted to {Next}.");
-        await LoadAsync();
+        Nav.NavigateTo("/PublicityReview");
     }
 }

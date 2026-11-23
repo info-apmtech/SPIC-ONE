@@ -105,7 +105,18 @@ namespace SPIC.Core.Entities
     /// currently-eligible request with SmdReviewedAt == null, or anything still short of the SMD
     /// stage, invalidates it) every time the page loads. There is no "cycle"/"batch" concept
     /// anywhere in this module (confirmed - no such field exists on PublicityRequest), so this
-    /// row's validity is always judged against present-moment data, not a closed period.</summary>
+    /// row's validity is always judged against present-moment data, not a closed period.
+    ///
+    /// SubmittedAt marks a DIFFERENT thing from staleness: once PublicityController.ReviewBulk
+    /// successfully forwards this Region's work to SMM, every one of its once-eligible requests has
+    /// moved past SmdReview - so a fresh page load would otherwise see 0 currently-eligible requests
+    /// and, for an Approved row, wrongly treat that as "nothing happened yet" rather than "already
+    /// submitted". SubmittedAt records that this row's Approved/ZeroConfirmed decision was already
+    /// acted on, without deleting the row (FinalizedByName/FinalizedAt stay as the only record of who
+    /// reviewed/declared this Region, since neither ApproveRegion, ConfirmZeroRegion nor
+    /// FinalizeZeroRegion write a PublicityEvent of their own). Any later explicit SMD/RM action on
+    /// this Region (a fresh ApproveRegion/ConfirmZeroRegion/FinalizeZeroRegion call, meaning a
+    /// genuinely new round) resets it back to null - see UpsertRegionFinalizationAsync.</summary>
     public class PublicityRegionFinalization
     {
         public int Id { get; set; }
@@ -115,6 +126,7 @@ namespace SPIC.Core.Entities
         [MaxLength(100)] public string FinalizedByUserId { get; set; } = "";
         [MaxLength(200)] public string? FinalizedByName { get; set; }
         public DateTime FinalizedAt { get; set; } = DateTime.Now;
+        public DateTime? SubmittedAt { get; set; }
     }
 
     /// <summary>One shipment towards <see cref="RequestId"/>. A Transfer is sourced from another

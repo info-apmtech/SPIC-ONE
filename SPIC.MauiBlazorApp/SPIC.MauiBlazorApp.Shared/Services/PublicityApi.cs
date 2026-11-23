@@ -9,14 +9,27 @@ namespace SPIC.MauiBlazorApp.Shared.Services;
 /// Also owns the role rules the pages use to decide which buttons to show (the API enforces them).
 /// Registered with AddScoped in both hosts.
 /// </summary>
-public sealed class PublicityApi : ApiClientBase
+public sealed class PublicityApi : ApiClientBase, IDisposable
 {
     public const long MaxFileBytes = 10L * 1024 * 1024;
     public const string Accept = ".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx";
 
     private PubLookupsDto? _lookups;
 
-    public PublicityApi(HttpClient http, LoginState login, ToastService toast) : base(http, login, toast, "api/Publicity") { }
+    public PublicityApi(HttpClient http, LoginState login, ToastService toast) : base(http, login, toast, "api/Publicity")
+    {
+        // This service is AddScoped, but a scope can outlive a single login (MAUI keeps one scope
+        // for the whole app session; a Web circuit survives client-side navigation) - without this,
+        // logging out and back in as someone else would keep serving the previous user's cached
+        // People list / MyUserId from LookupsAsync() below, silently defaulting "Requested By" on
+        // PublicityForm.razor to the wrong person. Same pattern as ClientTelemetry's own
+        // Login.OnChange subscription.
+        Login.OnChange += OnLoginChanged;
+    }
+
+    private void OnLoginChanged() => _lookups = null;
+
+    public void Dispose() => Login.OnChange -= OnLoginChanged;
 
     // ---- who is asking ----------------------------------------------------------------------
 
@@ -34,9 +47,11 @@ public sealed class PublicityApi : ApiClientBase
     public string Home => Login.CanAccess(nameof(PagePermission.PublicityReview)) && (IsApprover || IsDispatcher) ? "/PublicityReview" : "/PublicityRequest";
     /// <summary>Anyone in the workflow may raise a request, not only the RMDO (RMD or MDO) - a chain
     /// role creating its own request skips every stage at or below its own rung (API:
-    /// PublicityController.Submit). Admin/SuperAdmin keep the testing bypass.</summary>
-    public bool CanCreate => Role is AppRole.RMD or AppRole.MDO or AppRole.RM or AppRole.SMD or AppRole.SMM or AppRole.Admin or AppRole.SuperAdmin
-        || IsAdminMdCs || IsDgmMdCs;
+    /// PublicityController.Submit). Admin/SuperAdmin keep the testing bypass. ADMIN-MD CS / DGM-MD CS
+    /// are deliberately excluded here (they review/approve, they don't raise requests) - the server's
+    /// own Create() endpoint still allows them independently of this flag, so this only controls
+    /// whether the button is shown, never the actual authorization to create one.</summary>
+    public bool CanCreate => Role is AppRole.RMD or AppRole.MDO or AppRole.RM or AppRole.SMD or AppRole.SMM or AppRole.Admin or AppRole.SuperAdmin;
     /// <summary>RM, SMD, SMM: the consolidation reviewers (region / state level).</summary>
     public bool IsFieldApprover => Role is AppRole.RM or AppRole.SMD or AppRole.SMM;
     public PublicityStage? MyStage => Role switch
@@ -234,12 +249,13 @@ public static class PubText
         PubRegionStatus.Reviewed => "Reviewed",
         PubRegionStatus.InReview => "In Review",
         PubRegionStatus.Submitted => "Submitted for SMD Review",
+        PubRegionStatus.SubmittedToSmm => "Submitted to SMM",
         _ => "Pending RM Submission"
     };
 
     public static string RegionStatusTone(PubRegionDto g) => g.Status switch
     {
-        PubRegionStatus.Approved or PubRegionStatus.ZeroConfirmed => "green",
+        PubRegionStatus.Approved or PubRegionStatus.ZeroConfirmed or PubRegionStatus.SubmittedToSmm => "green",
         PubRegionStatus.ZeroSubmittedByRm => "violet",
         PubRegionStatus.Reviewed => "cyan",
         PubRegionStatus.InReview => "amber",

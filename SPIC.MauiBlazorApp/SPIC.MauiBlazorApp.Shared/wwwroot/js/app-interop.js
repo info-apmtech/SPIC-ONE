@@ -169,6 +169,14 @@ window.navSearch = {
     }
 };
 
+// scrollIntoView walks up nested scroll containers itself (same reason navSearch.scrollToMatch
+// above doesn't need to special-case desktop vs phone scroll containers), so this works regardless
+// of which ancestor actually scrolls.
+window.scrollToElementId = function (id) {
+    var el = document.getElementById(id);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+};
+
 // Blazor does not reset scroll position on navigation, so a new page would open at the
 // previous page's scroll offset. Which element actually scrolls depends on the screen size:
 //   desktop/tablet - .main-content (MainLayout) is the scroll container;
