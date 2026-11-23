@@ -83,6 +83,13 @@ namespace SPIC.Core.DTOs
         public bool AwaitingMe { get; set; }
         public DateTime CreatedAt { get; set; }
         public string? CreatedByName { get; set; }
+        // Who actually performed the RM-stage "Approved" action on this request - resolved from the
+        // existing PublicityEvent audit trail (Action="Approved", Stage=RmReview), never from the
+        // Region's CURRENT RM assignment (that could be a different person than whoever approved
+        // this specific request historically). Null if that event can't be found (e.g. a request
+        // created directly past RmReview by a chain role) - the UI must show the plain "Approved by
+        // RM" label in that case, never a fabricated name.
+        public string? RmApprovedByName { get; set; }
         // Request-level sign-off at the SMD stage - see PublicityRequest.SmdReviewedAt's own doc
         // comment. Null means not yet reviewed.
         public DateTime? SmdReviewedAt { get; set; }
@@ -353,6 +360,16 @@ namespace SPIC.Core.DTOs
     {
         public List<int> Ids { get; set; } = new();
         public string? Remarks { get; set; }
+    }
+
+    /// <summary>ReviewBulk's actual response shape - Approved is the server-confirmed count, which
+    /// can be less than the number of ids submitted (already-forwarded/out-of-scope ids are silently
+    /// skipped, never retried) - callers must report THIS count, not their own request-list length,
+    /// so a partial failure is never shown as "every request processed".</summary>
+    public sealed class PubBulkResultDto
+    {
+        public bool Success { get; set; }
+        public int Approved { get; set; }
     }
 
     public sealed class PubReviewDto

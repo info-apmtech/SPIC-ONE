@@ -7,14 +7,19 @@
 @inject ToastService Toast
 @inject FileDownloadService Downloads
 
-@* Approver consolidation (Figma "State Consolidation"): every request waiting at my stage, grouped
-   by region, with view / edit per request and one "Approve & Forward". RM sees its region, SMD /
-   SMM their state, MD CS all India. For SMD specifically, every Region in the state is listed (even
-   ones with zero requirements) and must be individually Approved or Zero Confirmed before the one
-   final "Submit to SMM" action is enabled - other roles keep their existing, unchanged behaviour. *@
+@* Approver consolidation (Figma "State Consolidation" - 3 reference screens: SMDO, SMM Review,
+   ADMIN Review). Same route/data for every role (RM sees its region, SMD/SMM their state, ADMIN-MD
+   CS / DGM-MD CS all states) but three different KPI/table layouts, chosen by IsSmm/IsStateBulkView
+   below - the underlying PubConsolidationDto/PubRegionDto shape is identical for all of them, only
+   the presentation branches. For SMD specifically, every Region in the state is listed (even ones
+   with zero requirements) and must be individually Approved or Zero Confirmed before the one final
+   "Submit to SMM" action is enabled. ADMIN-MD CS / DGM-MD CS instead see one row per STATE (every
+   Region/HQ it covers rolled up) with a per-State forward action, matching the ADMIN Review
+   screenshot - there is no separate DGM Figma, so DGM reuses this exact state-grouped view with its
+   own next-stage label (see Next below). *@
 
 <div class="pub-page">
-    <PageHeader Title="@Heading" Subtitle="@($"Review all region requirements, ensure all regions are accounted for (including 0), and submit the consolidated requirement to {Next}.")">
+    <PageHeader Title="@Heading" Subtitle="@Subtitle">
         <Actions>
             @if (_c is not null) { <span class="pub-pill pub-pill--green pub-pill--lg pub-hide-sm"><i class="bi bi-geo-alt"></i> @_c.Scope</span> }
             <a class="pub-btn pub-btn--primary" href="/PublicityReview">View Submitted Request <i class="bi bi-arrow-right"></i></a>
@@ -30,36 +35,111 @@
         var ready = Ready;
         var reviewedRegionCount = ReviewedRegionCount;
         var pendingReviewRegions = _c.Regions - reviewedRegionCount;
-        <div class="pub-kpis">
-            <div class="pub-kpi">
-                <span class="pub-kpi__label">Total Regions</span>
-                <span class="pub-kpi__value">@_c.Regions</span>
-                <span class="pub-kpi__hint">in @CleanScope</span>
-                <span class="pub-kpi__icon pub-tint--blue"><i class="bi bi-file-earmark-text"></i></span>
-            </div>
-            <div class="pub-kpi">
-                <span class="pub-kpi__label">Total Requests</span>
-                <span class="pub-kpi__value">@_c.Requests</span>
-                <span class="pub-kpi__hint">@Prev Approved</span>
-                <span class="pub-kpi__icon pub-tint--amber"><i class="bi bi-file-earmark-text"></i></span>
-            </div>
-            <div class="pub-kpi">
-                <span class="pub-kpi__label">Regions Reviewed</span>
-                <span class="pub-kpi__value">@reviewedRegionCount</span>
-                <span class="pub-kpi__hint">@(reviewedRegionCount == _c.Regions ? "All Regions Reviewed" : $"{pendingReviewRegions} Region{(pendingReviewRegions == 1 ? "" : "s")} Pending")</span>
-                <span class="pub-kpi__icon pub-tint--pink"><i class="bi bi-file-earmark-plus"></i></span>
-            </div>
-            <div class="pub-kpi">
-                <span class="pub-kpi__label">Total Requirement</span>
-                <span class="pub-kpi__value">@_c.Quantity.ToString("N0") Nos</span>
-                <span class="pub-kpi__hint">All Regions (Approved by @Prev)</span>
-                <span class="pub-kpi__icon pub-tint--green"><i class="bi bi-clock"></i></span>
-            </div>
+        <div class="pub-kpis @(IsSmm ? "pub-kpis--5" : IsStateBulkView ? "pub-kpis--6" : "")">
+            @if (IsSmm)
+            {
+                <div class="pub-kpi">
+                    <span class="pub-kpi__label">Submission ID</span>
+                    <span class="pub-kpi__value">@(_c.SubmissionId ?? "—")</span>
+                    <span class="pub-kpi__hint">Submitted on @PubText.DateTime(_c.SubmittedAt)</span>
+                    <span class="pub-kpi__icon pub-tint--blue"><i class="bi bi-file-earmark-text"></i></span>
+                </div>
+                <div class="pub-kpi">
+                    <span class="pub-kpi__label">State</span>
+                    <span class="pub-kpi__value">@CleanScope</span>
+                    <span class="pub-kpi__hint">Financial Year: @Fy</span>
+                    <span class="pub-kpi__icon pub-tint--amber"><i class="bi bi-file-earmark-text"></i></span>
+                </div>
+                <div class="pub-kpi">
+                    <span class="pub-kpi__label">Total Region</span>
+                    <span class="pub-kpi__value">@_c.Regions / @_c.Regions</span>
+                    <span class="pub-kpi__hint">All Regions Submitted</span>
+                    <span class="pub-kpi__icon pub-tint--pink"><i class="bi bi-file-earmark-plus"></i></span>
+                </div>
+                <div class="pub-kpi">
+                    <span class="pub-kpi__label">Total Requests</span>
+                    <span class="pub-kpi__value">@_c.Requests</span>
+                    <span class="pub-kpi__hint">Over all request</span>
+                    <span class="pub-kpi__icon pub-tint--amber"><i class="bi bi-file-earmark-text"></i></span>
+                </div>
+                <div class="pub-kpi">
+                    <span class="pub-kpi__label">Total Requirement</span>
+                    <span class="pub-kpi__value">@_c.Quantity.ToString("N0") Nos</span>
+                    <span class="pub-kpi__hint">Over all Quantity</span>
+                    <span class="pub-kpi__icon pub-tint--green"><i class="bi bi-clock"></i></span>
+                </div>
+            }
+            else if (IsStateBulkView)
+            {
+                <div class="pub-kpi">
+                    <span class="pub-kpi__label">Total States</span>
+                    <span class="pub-kpi__value">@StateGroups.Count</span>
+                    <span class="pub-kpi__hint">All States</span>
+                    <span class="pub-kpi__icon pub-tint--blue"><i class="bi bi-file-earmark-text"></i></span>
+                </div>
+                <div class="pub-kpi">
+                    <span class="pub-kpi__label">Total Region</span>
+                    <span class="pub-kpi__value">@_c.Regions</span>
+                    <span class="pub-kpi__hint">Across all regions</span>
+                    <span class="pub-kpi__icon pub-tint--blue"><i class="bi bi-file-earmark-text"></i></span>
+                </div>
+                <div class="pub-kpi">
+                    <span class="pub-kpi__label">Total HQs</span>
+                    <span class="pub-kpi__value">@_c.Hqs</span>
+                    <span class="pub-kpi__hint">Across all HQs</span>
+                    <span class="pub-kpi__icon pub-tint--amber"><i class="bi bi-file-earmark-text"></i></span>
+                </div>
+                <div class="pub-kpi">
+                    <span class="pub-kpi__label">Total Requests</span>
+                    <span class="pub-kpi__value">@_c.Requests</span>
+                    <span class="pub-kpi__hint">Approved Request</span>
+                    <span class="pub-kpi__icon pub-tint--amber"><i class="bi bi-file-earmark-text"></i></span>
+                </div>
+                <div class="pub-kpi">
+                    <span class="pub-kpi__label">Total Quantity</span>
+                    <span class="pub-kpi__value">@_c.Quantity.ToString("N0")</span>
+                    <span class="pub-kpi__hint">Over all Nos</span>
+                    <span class="pub-kpi__icon pub-tint--amber"><i class="bi bi-file-earmark-text"></i></span>
+                </div>
+                <div class="pub-kpi">
+                    <span class="pub-kpi__label">Reviewed</span>
+                    <span class="pub-kpi__value">@ReadyStateCount/@StateGroups.Count</span>
+                    <span class="pub-kpi__hint">Ready for @Next review</span>
+                    <span class="pub-kpi__icon pub-tint--green"><i class="bi bi-clock"></i></span>
+                </div>
+            }
+            else
+            {
+                <div class="pub-kpi">
+                    <span class="pub-kpi__label">Total Regions</span>
+                    <span class="pub-kpi__value">@_c.Regions</span>
+                    <span class="pub-kpi__hint">in @CleanScope</span>
+                    <span class="pub-kpi__icon pub-tint--blue"><i class="bi bi-file-earmark-text"></i></span>
+                </div>
+                <div class="pub-kpi">
+                    <span class="pub-kpi__label">Total Requests</span>
+                    <span class="pub-kpi__value">@_c.Requests</span>
+                    <span class="pub-kpi__hint">@Prev Approved</span>
+                    <span class="pub-kpi__icon pub-tint--amber"><i class="bi bi-file-earmark-text"></i></span>
+                </div>
+                <div class="pub-kpi">
+                    <span class="pub-kpi__label">Regions Reviewed</span>
+                    <span class="pub-kpi__value">@reviewedRegionCount</span>
+                    <span class="pub-kpi__hint">@(reviewedRegionCount == _c.Regions ? "All Regions Reviewed" : $"{pendingReviewRegions} Region{(pendingReviewRegions == 1 ? "" : "s")} Pending")</span>
+                    <span class="pub-kpi__icon pub-tint--pink"><i class="bi bi-file-earmark-plus"></i></span>
+                </div>
+                <div class="pub-kpi">
+                    <span class="pub-kpi__label">Total Requirement</span>
+                    <span class="pub-kpi__value">@_c.Quantity.ToString("N0") Nos</span>
+                    <span class="pub-kpi__hint">All Regions (Approved by @Prev)</span>
+                    <span class="pub-kpi__icon pub-tint--green"><i class="bi bi-clock"></i></span>
+                </div>
+            }
         </div>
 
         <section class="pub-card">
             <div class="pub-card__head">
-                <h2 class="pub-h2">Region - Wise Requirement</h2>
+                <h2 class="pub-h2">@(IsStateBulkView ? "Region - Wise Consolidated Requirement" : IsSmm ? "Region - Wise Requirement Consolidated Requirement" : "Region - Wise Requirement")</h2>
                 <div class="pub-card__tools">
                     <div class="pub-search">
                         <i class="bi bi-search"></i>
@@ -71,6 +151,122 @@
             @if (_c.Groups.Count == 0)
             {
                 <EmptyState Icon="bi-check2-all" Title="Nothing waiting for you" Message="Requests appear here when they reach your review stage." />
+            }
+            else if (IsStateBulkView)
+            {
+                <div class="pub-table-wrap">
+                    <table class="pub-table pub-table--consolidation">
+                        <thead>
+                            <tr>
+                                <th class="text-center">S.NO</th>
+                                <th class="text-start">State</th>
+                                <th class="text-center">Region</th>
+                                <th class="text-center">Total HQs</th>
+                                <th class="text-center">Total Requests</th>
+                                <th class="text-center">Total Quantity (Nos)</th>
+                                <th class="text-center">Reviewed</th>
+                                <th class="text-center">Status</th>
+                                <th class="text-center">Last Updated</th>
+                                <th class="text-center">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var (sg, i) in StateGroups.Select((sg, i) => (sg, i)))
+                            {
+                                var open = _openStates.Contains(sg.State);
+                                var stateReady = StateReady(sg);
+                                <tr class="pub-master-row @(open ? "is-expanded" : "")">
+                                    <td class="text-center" data-label="S.NO">@(i + 1)</td>
+                                    <td class="text-start pub-region-name" data-label="State">@sg.State</td>
+                                    <td class="text-center" data-label="Region">@sg.RegionCount</td>
+                                    <td class="text-center" data-label="Total HQs">@sg.Hqs</td>
+                                    <td class="text-center" data-label="Total Requests">@sg.Requests</td>
+                                    <td class="text-center" data-label="Total Quantity (Nos)">@sg.Quantity</td>
+                                    <td class="text-center" data-label="Reviewed">
+                                        <span class="pub-reviewed-stat @(stateReady ? "is-done" : "is-pending")">
+                                            <i class="bi bi-check-circle"></i> @sg.ReviewedCount / @sg.Requests
+                                        </span>
+                                    </td>
+                                    <td class="text-center" data-label="Status">
+                                        <span class="pub-pill pub-pill--@(stateReady ? "green" : "amber")">@(stateReady ? "Approved / Forward" : "Pending")</span>
+                                    </td>
+                                    <td class="text-center" data-label="Last Updated">@PubText.Date(sg.LastUpdated)</td>
+                                    <td class="text-center" data-label="Action">
+                                        <div class="pub-inner-actions">
+                                            <button type="button" class="pub-btn pub-btn--sm pub-btn--primary" disabled="@(_busy || !stateReady)" @onclick="() => ApproveStateAsync(sg)">Approve to @Next <i class="bi bi-arrow-right"></i></button>
+                                            <button type="button" class="pub-btn-chevron" aria-expanded="@open" aria-label="Show HQ requests of @sg.State" @onclick="() => ToggleState(sg.State)">
+                                                <i class="bi bi-chevron-@(open ? "up" : "down")"></i>
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                                @if (open)
+                                {
+                                    <tr class="pub-subrow">
+                                        <td colspan="10">
+                                            <div class="pub-inner-wrap">
+                                                <h3 class="pub-inner-title">@sg.State - HQ Request (@sg.Rows.Count)</h3>
+                                                @if (sg.Rows.Count == 0)
+                                                {
+                                                    <p class="pub-banner__sub">No requirements received from this State yet.</p>
+                                                }
+                                                else
+                                                {
+                                                    <div class="pub-table-wrap">
+                                                        <table class="pub-table pub-table--inner">
+                                                            <thead>
+                                                                <tr>
+                                                                    <th>S:No</th>
+                                                                    <th>Request ID</th>
+                                                                    <th>Request Date</th>
+                                                                    <th>Region</th>
+                                                                    <th>HQ</th>
+                                                                    <th>Product</th>
+                                                                    <th>Publicity Material</th>
+                                                                    <th>Request Qty</th>
+                                                                    <th>Approved Qty</th>
+                                                                    <th>Status</th>
+                                                                    <th>Action</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                @foreach (var (r, j) in sg.Rows.Select((r, j) => (r, j)))
+                                                                {
+                                                                    <tr>
+                                                                        <td data-label="S:No">@(j + 1)</td>
+                                                                        <td data-label="Request ID" class="pub-req-id">@r.IndentNo</td>
+                                                                        <td data-label="Request Date">@PubText.Date(r.CreatedAt)</td>
+                                                                        <td data-label="Region">@r.Region</td>
+                                                                        <td data-label="HQ">@r.Hq</td>
+                                                                        <td data-label="Product">@(string.IsNullOrWhiteSpace(r.Product) ? "—" : r.Product)</td>
+                                                                        <td data-label="Publicity Material">@r.Material</td>
+                                                                        <td data-label="Request Qty">@r.OriginalQuantity</td>
+                                                                        <td data-label="Approved Qty">@r.Quantity</td>
+                                                                        <td data-label="Status">
+                                                                            <span class="pub-pill pub-pill--green">Approved by RM</span>
+                                                                            @if (!string.IsNullOrWhiteSpace(r.RmApprovedByName))
+                                                                            {
+                                                                                <span class="pub-review-subtag pub-review-subtag--neutral">@r.RmApprovedByName</span>
+                                                                            }
+                                                                        </td>
+                                                                        <td data-label="Action" class="pub-inner-actions">
+                                                                            <a class="pub-inner-action-link pub-action-view" href="@($"/PublicityReview/{r.Id}?back=consolidation")" title="View @r.IndentNo" aria-label="View @r.IndentNo"><i class="bi bi-eye"></i></a>
+                                                                            <a class="pub-inner-action-link pub-action-edit" href="@($"/PublicityReview/edit/{r.Id}?back=consolidation")" title="Edit @r.IndentNo" aria-label="Edit @r.IndentNo"><i class="bi bi-pencil"></i></a>
+                                                                        </td>
+                                                                    </tr>
+                                                                }
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                }
+                                            </div>
+                                        </td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
             }
             else
             {
@@ -85,7 +281,7 @@
                                 <th class="text-center">Total Requests</th>
                                 <th class="text-center">Total Quantity (Nos)</th>
                                 <th class="text-center">Review Progress</th>
-                                <th class="text-center">Region Status</th>
+                                <th class="text-center">@(IsSmm ? "SMDO Status" : "Region Status")</th>
                                 <th class="text-center">Last Updated</th>
                                 <th class="text-center">Action</th>
                             </tr>
@@ -107,7 +303,7 @@
                                             <i class="bi bi-check-circle"></i> @ReviewFraction(g)
                                         </span>
                                     </td>
-                                    <td class="text-center" data-label="Region Status">
+                                    <td class="text-center" data-label="Status">
                                         <span class="pub-pill pub-pill--@RegionStatusTone(g)">@RegionStatusText(g)</span>
                                     </td>
                                     <td class="text-center" data-label="Last Updated">@PubText.Date(g.LastUpdated)</td>
@@ -174,16 +370,20 @@
                                                                         <td data-label="Request Qty">@r.OriginalQuantity</td>
                                                                         <td data-label="Approved Qty">@r.Quantity</td>
                                                                         <td data-label="Status">
-                                                                            <span class="pub-pill pub-pill--green">Approved</span>
+                                                                            <span class="pub-pill pub-pill--green">Approved by RM</span>
+                                                                            @if (!string.IsNullOrWhiteSpace(r.RmApprovedByName))
+                                                                            {
+                                                                                <span class="pub-review-subtag pub-review-subtag--neutral">@r.RmApprovedByName</span>
+                                                                            }
                                                                             @if (IsSmd)
                                                                             {
                                                                                 @if (r.SmdReviewedAt is not null)
                                                                                 {
-                                                                                    <span class="pub-review-subtag pub-review-subtag--done"><i class="bi bi-check-circle-fill"></i> Reviewed</span>
+                                                                                    <span class="pub-review-subtag pub-review-subtag--done"><i class="bi bi-check-circle-fill"></i> Reviewed by SMD@(string.IsNullOrWhiteSpace(r.SmdReviewedByName) ? "" : $" — {r.SmdReviewedByName}")</span>
                                                                                 }
                                                                                 else
                                                                                 {
-                                                                                    <span class="pub-review-subtag pub-review-subtag--pending">Pending Review</span>
+                                                                                    <span class="pub-review-subtag pub-review-subtag--pending">Pending SMD Review</span>
                                                                                 }
                                                                             }
                                                                         </td>
@@ -206,38 +406,65 @@
                     </table>
                 </div>
 
-                <div class="pub-banner--approval @(ready ? "is-ready" : "is-pending")">
-                    <div class="pub-banner__left">
-                        <span class="pub-banner__icon">
-                            <i class="bi bi-file-earmark-text"></i>
-                        </span>
-                        <div class="pub-banner__text">
-                            <h3 class="pub-banner__heading">@reviewedRegionCount of @_c.Regions Regions Reviewed</h3>
-                            <p class="pub-banner__sub">
-                                @if (ready)
-                                {
-                                    @:All @_c.Regions region(s) accounted for and ready for @Next Review.
-                                }
-                                else if (IsSmd)
-                                {
-                                    var pendingRm = _c.Groups.Count(g => g.Status == PubRegionStatus.PendingReview);
-                                    @:@reviewedRegionCount of @_c.Regions Regions Reviewed@(pendingRm > 0 ? $" ({pendingRm} Region{(pendingRm == 1 ? "" : "s")} Awaiting RM Submission)" : "").
-                                    @if (UnresolvedRegionDetails.Any())
+                @if (!IsSmm)
+                {
+                    <div class="pub-banner--approval @(ready ? "is-ready" : "is-pending")">
+                        <div class="pub-banner__left">
+                            <span class="pub-banner__icon">
+                                <i class="bi bi-file-earmark-text"></i>
+                            </span>
+                            <div class="pub-banner__text">
+                                <h3 class="pub-banner__heading">@reviewedRegionCount of @_c.Regions Regions Reviewed</h3>
+                                <p class="pub-banner__sub">
+                                    @if (ready)
                                     {
-                                        @: Pending: @string.Join(", ", UnresolvedRegionDetails).
+                                        @:All @_c.Regions region(s) accounted for and ready for @Next Review.
                                     }
-                                }
-                                else
-                                {
-                                    @:@reviewedRegionCount of @_c.Regions regions reviewed. @pendingReviewRegions regions are pending from @Prev
-                                }
-                            </p>
+                                    else if (IsSmd)
+                                    {
+                                        var pendingRm = _c.Groups.Count(g => g.Status == PubRegionStatus.PendingReview);
+                                        @:@reviewedRegionCount of @_c.Regions Regions Reviewed@(pendingRm > 0 ? $" ({pendingRm} Region{(pendingRm == 1 ? "" : "s")} Awaiting RM Submission)" : "").
+                                        @if (UnresolvedRegionDetails.Any())
+                                        {
+                                            @: Pending: @string.Join(", ", UnresolvedRegionDetails).
+                                        }
+                                    }
+                                    else
+                                    {
+                                        @:@reviewedRegionCount of @_c.Regions regions reviewed. @pendingReviewRegions regions are pending from @Prev
+                                    }
+                                </p>
+                            </div>
                         </div>
+                        <button type="button" class="pub-btn--submit @(ready ? "pub-btn--ready" : "pub-btn--disabled")" disabled="@(_busy || !ready)" @onclick="ApproveAllAsync">
+                            Approve &amp; Submit to @Next <i class="bi bi-arrow-right"></i>
+                        </button>
                     </div>
-                    <button type="button" class="pub-btn--submit @(ready ? "pub-btn--ready" : "pub-btn--disabled")" disabled="@(_busy || !ready)" @onclick="ApproveAllAsync">
-                        Approve &amp; Submit to @Next <i class="bi bi-arrow-right"></i>
-                    </button>
-                </div>
+                }
+                else
+                {
+                    <div class="pub-banner--approval @(ready ? "is-ready" : "is-pending")">
+                        <div class="pub-banner__left">
+                            <span class="pub-banner__icon"><i class="bi bi-file-earmark-text"></i></span>
+                            <div class="pub-banner__text">
+                                <h3 class="pub-banner__heading">@reviewedRegionCount of @_c.Regions Regions Reviewed</h3>
+                                <p class="pub-banner__sub">
+                                    @if (ready)
+                                    {
+                                        @:All @_c.Regions region(s) reviewed and ready to forward to @Next.
+                                    }
+                                    else
+                                    {
+                                        @:@reviewedRegionCount of @_c.Regions regions reviewed. @pendingReviewRegions regions still pending.
+                                    }
+                                </p>
+                            </div>
+                        </div>
+                        <button type="button" class="pub-btn--submit @(ready ? "pub-btn--ready" : "pub-btn--disabled")" disabled="@(_busy || !ready)" @onclick="ApproveAllAsync">
+                            Approve &amp; Submit to @Next <i class="bi bi-arrow-right"></i>
+                        </button>
+                    </div>
+                }
             }
         </section>
     }
@@ -246,11 +473,17 @@
 @code {
     private PubConsolidationDto? _c;
     private readonly HashSet<string> _open = new();
+    private readonly HashSet<string> _openStates = new();
     private string _q = "";
     private bool _busy;
 
     private bool IsSmd => Api.Role == AppRole.SMD;
     private bool IsRm => Api.Role == AppRole.RM;
+    private bool IsSmm => Api.Role == AppRole.SMM;
+    // No dedicated DGM-MD CS Figma exists - it reuses the ADMIN-MD CS state-grouped bulk view (same
+    // underlying data shape, just a different next-stage label below), per the explicit instruction
+    // to "reuse established consolidation/table design patterns" rather than invent a fourth design.
+    private bool IsStateBulkView => Api.IsAdminMdCs || Api.IsDgmMdCs;
     private string Prev => Api.Role switch
     {
         AppRole.SMM => "SMDO",
@@ -260,9 +493,15 @@
     private string Heading => Api.Role switch
     {
         AppRole.RM => "Region Consolidation (RM Review)",
-        AppRole.SMD => "State Consolidation (SMD Review)",
+        AppRole.SMD => "State Consolidation (SMDO)",
         AppRole.SMM => "State Consolidation (SMM Review)",
-        _ => $"State Consolidation ({Api.MyStageLabel ?? "Review"})"
+        _ => Api.IsAdminMdCs ? "State Consolidation (ADMIN Review)" : $"State Consolidation ({Api.MyStageLabel ?? "Review"})"
+    };
+    private string Subtitle => Api.Role switch
+    {
+        AppRole.SMM => $"Review the SMDO consolidated submission for {CleanScope} and take necessary action.",
+        _ => Api.IsAdminMdCs ? "Review and approve consolidated submissions for all states."
+            : $"Review all region requirements, ensure all regions are accounted for (including 0), and submit the consolidated requirement to {Next}."
     };
     private string CleanScope => _c?.Scope?.Replace(" (State Level)", "").Replace(" (Region Level)", "") ?? "your area";
     private static string Fy => DateTime.Today.Month >= 4 ? $"{DateTime.Today.Year} - {DateTime.Today.Year + 1}" : $"{DateTime.Today.Year - 1} - {DateTime.Today.Year}";
@@ -294,12 +533,53 @@
     private IEnumerable<PubRegionDto> Groups => string.IsNullOrWhiteSpace(_q) ? _c!.Groups
         : _c!.Groups.Where(g => g.Region.Contains(_q, StringComparison.OrdinalIgnoreCase) || g.Rows.Any(r => r.Hq.Contains(_q, StringComparison.OrdinalIgnoreCase) || r.IndentNo.Contains(_q, StringComparison.OrdinalIgnoreCase)));
 
-    protected override async Task OnInitializedAsync() => await LoadAsync();
+    // ADMIN-MD CS / DGM-MD CS see one row per STATE: every Region the existing per-region grouping
+    // (BuildRegionGroupsAsync, unchanged server-side) already returned for that state, rolled up.
+    // Nothing new is fetched or computed server-side - this is purely a client-side re-grouping of
+    // the same PubRegionDto rows every other role already receives.
+    private sealed record StateGroup(int StateId, string State, List<PubRegionDto> Regions)
+    {
+        public int RegionCount => Regions.Count;
+        public int Hqs => Regions.Sum(r => r.Hqs);
+        public int Requests => Regions.Sum(r => r.EligibleCount);
+        public int Quantity => Regions.Sum(r => r.Quantity);
+        public int ReviewedCount => Regions.Sum(r => r.ReviewedCount);
+        public DateTime? LastUpdated => Regions.Select(r => r.LastUpdated).Where(d => d.HasValue).Select(d => d!.Value).DefaultIfEmpty().Cast<DateTime?>().Max();
+        public List<PubRowDto> Rows => Regions.SelectMany(r => r.Rows).ToList();
+    }
+
+    private List<StateGroup> StateGroups => Groups.GroupBy(g => (g.StateId, g.State))
+        .Select(grp => new StateGroup(grp.Key.StateId, grp.Key.State, grp.ToList()))
+        .OrderBy(sg => sg.State).ToList();
+
+    private bool StateReady(StateGroup sg) => sg.Requests > 0 && sg.ReviewedCount == sg.Requests && sg.Regions.All(r => r.StillAtRmCount == 0);
+    private int ReadyStateCount => StateGroups.Count(StateReady);
+
+    private void ToggleState(string state) { if (!_openStates.Remove(state)) _openStates.Add(state); }
+
+    protected override async Task OnInitializedAsync()
+    {
+        // RM no longer has a Consolidation page - its own Region-level actions (bulk forward / Zero
+        // Requirement) now live directly on /PublicityReview instead (see PublicityList.razor's RM
+        // action banner). A direct navigation here is bounced back rather than silently rendered -
+        // the underlying Consolidation()/ReviewBulk/ConfirmZeroRegion APIs are still reachable (RM
+        // still needs them, just from that other page), only this page's own route is blocked.
+        if (Api.Role == AppRole.RM)
+        {
+            Nav.NavigateTo("/PublicityReview", replace: true);
+            return;
+        }
+        await LoadAsync();
+    }
 
     private async Task LoadAsync()
     {
         _c = await Api.ConsolidationAsync() ?? new PubConsolidationDto();
-        if (_open.Count == 0 && _c.Groups.Count > 0) _open.Add(_c.Groups[0].Region);
+        if (IsStateBulkView)
+        {
+            if (_openStates.Count == 0 && StateGroups.Count > 0) _openStates.Add(StateGroups[0].State);
+        }
+        else if (_open.Count == 0 && _c.Groups.Count > 0) _open.Add(_c.Groups[0].Region);
     }
 
     private void Toggle(string region) { if (!_open.Remove(region)) _open.Add(region); }
@@ -351,6 +631,26 @@
         await LoadAsync();
     }
 
+    // One State's worth of eligible requests, forwarded in a single confirmed bulk action - reuses
+    // the exact same review-bulk endpoint ApproveAllAsync below calls for SMD, just scoped to this
+    // State's own ids instead of every group's. ReviewOneAsync (server-side) already refuses to
+    // re-advance a request that isn't still sitting at my stage, so a repeat click / double-submit
+    // here can only ever re-process whatever (if anything) is genuinely still pending - never create
+    // a duplicate forward of something already handled.
+    private async Task ApproveStateAsync(StateGroup sg)
+    {
+        var ids = sg.Rows.Select(r => r.Id).ToList();
+        if (!await Toast.ConfirmAsync($"Approve {sg.State}", $"Approve {ids.Count} request(s) ({sg.Quantity} Nos) for {sg.State} and forward to {Next}?", "Approve")) return;
+        _busy = true;
+        var result = await Api.ReviewBulkDetailedAsync(new PubBulkReviewDto { Ids = ids });
+        _busy = false;
+        if (result is not { Success: true }) return;
+        Toast.Success(result.Approved < ids.Count
+            ? $"{result.Approved} of {ids.Count} request(s) for {sg.State} forwarded to {Next} ({ids.Count - result.Approved} already processed or out of scope)."
+            : $"{result.Approved} request(s) for {sg.State} forwarded to {Next}.");
+        await LoadAsync();
+    }
+
     private async Task ApproveAllAsync()
     {
         var ids = _c!.Groups.SelectMany(g => g.Rows).Select(r => r.Id).ToList();
@@ -371,17 +671,19 @@
             : $"Approve {ids.Count} request(s) ({_c.Quantity} Nos) and submit them to {Next}?";
         if (!await Toast.ConfirmAsync("Approve & submit", message, "Approve & Submit")) return;
         _busy = true;
-        var ok = await Api.ReviewBulkAsync(new PubBulkReviewDto { Ids = ids });
+        var result = await Api.ReviewBulkDetailedAsync(new PubBulkReviewDto { Ids = ids });
         _busy = false;
-        // SendAsync already toasts the actual server error and returns false on failure (see
+        // SendAsync already toasts the actual server error and returns null on failure (see
         // ApiClientBase) - staying on this page in that case needs no extra handling here. Only on
         // confirmed backend success do we leave: the same "View Submitted Request" route the page
         // header already links to, reused rather than inventing a new one. A refreshed/re-submitted
         // consolidation can't duplicate anything either way - ReviewBulk always re-derives its ids
         // from Regions still sitting at SmdReview, and every request this call just advanced is no
         // longer at that stage, so a repeat call has nothing left to submit.
-        if (!ok) return;
-        Toast.Success($"{ids.Count} request(s) submitted to {Next}.");
+        if (result is not { Success: true }) return;
+        Toast.Success(result.Approved < ids.Count
+            ? $"{result.Approved} of {ids.Count} request(s) submitted to {Next} ({ids.Count - result.Approved} already processed or out of scope)."
+            : $"{result.Approved} request(s) submitted to {Next}.");
         Nav.NavigateTo("/PublicityReview");
     }
 }

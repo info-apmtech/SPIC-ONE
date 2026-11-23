@@ -97,6 +97,10 @@ public sealed class PublicityApi : ApiClientBase, IDisposable
     public Task<bool> DeleteAsync(int id) => SendAsync(HttpMethod.Delete, $"requests/{id}", null, "delete the draft");
     public Task<bool> ReviewAsync(int id, PubReviewDto dto) => SendAsync(HttpMethod.Post, $"requests/{id}/review", dto, "update the request");
     public Task<bool> ReviewBulkAsync(PubBulkReviewDto dto) => SendAsync(HttpMethod.Post, "requests/review-bulk", dto, "approve the requests");
+    // Same endpoint, typed response - callers that need to report the server-confirmed Approved
+    // count (never the submitted id-list length, so a partial failure is never shown as "all done").
+    public Task<PubBulkResultDto?> ReviewBulkDetailedAsync(PubBulkReviewDto dto) =>
+        SendAsync<PubBulkResultDto>(HttpMethod.Post, "requests/review-bulk", dto, "approve the requests");
     public Task<bool> MarkRequestReviewedAsync(int id, bool reviewed) =>
         SendAsync(HttpMethod.Post, $"requests/{id}/mark-reviewed", new PubMarkReviewedDto { Reviewed = reviewed }, "update the review status");
     public Task<bool> ApproveRegionAsync(int stateId, int regionId, string? remarks) =>
@@ -246,9 +250,9 @@ public static class PubText
         PubRegionStatus.Approved => "Finalized",
         PubRegionStatus.ZeroConfirmed => "Finalized",
         PubRegionStatus.ZeroSubmittedByRm => "Zero Submitted by RM",
-        PubRegionStatus.Reviewed => "Reviewed",
-        PubRegionStatus.InReview => "In Review",
-        PubRegionStatus.Submitted => "Submitted for SMD Review",
+        PubRegionStatus.Reviewed => "Reviewed by SMD",
+        PubRegionStatus.InReview => "In SMD Review",
+        PubRegionStatus.Submitted => "Submitted to SMD",
         PubRegionStatus.SubmittedToSmm => "Submitted to SMM",
         _ => "Pending RM Submission"
     };

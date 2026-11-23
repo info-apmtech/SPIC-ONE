@@ -595,6 +595,21 @@ namespace SpicAPI.Controllers
             r.UpdatedAt = DateTime.UtcNow;
             if (approverEdit)
             {
+                // r.Remarks is the ONE original requester remarks field, shared read-only by every
+                // role's edit screen - never let an approver's edit (RM/SMD/SMM/ADMIN-MD CS) overwrite
+                // it, or earlier reviewers' and the original creator's remarks are destroyed the moment
+                // a later stage edits anything else. Whatever this approver actually typed is instead
+                // saved as the Remarks of THEIR OWN "Edited" PublicityEvent below (attributed to their
+                // own Stage/ActorRole/ActorName) - exactly what PubDetailDto.ApproverRemarks already
+                // surfaces as the latest reviewer's own remarks, kept distinct from the original.
+                var reviewerRemarks = Clean(dto.Remarks);
+                // The edit screen's Remarks box is pre-filled with the original remarks for every
+                // role (so it doubles as a read-only display when nobody touches it) - comparing
+                // against before.Remarks is what tells "the reviewer actually typed something new"
+                // apart from "the box still shows what it always showed", so re-saving an untouched
+                // box never fabricates an edit remark.
+                var remarksChanged = reviewerRemarks != before.Remarks;
+                r.Remarks = before.Remarks;
                 if (r.Stage == PublicityStage.SmdReview && await IsMyTurnAsync(r.Stage))
                 {
                     r.SmdReviewedAt = DateTime.Now;
@@ -606,8 +621,10 @@ namespace SpicAPI.Controllers
                 if (before.ProductId != r.ProductId) changes.Add("Product changed");
                 if (before.HeadquarterId != r.HeadquarterId) changes.Add("Location changed");
                 if (before.RequestedByUserId != r.RequestedByUserId) changes.Add("Requested by changed");
-                if (before.Remarks != r.Remarks) changes.Add("Remarks updated");
-                if (changes.Count > 0) await AddEvent(r, r.Stage, "Edited", await MyNameAsync(), string.Join("; ", changes) + ".");
+                var changeNote = changes.Count > 0 ? string.Join("; ", changes) + "." : null;
+                var eventRemarks = !remarksChanged || string.IsNullOrWhiteSpace(reviewerRemarks) ? changeNote
+                    : changeNote is null ? reviewerRemarks : $"{changeNote} Remarks: {reviewerRemarks}";
+                if (!string.IsNullOrWhiteSpace(eventRemarks)) await AddEvent(r, r.Stage, "Edited", await MyNameAsync(), eventRemarks);
             }
             else
             {
@@ -1237,6 +1254,23 @@ namespace SpicAPI.Controllers
             var products = await _db.Products.AsNoTracking().Where(p => productIds.Contains(p.Id)).ToDictionaryAsync(p => p.Id, p => p.Name);
             var materials = await _db.PublicityMaterialTypes.AsNoTracking().ToDictionaryAsync(m => m.Id, m => m.Name);
             var mine = await MyStageAsync();
+            // Who actually approved the RM stage, per request - from the existing per-request audit
+            // trail (PublicityEvent), never from the Region's CURRENT RM assignment (see PubRowDto.
+            // RmApprovedByName's own doc comment for why that would be wrong for a request an earlier,
+            // since-reassigned RM approved).
+            var requestIds = items.Select(r => r.Id).ToList();
+            // A request made by a chain role (e.g. RMDO) and later approved by the RM has a distinct
+            // Stage=RmReview "Approved" event - that's the normal case. But a request an RM created for
+            // THEMSELVES skips RmReview entirely (Submit()'s creatorIndex logic), so no such event ever
+            // exists for it; the RM's own "Submitted" action (logged at Stage=IndentCreation, the stage it
+            // was submitted FROM) is the only recorded act of theirs and functionally is their approval.
+            var rmApprovedByName = await _db.PublicityEvents.AsNoTracking()
+                .Where(e => requestIds.Contains(e.RequestId) &&
+                    ((e.Stage == PublicityStage.RmReview && e.Action == "Approved") ||
+                     (e.Stage == PublicityStage.IndentCreation && e.Action == "Submitted" && e.ActorRole == "RM")))
+                .GroupBy(e => e.RequestId)
+                .Select(g => new { RequestId = g.Key, Name = g.OrderByDescending(e => e.At).ThenByDescending(e => e.Id).First().ActorName })
+                .ToDictionaryAsync(x => x.RequestId, x => x.Name);
             return items.Select(r => new PubRowDto
             {
                 Id = r.Id, IndentNo = r.IndentNo, Quantity = r.Quantity, OriginalQuantity = r.OriginalQuantity,
@@ -1247,6 +1281,7 @@ namespace SpicAPI.Controllers
                 AwaitingMe = IsPendingAt(r.Status, r.Stage, mine),
                 StatusNote = r.Status == PublicityStatus.Returned ? $"Return by {StageLabel(r.Stage).Replace(" Review", "")}" : null,
                 CreatedByName = r.CreatedByName,
+                RmApprovedByName = rmApprovedByName.GetValueOrDefault(r.Id),
                 SmdReviewedAt = r.SmdReviewedAt,
                 SmdReviewedByName = r.SmdReviewedByName
             }).ToList();
@@ -1862,9 +1897,9 @@ namespace SpicAPI.Controllers
             PubRegionStatus.Approved => "Finalized",
             PubRegionStatus.ZeroConfirmed => "Finalized",
             PubRegionStatus.ZeroSubmittedByRm => "Zero Submitted by RM",
-            PubRegionStatus.Reviewed => "Reviewed",
-            PubRegionStatus.InReview => "In Review",
-            PubRegionStatus.Submitted => "Submitted for SMD Review",
+            PubRegionStatus.Reviewed => "Reviewed by SMD",
+            PubRegionStatus.InReview => "In SMD Review",
+            PubRegionStatus.Submitted => "Submitted to SMD",
             PubRegionStatus.SubmittedToSmm => "Already Submitted to SMM",
             _ => "Pending RM Submission"
         };
