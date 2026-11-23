@@ -803,6 +803,7 @@ namespace SpicAPI.Controllers
                     r.Status = PublicityStatus.FinalApproved;
                     Notify(PublicityNotificationType.Approval, r, null, r.CreatedByUserId, null, null,
                         $"Request {r.IndentNo} final approved", "Your publicity material request is approved and ready for dispatch.", null);
+                    await NotifyReadyForDispatchAsync(r);
                 }
             }
             r.UpdatedAt = DateTime.UtcNow;
@@ -817,13 +818,11 @@ namespace SpicAPI.Controllers
             if (!await IsDispatcherAsync()) return Forbid();
             var r = await LoadAsync(id, tracking: true);
             if (r is null) return NotFound(new { Success = false, Message = "Request not found." });
-            if (dto.Quantity <= 0) return BadRequest(new { Success = false, Message = "Enter the dispatch quantity." });
             var name = await MyNameAsync();
             var d = new PublicityDispatch
             {
                 RequestId = r.Id,
                 Kind = dto.Kind,
-                Quantity = dto.Quantity,
                 DestinationAddress = Clean(dto.DestinationAddress),
                 Remarks = Clean(dto.Remarks),
                 CreatedByUserId = Uid(),
@@ -832,12 +831,14 @@ namespace SpicAPI.Controllers
 
             if (dto.Kind == PublicityDispatchKind.Transfer)
             {
+                if (dto.Quantity <= 0) return BadRequest(new { Success = false, Message = "Enter the dispatch quantity." });
                 if (r.Status != PublicityStatus.ExceptionRaised) return BadRequest(new { Success = false, Message = "A stock transfer resolves a raised exception only." });
                 var source = dto.SourceRequestId is > 0 ? await LoadAsync(dto.SourceRequestId.Value, tracking: true) : null;
                 if (source is null || source.Id == r.Id) return BadRequest(new { Success = false, Message = "Select the source request that holds excess stock." });
                 var ss = await SummaryAsync(source);
                 var remaining = ss.Excess - ss.TransferredOut;
                 if (dto.Quantity > remaining) return BadRequest(new { Success = false, Message = $"Only {remaining} Nos of excess remain at the source HQ." });
+                d.Quantity = dto.Quantity;
                 d.DispatchNo = await NextNoAsync("TRF");
                 d.Status = PublicityDispatchStatus.TransferRequested;
                 d.SourceHqId = source.HeadquarterId;
@@ -855,10 +856,24 @@ namespace SpicAPI.Controllers
             }
             else
             {
-                if (dto.Kind == PublicityDispatchKind.Original && r.Status != PublicityStatus.FinalApproved)
-                    return BadRequest(new { Success = false, Message = "The request is not final approved yet." });
-                if (dto.Kind == PublicityDispatchKind.ReInitiation && r.Status != PublicityStatus.ExceptionRaised)
-                    return BadRequest(new { Success = false, Message = "Re-initiation resolves a raised exception only." });
+                // Dispatch Quantity is never taken from the client for these two kinds - it is always
+                // the authoritative server-side figure for whichever workflow is dispatching: the
+                // request's own final-approved Quantity (set by the last authorized reviewer to touch
+                // it, never DGM - MD CS's approve-only stage) for an Original dispatch, or the still-
+                // outstanding shortage (SummaryAsync, itself computed only from persisted dispatch/ack
+                // rows) for a ReInitiation - this is what actually prevents a client-supplied quantity
+                // from ever being saved, not just the frontend's readonly attribute.
+                if (dto.Kind == PublicityDispatchKind.Original)
+                {
+                    if (r.Status != PublicityStatus.FinalApproved) return BadRequest(new { Success = false, Message = "The request is not final approved yet." });
+                    d.Quantity = r.Quantity;
+                }
+                else
+                {
+                    if (r.Status != PublicityStatus.ExceptionRaised) return BadRequest(new { Success = false, Message = "Re-initiation resolves a raised exception only." });
+                    d.Quantity = (await SummaryAsync(r)).Outstanding;
+                }
+                if (d.Quantity <= 0) return BadRequest(new { Success = false, Message = "There is no quantity to dispatch for this request." });
                 if (string.IsNullOrWhiteSpace(dto.VendorName) || string.IsNullOrWhiteSpace(dto.Transporter) || dto.DispatchDate is null)
                     return BadRequest(new { Success = false, Message = "Vendor, transporter and dispatch date are required." });
                 d.DispatchNo = await NextNoAsync("DSP");
@@ -1137,6 +1152,12 @@ namespace SpicAPI.Controllers
             var n = await (await MyNotificationsAsync()).FirstOrDefaultAsync(x => x.Id == id);
             if (n is null) return NotFound(new { Success = false, Message = "Notification not found." });
             var dto = new PubNotificationDetailDto { Notice = ToNotice(n) };
+            if (n.Type == PublicityNotificationType.Approval && n.DispatchId is null)
+            {
+                var status = await _db.PublicityRequests.AsNoTracking().Where(x => x.Id == n.RequestId && !x.IsDeleted)
+                    .Select(x => (PublicityStatus?)x.Status).FirstOrDefaultAsync();
+                dto.CanDispatch = status == PublicityStatus.FinalApproved && await IsAdminMdCsAsync();
+            }
             var d = n.DispatchId is int did ? await _db.PublicityDispatches.AsNoTracking().FirstOrDefaultAsync(x => x.Id == did) : null;
             if (d is not null)
             {
@@ -1738,6 +1759,7 @@ namespace SpicAPI.Controllers
                 r.Status = PublicityStatus.FinalApproved;
                 Notify(PublicityNotificationType.Approval, r, null, r.CreatedByUserId, null, null,
                     $"Request {r.IndentNo} final approved", "Your publicity material request is approved and ready for dispatch.", null);
+                await NotifyReadyForDispatchAsync(r);
             }
             r.SubmittedAt = DateTime.UtcNow;
             await AddEvent(r, PublicityStage.IndentCreation, "Submitted", name, remarks);
@@ -1757,6 +1779,25 @@ namespace SpicAPI.Controllers
                 Type = type, RequestId = r.Id, DispatchId = dispatchId, TargetUserId = userId, TargetRole = role,
                 TargetHqId = hqId, Title = title, Message = message, SubText = sub
             });
+
+        // DGM - MD CS's final approval (both the normal chain in ReviewOneAsync and the chain-skip
+        // case in Submit() where the creator already outranks every stage) always notifies the
+        // ORIGINAL REQUESTER ("your request is approved") immediately above/below this call - that
+        // notification was never reaching ADMIN-MD-CS, the role that actually has to act on it, which
+        // is the root cause of Issue 1 (ADMIN-MD-CS's Notifications page showing nothing). This adds
+        // the missing ADDITIONAL notification, reusing the exact same PublicityNotification mechanism
+        // (AppRole.MDAdmin is already matched to IsAdminMdCsAsync() by MyNotificationsAsync, and
+        // PublicityNotificationType.Approval already renders under both "All" and "Dispatch &
+        // Approvals" in PublicityNotifications.razor) - no new notification system, table, or category.
+        private async Task NotifyReadyForDispatchAsync(PublicityRequest r)
+        {
+            var names = await NamesAsync(new[] { r.StateId }, new[] { r.RegionId }, new[] { r.HeadquarterId });
+            var pm = await ProductMaterialPartsAsync(r);
+            var sub = $"{names.States.GetValueOrDefault(r.StateId)} / {names.Regions.GetValueOrDefault(r.RegionId)} / {names.Hqs.GetValueOrDefault(r.HeadquarterId)}"
+                + $" - {pm.Material} - {r.Quantity} Nos - Approved {DateTime.Now:dd MMM yyyy, hh:mm tt}";
+            Notify(PublicityNotificationType.Approval, r, null, null, AppRole.MDAdmin, null,
+                "Ready for Dispatch", $"Publicity Request {r.IndentNo} has received final approval from DGM-MD-CS and is ready for dispatch.", sub);
+        }
 
         private async Task SetResponsibleAsync(PublicityDispatch d, string? userId)
         {

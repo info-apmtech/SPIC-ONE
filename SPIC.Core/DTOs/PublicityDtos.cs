@@ -451,6 +451,12 @@ namespace SPIC.Core.DTOs
     public sealed class PubNotificationDetailDto
     {
         public PubNotificationDto Notice { get; set; } = new();
+        // Only true for an "Approval" notice whose request is STILL actually dispatch-eligible right
+        // now (Status == FinalApproved) and the viewer is ADMIN-MD CS - re-checked live against the
+        // request on every open, never cached from when the notice was created, so once a dispatch
+        // exists (or anyone else already acted) this goes false on its own and the notice just stays
+        // as history, never an active action for a completed operation.
+        public bool CanDispatch { get; set; }
         public string? DestinationIndentNo { get; set; }
         public string? SourceIndentNo { get; set; }
         public string? SourceHq { get; set; }
