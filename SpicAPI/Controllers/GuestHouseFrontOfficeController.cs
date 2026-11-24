@@ -116,12 +116,16 @@ namespace SpicAPI.Controllers
 			var pendingPaymentHoldCutoff = PendingPaymentHoldCutoff;
 			var activeBookings = await _db.GuestHouseBookings
 				.AsNoTracking()
-				.Where(b => b.BookingStatus != GuestHouseBookingStatus.Cancelled
+				// A CheckedIn guest occupies the room until the actual check-out is completed, so an
+				// overdue stay (scheduled check-out today or earlier) stays on the grid with its
+				// Check-Out action - a room is never released just because the scheduled time passed.
+				.Where(b => b.BookingStatus == GuestHouseBookingStatus.CheckedIn
+					|| (b.BookingStatus != GuestHouseBookingStatus.Cancelled
 					&& b.BookingStatus != GuestHouseBookingStatus.Completed
 					&& (b.BookingStatus != GuestHouseBookingStatus.PendingPayment || b.CreatedAt >= pendingPaymentHoldCutoff)
 					&& b.CheckInDate.HasValue && b.CheckOutDate.HasValue
 					&& b.CheckInDate.Value.Date < todayEnd
-					&& b.CheckOutDate.Value.Date > todayStart)
+					&& b.CheckOutDate.Value.Date > todayStart))
 				.Where(b => scope == null || scope.Contains(b.GuestHouseId))
 				.Include(b => b.Guests)
 				.ToListAsync();
@@ -540,13 +544,31 @@ namespace SpicAPI.Controllers
 				return BadRequest(new { Success = false, Message = "Check-Out is only allowed for a booking that is currently checked in." });
 
 			var guest = booking.Guests.FirstOrDefault();
-			var payment = booking.Payments.FirstOrDefault();
+			var payment = MainPayment(booking);
 			var paymentReceived = payment != null && payment.PaymentStatus == GuestHousePaymentStatus.Paid
 				|| booking.PaymentStatus == GuestHousePaymentStatus.Paid;
+
+			// Late check-out charge as of NOW (server clock; the client never supplies a time).
+			var late = GuestHouseLateCheckOut.Calculate(booking, Clock());
+			var lateOutstanding = Math.Max(0m, late.Total - GuestHouseLateCheckOut.Settled(booking));
+			var bookingTotal = booking.TotalAmount ?? 0;
 
 			// Total already snapshotted = room cost + extra cot cost + tax.
 			return Ok(new CheckOutSummaryDto
 			{
+				ScheduledCheckOutAt = late.ScheduledCheckOutAt,
+				ActualCheckOutAt = late.ActualCheckOutAt,
+				GracePeriodMinutes = (int)late.GracePeriod.TotalMinutes,
+				LateDurationMinutes = (long)Math.Floor(late.LateDuration.TotalMinutes),
+				WithinGracePeriod = late.WithinGrace,
+				AdditionalDaysCharged = late.AdditionalDays,
+				DailyRoomRate = late.DailyRate,
+				LateCheckOutCharge = late.Amount,
+				LateCheckOutGst = late.GstAmount,
+				LateCheckOutTotal = late.Total,
+				LateChargeOutstanding = lateOutstanding,
+				FinalPayableAmount = bookingTotal + late.Total,
+				ReadyForCheckOut = paymentReceived && lateOutstanding <= 0m,
 				BookingId = booking.Id,
 				BookingReference = booking.BookingReference ?? $"BK{booking.Id}",
 				GuestHouseName = booking.GuestHouse?.Name ?? "",
@@ -585,14 +607,26 @@ namespace SpicAPI.Controllers
 			if (booking.BookingStatus != GuestHouseBookingStatus.CheckedIn)
 				return BadRequest(new { Success = false, Message = "Payment can only be recorded for a booking that is currently checked in." });
 
+			// Late check-out charge due as of now. Recorded once on a single settlement row (upserted, never
+			// added twice), so a retried / repeated confirmation cannot duplicate the charge.
+			var late = GuestHouseLateCheckOut.Calculate(booking, Clock());
+			var lateOutstanding = Math.Max(0m, late.Total - GuestHouseLateCheckOut.Settled(booking));
+
 			if (booking.PaymentStatus == GuestHousePaymentStatus.Paid)
-				return Ok(new { Success = true, Message = "Payment has already been received." });
+			{
+				if (lateOutstanding <= 0m)
+					return Ok(new { Success = true, Message = "Payment has already been received." });
+
+				RecordLateChargeSettlement(booking, late);
+				await _db.SaveChangesAsync();
+				return Ok(new { Success = true, Message = "Late check-out charge received and confirmed." });
+			}
 
 			booking.PaymentStatus = GuestHousePaymentStatus.Paid;
 			booking.UpdatedAt = DateTime.Now;
 			booking.UpdatedBy = actorId;
 
-			var payment = booking.Payments.FirstOrDefault();
+			var payment = MainPayment(booking);
 			if (payment != null)
 			{
 				payment.PaymentStatus = GuestHousePaymentStatus.Paid;
@@ -615,6 +649,9 @@ namespace SpicAPI.Controllers
 				});
 			}
 
+			if (lateOutstanding > 0m)
+				RecordLateChargeSettlement(booking, late);
+
 			await _db.SaveChangesAsync();
 
 			return Ok(new { Success = true, Message = "Payment received and confirmed." });
@@ -633,6 +670,10 @@ namespace SpicAPI.Controllers
 			if (request == null || request.BookingId <= 0)
 				return BadRequest(new { Success = false, Message = "Invalid request." });
 
+			// Serializable, like check-in: two simultaneous check-out submissions cannot both pass the
+			// CheckedIn guard (the loser gets a serialization failure -> friendly conflict).
+			await using var transaction = await _db.Database.BeginTransactionAsync(IsolationLevel.Serializable);
+
 			var booking = await LoadBookingAsync(request.BookingId);
 			if (booking == null)
 				return NotFound(new { Success = false, Message = "Booking not found." });
@@ -641,12 +682,24 @@ namespace SpicAPI.Controllers
 				return BadRequest(new { Success = false, Message = "Check-Out is only allowed for a booking that is currently checked in." });
 
 			var paymentReceived = booking.PaymentStatus == GuestHousePaymentStatus.Paid
-				|| booking.Payments.Any(p => p.PaymentStatus == GuestHousePaymentStatus.Paid);
+				|| booking.Payments.Any(p => GuestHouseLateCheckOut.IsOriginalPayment(p) && p.PaymentStatus == GuestHousePaymentStatus.Paid);
 			if (!paymentReceived)
 				return BadRequest(new { Success = false, Message = "Payment must be received before check-out." });
 
+			// One server timestamp drives both the late-charge calculation and the recorded check-out
+			// time, so the invoice always matches what was charged.
+			var now = Clock();
+			var late = GuestHouseLateCheckOut.Calculate(booking, now);
+			var lateOutstanding = late.Total - GuestHouseLateCheckOut.Settled(booking);
+			if (lateOutstanding > 0m)
+				return BadRequest(new
+				{
+					Success = false,
+					Message = $"A late check-out charge of {late.Total:N2} (incl. GST) applies and {lateOutstanding:N2} has not been received. Please refresh the summary and confirm payment before check-out."
+				});
+
 			booking.BookingStatus = GuestHouseBookingStatus.Completed;
-			booking.ActualCheckOutAt = DateTime.Now;
+			booking.ActualCheckOutAt = now;
 			booking.UpdatedAt = DateTime.Now;
 			booking.UpdatedBy = actorId;
 
@@ -663,13 +716,23 @@ namespace SpicAPI.Controllers
 				.ToListAsync();
 			_db.GuestHouseRoomAllocations.RemoveRange(allocatedRooms);
 
-			await _db.SaveChangesAsync();
+			try
+			{
+				await _db.SaveChangesAsync();
+				await transaction.CommitAsync();
+			}
+			catch (Exception ex) when (GuestHouseRoomInventory.IsSerializationFailure(ex))
+			{
+				await transaction.RollbackAsync();
+				return Conflict(new { Success = false, Message = "This check-out was just processed. Please refresh." });
+			}
 
 			return Ok(new
 			{
 				Success = true,
 				BookingId = booking.Id,
 				BookingReference = booking.BookingReference,
+				LateCheckOutCharge = late.Total,
 				Message = "Check-out completed. Room is now available."
 			});
 		}
@@ -1134,7 +1197,16 @@ namespace SpicAPI.Controllers
 			decimal cgstTotal = 0m;
 			decimal sgstTotal = 0m;
 
-			foreach (var li in request.LineItems)
+			// The Late Check-Out line is system-owned: any client-supplied one is discarded and the
+			// server-calculated line (if a late charge was assessed at check-out) is used instead.
+			var requestLines = request.LineItems
+				.Where(i => !(i.Description ?? "").Contains("Late Check-Out", StringComparison.OrdinalIgnoreCase))
+				.ToList();
+			var serverLateLine = BuildLateChargeLine(booking, bookingCgstPercent, bookingSgstPercent);
+			if (serverLateLine != null)
+				requestLines.Add(serverLateLine);
+
+			foreach (var li in requestLines)
 			{
 				var desc = li.Description ?? "";
 				var description = desc;
@@ -1195,22 +1267,29 @@ namespace SpicAPI.Controllers
 			cgstTotal = Math.Round(cgstTotal, 2, MidpointRounding.AwayFromZero);
 			sgstTotal = Math.Round(sgstTotal, 2, MidpointRounding.AwayFromZero);
 
+			// Advance Payment and Round Off are never taken from the client:
+			//  * advance = the verified, recorded payments of this booking (GuestHouseVerifiedAdvance);
+			//  * round off = automatic nearest rupee of (gross - discount), computed by GuestHouseBillMath.
+			// A posted advance that disagrees with the verified one means a stale or tampered page: reject,
+			// never overwrite. (A posted RoundOff is simply ignored - the server value is authoritative.)
 			var discount = Math.Max(0, request.Discount ?? 0);
-			var advance = Math.Max(0, request.AdvancePayment ?? 0);
-			var roundOff = request.RoundOff ?? 0;
+			var advance = GuestHouseVerifiedAdvance.Compute(booking);
 			var grossTotal = subtotal + cgstTotal + sgstTotal;
-			var balance = grossTotal - discount - advance + roundOff;
 
-			// Validation: discount / advance cannot incorrectly exceed the applicable amount.
+			if (request.AdvancePayment.HasValue && request.AdvancePayment.Value != advance)
+				return Conflict(new { Success = false, Message = "The advance payment received for this booking does not match the page. It cannot be edited here - please reload the bill and try again." });
+
+			// Validation: discount cannot exceed the amount, and cannot push the payable below the money already received.
 			if (discount > grossTotal)
 				return BadRequest(new { Success = false, Message = "Discount cannot exceed the total bill amount." });
-			if (advance > grossTotal - discount)
-				return BadRequest(new { Success = false, Message = "Advance Payment cannot exceed Grand Total." });
+			var calc = SPIC.Core.Billing.GuestHouseBillMath.Compute(grossTotal, discount, advance);
+			var roundOff = calc.RoundOff;
+			var balance = calc.Balance;
 			if (balance < 0)
-				return BadRequest(new { Success = false, Message = "Bill balance cannot be negative. Check discount, advance and round off values." });
+				return BadRequest(new { Success = false, Message = "Payable amount cannot be less than the advance payment already received. Reduce the discount; refunds are handled through the refund process." });
 
 			var guest = booking.Guests.FirstOrDefault();
-			var payment = booking.Payments.FirstOrDefault();
+			var payment = MainPayment(booking);
 
 			var bill = new GuestHouseBill
 			{
@@ -1341,13 +1420,7 @@ namespace SpicAPI.Controllers
 			// payment taken at booking time). It must NOT include payment collected at the
 			// Front Office check-out gate (RecordPayment) - that is the final settlement for
 			// the stay, not a pre-stay advance, and belongs in "Payment received" at billing time.
-			var advancePayment = booking.Payments
-				.Where(p => p.PaymentMethod != GuestHousePaymentMethod.PayAfterStay
-					&& p.PaymentStatus == GuestHousePaymentStatus.Paid
-					&& p.PaymentDate.HasValue
-					&& booking.ActualCheckInAt.HasValue
-					&& p.PaymentDate.Value <= booking.ActualCheckInAt.Value)
-				.Sum(p => p.Amount);
+			var advancePayment = GuestHouseVerifiedAdvance.Compute(booking);
 
 			var existing = await _db.GuestHouseBills
 				.AsNoTracking()
@@ -1396,6 +1469,12 @@ namespace SpicAPI.Controllers
 				});
 			}
 
+			// Late check-out charge: only for stays on which it was actually assessed and collected at
+			// check-out (settlement row present). Older completed bookings never get one retroactively.
+			var lateLine = BuildLateChargeLine(booking, cgstPercent, sgstPercent);
+			if (lateLine != null)
+				lines.Add(lateLine);
+
 			var draft = new BillDraftDto
 			{
 				BookingId = booking.Id,
@@ -1426,6 +1505,62 @@ namespace SpicAPI.Controllers
 		}
 
 		// ---- Helpers ----
+
+		// Server clock used for check-out / late-charge timestamps. A property only so the regression
+		// harness can pin the time; production always uses the server's DateTime.Now (same clock the
+		// rest of this controller stamps), never anything sent by the client.
+		public Func<DateTime> Clock { get; set; } = () => DateTime.Now;
+
+		// The server-calculated "Late Check-Out Charge" bill line (rooms x extra days at the booking's
+		// snapshotted room rate, booking GST), or null when none was assessed at check-out.
+		private static BillLineItemDto? BuildLateChargeLine(GuestHouseBooking booking, decimal cgstPercent, decimal sgstPercent)
+		{
+			if (GuestHouseLateCheckOut.SettlementRow(booking) == null || !booking.ActualCheckOutAt.HasValue)
+				return null;
+			var late = GuestHouseLateCheckOut.Calculate(booking, booking.ActualCheckOutAt.Value);
+			if (!late.HasCharge)
+				return null;
+			var rooms = Math.Max(1, booking.NumberOfRooms ?? 1);
+			return new BillLineItemDto
+			{
+				Description = GuestHouseLateCheckOut.BillLineDescription,
+				Quantity = rooms * late.AdditionalDays,
+				Rate = booking.RoomPrice,
+				CgstPercent = cgstPercent,
+				SgstPercent = sgstPercent,
+				IsEditable = false
+			};
+		}
+
+		// The booking's original payment row (never the late check-out settlement row).
+		private static GuestHouseBookingPayment? MainPayment(GuestHouseBooking booking) =>
+			booking.Payments.FirstOrDefault(GuestHouseLateCheckOut.IsOriginalPayment);
+
+		// Records (or tops up) the single Late Check-Out settlement row. Idempotent: the row is keyed by a
+		// fixed per-booking reference, so repeating the call never creates a second charge.
+		private static void RecordLateChargeSettlement(GuestHouseBooking booking, GuestHouseLateCheckOut.Result late)
+		{
+			var now = DateTime.Now;
+			var row = GuestHouseLateCheckOut.SettlementRow(booking);
+			if (row == null)
+			{
+				booking.Payments.Add(new GuestHouseBookingPayment
+				{
+					PaymentReference = $"{GuestHouseLateCheckOut.PaymentReferencePrefix}{booking.Id}",
+					PaymentMethod = GuestHousePaymentMethod.PayAfterStay, // collected at the guest house desk
+					PaymentStatus = GuestHousePaymentStatus.Paid,
+					Amount = late.Total,
+					PaymentDate = now,
+					CreatedAt = now,
+					UpdatedAt = now
+				});
+				return;
+			}
+			row.Amount = Math.Max(row.Amount, late.Total);
+			row.PaymentStatus = GuestHousePaymentStatus.Paid;
+			row.PaymentDate = now;
+			row.UpdatedAt = now;
+		}
 
 		private async Task<GuestHouseBooking?> LoadBookingAsync(int bookingId)		{
 			var query = _db.GuestHouseBookings
@@ -1664,6 +1799,21 @@ namespace SpicAPI.Controllers
 		public GuestHousePaymentStatus PaymentStatus { get; set; }
 		public GuestHousePaymentMethod? PaymentMethod { get; set; }
 		public bool PaymentReceived { get; set; }
+
+		// Late check-out (server-calculated as of now; see GuestHouseLateCheckOut).
+		public DateTime ScheduledCheckOutAt { get; set; }
+		public DateTime ActualCheckOutAt { get; set; }
+		public int GracePeriodMinutes { get; set; }
+		public long LateDurationMinutes { get; set; }
+		public bool WithinGracePeriod { get; set; }
+		public int AdditionalDaysCharged { get; set; }
+		public decimal DailyRoomRate { get; set; }
+		public decimal LateCheckOutCharge { get; set; }       // before GST
+		public decimal LateCheckOutGst { get; set; }
+		public decimal LateCheckOutTotal { get; set; }        // incl. GST
+		public decimal LateChargeOutstanding { get; set; }    // not yet collected
+		public decimal FinalPayableAmount { get; set; }       // booking total + late charge incl. GST
+		public bool ReadyForCheckOut { get; set; }            // original paid AND no late charge outstanding
 	}
 
 	public class CheckInRequest

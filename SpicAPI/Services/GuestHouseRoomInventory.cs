@@ -116,6 +116,10 @@ namespace SpicAPI.Services
 			if (roomIds.Count == 0)
 				return new List<RoomHolding>();
 
+			// A CheckedIn guest physically occupies the room until the actual check-out, even past the
+			// scheduled check-out date: such an overdue stay still holds today, so it blocks any
+			// requested window that includes today. (Scheduled-date overlap is unchanged for everyone else.)
+			var today = DateTime.Today;
 			var query = db.GuestHouseBookings
 				.AsNoTracking()
 				.Where(b => (roomIds.Contains(b.GuestHouseRoomId)
@@ -125,7 +129,8 @@ namespace SpicAPI.Services
 					&& (b.BookingStatus != GuestHouseBookingStatus.PendingPayment || b.CreatedAt >= pendingPaymentHoldCutoff)
 					&& b.CheckInDate.HasValue && b.CheckOutDate.HasValue
 					&& b.CheckInDate.Value.Date < checkOutDate.Date
-					&& b.CheckOutDate.Value.Date > checkInDate.Date);
+					&& (b.CheckOutDate.Value.Date > checkInDate.Date
+						|| (b.BookingStatus == GuestHouseBookingStatus.CheckedIn && checkInDate.Date <= today)));
 
 			if (excludeBookingId.HasValue)
 				query = query.Where(b => b.Id != excludeBookingId.Value);

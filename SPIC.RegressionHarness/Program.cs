@@ -40,6 +40,10 @@ internal static class Program
 		GuestHouseSingleRoomBookingTests.Run();
 		Console.WriteLine();
 
+		// Late check-out grace period + extra-day charge, payment gate, invoice line, overdue-room protection.
+		GuestHouseLateCheckOutTests.Run();
+		Console.WriteLine();
+
 		// GPS Settings entity, DTOs, controller authorization, and role access.
 		GpsSettingsTests.Run();
 		Console.WriteLine();

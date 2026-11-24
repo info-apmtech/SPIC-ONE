@@ -304,7 +304,26 @@
                         <div class="fo-kv"><span class="fo-kv-label">Number of Persons</span><span class="fo-kv-value">@(_checkOutBooking.NumberOfPersons?.ToString() ?? "-")</span></div>
                         <div class="fo-kv"><span class="fo-kv-label">Extra Beds</span><span class="fo-kv-value">@_checkOutBooking.ExtraBeds</span></div>
                         <div class="fo-divider"></div>
-                        <div class="fo-kv"><span class="fo-kv-label">Total Amount</span><span class="fo-kv-value fo-total-value">@_money(_checkOutBooking.TotalAmount)</span></div>
+                        <div class="fo-kv"><span class="fo-kv-label">Scheduled Check-out</span><span class="fo-kv-value">@FormatDateTime(_checkOutBooking.ScheduledCheckOutAt)</span></div>
+                        <div class="fo-kv"><span class="fo-kv-label">Actual Check-out</span><span class="fo-kv-value">@FormatDateTime(_checkOutBooking.ActualCheckOutAt)</span></div>
+                        <div class="fo-kv"><span class="fo-kv-label">Grace Period</span><span class="fo-kv-value">@_checkOutBooking.GracePeriodMinutes minutes</span></div>
+                        <div class="fo-kv"><span class="fo-kv-label">Late Duration</span><span class="fo-kv-value">@FormatLateDuration(_checkOutBooking.LateDurationMinutes)</span></div>
+                        @if (_checkOutBooking.AdditionalDaysCharged > 0)
+                        {
+                            <div class="fo-alert-warning fo-modal-message">
+                                Grace period exceeded – @_checkOutBooking.AdditionalDaysCharged additional day(s) charged at @_money(_checkOutBooking.DailyRoomRate) per day.
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="fo-alert-success fo-modal-message">Within Grace Period – No Additional Charge.</div>
+                        }
+                        <div class="fo-kv"><span class="fo-kv-label">Additional Days Charged</span><span class="fo-kv-value">@_checkOutBooking.AdditionalDaysCharged</span></div>
+                        <div class="fo-divider"></div>
+                        <div class="fo-kv"><span class="fo-kv-label">Original Booking Amount</span><span class="fo-kv-value">@_money(_checkOutBooking.TotalAmount)</span></div>
+                        <div class="fo-kv"><span class="fo-kv-label">Additional Late Check-Out Charge</span><span class="fo-kv-value">@_money(_checkOutBooking.LateCheckOutCharge)</span></div>
+                        <div class="fo-kv"><span class="fo-kv-label">Applicable GST</span><span class="fo-kv-value">@_money(_checkOutBooking.LateCheckOutGst)</span></div>
+                        <div class="fo-kv"><span class="fo-kv-label">Final Payable Amount</span><span class="fo-kv-value fo-total-value">@_money(_checkOutBooking.FinalPayableAmount)</span></div>
                         <div class="fo-kv"><span class="fo-kv-label">Payment Method</span><span class="fo-kv-value">@PaymentMethodText(_checkOutBooking.PaymentMethod)</span></div>
                         <div class="fo-kv">
                             <span class="fo-kv-label">Payment Status</span>
@@ -321,7 +340,7 @@
                     <button class="fo-btn fo-btn-secondary" @onclick="CloseCheckOut">Cancel</button>
                     @if (_checkOutBooking != null)
                     {
-                        @if (!_checkOutBooking.PaymentReceived)
+                        @if (!_checkOutBooking.ReadyForCheckOut)
                         {
                             <button class="fo-btn fo-btn-checkin" @onclick="ConfirmPayment" disabled="@_isSubmitting">
                                 @(_isSubmitting ? "Recording payment..." : "Confirm Payment Received")
@@ -614,6 +633,10 @@
             else
             {
                 _checkOutError = result?.Message ?? "Check-out could not be completed.";
+                // The late charge is time-based: reload the summary so the amounts shown match the server.
+                var refresh = await Http.GetAsync($"api/GuestHouseFrontOffice/checkout/{_checkOutBooking.BookingId}");
+                if (refresh.IsSuccessStatusCode)
+                    _checkOutBooking = await refresh.Content.ReadFromJsonAsync<CheckOutSummaryDto>();
             }
         }
         catch (Exception)
@@ -712,6 +735,21 @@
     private static string FormatDate(DateTime? value)
     {
         return value.HasValue ? value.Value.ToString("dd MMM yyyy", CultureInfo.InvariantCulture) : "-";
+    }
+
+    private static string FormatDateTime(DateTime value) => value.ToString("dd MMM yyyy, hh:mm tt", CultureInfo.InvariantCulture);
+
+    private static string FormatLateDuration(long minutes)
+    {
+        if (minutes <= 0) return "None";
+        var days = minutes / 1440;
+        var hours = minutes % 1440 / 60;
+        var mins = minutes % 60;
+        var parts = new List<string>();
+        if (days > 0) parts.Add($"{days} day(s)");
+        if (hours > 0) parts.Add($"{hours} hour(s)");
+        if (mins > 0 || parts.Count == 0) parts.Add($"{mins} minute(s)");
+        return string.Join(" ", parts);
     }
 
     private static string _money(decimal value) => "₹" + value.ToString("N2", CultureInfo.InvariantCulture);
@@ -821,5 +859,18 @@
         public int PaymentStatus { get; set; }
         public int? PaymentMethod { get; set; }
         public bool PaymentReceived { get; set; }
+        public DateTime ScheduledCheckOutAt { get; set; }
+        public DateTime ActualCheckOutAt { get; set; }
+        public int GracePeriodMinutes { get; set; }
+        public long LateDurationMinutes { get; set; }
+        public bool WithinGracePeriod { get; set; }
+        public int AdditionalDaysCharged { get; set; }
+        public decimal DailyRoomRate { get; set; }
+        public decimal LateCheckOutCharge { get; set; }
+        public decimal LateCheckOutGst { get; set; }
+        public decimal LateCheckOutTotal { get; set; }
+        public decimal LateChargeOutstanding { get; set; }
+        public decimal FinalPayableAmount { get; set; }
+        public bool ReadyForCheckOut { get; set; }
     }
 }
