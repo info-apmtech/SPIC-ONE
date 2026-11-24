@@ -153,12 +153,11 @@
                 @for (var i = 0; i < d.Dispatches.Count; i++)
                 {
                     var x = d.Dispatches[i];
-                    <PubDispatchCard X="x" D="d" Heading="@($"Dispatch {i + 1}")" StartOpen="@(i == d.Dispatches.Count - 1 || d.Dispatches.Count < 3)">
+                    <PubDispatchCard X="x" D="d" Heading="@($"Dispatch {i + 1}")" StartOpen="@(i == d.Dispatches.Count - 1 || d.Dispatches.Count < 3)" ShowAck="false">
                         <Notice>
                             @if (x.Status == PublicityDispatchStatus.TransferRequested) { <span class="pub-note pub-note--amber">Courier proof is pending from the source RMDO.</span> }
                             @if (x.Status == PublicityDispatchStatus.ProofSubmitted) { <span class="pub-note pub-note--blue">Source RMDO uploaded the dispatch proof. Admin review pending.</span> }
                         </Notice>
-                        <AckActions><button type="button" class="pub-btn pub-btn--line pub-btn--sm" @onclick="() => _tab = 2">View Acknowledgement <i class="bi bi-arrow-right"></i></button></AckActions>
                         <Actions>
                             @if (Api.IsDispatcher && x.Status is >= PublicityDispatchStatus.ProofSubmitted and < PublicityDispatchStatus.Acknowledged)
                             {
@@ -167,11 +166,16 @@
                                     {
                                         <button type="button" class="pub-btn pub-btn--primary" @onclick="() => OpenStatus(x, PublicityDispatchStatus.Dispatched)">Update Dispatch Details</button>
                                     }
-                                    @if (x.Status == PublicityDispatchStatus.Dispatched)
+                                    @* Mark In Transit / Mark Delivered are a Transfer-kind-only manual progression (no
+                                       courier integration exists for inter-HQ transfers); Original / ReInitiation
+                                       dispatches no longer expose them - their 3-step timeline's "In Transit" segment
+                                       represents the whole dispatched-and-awaiting-acknowledgement window instead of a
+                                       claimed real-time courier scan, and Acknowledge is the only way they advance. *@
+                                    @if (x.Kind == PublicityDispatchKind.Transfer && x.Status == PublicityDispatchStatus.Dispatched)
                                     {
                                         <button type="button" class="pub-btn pub-btn--line" @onclick="() => OpenStatus(x, PublicityDispatchStatus.InTransit)"><i class="bi bi-truck"></i> Mark In Transit</button>
                                     }
-                                    @if (x.Status is PublicityDispatchStatus.Dispatched or PublicityDispatchStatus.InTransit)
+                                    @if (x.Kind == PublicityDispatchKind.Transfer && x.Status is PublicityDispatchStatus.Dispatched or PublicityDispatchStatus.InTransit)
                                     {
                                         <button type="button" class="pub-btn pub-btn--primary" @onclick="() => OpenStatus(x, PublicityDispatchStatus.Delivered)"><i class="bi bi-box-seam"></i> Mark Delivered</button>
                                     }
@@ -181,30 +185,21 @@
                             {
                                 <div class="pub-banner pub-banner--blue">
                                     <span class="pub-banner__icon"><i class="bi bi-hourglass-split"></i></span>
-                                    <div><h3>Awaiting Acknowledgement</h3><p>Once the material reaches you, submit the receipt acknowledgement.</p></div>
-                                    <button type="button" class="pub-btn pub-btn--primary" @onclick="() => _tab = 2">Acknowledge <i class="bi bi-arrow-right"></i></button>
+                                    <div><h3>Acknowledgement Pending</h3><p>Material delivery is awaiting receipt acknowledgement.</p></div>
+                                    <button type="button" class="pub-btn pub-btn--primary" @onclick="() => _tab = 2">Create Acknowledgement <i class="bi bi-arrow-right"></i></button>
+                                </div>
+                            }
+                            else if (x.Ack is not { IsDraft: false } && x.Status != PublicityDispatchStatus.Acknowledged)
+                            {
+                                @* Any authorized viewer who is NOT the assigned Responsible Person (e.g. ADMIN-MD
+                                   CS) sees this instead of an action they are not allowed to perform. *@
+                                <div class="pub-banner pub-banner--blue">
+                                    <span class="pub-banner__icon"><i class="bi bi-hourglass-split"></i></span>
+                                    <div><h3>Awaiting Delivery / Acknowledgement</h3><p>Material has been dispatched and is awaiting acknowledgement from the responsible receiving employee.</p></div>
                                 </div>
                             }
                         </Actions>
                     </PubDispatchCard>
-                }
-
-                @if (d.Summary.ExceptionStatus == "Raised")
-                {
-                    <section class="pub-card pub-card--flush">
-                        <div class="pub-card__band pub-band--red">
-                            <div><h2 class="pub-h2 pub-text-red">Exception Raised</h2><span class="pub-muted">@d.Summary.ExceptionType reported in the acknowledgement.</span></div>
-                            @if (d.CanResolve) { <button type="button" class="pub-btn pub-btn--primary" @onclick="OpenResolve">Resolve Exception <i class="bi bi-arrow-right"></i></button> }
-                        </div>
-                        <div class="pub-grid pub-grid--3">
-                            <PubInfo Label="Exception Type">
-                                @foreach (var t in d.Summary.ExceptionType.Split(" + ")) { <PubPill Text="@t" Tone="red" /> }
-                            </PubInfo>
-                            <PubInfo Label="Raised By" Tone="green" Value="@d.ExceptionRaisedBy" />
-                            <PubInfo Label="Raised On" Value="@PubText.DateTime(d.ExceptionRaisedAt)" />
-                            <div class="pub-grid__wide"><span class="pub-info__label">Remarks</span><b class="pub-info__value pub-info__value--sm">@(d.ExceptionRemarks ?? "-")</b></div>
-                        </div>
-                    </section>
                 }
 
                 @for (var i = 0; i < d.OutgoingTransfers.Count; i++)
@@ -225,14 +220,55 @@
                     </PubDispatchCard>
                 }
 
-                @if (d.Status == PublicityStatus.Completed)
+                @if (d.Dispatches.Count > 0)
                 {
-                    <div class="pub-banner pub-banner--green">
-                        <span class="pub-banner__icon"><i class="bi bi-patch-check-fill"></i></span>
-                        <div><h3>Request Completed</h3>
-                            <p>@(d.Summary.ExceptionStatus == "Resolved" ? "Shortage and damaged quantity were resolved; all required usable quantity is received." : "The material has been delivered and acknowledged.")</p></div>
+                    // Full-width status banner only - the actual quantities/condition/remarks/evidence
+                    // live exclusively in the Acknowledgement / Exception Handling tab (case 2 below);
+                    // every value here is read straight from the same persisted request Status /
+                    // Summary that tab itself is built from, never invented for display purposes.
+                    var anyAck = d.Dispatches.Any(x => x.Ack is { IsDraft: false });
+                    string icon, heading, message, tone;
+                    if (d.Status == PublicityStatus.Completed)
+                    {
+                        (icon, heading, tone) = ("bi-patch-check-fill", "Request Completed", "green");
+                        message = "The material has been successfully received and acknowledged. No shortage or damage was reported.";
+                    }
+                    else if (d.Summary.ExceptionStatus == "Raised")
+                    {
+                        (icon, heading, tone) = ("bi-exclamation-octagon-fill", "Exception Raised", "red");
+                        message = "Shortage or damage was reported during acknowledgement.";
+                    }
+                    else if (d.Summary.ExceptionStatus == "Resolved")
+                    {
+                        (icon, heading, tone) = ("bi-patch-check-fill", "Exception Resolved", "green");
+                        message = "The reported shortage or damage has been resolved.";
+                    }
+                    else if (anyAck)
+                    {
+                        (icon, heading, tone) = ("bi-patch-check-fill", "Acknowledged", "green");
+                        message = "Receipt confirmed by the assigned responsible employee.";
+                    }
+                    else
+                    {
+                        (icon, heading, tone) = ("bi-hourglass-split", "Awaiting Acknowledgement", "amber");
+                        message = _ackTarget is not null
+                            ? "Material delivery is awaiting your receipt acknowledgement."
+                            : "Material has been dispatched and is awaiting acknowledgement from the responsible receiving employee.";
+                    }
+                    <div class="pub-banner pub-banner--@tone">
+                        <span class="pub-banner__icon"><i class="bi @icon"></i></span>
+                        <div><h3>@heading</h3><p>@message</p></div>
+                        @if (_ackTarget is not null)
+                        {
+                            <button type="button" class="pub-btn pub-btn--primary" @onclick="() => _tab = 2">Create Acknowledgement <i class="bi bi-arrow-right"></i></button>
+                        }
+                        else if (anyAck)
+                        {
+                            <button type="button" class="pub-btn pub-btn--line" @onclick="() => _tab = 2">View Acknowledgement <i class="bi bi-arrow-right"></i></button>
+                        }
                     </div>
                 }
+
                 break;
 
             case 2:
@@ -273,10 +309,10 @@
                                 </div>
                             }
                             <div class="pub-field">
-                                <label class="pub-label pub-req" for="ack-by">Acknowledged By</label>
-                                <select id="ack-by" class="pub-input" @bind="_ack.AcknowledgedByUserId">
-                                    @foreach (var p in _lookups?.People ?? new()) { <option value="@p.UserId">@p.Name @(p.Role is null ? "" : $"({p.Role})")</option> }
-                                </select>
+                                <label class="pub-label pub-req">Acknowledged By</label>
+                                @* Always the authenticated user - the server ignores any client-supplied acknowledger
+                                   id and records Uid()/MyNameAsync() regardless, so this is never a choice. *@
+                                <div class="pub-remarks">@(_lookups?.MyName ?? "-")</div>
                             </div>
                             <div class="pub-field pub-field--wide">
                                 <label class="pub-label" for="ack-rem">Remarks</label>
@@ -315,6 +351,15 @@
                 @for (var i = 0; i < d.Dispatches.Count; i++)
                 {
                     var x = d.Dispatches[i];
+                    // The dispatch whose form is rendered above (the one THIS viewer is personally
+                    // the assigned Responsible Person for, awaiting their own action) would otherwise
+                    // show its dispatch context twice - once in the form's own Dispatch Summary, once
+                    // here. Skipped only for that exact dispatch, not by role: once it's acknowledged
+                    // _ackTarget goes back to null (CanAcknowledge is false once Acknowledged), so the
+                    // card reappears read-only here to show what was submitted - for the responsible
+                    // employee themselves and for every other viewer (ADMIN-MD CS included) the same
+                    // way it always has.
+                    if (_ackTarget is not null && x.Id == _ackTarget.Id) continue;
                     var a = x.Ack is { IsDraft: false } ? x.Ack : null;
                     <section class="pub-card pub-card--flush">
                         <div class="pub-card__band pub-band--green">
@@ -371,11 +416,25 @@
                     </section>
                 }
 
-                @if (d.Dispatches.Any(x => x.Ack is { IsDraft: false }))
+                @if (d.Summary.ExceptionStatus == "Raised")
                 {
-                    <PubSummary S="d.Summary" Title="Final Acknowledgement Summary" Final="true" />
+                    <section class="pub-card pub-card--flush">
+                        <div class="pub-card__band pub-band--red">
+                            <div><h2 class="pub-h2 pub-text-red">Exception Raised</h2><span class="pub-muted">@d.Summary.ExceptionType reported in the acknowledgement.</span></div>
+                            @if (d.CanResolve) { <button type="button" class="pub-btn pub-btn--primary" @onclick="OpenResolve">Resolve Exception <i class="bi bi-arrow-right"></i></button> }
+                        </div>
+                        <div class="pub-grid pub-grid--3">
+                            <PubInfo Label="Exception Type">
+                                @foreach (var t in d.Summary.ExceptionType.Split(" + ")) { <PubPill Text="@t" Tone="red" /> }
+                            </PubInfo>
+                            <PubInfo Label="Raised By" Tone="green" Value="@d.ExceptionRaisedBy" />
+                            <PubInfo Label="Raised On" Value="@PubText.DateTime(d.ExceptionRaisedAt)" />
+                            <div class="pub-grid__wide"><span class="pub-info__label">Remarks</span><b class="pub-info__value pub-info__value--sm">@(d.ExceptionRemarks ?? "-")</b></div>
+                        </div>
+                    </section>
                 }
-                else if (_ackTarget is null)
+
+                @if (d.Dispatches.All(x => x.Ack is not { IsDraft: false }) && _ackTarget is null)
                 {
                     <EmptyState Icon="bi-inbox" Title="No acknowledgement yet" Message="Acknowledgements appear here once the material is received." />
                 }

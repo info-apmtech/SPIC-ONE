@@ -1118,9 +1118,12 @@ namespace SpicAPI.Controllers
             ack.DamagedQty = dto.IsDamaged ? dto.DamagedQty : 0;
             ack.Remarks = Clean(dto.Remarks);
             ack.UpdatedAt = DateTime.UtcNow;
-            var by = string.IsNullOrWhiteSpace(dto.AcknowledgedByUserId) ? Uid() : dto.AcknowledgedByUserId!;
-            ack.AcknowledgedByUserId = by;
-            ack.AcknowledgedByName = await _db.Users.AsNoTracking().Where(u => u.Id == by).Select(u => u.Name ?? u.UserName).FirstOrDefaultAsync() ?? await MyNameAsync();
+            // Acknowledged By is never taken from the client - CanAcknowledgeAsync above already
+            // proved the CALLER is the one and only authorized party for this dispatch (the assigned
+            // Responsible Person, or the Transfer-kind destination rule), so the acknowledger's
+            // identity can only ever be the authenticated user, never a dto-supplied id.
+            ack.AcknowledgedByUserId = Uid();
+            ack.AcknowledgedByName = await MyNameAsync();
 
             if (dto.Submit)
             {
@@ -1128,13 +1131,20 @@ namespace SpicAPI.Controllers
                 ack.SubmittedAt = DateTime.UtcNow;
                 d.Status = PublicityDispatchStatus.Acknowledged;
                 d.DeliveredAt ??= DateTime.UtcNow;
-                var type = ExceptionType(Math.Max(0, d.Quantity - ack.ReceivedQty), Math.Max(0, ack.ReceivedQty - d.Quantity), ack.DamagedQty);
+                var shortage = Math.Max(0, d.Quantity - ack.ReceivedQty);
+                var type = ExceptionType(shortage, Math.Max(0, ack.ReceivedQty - d.Quantity), ack.DamagedQty);
                 var name = await MyNameAsync();
                 await AddEvent(r, PublicityStage.Acknowledgement, type == "None" ? "Acknowledged" : "Exception Raised", name,
                     ack.Remarks ?? $"Received {ack.ReceivedQty} of {d.Quantity} Nos.", d.Id);
                 if (type != "None" && type != "Excess")
+                {
+                    var parts = new List<string>();
+                    if (shortage > 0) parts.Add($"shortage of {shortage} Nos");
+                    if (ack.DamagedQty > 0) parts.Add($"damage of {ack.DamagedQty} Nos");
                     Notify(PublicityNotificationType.Exception, r, d.Id, null, AppRole.MDAdmin, null,
-                        $"Exception raised ({type})", $"{r.IndentNo}: received {ack.ReceivedQty} of {d.Quantity} Nos, {ack.DamagedQty} damaged.", ack.Remarks);
+                        "Publicity Dispatch Exception Raised",
+                        $"Request {r.IndentNo} has an acknowledgement exception: {string.Join(" and ", parts)}. Review required.", ack.Remarks);
+                }
                 await _db.SaveChangesAsync();
                 var before = r.Status;
                 await RecomputeAsync(r);
@@ -1538,11 +1548,17 @@ namespace SpicAPI.Controllers
             }
             else
             {
+                // Three-step delivery timeline (Dispatched -> In Transit -> Acknowledged) - "In
+                // Transit" represents dispatched material awaiting acknowledgement in general, not a
+                // literal courier-verified scan, so its Done flag is keyed off the same `acked` signal
+                // as the Acknowledged step itself (not the separate InTransit/Delivered enum values,
+                // which nothing advances anymore now that Mark In Transit / Mark Delivered are removed
+                // from this kind's UI - see PublicityDetails.razor).
                 dto.Steps = Steps(
-                    ("Dispatched", d.Transporter, d.CreatedAt, true),
-                    ("In Transit", d.CurrentLocation ?? (d.ExpectedDeliveryDate is { } e ? $"Expected Delivery {e:dd MMM yyyy}" : null), d.InTransitAt, d.Status >= PublicityDispatchStatus.InTransit),
-                    ("Delivered", d.CurrentLocation, d.DeliveredAt, d.Status >= PublicityDispatchStatus.Delivered),
+                    ("Dispatched", $"Material handed over to {d.Transporter}", d.CreatedAt, true),
+                    ("In Transit", d.CurrentLocation ?? (d.ExpectedDeliveryDate is { } e ? $"Expected Delivery {e:dd MMM yyyy}" : null), d.InTransitAt, acked),
                     ("Acknowledged", ackPill, a?.SubmittedAt, acked));
+                if (dto.Steps[1].State == 1) dto.Steps[1].UseSpinner = true;
             }
             if (acked) dto.Steps[^1].State = ackState;
             return dto;
@@ -1631,14 +1647,27 @@ namespace SpicAPI.Controllers
                 Stage = Label(e), Action = e.Action, By = e.ActorName, Role = e.ActorRole, At = e.At, Remarks = e.Remarks,
                 State = e.Action is "Edited" or "Returned" or "Exception Raised" ? 1 : e.Action == "Rejected" ? 3 : 2
             }).ToList();
-            var sequence = new[] { "Indent Creation", "Submitted to RM", "RM Review", "SMD Review", "SMM Review", "ADMIN - MD CS Review", "DGM - MD CS Review", "Note Approval", "Dispatch", "Acknowledgement" };
+            // Each label's own stage - used below to tell a stage the request hasn't reached YET
+            // apart from one it has already passed, whether via a real persisted event or because a
+            // chain role (e.g. the RM itself) created the request and skipped every stage at or below
+            // its own rung (see Submit()'s creatorIndex doc comment). A skipped stage is "behind" the
+            // request's current position, not "ahead" of it, so it must never render as Not Started -
+            // that label is reserved for stages genuinely still to come.
+            var sequence = new[]
+            {
+                ("Indent Creation", PublicityStage.IndentCreation), ("Submitted to RM", PublicityStage.IndentCreation),
+                ("RM Review", PublicityStage.RmReview), ("SMD Review", PublicityStage.SmdReview),
+                ("SMM Review", PublicityStage.SmmReview), ("ADMIN - MD CS Review", PublicityStage.AdminMdCsReview),
+                ("DGM - MD CS Review", PublicityStage.DgmMdCsReview), ("Note Approval", PublicityStage.Dispatch),
+                ("Dispatch", PublicityStage.Dispatch), ("Acknowledgement", PublicityStage.Acknowledgement)
+            };
             var current = r.Status is PublicityStatus.PendingApproval or PublicityStatus.PendingFinalApproval ? StageLabel(r.Stage)
                 : r.Status == PublicityStatus.FinalApproved ? "Note Approval"
                 : r.Status is PublicityStatus.InDispatch or PublicityStatus.AcknowledgementPending ? "Acknowledgement" : null;
             // the stage waiting now always gets its own "Pending Review" row (it may already have
             // older rows, e.g. RM Review after a return and resubmit); then the stages not reached yet
             if (current != null) list.Add(new PubHistoryDto { Stage = current, Action = "Pending Review", State = 1 });
-            foreach (var label in sequence.Where(l => l != current && list.All(h => h.Stage != l)))
+            foreach (var (label, stage) in sequence.Where(x => x.Item2 > r.Stage && x.Item1 != current && list.All(h => h.Stage != x.Item1)))
                 list.Add(new PubHistoryDto { Stage = label, Action = "Not Started", State = 0 });
             return list;
         }
@@ -1684,7 +1713,16 @@ namespace SpicAPI.Controllers
         private async Task<bool> CanAcknowledgeAsync(PublicityRequest r, PublicityDispatch d)
         {
             if (d.Status is not (PublicityDispatchStatus.Dispatched or PublicityDispatchStatus.InTransit or PublicityDispatchStatus.Delivered)) return false;
-            if (IsSuper() || r.CreatedByUserId == Uid() || r.RequestedByUserId == Uid()) return true;
+            if (IsSuper()) return true;
+            if (d.Kind != PublicityDispatchKind.Transfer)
+                // Original / ReInitiation: only the specifically assigned Responsible Person may
+                // acknowledge - never the original requester/creator and never "any RMD/MDO in the
+                // HQ" (the Requested By employee and the dispatch's Responsible Person are not always
+                // the same person, per this workflow's own authorization requirement).
+                return d.ResponsibleUserId == Uid();
+            // Transfer kind has no single named Responsible Person (SetResponsibleAsync is never
+            // called for it in CreateDispatch) - preserve its existing destination-HQ rule unchanged.
+            if (r.CreatedByUserId == Uid() || r.RequestedByUserId == Uid()) return true;
             return (MyRole() is AppRole.RMD or AppRole.MDO) && (await MyHqIdsAsync()).Contains(r.HeadquarterId);
         }
 

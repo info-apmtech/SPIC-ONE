@@ -139,6 +139,11 @@ namespace SPIC.Core.DTOs
         public string? Note { get; set; }
         public DateTime? At { get; set; }
         public int State { get; set; }
+        // Only the delivery timeline's "In Transit" step sets this - a request/approval-chain
+        // timeline step never does, so PubStepper's generic checkmark icon is unaffected everywhere
+        // else. Rendered as a spinning loading icon ONLY while State == 1 (current/active); once the
+        // step moves to done (acknowledged) or this is simply a different step, it's inert.
+        public bool UseSpinner { get; set; }
     }
 
     public sealed class PubHistoryDto
