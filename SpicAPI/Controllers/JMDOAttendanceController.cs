@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Spic.Infrastructure.Data;
 using SPIC.Core.DTOs;
 using SPIC.Core.Entities;
+using SPIC.Core.Utilities;
 using System.Security.Claims;
 
 namespace SpicAPI.Controllers
@@ -131,8 +132,8 @@ namespace SpicAPI.Controllers
             var sessionIds = sessions.Select(s => s.Id).ToList();
 
             var pointsBySession = (await _db.JMDOTrackingPoints.AsNoTracking()
-                    .Where(p => sessionIds.Contains(p.TrackingSessionId))
-                    .Select(p => new { p.TrackingSessionId, p.Id, p.Latitude, p.Longitude, p.RecordedAt })
+                    .Where(p => sessionIds.Contains(p.TrackingSessionId) && (p.Accuracy == null || p.Accuracy <= GpsTrajectoryFilter.DefaultMaxAccuracyMeters))
+                    .Select(p => new { p.TrackingSessionId, p.Id, p.Latitude, p.Longitude, p.RecordedAt, p.Accuracy })
                     .ToListAsync())
                 .GroupBy(p => p.TrackingSessionId)
                 .ToDictionary(g => g.Key, g => g.OrderBy(p => p.RecordedAt).ThenBy(p => p.Id).ToList());
@@ -161,14 +162,32 @@ namespace SpicAPI.Controllers
                 if (duration < TimeSpan.Zero) duration = TimeSpan.Zero;
                 durationByAttendance[s.AttendanceId] = durationByAttendance.GetValueOrDefault(s.AttendanceId) + duration;
 
-                // One path per session: the Start fix, then its points in RecordedAt order - never
-                // joined to another session's points.
-                var path = new List<(double Lat, double Lng)>();
-                if (s.StartLatitude is { } startLat && s.StartLongitude is { } startLng)
-                    path.Add((startLat, startLng));
+                // One trajectory per session: the Start fix, then its points in RecordedAt order.
+                // Uses GpsTrajectoryFilter to filter out cell tower jumps, speed-spike bounces,
+                // and stationary GPS jitter so travel distance is accurate and never inflated.
+                var trajectory = new List<GpsTrajectoryPoint>();
+                if (s.StartLatitude is { } startLat && s.StartLongitude is { } startLng && GpsTrajectoryFilter.IsValidCoordinate(startLat, startLng))
+                {
+                    trajectory.Add(new GpsTrajectoryPoint
+                    {
+                        Latitude = startLat,
+                        Longitude = startLng,
+                        RecordedAt = s.StartTime,
+                        Accuracy = 10.0
+                    });
+                }
                 if (points != null)
-                    path.AddRange(points.Select(p => (p.Latitude, p.Longitude)));
-                distanceByAttendance[s.AttendanceId] = distanceByAttendance.GetValueOrDefault(s.AttendanceId) + PathDistanceKm(path);
+                {
+                    trajectory.AddRange(points.Select(p => new GpsTrajectoryPoint
+                    {
+                        Latitude = p.Latitude,
+                        Longitude = p.Longitude,
+                        Accuracy = p.Accuracy,
+                        RecordedAt = p.RecordedAt
+                    }));
+                }
+                var distanceKm = GpsTrajectoryFilter.CalculateTravelDistanceKm(trajectory);
+                distanceByAttendance[s.AttendanceId] = distanceByAttendance.GetValueOrDefault(s.AttendanceId) + distanceKm;
             }
 
             var days = new List<JMDOWeeklyDayDto>(7);
@@ -275,11 +294,16 @@ namespace SpicAPI.Controllers
 
         private AppRole? CurrentRole()
         {
-            var raw = User.FindFirst(ClaimTypes.Role)?.Value;
+            var raw = User.FindFirst(ClaimTypes.Role)?.Value ??
+                      User.FindFirst("Role")?.Value ??
+                      User.FindFirst("role")?.Value;
             return Enum.TryParse<AppRole>(raw, true, out var role) ? role : null;
         }
 
-        private bool IsJmdo() => CurrentRole() == AppRole.JMDO;
+        private bool IsJmdo() =>
+            User.IsInRole("JMDO") ||
+            User.IsInRole("jmdo") ||
+            CurrentRole() == AppRole.JMDO;
 
         // The API container runs on UTC (no TZ is set in the Docker image), but "today" here must
         // mean the JMDO's own India day - otherwise, between 00:00 and 05:30 IST, DateTime.Today

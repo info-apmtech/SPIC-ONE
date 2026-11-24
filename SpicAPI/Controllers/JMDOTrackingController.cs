@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Spic.Infrastructure.Data;
 using SPIC.Core.DTOs;
 using SPIC.Core.Entities;
+using SPIC.Core.Utilities;
 using System.Security.Claims;
 
 namespace SpicAPI.Controllers
@@ -152,7 +153,24 @@ namespace SpicAPI.Controllers
             };
 
             _db.JMDOTrackingSessions.Add(session);
-            await _db.SaveChangesAsync();
+            try
+            {
+                await _db.SaveChangesAsync();
+            }
+            catch (DbUpdateException)
+            {
+                // A concurrent request for this same user already won the race and created the
+                // Active session (the filtered unique index on JMDOTrackingSessions(UserId) WHERE
+                // Status=0 is the actual backstop - the existing check above this point is only a
+                // best-effort reduction of how often this branch is hit, never the real guarantee).
+                // Detach the failed insert so the change tracker isn't left holding a phantom Added
+                // entity, then return whichever session won instead of a 500.
+                _db.Entry(session).State = EntityState.Detached;
+                var winner = await _db.JMDOTrackingSessions
+                    .FirstOrDefaultAsync(s => s.UserId == userId && s.Status == JMDOTrackingSessionStatus.Active);
+                if (winner is null) throw;
+                return Ok(await MapAsync(winner));
+            }
 
             return Ok(await MapAsync(session));
         }
@@ -243,6 +261,11 @@ namespace SpicAPI.Controllers
             if (dto == null || !IsValidCoordinate(dto.Latitude, dto.Longitude))
                 return BadRequest(new { Success = false, Message = "A valid latitude/longitude is required." });
 
+            var currentInterval = await GetEffectiveIntervalSecondsAsync();
+            // Coarse fixes (> 500m) are network/cell tower triangulation artifacts that create false jumps
+            if (dto.Accuracy.HasValue && dto.Accuracy.Value > 500)
+                return Ok(new { intervalSeconds = currentInterval, ignored = true });
+
             var userId = CurrentUserId();
             var session = await _db.JMDOTrackingSessions
                 .FirstOrDefaultAsync(s => s.Id == sessionId && s.UserId == userId);
@@ -256,7 +279,6 @@ namespace SpicAPI.Controllers
             _db.JMDOTrackingPoints.Add(NewPoint(session.Id, dto, now));
             await _db.SaveChangesAsync();
 
-            var currentInterval = await GetEffectiveIntervalSecondsAsync();
             return Ok(new { intervalSeconds = currentInterval });
         }
 
@@ -275,8 +297,14 @@ namespace SpicAPI.Controllers
                 return BadRequest(new { Success = false, Message = "At least one point is required." });
             if (points.Count > 500)
                 return BadRequest(new { Success = false, Message = "At most 500 points per batch." });
-            if (points.Any(p => !IsValidCoordinate(p.Latitude, p.Longitude)))
-                return BadRequest(new { Success = false, Message = "Every point requires a valid latitude/longitude." });
+
+            var currentInterval = await GetEffectiveIntervalSecondsAsync();
+            var validPoints = points
+                .Where(p => IsValidCoordinate(p.Latitude, p.Longitude) && (!p.Accuracy.HasValue || p.Accuracy.Value <= 500))
+                .ToList();
+
+            if (validPoints.Count == 0)
+                return Ok(new { intervalSeconds = currentInterval, ignored = true });
 
             var userId = CurrentUserId();
             var session = await _db.JMDOTrackingSessions
@@ -288,14 +316,13 @@ namespace SpicAPI.Controllers
                 return BadRequest(new { Success = false, Message = "This tracking session is no longer active." });
 
             var now = IndiaNow();
-            var ordered = points
+            var ordered = validPoints
                 .OrderBy(p => p.DeviceCapturedAt ?? now)
                 .Select(p => NewPoint(session.Id, p, now));
 
             _db.JMDOTrackingPoints.AddRange(ordered);
             await _db.SaveChangesAsync();
 
-            var currentInterval = await GetEffectiveIntervalSecondsAsync();
             return Ok(new { intervalSeconds = currentInterval });
         }
 
@@ -348,6 +375,16 @@ namespace SpicAPI.Controllers
             // has any side effect on attendance, in either direction (see Start and the class doc
             // comment).
 
+            // The JMDO stopping tracking entirely overrides any task that was reusing this session -
+            // its links become stale the instant the session stops existing, regardless of what
+            // ownership it had, so they must not keep pointing at a now-dead session (see
+            // JmdoTaskAllocationController.ReleaseTaskTrackingAsync's own doc comment).
+            var staleLinks = await _db.JmdoTaskTrackingLinks
+                .Where(l => l.TrackingSessionId == session.Id)
+                .ToListAsync();
+            if (staleLinks.Count > 0)
+                _db.JmdoTaskTrackingLinks.RemoveRange(staleLinks);
+
             await _db.SaveChangesAsync();
 
             return Ok(new JMDOTrackingSessionDto
@@ -393,6 +430,11 @@ namespace SpicAPI.Controllers
 
             var userIds = team.Select(t => t.UserId).ToList();
 
+            var designationsByUser = await _db.Users.AsNoTracking()
+                .Where(u => userIds.Contains(u.Id))
+                .Select(u => new { u.Id, Designation = u.Designation != null ? u.Designation.Name : null })
+                .ToDictionaryAsync(x => x.Id, x => x.Designation);
+
             // Latest session per user (Active first if one exists, else the most recently started)
             // - a JMDO with no session at all simply gets no row's worth of session data, surfaced
             // as LiveStatus = AutoEnded-like "never started" via a null session below.
@@ -423,29 +465,40 @@ namespace SpicAPI.Controllers
                 latestByUser.TryGetValue(t.UserId, out var session);
                 lastPointBySession.TryGetValue(session?.Id ?? 0, out var lastPoint);
 
+                designationsByUser.TryGetValue(t.UserId, out var designation);
+
                 return new JMDOTrackingTeamRowDto
                 {
                     UserId = t.UserId,
                     JmdoName = t.Name,
+                    Designation = designation,
                     LiveStatus = session is null ? JmdoTrackingLiveStatus.NotStarted : ResolveLiveStatus(session, lastPoint?.RecordedAt, interval),
                     LastPointAt = lastPoint?.RecordedAt,
                     LastLatitude = lastPoint?.Latitude,
                     LastLongitude = lastPoint?.Longitude,
-                    SessionStartTime = session?.StartTime
+                    LastAccuracy = lastPoint?.Accuracy,
+                    SessionStartTime = session?.StartTime,
+                    SessionId = session?.Id
                 };
             }).ToList();
 
             return Ok(rows);
         }
 
-        // GET /api/JMDOTracking/sessions/{sessionId}/points
+        // GET /api/JMDOTracking/sessions/{sessionId}/points[?sinceId=]
         // Oldest-first points for drawing a session's route on a map. A JMDO can only ever fetch
         // their own session (any status - including a Stopped/AutoEnded one, so a past day's route
         // can still be reviewed); an Admin/MO/MDO can fetch any session belonging to a JMDO on their
         // own HQ team, same scope as Team() - never cross-HQ. Capped at 3000 points (~16h of 20s-
         // interval tracking) so one request can't pull an unbounded payload.
+        //
+        // sinceId is the incremental-fetch cursor for TrackPlayback's Live Tracking tab: when given,
+        // only points with Id > sinceId are returned, ordered by Id (not RecordedAt, which can be
+        // out of insertion order for an offline-queue flush) - so a 15s poll only pulls what's new
+        // instead of the whole route every tick. Omitted entirely, behaviour is byte-for-byte
+        // unchanged from before this parameter existed (Playback History's call site never sends it).
         [HttpGet("sessions/{sessionId:int}/points")]
-        public async Task<IActionResult> GetSessionPoints(int sessionId)
+        public async Task<IActionResult> GetSessionPoints(int sessionId, [FromQuery] int? sinceId = null)
         {
             var session = await _db.JMDOTrackingSessions
                 .AsNoTracking()
@@ -467,13 +520,20 @@ namespace SpicAPI.Controllers
                     return Forbid403("You can only view tracking sessions for your own HQ team.");
             }
 
-            var points = await _db.JMDOTrackingPoints
+            var query = _db.JMDOTrackingPoints
                 .AsNoTracking()
-                .Where(p => p.TrackingSessionId == sessionId)
-                .OrderBy(p => p.RecordedAt)
+                .Where(p => p.TrackingSessionId == sessionId && (p.Accuracy == null || p.Accuracy <= GpsTrajectoryFilter.DefaultMaxAccuracyMeters));
+
+            if (sinceId is > 0)
+                query = query.Where(p => p.Id > sinceId.Value).OrderBy(p => p.Id);
+            else
+                query = query.OrderBy(p => p.RecordedAt);
+
+            var rawPoints = await query
                 .Take(3000)
                 .Select(p => new JMDOTrackingPointDto
                 {
+                    Id = p.Id,
                     Latitude = p.Latitude,
                     Longitude = p.Longitude,
                     RecordedAt = p.RecordedAt,
@@ -481,6 +541,21 @@ namespace SpicAPI.Controllers
                     Accuracy = p.Accuracy
                 })
                 .ToListAsync();
+
+            // Run kinematic bounce outlier filter to remove impossible jumps (e.g. A -> B -> A),
+            // and segment points across any genuine tracking gaps/discontinuities.
+            var cleaned = GpsTrajectoryFilter.CleanPoints(rawPoints);
+            var segments = GpsTrajectoryFilter.SegmentPoints(cleaned);
+
+            var points = new List<JMDOTrackingPointDto>(cleaned.Count);
+            for (var s = 0; s < segments.Count; s++)
+            {
+                foreach (var pt in segments[s])
+                {
+                    pt.SegmentIndex = s;
+                    points.Add(pt);
+                }
+            }
 
             return Ok(points);
         }
@@ -518,6 +593,18 @@ namespace SpicAPI.Controllers
                 item.Session.UpdatedAt = now;
             }
 
+            // Final backstop for a task-owned session whose ReleaseTaskTrackingAsync never ran (app
+            // crash, lost connection before the stop/closeout request) - this 24h-inactivity sweep
+            // already existed for manual sessions; reused as-is so a task-owned session gets the same
+            // guarantee instead of staying orphaned forever, with no separate/earlier timeout. Links
+            // are stale the moment their session stops being Active, same as in Stop() above.
+            var closedIds = toClose.Select(item => item.Session.Id).ToList();
+            var staleLinks = await _db.JmdoTaskTrackingLinks
+                .Where(l => closedIds.Contains(l.TrackingSessionId))
+                .ToListAsync();
+            if (staleLinks.Count > 0)
+                _db.JmdoTaskTrackingLinks.RemoveRange(staleLinks);
+
             await _db.SaveChangesAsync();
         }
 
@@ -554,13 +641,29 @@ namespace SpicAPI.Controllers
                 StartLatitude = s.StartLatitude,
                 StartLongitude = s.StartLongitude,
                 Status = s.Status,
+                Ownership = s.Ownership,
                 LiveStatus = ResolveLiveStatus(s, lastPoint?.RecordedAt, intervalSeconds),
                 LastPointAt = lastPoint?.RecordedAt,
                 LastLatitude = lastPoint?.Latitude,
                 LastLongitude = lastPoint?.Longitude,
-                IntervalSeconds = intervalSeconds
+                LastAccuracy = lastPoint?.Accuracy,
+                IntervalSeconds = intervalSeconds,
+                // UserName is already snapshotted on the session itself (set from User.Identity?.Name
+                // at Start) - reused here rather than a fresh join, so a plain JMDO's own self-row on
+                // TrackPlayback's Live Tracking tab (sourced from mine/active, not Team()) has a name
+                // to show without extra round trips.
+                JmdoName = s.UserName,
+                Designation = await GetDesignationAsync(s.UserId)
             };
         }
+
+        // Batched in Team() (one query for the whole roster); called singly here since MapAsync
+        // already does one extra per-session query (lastPoint) in the same style.
+        private async Task<string?> GetDesignationAsync(string userId) =>
+            await _db.Users.AsNoTracking()
+                .Where(u => u.Id == userId)
+                .Select(u => u.Designation != null ? u.Designation.Name : null)
+                .FirstOrDefaultAsync();
 
         // Stopped/AutoEnded reflect the stored Status (set exactly once, at Stop or at
         // CloseStaleSessionsAsync, never recomputed). For a still-Active session, Live/Stale/Offline
@@ -573,6 +676,9 @@ namespace SpicAPI.Controllers
             if (session.Status == JMDOTrackingSessionStatus.Completed) return JmdoTrackingLiveStatus.Stopped;
             if (session.Status == JMDOTrackingSessionStatus.AutoEnded) return JmdoTrackingLiveStatus.AutoEnded;
             if (session.Status == JMDOTrackingSessionStatus.Cancelled) return JmdoTrackingLiveStatus.Stopped;
+            // Task-closure-driven end - same viewer-facing bucket as a manual Stop (both are a
+            // deliberate, clean end), even though it's never the JMDO pressing Stop themselves.
+            if (session.Status == JMDOTrackingSessionStatus.TaskEnded) return JmdoTrackingLiveStatus.Stopped;
 
             var effectiveInterval = interval ?? GetEffectiveIntervalSecondsSync();
             var since = IndiaNow() - (lastPointAt ?? session.StartTime);
@@ -587,13 +693,20 @@ namespace SpicAPI.Controllers
 
         private AppRole? CurrentRole()
         {
-            var raw = User.FindFirst(ClaimTypes.Role)?.Value;
+            var raw = User.FindFirst(ClaimTypes.Role)?.Value ??
+                      User.FindFirst("Role")?.Value ??
+                      User.FindFirst("role")?.Value;
             return Enum.TryParse<AppRole>(raw, true, out var role) ? role : null;
         }
 
-        private bool IsJmdo() => CurrentRole() == AppRole.JMDO;
+        private bool IsJmdo() =>
+            User.IsInRole("JMDO") ||
+            User.IsInRole("jmdo") ||
+            CurrentRole() == AppRole.JMDO;
 
-        private bool IsSupervisor() => CurrentRole() is AppRole.Admin or AppRole.MO or AppRole.MDO;
+        private bool IsSupervisor() =>
+            User.IsInRole("Admin") || User.IsInRole("MO") || User.IsInRole("MDO") ||
+            CurrentRole() is AppRole.Admin or AppRole.MO or AppRole.MDO;
 
         // Same claim-reading rule as JmdoTaskAllocationController/TeamController, kept local to this
         // controller since Team() is the only action here that needs it.
@@ -606,12 +719,7 @@ namespace SpicAPI.Controllers
         private ObjectResult Forbid403(string message) =>
             StatusCode(403, new { Success = false, Message = message });
 
-        private static bool IsValidCoordinate(double? latitude, double? longitude)
-        {
-            if (latitude is null || longitude is null) return false;
-            if (double.IsNaN(latitude.Value) || double.IsInfinity(latitude.Value)) return false;
-            if (double.IsNaN(longitude.Value) || double.IsInfinity(longitude.Value)) return false;
-            return latitude.Value is >= -90 and <= 90 && longitude.Value is >= -180 and <= 180;
-        }
+        private static bool IsValidCoordinate(double? latitude, double? longitude) =>
+            GpsTrajectoryFilter.IsValidCoordinate(latitude, longitude);
     }
 }

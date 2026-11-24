@@ -1,4 +1,5 @@
 using SPIC.Core.Entities;
+using SPIC.Core.Utilities;
 
 namespace SPIC.Core.DTOs;
 
@@ -81,12 +82,20 @@ public class JMDOTrackingSessionDto
     public double? StartLatitude { get; set; }
     public double? StartLongitude { get; set; }
     public JMDOTrackingSessionStatus Status { get; set; }
+    public JMDOTrackingSessionOwnership Ownership { get; set; }
 
     public JmdoTrackingLiveStatus LiveStatus { get; set; }
     public DateTime? LastPointAt { get; set; }
     public double? LastLatitude { get; set; }
     public double? LastLongitude { get; set; }
+    public double? LastAccuracy { get; set; }
     public int? IntervalSeconds { get; set; }
+
+    // Populated the same way JMDOTrackingTeamRowDto's JmdoName/Designation are (an EmployeeInformation
+    // + UserInfo join) - without these, a plain JMDO's own self-row on TrackPlayback's Live Tracking
+    // tab (sourced from mine/active, not Team()) would have no name/designation to show.
+    public string? JmdoName { get; set; }
+    public string? Designation { get; set; }
 }
 
 public class JMDOTrackingPointUpsertDto
@@ -106,22 +115,32 @@ public class JMDOTrackingTeamRowDto
 {
     public string UserId { get; set; } = "";
     public string JmdoName { get; set; } = "";
+    public string? Designation { get; set; }
     public JmdoTrackingLiveStatus LiveStatus { get; set; }
     public DateTime? LastPointAt { get; set; }
     public double? LastLatitude { get; set; }
     public double? LastLongitude { get; set; }
+    public double? LastAccuracy { get; set; }
     public DateTime? SessionStartTime { get; set; }
+    // The latest/active session this row's status was derived from - needed so TrackPlayback's Live
+    // Tracking tab can call GetSessionPoints(sessionId) for a selected team member; the row itself
+    // never carried enough to look that up before this field existed.
+    public int? SessionId { get; set; }
 }
 
 // GET api/JMDOTracking/sessions/{sessionId}/points - one row per recorded GPS fix, oldest first, for
 // drawing a session's route on a map. RecordedAt (server-received) is what orders/paginates the
 // data server-side; DeviceCapturedAt is exposed too since it's what actually reflects real movement
 // time for a point that was flushed from an offline queue well after it was captured.
-public class JMDOTrackingPointDto
+public class JMDOTrackingPointDto : IGpsPoint
 {
+    // The incremental-fetch cursor for Live Tracking's polling (?sinceId=) - purely additive, History
+    // playback's existing deserialization already ignores fields it doesn't know about.
+    public int Id { get; set; }
     public double Latitude { get; set; }
     public double Longitude { get; set; }
     public DateTime RecordedAt { get; set; }
     public DateTime DeviceCapturedAt { get; set; }
     public double? Accuracy { get; set; }
+    public int SegmentIndex { get; set; }
 }

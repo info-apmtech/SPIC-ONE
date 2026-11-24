@@ -45,7 +45,7 @@
                 </div>
                 <div class="pub-field" data-help="pub-qty">
                     <label class="pub-label pub-req" for="pr-qty">Quantity</label>
-                    <input id="pr-qty" class="pub-input" type="number" min="1" placeholder="Enter Required Quantity" @bind="_qty" />
+                    <input id="pr-qty" class="pub-input" type="number" min="0" placeholder="Enter Required Quantity" @bind="_qty" />
                 </div>
                 <div class="pub-field">
                     <label class="pub-label pub-req" for="pr-by">Requested By</label>
@@ -99,7 +99,7 @@
                 <button type="button" class="pub-btn pub-btn--grey" disabled="@_busy" @onclick="() => SaveAsync(false)">Save as Draft</button>
             }
             <button type="button" class="pub-btn pub-btn--primary" disabled="@_busy" @onclick="() => SaveAsync(true)">
-                @(Approver && _detail is not null ? $"Save & Forward to {PubText.Next(_detail.Stage)}" : Approver ? "Save & Forward" : "Submit Request") <i class="bi bi-chevron-double-right"></i>
+                @(Approver && _detail is not null ? (FromConsolidation ? "Save Changes" : $"Save & Forward to {PubText.Next(_detail.Stage)}") : Approver ? "Save & Forward" : "Submit Request") <i class="bi bi-chevron-double-right"></i>
             </button>
         </div>
     }
@@ -109,8 +109,9 @@
     [Parameter] public int? Id { get; set; }
 
     private bool Approver => Nav.ToBaseRelativePath(Nav.Uri).StartsWith("PublicityReview", StringComparison.OrdinalIgnoreCase);
+    private bool FromConsolidation => Nav.Uri.Contains("back=consolidation");
     private string Back => !Approver ? "/PublicityRequest"
-        : Nav.Uri.Contains("back=consolidation") ? "/PublicityReview/consolidation" : $"/PublicityReview/{Id}";
+        : FromConsolidation ? "/PublicityReview/consolidation" : $"/PublicityReview/{Id}";
     private PubDetailDto? _detail;
     private PubLookupsDto? _lookups;
     private readonly PubUpsertDto _dto = new();
@@ -135,6 +136,12 @@
         var path = Nav.ToBaseRelativePath(Nav.Uri).Split('?')[0].TrimEnd('/');
         if (string.Equals(path, _loadedPath, StringComparison.OrdinalIgnoreCase)) return;
         _loadedPath = path;
+        // Product/Requested By use Select2 (see OnAfterRenderAsync below) - once initialized, Select2
+        // owns its own rendered display and stops noticing when this reused component instance later
+        // renders the underlying <select> with a DIFFERENT selected option for a different request.
+        // Flagging a re-sync here (consumed once, in OnAfterRenderAsync) is what actually fixes
+        // "saved Product not showing" - the data was already correct, Select2's own display wasn't.
+        _pendingSelect2Sync = true;
 
         _detail = null;
         _indent = null;
@@ -154,6 +161,17 @@
             // a state / region reviewer may not have the requester in their own people list
             if (_lookups is not null && d.RequestedByUserId is { } rb && _lookups.People.All(p => p.UserId != rb))
                 _lookups.People.Insert(0, new PubPerson { UserId = rb, Name = d.RequestedByName ?? rb, Role = d.RequestedByRole });
+            // Lookups only ever returns ACTIVE products (PublicityController.Lookups), so a saved
+            // Product that's since gone inactive - or whose row is simply gone - would otherwise match
+            // no <option> at all and silently render as "Select Product", indistinguishable from
+            // nothing-ever-saved. d.Product already resolves the real name with no IsActive filter
+            // (PublicityController.ProductMaterialPartsAsync), so reuse it here instead of guessing.
+            if (_lookups is not null && d.ProductId > 0 && _lookups.Products.All(p => p.Id != d.ProductId))
+                _lookups.Products.Insert(0, new PubOption
+                {
+                    Id = d.ProductId,
+                    Name = string.IsNullOrWhiteSpace(d.Product) ? $"Product #{d.ProductId} (unavailable)" : $"{d.Product} (Inactive)"
+                });
             _indent = d.IndentNo;
             (_dto.MaterialTypeId, _dto.ProductId, _qty, _dto.RequestedByUserId, _dto.Remarks) = (d.MaterialTypeId, d.ProductId, d.Quantity, d.RequestedByUserId, d.Remarks);
             (_dto.StateId, _dto.RegionId, _dto.HeadquarterId) = (d.StateId, d.RegionId, d.HeadquarterId);
@@ -173,18 +191,32 @@
     // truth via @onchange (progressive enhancement), Select2 just also calls the same method directly.
     private DotNetObjectReference<PublicityForm>? _objRef;
     private bool _select2Ready;
+    private bool _pendingSelect2Sync;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (_lookups is null || _select2Ready) return;
-        _select2Ready = true;
-        _objRef ??= DotNetObjectReference.Create(this);
-        var configs = new[]
+        if (_lookups is null) return;
+        if (!_select2Ready)
         {
-            new { id = "pr-prod", method = nameof(OnProductChanged), parent = (string?)null },
-            new { id = "pr-by", method = nameof(OnRequestedByChanged), parent = (string?)null }
-        };
-        await JS.InvokeVoidAsync("spicSelect2.initMultiple", configs, _objRef);
+            _select2Ready = true;
+            _objRef ??= DotNetObjectReference.Create(this);
+            var configs = new[]
+            {
+                new { id = "pr-prod", method = nameof(OnProductChanged), parent = (string?)null },
+                new { id = "pr-by", method = nameof(OnRequestedByChanged), parent = (string?)null }
+            };
+            await JS.InvokeVoidAsync("spicSelect2.initMultiple", configs, _objRef);
+            // Freshly initialized from the current, already-correct DOM `selected` state - nothing
+            // further to sync for this first-ever render.
+            _pendingSelect2Sync = false;
+            return;
+        }
+        if (_pendingSelect2Sync)
+        {
+            _pendingSelect2Sync = false;
+            await JS.InvokeVoidAsync("spicSelect2.setValue", "pr-prod", _dto.ProductId > 0 ? _dto.ProductId : (int?)null);
+            await JS.InvokeVoidAsync("spicSelect2.setValue", "pr-by", _dto.RequestedByUserId);
+        }
     }
 
     private static Task OnNativeSelect(ChangeEventArgs e, Action<List<string>?> handler)
@@ -233,19 +265,32 @@
     {
         string? error = _dto.MaterialTypeId <= 0 ? "Select the type of publicity material."
             : _dto.ProductId <= 0 ? "Select the product."
-            : _qty is not > 0 ? "Enter the required quantity."
+            : _qty is not >= 0 ? "Enter the required quantity."
             : _dto.HeadquarterId <= 0 ? "Select the state, region and headquarter." : null;
         if (error != null) { Toast.Error(error); return; }
         if (Approver)
         {
-            // Editing IS the approval here: no separate "Approve & Forward" click afterwards -
-            // saving the change immediately forwards the request to the next stage.
-            var next = PubText.Next(_detail!.Stage);
             _busy = true;
             _dto.Quantity = _qty!.Value;
             _dto.Submit = false;
             var ok = await Api.SaveAsync(Id, _dto) is not null;
             if (ok && _files.Count > 0) ok = await Api.UploadAsync(Id!.Value, PublicityFileKind.Design, _files) is not null;
+
+            if (FromConsolidation || _detail?.Stage == PublicityStage.SmdReview)
+            {
+                // In SMD consolidation, individual requests are reviewed and saved, not forwarded to SMM individually.
+                if (ok) await Api.MarkRequestReviewedAsync(Id!.Value, true);
+                _busy = false;
+                if (!ok) return;
+                _files = new();
+                Toast.Success("Changes saved and marked as reviewed.");
+                Nav.NavigateTo(Back);
+                return;
+            }
+
+            // Editing IS the approval here: no separate "Approve & Forward" click afterwards -
+            // saving the change immediately forwards the request to the next stage.
+            var next = PubText.Next(_detail!.Stage);
             if (ok) ok = await Api.ReviewAsync(Id!.Value, new PubReviewDto { Action = "Approve" });
             _busy = false;
             if (!ok) return;

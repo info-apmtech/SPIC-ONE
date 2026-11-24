@@ -19,6 +19,7 @@ public class JmdoTaskAllocationController : ControllerBase
     private readonly IWebHostEnvironment _environment;
     private readonly IConfiguration _configuration;
     private readonly IDealerInsightService _dealerInsightService;
+    private readonly ILogger<JmdoTaskAllocationController> _logger;
 
     // "JmdoTasks:NearbyRadiusKm" in appsettings overrides this; no radius existed anywhere before.
     private const double DefaultNearbyRadiusKm = 5;
@@ -27,12 +28,14 @@ public class JmdoTaskAllocationController : ControllerBase
         AppDbContext db,
         IWebHostEnvironment environment,
         IConfiguration configuration,
-        IDealerInsightService dealerInsightService)
+        IDealerInsightService dealerInsightService,
+        ILogger<JmdoTaskAllocationController> logger)
     {
         _db = db;
         _environment = environment;
         _configuration = configuration;
         _dealerInsightService = dealerInsightService;
+        _logger = logger;
     }
 
     // ---- Claim helpers, copied from SubDealerRegistrationController so the two controllers'
@@ -45,7 +48,14 @@ public class JmdoTaskAllocationController : ControllerBase
     private string CurrentRole() =>
         User.FindFirst(ClaimTypes.Role)?.Value ??
         User.FindFirst("Role")?.Value ??
+        User.FindFirst("role")?.Value ??
         string.Empty;
+
+    private bool IsJmdoOrOwner(JmdoTaskAllocation? allocation) =>
+        User.IsInRole("JMDO") ||
+        User.IsInRole("jmdo") ||
+        string.Equals(CurrentRole(), "JMDO", StringComparison.OrdinalIgnoreCase) ||
+        (allocation != null && allocation.SubmittedByUserId == CurrentUserId());
 
     private int? CurrentStateId() => ReadIntClaim("spic:state_id", "StateId");
     private int? CurrentRegionId() => ReadIntClaim("spic:region_id", "RegionId");
@@ -584,6 +594,31 @@ public class JmdoTaskAllocationController : ControllerBase
     private static DateTime CurrentWeekStart() => WeekStartFor(DateTime.Today);
 
     private static DateTime WeekStartFor(DateTime date) => date.Date.AddDays(-(int)date.Date.DayOfWeek);
+
+    // The API container runs on UTC with no timezone configured, so plain DateTime.Today is still
+    // "yesterday" between 00:00 and 05:30 IST - but JMDOAttendance.Date (JMDOAttendanceController's
+    // UpdateAttendance/GetToday) is always normalized to the India calendar day. UpdateMyTaskStatus's
+    // attendance check below needs the same India-day notion that row was saved under, not the
+    // server's raw UTC day, or a JMDO who marks attendance in that window gets wrongly told they
+    // haven't. Mirrors JMDOAttendanceController.IndiaNow exactly (Asia/Kolkata IANA id for Linux,
+    // "India Standard Time" for Windows, so this resolves correctly in both); duplicated rather than
+    // shared because no shared timezone utility exists in this codebase - every controller that
+    // needs India "today" (JMDOAttendanceController, JMDOTrackingController, StockReconciliationController,
+    // FarmReportController, ...) already keeps its own private copy of this exact pattern.
+    private static DateTime IndiaNow() =>
+        IndiaTimeZone is { } tz ? TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz) : DateTime.UtcNow.AddHours(5.5);
+
+    private static readonly TimeZoneInfo? IndiaTimeZone = FindIndiaTimeZone();
+
+    private static TimeZoneInfo? FindIndiaTimeZone()
+    {
+        foreach (var id in new[] { "Asia/Kolkata", "India Standard Time" })
+        {
+            try { return TimeZoneInfo.FindSystemTimeZoneById(id); }
+            catch (Exception) { /* try the next id */ }
+        }
+        return null;
+    }
 
     // SPCM/PoS Liquidation are weekly count targets, not a single visit like Dealer/MD Program -
     // "done" has to mean "the cumulative logged count across every closeout saved this week (one
@@ -1131,12 +1166,24 @@ public class JmdoTaskAllocationController : ControllerBase
         // InProgress before StartedAt existed) resending the same status to fill in a missing
         // timestamp. Gating that resend too would permanently 400 that backfill on any day the
         // JMDO hasn't (yet) marked attendance, even though nothing is actually "starting".
-        if (dto.Status == AllocTaskStatus.InProgress
-            && CurrentTaskStatus(allocation, dto.TaskKey) == AllocTaskStatus.YetToStart
-            && string.Equals(CurrentRole(), "JMDO", StringComparison.OrdinalIgnoreCase))
+        // Reused below (after the dispatch block/real save) to decide whether this request is a
+        // genuine start/completion for tracking purposes too - "genuine" means the task's CURRENT
+        // stored status is actually transitioning, not a resend of a status it's already at (see
+        // the comment above about TaskDetail's own StartedAt backfill).
+        var currentStatus = CurrentTaskStatus(allocation, dto.TaskKey);
+        var isGenuineStart = dto.Status == AllocTaskStatus.InProgress
+            && (currentStatus == AllocTaskStatus.YetToStart || currentStatus == AllocTaskStatus.InProgress)
+            && IsJmdoOrOwner(allocation);
+        var isGenuineCompletion = dto.Status == AllocTaskStatus.Completed
+            && currentStatus != AllocTaskStatus.Completed
+            && IsJmdoOrOwner(allocation);
+
+        if (isGenuineStart && currentStatus == AllocTaskStatus.YetToStart)
         {
+            var today = IndiaNow().Date;
+            var localToday = DateTime.Today;
             var hasAttendanceToday = await _db.JMDOAttendances
-                .AnyAsync(a => a.UserId == userId && a.Date == DateTime.Today);
+                .AnyAsync(a => a.UserId == userId && (a.Date == today || a.Date == localToday || (a.Date >= today.AddDays(-1) && a.Date <= today.AddDays(1))));
             if (!hasAttendanceToday)
                 return BadRequest(new { Success = false, Message = "Mark today's attendance before starting a task." });
         }
@@ -1252,6 +1299,44 @@ public class JmdoTaskAllocationController : ControllerBase
         else return BadRequest(new { Success = false, Message = $"Unrecognized task key '{taskKey}'." });
 
         await _db.SaveChangesAsync();
+
+        // Tracking is strictly a side effect of a task status change that has already committed -
+        // a start never starts "fake", and completion's own release never runs before the real
+        // completion is saved (ReleaseTaskTrackingAsync already has its own internal try/catch;
+        // GetOrCreateTaskTrackingSessionAsync does not, so it's wrapped here too, so a transient
+        // tracking-side failure can never turn an otherwise-successful task start into a 500).
+        if (isGenuineStart)
+        {
+            var canonicalKey = CanonicalTaskKey(allocation, dto.TaskKey);
+            if (canonicalKey is null)
+            {
+                _logger.LogWarning(
+                    "Task start tracking skipped: CanonicalTaskKey resolved to null for user {UserId}, allocation {AllocationId}, raw task key {RawTaskKey}.",
+                    userId, allocation.Id, dto.TaskKey);
+            }
+            else
+            {
+                try
+                {
+                    var trackingSession = await GetOrCreateTaskTrackingSessionAsync(userId, allocation.Id, canonicalKey, dto.Latitude, dto.Longitude, dto.Accuracy);
+                    _logger.LogInformation(
+                        "Task start tracking: user {UserId}, allocation {AllocationId}, task {TaskKey} -> session {SessionId} (ownership {Ownership}).",
+                        userId, allocation.Id, canonicalKey, trackingSession?.Id, trackingSession?.Ownership);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex,
+                        "GetOrCreateTaskTrackingSessionAsync failed for user {UserId}, allocation {AllocationId}, task {TaskKey} - task start still succeeds.",
+                        userId, allocation.Id, canonicalKey);
+                }
+            }
+        }
+        else if (isGenuineCompletion)
+        {
+            var canonicalKey = CanonicalTaskKey(allocation, dto.TaskKey);
+            await ReleaseTaskTrackingAsync(userId, allocation.Id, canonicalKey);
+        }
+
         return NoContent();
     }
 
@@ -1380,6 +1465,9 @@ public class JmdoTaskAllocationController : ControllerBase
             allocation.SpcmStatus = AllocTaskStatus.Completed;
             allocation.SpcmCompletedAt ??= DateTime.Now;
             await _db.SaveChangesAsync();
+            // Same release logic a manual Stop click goes through in UpdateMyTaskStatus - this is
+            // "Status transitions to Completed" happening here instead of there, nothing more.
+            await ReleaseTaskTrackingAsync(userId, allocation.Id, "spcm");
         }
         else if (dto.Kind == JmdoCloseoutKind.PosLiquidation && allocation.PosLiquidationStatus != AllocTaskStatus.Completed
             && (allocation.UreaTarget > 0 || allocation.NpsTarget > 0 || allocation.DapTarget > 0 || allocation.OthersTarget > 0)
@@ -1388,6 +1476,7 @@ public class JmdoTaskAllocationController : ControllerBase
             allocation.PosLiquidationStatus = AllocTaskStatus.Completed;
             allocation.PosLiquidationCompletedAt ??= DateTime.Now;
             await _db.SaveChangesAsync();
+            await ReleaseTaskTrackingAsync(userId, allocation.Id, "posliquidation");
         }
 
         return Ok(new JmdoTaskCloseoutDto
@@ -1514,6 +1603,7 @@ public class JmdoTaskAllocationController : ControllerBase
                 allocation.SpcmStatus = AllocTaskStatus.Completed;
                 allocation.SpcmCompletedAt ??= DateTime.Now;
                 await _db.SaveChangesAsync();
+                await ReleaseTaskTrackingAsync(userId, allocation.Id, "spcm");
             }
             else if (allocation.SpcmStatus == AllocTaskStatus.Completed && achievedNow < allocation.SpcmTarget)
             {
@@ -1731,6 +1821,15 @@ public class JmdoTaskAllocationController : ControllerBase
 
         if (dto.RequestedDate.Date < DateTime.Today)
             return BadRequest(new { Success = false, Message = "Cannot postpone to a past date." });
+
+        if (row.PlannedDate.HasValue)
+        {
+            if (dto.RequestedDate.Date == row.PlannedDate.Value.Date)
+                return BadRequest(new { Success = false, Message = "Cannot postpone to the same scheduled date." });
+
+            if (row.PlannedDate.Value.Date > DateTime.Today && dto.RequestedDate.Date < row.PlannedDate.Value.Date)
+                return BadRequest(new { Success = false, Message = "Cannot postpone a future visit to an earlier date." });
+        }
 
         if (string.IsNullOrWhiteSpace(dto.Reason))
             return BadRequest(new { Success = false, Message = "A reason is required." });
@@ -2130,6 +2229,262 @@ public class JmdoTaskAllocationController : ControllerBase
         };
     }
 
+    // Canonicalizes the 7 input forms CurrentTaskStatus above already resolves down to 5 real
+    // targets, so every JmdoTaskTrackingLink is keyed consistently regardless of which synonym the
+    // caller used ("dealer"/"dealer_{id}" must link to the same session as each other; likewise
+    // "mdprogram"/"prog_{id}", "soil"/"soilsample", "pos"/"posliquidation"). This also lets
+    // CreateCloseout - which only has a JmdoCloseoutKind enum, no raw TaskKey string - independently
+    // compute the matching "spcm"/"posliquidation" key without needing one passed in.
+    //
+    // Only meaningful to call once the caller already knows the task resolves to something real (the
+    // dispatch block's own NotFound checks run first in UpdateMyTaskStatus) - returns null for the
+    // two bare synonyms only when there's genuinely nothing on the allocation to resolve to, which
+    // the tracking helpers below treat as "don't touch tracking for this call" rather than erroring.
+    private static string? CanonicalTaskKey(JmdoTaskAllocation allocation, string? taskKey)
+    {
+        var key = taskKey?.Trim() ?? string.Empty;
+
+        if (key.StartsWith("dealer_", StringComparison.OrdinalIgnoreCase)
+            && int.TryParse(key.AsSpan("dealer_".Length), out var dealerId))
+        {
+            return $"dealer_{dealerId}";
+        }
+        if (key.StartsWith("prog_", StringComparison.OrdinalIgnoreCase)
+            && int.TryParse(key.AsSpan("prog_".Length), out var csr1Id))
+        {
+            return $"prog_{csr1Id}";
+        }
+        if (string.Equals(key, "spcm", StringComparison.OrdinalIgnoreCase))
+            return "spcm";
+        if (string.Equals(key, "soil", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(key, "soilsample", StringComparison.OrdinalIgnoreCase))
+            return "soilsample";
+        if (string.Equals(key, "pos", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(key, "posliquidation", StringComparison.OrdinalIgnoreCase))
+            return "posliquidation";
+        if (string.Equals(key, "dealer", StringComparison.OrdinalIgnoreCase))
+        {
+            var dealer = allocation.Dealers.FirstOrDefault();
+            return dealer is null ? null : $"dealer_{EffectiveDealerId(dealer)}";
+        }
+        if (string.Equals(key, "mdprogram", StringComparison.OrdinalIgnoreCase))
+        {
+            var program = allocation.Programs.FirstOrDefault();
+            return program is null ? null : $"prog_{program.Csr1Id}";
+        }
+
+        return null;
+    }
+
+    // Ending a task-owned session (ReleaseTaskTrackingAsync below) and reusing it for a new task
+    // (here) are two different operations against the same JMDOTrackingSession row from two
+    // different call sites. A single atomic UPDATE only protects one side against another call of
+    // itself - it does nothing to stop a concurrent reuse from reading the session as Active and
+    // inserting a fresh link for it a moment after (or before) a release's UPDATE commits. Both
+    // methods therefore take a genuine Postgres row lock (SELECT ... FOR UPDATE inside an explicit
+    // transaction) on the same session row and hold it for their whole read-decide-write sequence -
+    // whichever call reaches the lock first proceeds against truthful data; the other blocks until
+    // the first transaction commits/rolls back, then re-reads guaranteed-fresh state.
+    //
+    // Commits its own transaction fully before returning, independently of the caller's own
+    // SaveChangesAsync for the task's status fields - holding this row lock open across the
+    // caller's unrelated status mutations too would needlessly widen its scope for no benefit.
+    // Returns null (no tracking touched) if today's attendance row is missing - should be
+    // unreachable in practice since this is only ever called once UpdateMyTaskStatus's own
+    // attendance gate has already passed for a genuine start.
+    private static bool IsValidCoordinate(double? latitude, double? longitude)
+    {
+        if (latitude is null || longitude is null) return false;
+        if (double.IsNaN(latitude.Value) || double.IsInfinity(latitude.Value)) return false;
+        if (double.IsNaN(longitude.Value) || double.IsInfinity(longitude.Value)) return false;
+        return latitude.Value is >= -90 and <= 90 && longitude.Value is >= -180 and <= 180;
+    }
+
+    private async Task<JMDOTrackingSession?> GetOrCreateTaskTrackingSessionAsync(
+        string userId, int allocationId, string canonicalKey, double? latitude, double? longitude, double? accuracy)
+    {
+        var today = IndiaNow().Date;
+        var localToday = DateTime.Today;
+        var attendance = await _db.JMDOAttendances
+            .Where(a => a.UserId == userId && (a.Date == today || a.Date == localToday || (a.Date >= today.AddDays(-1) && a.Date <= today.AddDays(1))))
+            .OrderByDescending(a => a.Date)
+            .ThenByDescending(a => a.Id)
+            .FirstOrDefaultAsync();
+        if (attendance is null) return null;
+
+        for (var attempt = 0; attempt < 2; attempt++)
+        {
+            try
+            {
+                var existing = await _db.JMDOTrackingSessions
+                    .FirstOrDefaultAsync(s => s.UserId == userId && s.Status == JMDOTrackingSessionStatus.Active);
+                var now = IndiaNow();
+
+                if (existing is not null && existing.Ownership == JMDOTrackingSessionOwnership.TaskStarted)
+                {
+                    // Opportunistic orphan reconciliation: a previous ReleaseTaskTrackingAsync should
+                    // have ended this session but didn't commit. Safe to check now.
+                    var hasLinks = await _db.JmdoTaskTrackingLinks.AnyAsync(l => l.TrackingSessionId == existing.Id);
+                    if (!hasLinks)
+                    {
+                        var orphanLastPoint = await _db.JMDOTrackingPoints
+                            .Where(p => p.TrackingSessionId == existing.Id)
+                            .OrderByDescending(p => p.RecordedAt)
+                            .FirstOrDefaultAsync();
+                        existing.EndTime = now;
+                        existing.Duration = now - existing.StartTime;
+                        existing.Status = JMDOTrackingSessionStatus.TaskEnded;
+                        existing.EndLatitude = orphanLastPoint?.Latitude;
+                        existing.EndLongitude = orphanLastPoint?.Longitude;
+                        existing.UpdatedAt = now;
+                        await _db.SaveChangesAsync();
+                        existing = null;
+                    }
+                }
+
+                JMDOTrackingSession session;
+                if (existing is not null)
+                {
+                    session = existing;
+                }
+                else
+                {
+                    var startLat = latitude ?? attendance.AttendanceLatitude;
+                    var startLng = longitude ?? attendance.AttendanceLongitude;
+
+                    session = new JMDOTrackingSession
+                    {
+                        AttendanceId = attendance.Id,
+                        UserId = userId,
+                        UserName = User.Identity?.Name,
+                        StartTime = now,
+                        StartLatitude = startLat,
+                        StartLongitude = startLng,
+                        Status = JMDOTrackingSessionStatus.Active,
+                        Ownership = JMDOTrackingSessionOwnership.TaskStarted,
+                        CreatedAt = now,
+                        UpdatedAt = now
+                    };
+                    _db.JMDOTrackingSessions.Add(session);
+                    try
+                    {
+                        await _db.SaveChangesAsync();
+                    }
+                    catch (DbUpdateException)
+                    {
+                        _db.Entry(session).State = EntityState.Detached;
+                        session = await _db.JMDOTrackingSessions
+                            .FirstOrDefaultAsync(s => s.UserId == userId && s.Status == JMDOTrackingSessionStatus.Active);
+                        if (session is null) throw;
+                    }
+
+                    if (startLat.HasValue && startLng.HasValue && IsValidCoordinate(startLat, startLng))
+                    {
+                        _db.JMDOTrackingPoints.Add(new JMDOTrackingPoint
+                        {
+                            TrackingSessionId = session.Id,
+                            Latitude = startLat.Value,
+                            Longitude = startLng.Value,
+                            Accuracy = accuracy,
+                            RecordedAt = now,
+                            CreatedAt = now,
+                            DeviceCapturedAt = now
+                        });
+                        await _db.SaveChangesAsync();
+                    }
+                }
+
+                var linkExists = await _db.JmdoTaskTrackingLinks
+                    .AnyAsync(l => l.AllocationId == allocationId && l.TaskKey == canonicalKey);
+                if (!linkExists)
+                {
+                    _db.JmdoTaskTrackingLinks.Add(new JmdoTaskTrackingLink
+                    {
+                        UserId = userId,
+                        AllocationId = allocationId,
+                        TaskKey = canonicalKey,
+                        TrackingSessionId = session.Id,
+                        CreatedAt = now
+                    });
+                    try
+                    {
+                        await _db.SaveChangesAsync();
+                    }
+                    catch (DbUpdateException)
+                    {
+                        var staged = _db.ChangeTracker.Entries<JmdoTaskTrackingLink>()
+                            .FirstOrDefault(e => e.Entity.AllocationId == allocationId && e.Entity.TaskKey == canonicalKey);
+                        if (staged is not null) staged.State = EntityState.Detached;
+                    }
+                }
+
+                return session;
+            }
+            catch (DbUpdateException) when (attempt == 0)
+            {
+                foreach (var entry in _db.ChangeTracker.Entries().Where(e => e.State != EntityState.Unchanged).ToList())
+                    entry.State = EntityState.Detached;
+            }
+        }
+
+        return null;
+    }
+
+    // Shared by both the manual-Completed path in UpdateMyTaskStatus and CreateCloseout's SPCM/PoS
+    // auto-complete - one method, two call sites, never a divergent copy. Never throws: a
+    // tracking-cleanup failure must never undo or block a task completion that's already been
+    // saved by the time this runs (always called after the caller's own SaveChangesAsync commits).
+    private async Task ReleaseTaskTrackingAsync(string userId, int allocationId, string? canonicalKey)
+    {
+        if (string.IsNullOrEmpty(canonicalKey)) return;
+
+        try
+        {
+            var link = await _db.JmdoTaskTrackingLinks
+                .FirstOrDefaultAsync(l => l.AllocationId == allocationId && l.TaskKey == canonicalKey);
+            if (link is null) return;
+
+            var sessionId = link.TrackingSessionId;
+            _db.JmdoTaskTrackingLinks.Remove(link);
+            await _db.SaveChangesAsync();
+
+            var session = await _db.JMDOTrackingSessions
+                .FirstOrDefaultAsync(s => s.Id == sessionId);
+            if (session is null || session.Status != JMDOTrackingSessionStatus.Active
+                || session.Ownership == JMDOTrackingSessionOwnership.Manual)
+            {
+                return;
+            }
+
+            var remaining = await _db.JmdoTaskTrackingLinks.CountAsync(l => l.TrackingSessionId == sessionId);
+            if (remaining > 0)
+            {
+                return;
+            }
+
+            var lastPoint = await _db.JMDOTrackingPoints
+                .Where(p => p.TrackingSessionId == sessionId)
+                .OrderByDescending(p => p.RecordedAt)
+                .FirstOrDefaultAsync();
+
+            var now = IndiaNow();
+            session.EndTime = now;
+            session.Duration = now - session.StartTime;
+            session.Status = JMDOTrackingSessionStatus.TaskEnded;
+            session.EndLatitude = lastPoint?.Latitude;
+            session.EndLongitude = lastPoint?.Longitude;
+            session.UpdatedAt = now;
+
+            await _db.SaveChangesAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "ReleaseTaskTrackingAsync failed for user {UserId}, allocation {AllocationId}, task {TaskKey} - leaving cleanup to the self-healing paths.",
+                userId, allocationId, canonicalKey);
+        }
+    }
+
     // District/Taluk aren't snapshotted on JmdoTaskAllocationDealer (only DealerName/DealerCode
     // are) - resolved from the live dealer-master row, DealerRegistration for a new-style row or
     // SubDealerRegistration for a legacy one, keyed by EffectiveDealerId so callers can look up
@@ -2220,6 +2575,7 @@ public class JmdoTaskAllocationController : ControllerBase
                 DealerName = d.DealerName,
                 DealerCode = d.DealerCode,
                 Day = d.PlannedDay,
+                PlannedDate = d.PlannedDate,
                 Status = d.Status,
                 StartedAt = d.StartedAt,
                 CompletedAt = d.CompletedAt,

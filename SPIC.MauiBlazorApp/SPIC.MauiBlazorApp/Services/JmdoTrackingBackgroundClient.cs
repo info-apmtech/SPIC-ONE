@@ -41,6 +41,9 @@ namespace SPIC.MauiBlazorApp.Services
         /// for this session) - on any failure the fix is queued locally instead of lost.</summary>
         public static async Task ReportPointAsync(int sessionId, double latitude, double longitude, double? accuracy, CancellationToken ct)
         {
+            if (accuracy.HasValue && accuracy.Value > 200.0) return;
+            if (Math.Abs(latitude) < 0.01 && Math.Abs(longitude) < 0.01) return;
+
             var point = new PendingLocationPoint
             {
                 SessionId = sessionId,

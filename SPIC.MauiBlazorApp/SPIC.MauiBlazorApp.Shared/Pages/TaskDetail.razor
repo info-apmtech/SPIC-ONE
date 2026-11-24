@@ -8,6 +8,9 @@
 @inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
 @inject SPIC.MauiBlazorApp.Shared.Services.NavHistoryService NavHistory
 @inject SPIC.MauiBlazorApp.Shared.Services.LookupCacheService LookupCache
+@inject SPIC.MauiBlazorApp.Shared.Services.IFormFactor FormFactor
+@inject SPIC.MauiBlazorApp.Shared.Services.JMDOTrackingApi TrackingApi
+@inject SPIC.MauiBlazorApp.Shared.Services.JmdoTrackingClientLoop TrackingLoop
 @inject IJSRuntime JS
 
 <div class="container-fluid py-4 px-0 td-page">
@@ -168,6 +171,14 @@
                         <span>Location captured (&plusmn;20m)</span>
                     }
                 </div>
+
+                @if (TrackingStatusLabel is { } trackingLabel)
+                {
+                    <div class="td-time-location text-muted small">
+                        <i class="bi bi-broadcast me-1"></i>
+                        <span>@trackingLabel</span>
+                    </div>
+                }
 
                 @if (!isStarted && !isClosed && LoginState.Can(PagePermission.TasksAllocation, "Update"))
                 {
@@ -1116,6 +1127,13 @@
             }
         }
 
+        try
+        {
+            var (attLoaded, att) = await AttendanceApi.LoadTodayAsync();
+            if (attLoaded) _todayAttendance = att;
+        }
+        catch { }
+
         currentAllocation = await FetchCurrentAllocationAsync();
 
         if (currentAllocation != null)
@@ -1257,6 +1275,7 @@
         if (status == AllocTaskStatus.InProgress)
         {
             isStarted = true;
+            isClosed = false;
             var idx = TimelineSteps.FindIndex(s => s.Label == "Started");
             if (idx >= 0) TimelineSteps[idx] = TimelineSteps[idx] with { SubLabel = "Time & GPS logged", Done = true };
 
@@ -1284,11 +1303,15 @@
             }
 
             StartTimer();
+            _ = InitTaskTrackingAsync();
         }
         else if (status == AllocTaskStatus.Completed)
         {
             isStarted = true;
             isClosed = true;
+            _taskTrackingSession = null;
+            StopTimer();
+
             var idx1 = TimelineSteps.FindIndex(s => s.Label == "Started");
             if (idx1 >= 0) TimelineSteps[idx1] = TimelineSteps[idx1] with { SubLabel = "Time & GPS logged", Done = true };
             var idx2 = TimelineSteps.FindIndex(s => s.Label == "Closed");
@@ -1302,7 +1325,16 @@
             {
                 elapsedSeconds = Math.Max(0, (int)(completed - started).TotalSeconds);
             }
-            else if (completedAt is null)
+            else if (startedAt is { } startedOnly)
+            {
+                elapsedSeconds = Math.Max(0, (int)(DateTime.Now - startedOnly).TotalSeconds);
+            }
+            else
+            {
+                elapsedSeconds = 0;
+            }
+
+            if (completedAt is null)
             {
                 var key = TaskKey;
                 try
@@ -1315,6 +1347,13 @@
                     Console.WriteLine($"Backfilling CompletedAt failed: {ex.Message}");
                 }
             }
+        }
+        else
+        {
+            isStarted = false;
+            isClosed = false;
+            StopTimer();
+            elapsedSeconds = 0;
         }
     }
 
@@ -1461,6 +1500,197 @@
     private string? capturedPlaceName;
     private int elapsedSeconds;
     private System.Timers.Timer? timer;
+    private readonly object timerLock = new();
+
+    private void StopTimer()
+    {
+        lock (timerLock)
+        {
+            if (timer != null)
+            {
+                try
+                {
+                    timer.Stop();
+                    timer.Dispose();
+                }
+                catch { }
+                finally
+                {
+                    timer = null;
+                }
+            }
+        }
+    }
+
+    private JMDOTrackingSessionDto? _taskTrackingSession;
+    private JMDOAttendanceDto? _todayAttendance;
+
+    private bool IsNativeApp => FormFactor.GetFormFactor() != "Web";
+
+    private string? TrackingStatusLabel
+    {
+        get
+        {
+            if (!isStarted || isClosed) return null;
+            if (_taskTrackingSession is null)
+            {
+                return TrackingLoop.IsRunning ? "GPS Tracking: Active" : null;
+            }
+
+            if (_taskTrackingSession.LastPointAt is null)
+                return "GPS Tracking: Waiting for GPS";
+
+            return _taskTrackingSession.LiveStatus switch
+            {
+                JmdoTrackingLiveStatus.Live => "GPS Tracking: Live",
+                JmdoTrackingLiveStatus.Stale => "GPS Tracking: Stale",
+                JmdoTrackingLiveStatus.Offline => "GPS Tracking: Offline",
+                JmdoTrackingLiveStatus.Stopped => "GPS Tracking: Stopped",
+                _ => "GPS Tracking: Active"
+            };
+        }
+    }
+
+    private async Task StartNativeBackgroundTrackingAsync(int sessionId)
+    {
+        if (!IsNativeApp) return;
+        try
+        {
+            await JS.InvokeAsync<bool>("startBackgroundTracking", sessionId);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Native background tracking could not be started: {ex.Message}");
+        }
+    }
+
+    private async Task StopNativeBackgroundTrackingAsync()
+    {
+        if (!IsNativeApp) return;
+        try
+        {
+            await JS.InvokeAsync<bool>("stopBackgroundTracking");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Native background tracking could not be stopped: {ex.Message}");
+        }
+    }
+
+    private async Task InitTaskTrackingAsync()
+    {
+        try
+        {
+            _taskTrackingSession = await TrackingApi.GetMineActiveAsync();
+            if (_taskTrackingSession is null && isStarted && !isClosed)
+            {
+                // Fallback guarantee: if the backend session was not active yet, start it via TrackingApi
+                var lat = capturedLatitude ?? 0;
+                var lng = capturedLongitude ?? 0;
+                if (lat == 0 && lng == 0)
+                {
+                    try
+                    {
+                        var geo = await JS.InvokeAsync<GeoResult>("getCurrentPosition");
+                        if (geo != null && string.IsNullOrEmpty(geo.Error) && (geo.Latitude != 0 || geo.Longitude != 0))
+                        {
+                            capturedLatitude = geo.Latitude;
+                            capturedLongitude = geo.Longitude;
+                            lat = geo.Latitude;
+                            lng = geo.Longitude;
+                            capturedAccuracy = geo.Accuracy > 0 ? geo.Accuracy : 20;
+                        }
+                    }
+                    catch { }
+                }
+
+                if (lat == 0 && lng == 0 && _todayAttendance != null && _todayAttendance.AttendanceLatitude.HasValue && _todayAttendance.AttendanceLongitude.HasValue)
+                {
+                    lat = _todayAttendance.AttendanceLatitude.Value;
+                    lng = _todayAttendance.AttendanceLongitude.Value;
+                }
+
+                if (lat != 0 || lng != 0)
+                {
+                    _taskTrackingSession = await TrackingApi.StartAsync(lat, lng);
+                }
+            }
+
+            if (_taskTrackingSession is not null)
+            {
+                TrackingLoop.Start(_taskTrackingSession.Id);
+                if (IsNativeApp)
+                {
+                    await StartNativeBackgroundTrackingAsync(_taskTrackingSession.Id);
+                }
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"InitTaskTrackingAsync failed: {ex.Message}");
+        }
+    }
+
+    private async Task RefreshTrackingStatusAsync()
+    {
+        if (!isStarted || isClosed) return;
+        try
+        {
+            var session = await TrackingApi.GetMineActiveAsync();
+            if (session is not null)
+            {
+                _taskTrackingSession = session;
+                if (!TrackingLoop.IsRunning || TrackingLoop.SessionId != session.Id)
+                {
+                    TrackingLoop.Start(session.Id);
+                    if (IsNativeApp)
+                    {
+                        await StartNativeBackgroundTrackingAsync(session.Id);
+                    }
+                }
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"RefreshTrackingStatusAsync failed: {ex.Message}");
+        }
+    }
+
+    private async Task SyncTrackingAfterTaskCloseAsync()
+    {
+        try
+        {
+            var active = await TrackingApi.GetMineActiveAsync();
+            if (active is null)
+            {
+                _taskTrackingSession = null;
+                TrackingLoop.Stop();
+                if (IsNativeApp)
+                {
+                    await StopNativeBackgroundTrackingAsync();
+                }
+            }
+            else
+            {
+                _taskTrackingSession = active;
+                if (!TrackingLoop.IsRunning || TrackingLoop.SessionId != active.Id)
+                {
+                    TrackingLoop.Start(active.Id);
+                    if (IsNativeApp)
+                    {
+                        await StartNativeBackgroundTrackingAsync(active.Id);
+                    }
+                }
+            }
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"SyncTrackingAfterTaskCloseAsync failed: {ex.Message}");
+        }
+    }
 
     private sealed class GeoResult
     {
@@ -1505,7 +1735,20 @@
         }
     }
 
-    private string ElapsedDisplay => TimeSpan.FromSeconds(elapsedSeconds).ToString(@"mm\:ss");
+    private string ElapsedDisplay
+    {
+        get
+        {
+            if (elapsedSeconds <= 0) return "00:00";
+            var ts = TimeSpan.FromSeconds(elapsedSeconds);
+            var totalHours = (int)ts.TotalHours;
+            if (totalHours > 0)
+            {
+                return $"{totalHours:D2}:{ts.Minutes:D2}:{ts.Seconds:D2}";
+            }
+            return ts.ToString(@"mm\:ss");
+        }
+    }
 
     // SPCM/PoS are weekly count targets, not a single visit - these surface "how much is left"
     // so the JMDO can see progress before saving, instead of finding out only when a save is
@@ -1559,6 +1802,10 @@
             Navigation.NavigateTo("/MarkAttendance");
             return;
         }
+        if (loaded && todayAttendance is not null)
+        {
+            _todayAttendance = todayAttendance;
+        }
 
         isLocationCapturing = true;
         StateHasChanged();
@@ -1587,7 +1834,15 @@
         try
         {
             var response = await Http.PutAsJsonAsync("api/JmdoTaskAllocation/mine/task-status",
-                new UpdateTaskStatusDto { TaskKey = key, Status = AllocTaskStatus.InProgress, PlaceName = capturedPlaceName });
+                new UpdateTaskStatusDto
+                {
+                    TaskKey = key,
+                    Status = AllocTaskStatus.InProgress,
+                    PlaceName = capturedPlaceName,
+                    Latitude = capturedLatitude,
+                    Longitude = capturedLongitude,
+                    Accuracy = capturedAccuracy
+                });
             if (!response.IsSuccessStatusCode)
             {
                 var errorMsg = "Could not start the task. Please try again.";
@@ -1613,32 +1868,45 @@
         }
 
         isStarted = true;
+        isClosed = false;
 
         var idx = TimelineSteps.FindIndex(s => s.Label == "Started");
         if (idx >= 0) TimelineSteps[idx] = TimelineSteps[idx] with { SubLabel = "Time & GPS logged", Done = true };
 
+        elapsedSeconds = 0;
         StartTimer();
+        await InitTaskTrackingAsync();
 
         Toast.Success("Task started - time and location are now being logged.");
     }
 
     // Shared by StartTask() (fresh start) and ApplyStatusFromAllocation (resuming a task
-    // that was already InProgress in the DB from an earlier session) - without this, a
-    // page reload/re-login on an in-progress task left isStarted=true but no timer ever
-    // running, so "Time on task" stayed frozen at 00:00 even though it was still active.
-    // There's no persisted start timestamp, so this counts from 0 on resume rather than
-    // recovering the true original elapsed time.
+    // that was already InProgress in the DB from an earlier session).
     private void StartTimer()
     {
-        if (timer != null) return;
+        if (isClosed) return;
 
-        timer = new System.Timers.Timer(1000) { AutoReset = true };
-        timer.Elapsed += (_, _) =>
+        lock (timerLock)
         {
-            elapsedSeconds++;
-            InvokeAsync(StateHasChanged);
-        };
-        timer.Start();
+            if (isClosed || timer != null) return;
+
+            timer = new System.Timers.Timer(1000) { AutoReset = true };
+            timer.Elapsed += (_, _) =>
+            {
+                if (isClosed)
+                {
+                    StopTimer();
+                    return;
+                }
+                elapsedSeconds++;
+                if (elapsedSeconds % 15 == 0)
+                {
+                    _ = RefreshTrackingStatusAsync();
+                }
+                _ = InvokeAsync(StateHasChanged);
+            };
+            timer.Start();
+        }
     }
 
     private bool showStopConfirm;
@@ -1688,7 +1956,8 @@
 
         isStarted = false;
         isClosed = true;
-        timer?.Stop();
+        StopTimer();
+        await SyncTrackingAfterTaskCloseAsync();
         Toast.Success("Task stopped and closed.");
 
         var idx = TimelineSteps.FindIndex(s => s.Label == "Closed");
@@ -2019,6 +2288,10 @@
             {
                 var wasClosed = isClosed;
                 await ReloadAllocationStateAsync();
+                if (isClosed && !wasClosed)
+                {
+                    await SyncTrackingAfterTaskCloseAsync();
+                }
                 Toast.Success(isClosed && !wasClosed
                     ? "Record saved - weekly target reached, task completed!"
                     : "Record saved.");
@@ -2052,7 +2325,6 @@
 
     public void Dispose()
     {
-        timer?.Stop();
-        timer?.Dispose();
+        StopTimer();
     }
 }

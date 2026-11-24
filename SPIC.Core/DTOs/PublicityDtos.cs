@@ -82,7 +82,35 @@ namespace SPIC.Core.DTOs
         public int OriginalQuantity { get; set; }
         public bool AwaitingMe { get; set; }
         public DateTime CreatedAt { get; set; }
+        public string? CreatedByName { get; set; }
+        // Who actually performed the RM-stage "Approved" action on this request - resolved from the
+        // existing PublicityEvent audit trail (Action="Approved", Stage=RmReview), never from the
+        // Region's CURRENT RM assignment (that could be a different person than whoever approved
+        // this specific request historically). Null if that event can't be found (e.g. a request
+        // created directly past RmReview by a chain role) - the UI must show the plain "Approved by
+        // RM" label in that case, never a fabricated name.
+        public string? RmApprovedByName { get; set; }
+        // Request-level sign-off at the SMD stage - see PublicityRequest.SmdReviewedAt's own doc
+        // comment. Null means not yet reviewed.
+        public DateTime? SmdReviewedAt { get; set; }
+        public string? SmdReviewedByName { get; set; }
     }
+
+    // Display-only status for a Region's current state in the SMD consolidation screen - computed
+    // fresh from live request data (+ any PublicityRegionFinalization row) every time, never stored
+    // as its own column anywhere. See PublicityController.Consolidation() for the derivation and
+    // PublicityRegionFinalization's doc comment for why staleness is always re-checked live.
+    // PendingReview specifically means "the responsible RM has not completed a submission" (no
+    // eligible request has reached SMD yet, whether because nothing was ever raised or because some
+    // of the Region's requests are still sitting at RM review) - distinct from Submitted, where the
+    // RM's submission is complete and SMD simply hasn't started reviewing it yet. ZeroSubmittedByRm
+    // means the RM has explicitly submitted Zero Requirement, awaiting SMD finalization. ZeroConfirmed
+    // means SMD has finalized/acknowledged the zero requirement.
+    // SubmittedToSmm means this Region's Approved/ZeroConfirmed decision has already been forwarded
+    // to SMM (PublicityRegionFinalization.SubmittedAt is set) and nothing new has arrived for it
+    // since - distinct from Approved/ZeroConfirmed so an already-submitted Region never keeps
+    // counting toward RegionsFinalized or re-enabling "Approve & Submit to SMM" for a closed round.
+    public enum PubRegionStatus { PendingReview = 0, InReview = 1, Reviewed = 2, Approved = 3, ZeroConfirmed = 4, Submitted = 5, ZeroSubmittedByRm = 6, SubmittedToSmm = 7 }
 
     public sealed class PubPageDto
     {
@@ -237,6 +265,8 @@ namespace SPIC.Core.DTOs
         public bool CanReview { get; set; }
         public bool CanDispatch { get; set; }
         public bool CanResolve { get; set; }
+        public DateTime? SmdReviewedAt { get; set; }
+        public string? SmdReviewedByName { get; set; }
         public string? ExceptionRaisedBy { get; set; }
         public DateTime? ExceptionRaisedAt { get; set; }
         public string? ExceptionRemarks { get; set; }
@@ -261,7 +291,10 @@ namespace SPIC.Core.DTOs
         public int Remaining { get; set; }
     }
 
-    /// <summary>Approver consolidation: requests waiting at my stage, grouped by region.</summary>
+    /// <summary>Approver consolidation: requests waiting at my stage, grouped by region. At the SMD
+    /// stage, Groups always includes EVERY Region in the state (active, or with any request that
+    /// hasn't fully passed the SMD stage yet) - not just ones with currently-pending requests - see
+    /// PublicityController.Consolidation()'s own comment on why that distinction matters.</summary>
     public sealed class PubConsolidationDto
     {
         public string Scope { get; set; } = "";
@@ -271,28 +304,72 @@ namespace SPIC.Core.DTOs
         public DateTime? SubmittedAt { get; set; }
         public int Regions { get; set; }
         public int Hqs { get; set; }
+        /// <summary>Sum of each Region's EligibleCount only - requests still short of my stage
+        /// (StillAtRmCount) are real but not yet mine to act on, so they're deliberately excluded
+        /// from this total (see PubRegionDto.StillAtRmCount's own comment).</summary>
         public int Requests { get; set; }
         public int Quantity { get; set; }
-        public int ReadyRegions { get; set; }
+        public int RegionsFinalized { get; set; }
+        public int ApprovedRegions { get; set; }
+        public int ZeroConfirmedRegions { get; set; }
         public List<PubRegionDto> Groups { get; set; } = new();
     }
 
     public sealed class PubRegionDto
     {
+        public int StateId { get; set; }
+        public int RegionId { get; set; }
         public string State { get; set; } = "";
         public string Region { get; set; } = "";
         public int Hqs { get; set; }
         public int Quantity { get; set; }
-        public int Pending { get; set; }
-        public int Total { get; set; }
+        /// <summary>Requests currently AT my stage (SmdReview), i.e. actually eligible for me to
+        /// review right now. This is what "Total Requests"/the review-progress denominator should
+        /// be built from - NOT StillAtRmCount, which is a different, earlier-stage concept.</summary>
+        public int EligibleCount { get; set; }
+        /// <summary>Of EligibleCount, how many already have SmdReviewedAt set.</summary>
+        public int ReviewedCount { get; set; }
+        /// <summary>Requests from this Region that exist but haven't reached my stage yet (still
+        /// with RM or earlier) - real, but not "mine" to review yet. Approving/zero-confirming a
+        /// Region requires this to be 0 first (see ApproveRegion/ConfirmZeroRegion), so these can't
+        /// be silently skipped by forwarding before RM has finished its own part.</summary>
+        public int StillAtRmCount { get; set; }
+        public PubRegionStatus Status { get; set; }
+        public string? FinalizedByName { get; set; }
+        public DateTime? FinalizedAt { get; set; }
         public DateTime? LastUpdated { get; set; }
         public List<PubRowDto> Rows { get; set; } = new();
+    }
+
+    /// <summary>Body for POST regions/{stateId}/{regionId}/approve and .../confirm-zero - both take
+    /// only an optional remark, every other input is resolved server-side from the authenticated
+    /// caller's own state/role claim and the live request data (see PublicityController).</summary>
+    public sealed class PubRegionActionDto
+    {
+        public string? Remarks { get; set; }
+    }
+
+    /// <summary>Body for POST requests/{id}/mark-reviewed - a toggle, not a one-way action, so SMD
+    /// can un-review a request to look again before approving the Region.</summary>
+    public sealed class PubMarkReviewedDto
+    {
+        public bool Reviewed { get; set; } = true;
     }
 
     public sealed class PubBulkReviewDto
     {
         public List<int> Ids { get; set; } = new();
         public string? Remarks { get; set; }
+    }
+
+    /// <summary>ReviewBulk's actual response shape - Approved is the server-confirmed count, which
+    /// can be less than the number of ids submitted (already-forwarded/out-of-scope ids are silently
+    /// skipped, never retried) - callers must report THIS count, not their own request-list length,
+    /// so a partial failure is never shown as "every request processed".</summary>
+    public sealed class PubBulkResultDto
+    {
+        public bool Success { get; set; }
+        public int Approved { get; set; }
     }
 
     public sealed class PubReviewDto
@@ -374,6 +451,12 @@ namespace SPIC.Core.DTOs
     public sealed class PubNotificationDetailDto
     {
         public PubNotificationDto Notice { get; set; } = new();
+        // Only true for an "Approval" notice whose request is STILL actually dispatch-eligible right
+        // now (Status == FinalApproved) and the viewer is ADMIN-MD CS - re-checked live against the
+        // request on every open, never cached from when the notice was created, so once a dispatch
+        // exists (or anyone else already acted) this goes false on its own and the notice just stays
+        // as history, never an active action for a completed operation.
+        public bool CanDispatch { get; set; }
         public string? DestinationIndentNo { get; set; }
         public string? SourceIndentNo { get; set; }
         public string? SourceHq { get; set; }

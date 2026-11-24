@@ -32,6 +32,7 @@ namespace SPIC.Core.DTOs
         public string DealerName { get; set; } = "";
         public string DealerCode { get; set; } = "";
         public DayOfWeek? Day { get; set; }
+        public DateTime? PlannedDate { get; set; }
         public AllocTaskStatus Status { get; set; }
         public DateTime? StartedAt { get; set; }
         public DateTime? CompletedAt { get; set; }
@@ -241,6 +242,13 @@ namespace SPIC.Core.DTOs
         // the status change, so the server can cache it next to StartedAt - only meaningful when
         // Status is InProgress.
         public string? PlaceName { get; set; }
+        // The same GPS fix TaskDetail already captures for PlaceName above, reused (not re-captured)
+        // as the start point if this start needs to create a brand-new task-owned tracking session -
+        // only meaningful when Status is InProgress, and only used when no existing Active session
+        // is found to reuse. See JmdoTaskAllocationController.GetOrCreateTaskTrackingSessionAsync.
+        public double? Latitude { get; set; }
+        public double? Longitude { get; set; }
+        public double? Accuracy { get; set; }
     }
 
     // Request body for POST api/JmdoTaskAllocation/postpone-requests - a JMDO asking to move

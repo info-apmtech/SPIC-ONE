@@ -339,6 +339,9 @@ namespace SPIC.MauiBlazorApp.Platforms.Android
             var lng = location.Longitude;
             double? accuracy = location.HasAccuracy ? location.Accuracy : null;
 
+            if (accuracy.HasValue && accuracy.Value > 200.0) return;
+            if (Math.Abs(lat) < 0.01 && Math.Abs(lng) < 0.01) return;
+
             _ = JmdoTrackingBackgroundClient.ReportPointAsync(sessionId, lat, lng, accuracy, cts.Token);
         }
 

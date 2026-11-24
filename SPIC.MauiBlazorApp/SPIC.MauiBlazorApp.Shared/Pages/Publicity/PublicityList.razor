@@ -8,6 +8,7 @@
 @inject NavigationManager Nav
 @inject FileDownloadService Downloads
 @inject ToastService Toast
+@inject IJSRuntime JS
 @implements IDisposable
 
 @*
@@ -23,7 +24,10 @@
         <Actions>
             @if (Review && !string.IsNullOrEmpty(_lookups?.MyScope)) { <span class="pub-pill pub-pill--green pub-pill--lg pub-hide-sm"><i class="bi bi-geo-alt"></i> @_lookups.MyScope</span> }
             <a class="pub-btn pub-btn--ghost" href="@($"{Api.Home}/notifications")"><i class="bi bi-bell"></i> <span class="pub-hide-sm">Notifications</span></a>
-            @if (Review && Api.MyStageLabel is not null && (Api.Role is AppRole.RM or AppRole.SMD or AppRole.SMM || Api.IsAdminMdCs))
+            @* RM has no separate Consolidation page - its own Region-level actions (bulk forward /
+               Zero Requirement) live directly below in this same list instead, see the RM action
+               banner further down. *@
+            @if (Review && Api.MyStageLabel is not null && (Api.Role is AppRole.SMD or AppRole.SMM || Api.IsAdminMdCs || Api.IsDgmMdCs))
             {
                 <a class="pub-btn pub-btn--line" href="/PublicityReview/consolidation"><i class="bi bi-diagram-3"></i> <span class="pub-hide-sm">Consolidation</span></a>
             }
@@ -126,10 +130,17 @@
         }
     </section>
 
-    <section class="pub-card">
+    <section class="pub-card" id="pub-request-list">
         <div class="pub-card__head">
-            <h2 class="pub-h2">@(_awaitingMe ? "Awaiting My Review" : "Submitted Request")</h2>
+            <h2 class="pub-h2">@(_awaitingMe ? "Awaiting My Review" : Review ? "All My Requests" : "Submitted Request")</h2>
             <div class="pub-card__tools">
+                @if (Review && Api.MyStageLabel is not null)
+                {
+                    <div class="pub-card__band-toggle" role="group" aria-label="Request list view">
+                        <button type="button" class="pub-btn pub-btn--sm @(!_awaitingMe ? "pub-btn--primary" : "pub-btn--line")" @onclick="() => SwitchView(false)">All My Requests</button>
+                        <button type="button" class="pub-btn pub-btn--sm @(_awaitingMe ? "pub-btn--primary" : "pub-btn--line")" @onclick="() => SwitchView(true)">Awaiting My Review</button>
+                    </div>
+                }
                 <div class="pub-search" data-help="pub-search"><i class="bi bi-search"></i><input class="pub-input" placeholder="Search indent, product, material..." @bind="_q" @bind:event="oninput" @onkeyup="SearchKey" aria-label="Search" /></div>
                 <button type="button" class="pub-btn pub-btn--line" data-help="pub-export" @onclick="ExportAsync" disabled="@(_page?.Items.Count is not > 0)"><i class="bi bi-download"></i> Export</button>
             </div>
@@ -141,7 +152,23 @@
         }
         else if (_page.Items.Count == 0)
         {
-            <EmptyState Icon="bi-megaphone" Title="No requests found" Message="@(Review ? "Nothing matches these filters." : "Create your first publicity material request.")" />
+            @* RM's Zero Requirement action lives here, reusing the page's own existing empty-state
+               slot rather than a dashboard banner. Gated on _stats.Total == 0 - genuinely zero
+               requests EVER raised for this Region, never "nothing currently pending at my stage"
+               (an approved/forwarded request also empties this exact table once awaitingMe narrows
+               it down, and that must never be mistaken for "the Region has no requirements" - see
+               PubStatsDto.Total, which only Draft rows are excluded from). *@
+            @if (Review && Api.Role == AppRole.RM && _stats is { Total: 0 } && _rmConsolidation is { Groups.Count: > 0 } rmc)
+            {
+                <EmptyState Icon="bi-info-circle" Title="No Publicity Requests from HQs"
+                            Message="@($"If there are no publicity requirements for {rmc.Groups[0].Region} this round, confirm a Zero Requirement so SMD can account for it.")">
+                    <button type="button" class="pub-btn pub-btn--primary" disabled="@_rmBusy" @onclick="RmSubmitZeroAsync">Submit Zero Requirement</button>
+                </EmptyState>
+            }
+            else
+            {
+                <EmptyState Icon="bi-megaphone" Title="No requests found" Message="@(Review ? "Nothing matches these filters." : "Create your first publicity material request.")" />
+            }
         }
         else
         {
@@ -199,6 +226,8 @@
     private PubStatsDto? _stats;
     private PubPageDto? _page;
     private PubLookupsDto? _lookups;
+    private PubConsolidationDto? _rmConsolidation;
+    private bool _rmBusy;
     private List<PubOption> _states = new(), _regions = new(), _hqs = new();
     private bool _filtersOpen = true, _awaitingMe;
     private DateTime? _from, _to;
@@ -224,9 +253,25 @@
     private (string Text, string Tone) StatusFor(PubRowDto r)
     {
         if (Review && r.AwaitingMe) return ("Pending", "amber");
+        // Forwarded past my own stage, still inside the approval chain - name who it's actually WITH
+        // now (reusing the same StageShort label the existing Current Stage column already shows),
+        // rather than the old bare "Approved" which didn't say where the request currently sits once
+        // it leaves the viewer's own queue. Dispatch-onward stages are untouched below - PubText.
+        // Status already has adequate labels for those ("In Dispatch", "Delivered", "Completed", ...).
         if (Review && Api.MyStage is { } mine && r.Stage > mine && r.Stage <= PublicityStage.DgmMdCsReview
-            && r.Status is PublicityStatus.PendingApproval or PublicityStatus.PendingFinalApproval) return ("Approved", "green");
+            && r.Status is PublicityStatus.PendingApproval or PublicityStatus.PendingFinalApproval)
+            return ($"With {PubText.StageShort(r.Stage).Replace(" Approval", "")}", "blue");
         return (PubText.Status(r.Status), PubText.StatusTone(r.Status));
+    }
+
+    // "All My Requests" (default) vs "Awaiting My Review" - an explicit, visible toggle within the
+    // existing table section (the KPI cards already offer this indirectly via QuickStatus, but this
+    // is the direct switch the two tracking views need).
+    private Task SwitchView(bool awaitingMe)
+    {
+        _awaitingMe = awaitingMe;
+        _status = null;
+        return LoadAsync(1);
     }
 
     private IEnumerable<Kpi> Kpis => Review && Api.Role == AppRole.RM
@@ -292,8 +337,15 @@
         _states = _regions = _hqs = new();
 
         var uri = Nav.ToAbsoluteUri(Nav.Uri);
+        // "All My Requests" (awaitingMe=false) is the default tracking view - forwarding a request
+        // must never make it disappear from the page. ?mine=1 (the "View New Requests" banner, and
+        // the explicit Awaiting My Review toggle below) switches to the pending-only view on demand.
         _awaitingMe = uri.Query.Contains("mine=1");
         var statsTask = Api.StatsAsync();
+        // RM's own Region-level actions (bulk forward / Zero Requirement) now live on this page
+        // instead of the Consolidation page RM no longer has - same underlying data RM's share of
+        // that page always used.
+        var rmConsolidationTask = Review && Api.Role == AppRole.RM ? Api.ConsolidationAsync() : Task.FromResult<PubConsolidationDto?>(null);
         _lookups = await Api.LookupsAsync();
         if (Review && ShowState) _states = await Api.StatesAsync() ?? new();
         else if (Review && _lookups is not null)
@@ -303,6 +355,7 @@
             if (Api.Role == AppRole.RM) _hqs = await Api.HqsAsync(_lookups.MyRegionId) ?? new();
         }
         _stats = await statsTask;
+        _rmConsolidation = await rmConsolidationTask;
         await LoadAsync(1);
     }
 
@@ -338,16 +391,62 @@
         return LoadAsync(1);
     }
 
-    private Task ShowMine()
+    // Set by ShowMine() once its data load has actually finished; consumed by OnAfterRenderAsync
+    // below. Scrolling can only happen AFTER Blazor has rendered the new _page into the DOM - calling
+    // the JS interop directly from ShowMine, right after awaiting LoadAsync, would race the render
+    // and frequently scroll to the list's old, pre-filter contents (or scroll to nothing new at all,
+    // which is exactly the "click does nothing" symptom this exists to fix).
+    private bool _scrollToResultsPending;
+
+    private async Task ShowMine()
     {
-        if (Api.Role is AppRole.RM or AppRole.SMD or AppRole.SMM || Api.IsAdminMdCs)
+        // RM no longer has a Consolidation page to redirect to - its own pending work already shows
+        // right here (awaitingMe below), with the Region-level banner above handling bulk forward /
+        // Zero Requirement directly.
+        if (Api.Role is AppRole.SMD or AppRole.SMM || Api.IsAdminMdCs || Api.IsDgmMdCs)
         {
             Nav.NavigateTo("/PublicityReview/consolidation");
-            return Task.CompletedTask;
+            return;
         }
+        // Any filter left over from an earlier search (state/region/HQ/stage/date-range/text) would
+        // otherwise stack on top of awaitingMe=true and silently narrow the result to nothing - a
+        // DGM-MD CS reviewer's pending requests span every state/region, so a stale state/region/HQ
+        // filter in particular would reliably hide all of them. "View New Requests" must always show
+        // every one of the caller's own pending requests, not whatever was still filtered.
+        _from = _to = null;
+        _product = _material = _state = _region = _hq = 0;
+        _stage = _q = "";
         _awaitingMe = true;
         _status = null;
-        return LoadAsync(1);
+        await LoadAsync(1);
+        _scrollToResultsPending = true;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_scrollToResultsPending) return;
+        _scrollToResultsPending = false;
+        try { await JS.InvokeVoidAsync("scrollToElementId", "pub-request-list"); } catch (JSException) { }
+    }
+
+    // RM's Zero Requirement action, moved here from the Consolidation page RM no longer has access to
+    // - reuses the exact same API call that page's RM path already used, so the server-side
+    // authorization/validation (ConfirmZeroRegion's own RM-only gate) is completely unchanged. There
+    // is deliberately no bulk "Approve & Submit to SMD" method here anymore - see the banner markup's
+    // own comment for why removing it doesn't touch the real RM-to-SMD forward.
+    private async Task RmSubmitZeroAsync()
+    {
+        if (_rmConsolidation is not { Groups.Count: > 0 } rmc) return;
+        var g = rmc.Groups[0];
+        if (!await Toast.ConfirmAsync("Submit Zero Requirement", $"Confirm that {g.Region} has no publicity material requirement this round? This will be submitted to SMD for State consolidation.", "Submit Zero Requirement")) return;
+        _rmBusy = true;
+        var ok = await Api.ConfirmZeroRegionAsync(g.StateId, g.RegionId, null);
+        _rmBusy = false;
+        if (!ok) return;
+        Toast.Success($"Zero Requirement submitted for {g.Region}.");
+        _rmConsolidation = await Api.ConsolidationAsync();
+        _stats = await Api.StatsAsync();
+        await LoadAsync(_pageNo);
     }
 
     private async Task SearchKey(KeyboardEventArgs e)
