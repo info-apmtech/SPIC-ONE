@@ -39,6 +39,15 @@ namespace SPIC.Core.Entities
 
     public enum PublicityNotificationType { StockTransfer = 0, Exception = 1, Approval = 2, Dispatch = 3, General = 4 }
 
+    // A Region as a whole is signed off by its state-level approver (SMD today) independently of
+    // any single request's own Stage/Status - neither enum above has a "this whole region is done"
+    // member, and none should: Stage/Status are per-REQUEST concepts. ZeroConfirmed exists
+    // specifically for a Region that genuinely has no eligible requests this round - see
+    // PublicityController.ConfirmZeroRegion's own doc comment for why this can never be inferred
+    // automatically from "no rows appeared".
+    // RmZeroSubmitted is when the Region's RM explicitly submitted Zero Requirement, awaiting SMD finalization.
+    public enum PublicityRegionFinalizationStatus { Approved = 0, ZeroConfirmed = 1, RmZeroSubmitted = 2 }
+
     public class PublicityMaterialType
     {
         public int Id { get; set; }
@@ -71,8 +80,53 @@ namespace SPIC.Core.Entities
         public DateTime? SubmittedAt { get; set; }
         public DateTime? UpdatedAt { get; set; }
         public bool IsDeleted { get; set; }
+        // Request-level review sign-off at the SMD stage - distinct from Region-level approval
+        // (PublicityRegionFinalization below): a Region can only be approved once every one of its
+        // currently-eligible requests has this set. Cleared automatically whenever the request is
+        // edited afterward (see PublicityController.ReviewOneAsync's "edit" branch), so a changed
+        // request always requires a fresh look before the Region can be (re-)approved.
+        public DateTime? SmdReviewedAt { get; set; }
+        [MaxLength(200)] public string? SmdReviewedByName { get; set; }
         public List<PublicityDispatch> Dispatches { get; set; } = new();
         public List<PublicityEvent> Events { get; set; } = new();
+    }
+
+    /// <summary>One Region's sign-off for its state-level approver's review pass - either every
+    /// currently-eligible request in the Region has been reviewed and the Region itself approved as
+    /// a block, or the Region has been explicitly confirmed to have zero requirements this round.
+    /// One row per (StateId, RegionId) - re-finalizing overwrites the previous row (see
+    /// PublicityController's ApproveRegion/ConfirmZeroRegion), so this always reflects the CURRENT
+    /// finalization, not a history of every past one; PublicityEvent already owns per-request audit
+    /// history, this is deliberately not a duplicate of it.
+    ///
+    /// Staleness (a Region finalized earlier, then new/unreviewed work appeared for it since) is
+    /// never computed from this row directly - PublicityController's Consolidation() always
+    /// re-derives "is this Region's finalization still accurate" from live request data (any
+    /// currently-eligible request with SmdReviewedAt == null, or anything still short of the SMD
+    /// stage, invalidates it) every time the page loads. There is no "cycle"/"batch" concept
+    /// anywhere in this module (confirmed - no such field exists on PublicityRequest), so this
+    /// row's validity is always judged against present-moment data, not a closed period.
+    ///
+    /// SubmittedAt marks a DIFFERENT thing from staleness: once PublicityController.ReviewBulk
+    /// successfully forwards this Region's work to SMM, every one of its once-eligible requests has
+    /// moved past SmdReview - so a fresh page load would otherwise see 0 currently-eligible requests
+    /// and, for an Approved row, wrongly treat that as "nothing happened yet" rather than "already
+    /// submitted". SubmittedAt records that this row's Approved/ZeroConfirmed decision was already
+    /// acted on, without deleting the row (FinalizedByName/FinalizedAt stay as the only record of who
+    /// reviewed/declared this Region, since neither ApproveRegion, ConfirmZeroRegion nor
+    /// FinalizeZeroRegion write a PublicityEvent of their own). Any later explicit SMD/RM action on
+    /// this Region (a fresh ApproveRegion/ConfirmZeroRegion/FinalizeZeroRegion call, meaning a
+    /// genuinely new round) resets it back to null - see UpsertRegionFinalizationAsync.</summary>
+    public class PublicityRegionFinalization
+    {
+        public int Id { get; set; }
+        public int StateId { get; set; }
+        public int RegionId { get; set; }
+        public PublicityRegionFinalizationStatus Status { get; set; }
+        [MaxLength(100)] public string FinalizedByUserId { get; set; } = "";
+        [MaxLength(200)] public string? FinalizedByName { get; set; }
+        public DateTime FinalizedAt { get; set; } = DateTime.Now;
+        public DateTime? SubmittedAt { get; set; }
     }
 
     /// <summary>One shipment towards <see cref="RequestId"/>. A Transfer is sourced from another

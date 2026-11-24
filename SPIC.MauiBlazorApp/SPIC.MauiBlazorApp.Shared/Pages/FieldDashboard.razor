@@ -150,10 +150,17 @@
                 </div>
 
                 <div class="fd-tracking-actions">
-                    <button type="button" class="fd-btn fd-btn-outline fd-btn-view" @onclick='() => Navigation.NavigateTo("/TrackPlayback")'>
+                    @* An Active session only ever reaches this branch at all, so View Route always
+                       has one to show - go straight to the Live Tracking tab instead of defaulting
+                       to Playback History (which used to show this same session mislabeled
+                       "Tracking Stopped" - see TrackPlayback.razor's Route Playback header fix). *@
+                    <button type="button" class="fd-btn fd-btn-outline fd-btn-view" @onclick='() => Navigation.NavigateTo("/TrackPlayback?tab=live")'>
                         <i class="bi bi-map"></i> View Route
                     </button>
-                    @if (LoginState.Can(PagePermission.FieldDashboard, "Update"))
+                    @* Manual Start/Stop is mobile-only policy (same IsNativeApp gate the inactive-state
+                       Start Live Tracking button above already uses) - desktop/web only ever gets
+                       read-only tracking information here, never a control that stops it. *@
+                    @if (IsNativeApp && LoginState.Can(PagePermission.FieldDashboard, "Update"))
                     {
                         <button type="button" class="fd-btn fd-btn-stop" @onclick="RequestStopTracking">
                             <i class="bi bi-stop-circle-fill"></i> Stop Tracking

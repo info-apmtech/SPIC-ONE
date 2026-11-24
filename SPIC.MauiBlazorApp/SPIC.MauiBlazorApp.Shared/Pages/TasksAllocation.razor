@@ -58,6 +58,13 @@
                     @onclick="() => currentTab = TaTab.Summary">
                 Task Summary
             </button>
+            <button type="button"
+                    class="ta-tab @(currentTab == TaTab.Postpone ? "active" : "")"
+                    role="tab"
+                    aria-selected="@(currentTab == TaTab.Postpone ? "true" : "false")"
+                    @onclick="() => currentTab = TaTab.Postpone">
+                Postpone
+            </button>
         </div>
 
         @if (currentTab == TaTab.All)
@@ -546,18 +553,6 @@
 
                     <!-- Task cards -->
                     <div class="ta-wizard-content">
-                        @if (_selectedPostponeRowIds.Count > 0)
-                        {
-                            <div class="ta-postpone-selection-bar">
-                                <span><i class="bi bi-calendar-event"></i> @_selectedPostponeRowIds.Count visit(s) selected for postponement</span>
-                                <div class="ta-postpone-selection-actions">
-                                    <button type="button" class="ta-modal-btn-outline" @onclick="ClearPostponeSelection">Clear</button>
-                                    <button type="button" class="ta-postpone-btn" @onclick="OpenBulkPostponeModal">
-                                        <i class="bi bi-calendar-event"></i> Postpone Selected
-                                    </button>
-                                </div>
-                            </div>
-                        }
                         <div class="ta-today-grid">
                             @if (BadgeCount(todayFilter) == 0)
                             {
@@ -604,7 +599,7 @@
                                             @if (assignment.PendingPostponeRequestId != null)
                                             {
                                                 <div class="ta-postpone-badge">
-                                                    <i class="bi bi-calendar-event"></i> Postpone Requested &rarr; @assignment.PendingPostponeRequestedDate?.ToString("dd MMM yyyy")
+                                                    <i class="bi bi-clock-history"></i> Postpone Pending
                                                 </div>
                                             }
                                             else
@@ -614,13 +609,6 @@
                                                     <button type="button" class="ta-start-btn" @onclick='() => Navigation.NavigateTo($"/TaskDetail?type=dealer&id=dealer_{assignment.DealerId}")'>
                                                         @ActionLabel(dStatus) <i class="bi bi-arrow-right"></i>
                                                     </button>
-                                                    @if (dStatus != AllocTaskStatus.Completed)
-                                                    {
-                                                        <label class="ta-postpone-select">
-                                                            <input type="checkbox" checked="@_selectedPostponeRowIds.Contains(assignment.RowId)" @onchange="() => TogglePostponeSelection(assignment.RowId)" />
-                                                            <span>Select to postpone</span>
-                                                        </label>
-                                                    }
                                                 }
                                             }
                                         </div>
@@ -835,18 +823,6 @@
             }
             else
             {
-                @if (_selectedPostponeRowIds.Count > 0)
-                {
-                    <div class="ta-postpone-selection-bar">
-                        <span><i class="bi bi-calendar-event"></i> @_selectedPostponeRowIds.Count visit(s) selected for postponement</span>
-                        <div class="ta-postpone-selection-actions">
-                            <button type="button" class="ta-modal-btn-outline" @onclick="ClearPostponeSelection">Clear</button>
-                            <button type="button" class="ta-postpone-btn" @onclick="OpenBulkPostponeModal">
-                                <i class="bi bi-calendar-event"></i> Postpone Selected
-                            </button>
-                        </div>
-                    </div>
-                }
                 <div class="ta-today-grid">
                     @foreach (var assignment in FilteredCompletedDealers)
                     {
@@ -892,7 +868,7 @@
                             @if (assignment.PendingPostponeRequestId != null)
                             {
                                 <div class="ta-postpone-badge">
-                                    <i class="bi bi-calendar-event"></i> Postpone Requested &rarr; @assignment.PendingPostponeRequestedDate?.ToString("dd MMM yyyy")
+                                    <i class="bi bi-clock-history"></i> Postpone Pending
                                 </div>
                             }
                             else
@@ -903,13 +879,6 @@
                                         <button type="button" class="ta-start-btn" @onclick='() => Navigation.NavigateTo($"/TaskDetail?type=dealer&id=dealer_{assignment.DealerId}")'>
                                             @ActionLabel(assignment.Status) <i class="bi bi-arrow-right"></i>
                                         </button>
-                                        @if (assignment.Status != AllocTaskStatus.Completed)
-                                        {
-                                            <label class="ta-postpone-select">
-                                                <input type="checkbox" checked="@_selectedPostponeRowIds.Contains(assignment.RowId)" @onchange="() => TogglePostponeSelection(assignment.RowId)" />
-                                                <span>Select to postpone</span>
-                                            </label>
-                                        }
                                     }
                                 </div>
                             }
@@ -1279,50 +1248,342 @@
                 </div>
             }
         }
+        else if (currentTab == TaTab.Postpone)
+        {
+            <div class="ta-completed-filters">
+                <div class="ta-completed-filter-field">
+                    <label class="ta-field-label" for="ta-postpone-scheduled-date">Scheduled Date</label>
+                    <input id="ta-postpone-scheduled-date" type="date" class="ta-filter-select" @bind="postponeScheduledDate" />
+                </div>
+                <div class="ta-completed-filter-field ta-dealer-filter-field">
+                    <label class="ta-field-label">Dealer</label>
+                    <div class="ta-multiselect-wrap">
+                        <div class="ta-filter-select ta-multiselect-box @(_isPostponeDealerDropdownOpen ? "active" : "")" @onclick="TogglePostponeDealerDropdown">
+                            <div class="ta-multiselect-display">
+                                @if (_stagedPostponeDealers.Count == 0)
+                                {
+                                    <span class="text-muted">All Dealers</span>
+                                }
+                                else if (_stagedPostponeDealers.Count == 1)
+                                {
+                                    <span class="ta-multiselect-text text-truncate" title="@_stagedPostponeDealers.First()">@_stagedPostponeDealers.First()</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-primary text-white">@_stagedPostponeDealers.Count Dealers Selected</span>
+                                }
+                            </div>
+                            <div class="ta-multiselect-actions">
+                                @if (_stagedPostponeDealers.Count > 0)
+                                {
+                                    <i class="bi bi-x-circle-fill ta-multiselect-clear"
+                                       title="Clear all dealers"
+                                       @onclick="ClearAllPostponeDealerFilter"
+                                       @onclick:stopPropagation="true"></i>
+                                }
+                                <i class="bi @(_isPostponeDealerDropdownOpen ? "bi-chevron-up" : "bi-chevron-down") text-muted"></i>
+                            </div>
+                        </div>
+
+                        @if (_isPostponeDealerDropdownOpen)
+                        {
+                            <div class="ta-multiselect-overlay" @onclick="ClosePostponeDealerDropdown"></div>
+                            <div class="ta-multiselect-dropdown" @onclick:stopPropagation="true">
+                                <div class="ta-multiselect-search">
+                                    <i class="bi bi-search text-muted me-2"></i>
+                                    <input type="text"
+                                           class="ta-multiselect-search-input"
+                                           placeholder="Search dealer name or code..."
+                                           @bind="_postponeDealerSearchQuery"
+                                           @bind:event="oninput"
+                                           autofocus />
+                                    @if (!string.IsNullOrEmpty(_postponeDealerSearchQuery))
+                                    {
+                                        <i class="bi bi-x text-muted cursor-pointer fs-5" @onclick='() => _postponeDealerSearchQuery = ""'></i>
+                                    }
+                                </div>
+                                <div class="ta-multiselect-toolbar">
+                                    <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none" @onclick="SelectAllPostponeDealers">
+                                        Select All (@FilteredPostponeDealerOptions.Count())
+                                    </button>
+                                    @if (_stagedPostponeDealers.Count > 0)
+                                    {
+                                        <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none text-danger" @onclick="ClearAllPostponeDealerFilter">
+                                            Clear All
+                                        </button>
+                                    }
+                                </div>
+                                <div class="ta-multiselect-options">
+                                    @if (!FilteredPostponeDealerOptions.Any())
+                                    {
+                                        <div class="p-3 text-center text-muted small">No dealers match your search.</div>
+                                    }
+                                    else
+                                    {
+                                        @foreach (var opt in FilteredPostponeDealerOptions)
+                                        {
+                                            var isChecked = _stagedPostponeDealers.Contains(opt.Name);
+                                            <div class="ta-multiselect-option @(isChecked ? "selected" : "")"
+                                                 @onclick="() => TogglePostponeDealerSelection(opt.Name)">
+                                                <input type="checkbox"
+                                                       class="form-check-input me-2 mt-0 flex-shrink-0"
+                                                       checked="@isChecked"
+                                                       @onchange="() => TogglePostponeDealerSelection(opt.Name)"
+                                                       @onclick:stopPropagation="true" />
+                                                <div class="flex-grow-1 text-truncate">
+                                                    <div class="fw-medium text-dark text-truncate">@opt.Name</div>
+                                                    @if (!string.IsNullOrWhiteSpace(opt.Code))
+                                                    {
+                                                        <div class="text-muted" style="font-size: 0.75rem;"><i class="bi bi-person"></i> @opt.Code</div>
+                                                    }
+                                                </div>
+                                            </div>
+                                        }
+                                    }
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+                <div class="ta-completed-filter-field">
+                    <label class="ta-field-label" for="ta-postpone-status">Status</label>
+                    <select id="ta-postpone-status" class="ta-filter-select" @bind="postponeStatusFilter">
+                        <option value="">All</option>
+                        <option value="@AllocTaskStatus.YetToStart">Yet to Start</option>
+                        <option value="@AllocTaskStatus.InProgress">In Progress</option>
+                        <option value="@AllocTaskStatus.Completed">Completed</option>
+                    </select>
+                </div>
+                <button type="button" class="ta-filter-btn ta-filter-btn-primary" @onclick="ApplyPostponeFilters">
+                    <i class="bi bi-search"></i> Search
+                </button>
+                <button type="button" class="ta-filter-btn" @onclick="ResetPostponeFilters">
+                    <i class="bi bi-arrow-counterclockwise"></i> Today / Reset
+                </button>
+            </div>
+
+            @if (_isLoadingCompleted)
+            {
+                <EmptyState Icon="bi-hourglass-split" Title="Loading dealer visits..." Compact="true" />
+            }
+            else if (!FilteredPostponeDealers.Any())
+            {
+                <EmptyState Icon="bi-calendar-x" Title="No dealer visits found for the selected criteria" Compact="true" />
+            }
+            else
+            {
+                <div class="ta-table-container table-responsive">
+                    <table class="table ta-postpone-table align-middle">
+                        <thead>
+                            <tr>
+                                <th style="width: 48px;" class="text-center">
+                                    <input type="checkbox"
+                                           class="form-check-input"
+                                           checked="@IsAllEligiblePostponeSelected"
+                                           disabled="@(!EligibleDisplayedVisits.Any())"
+                                           @onchange="ToggleSelectAllEligiblePostpone"
+                                           title="Select all eligible dealer visits" />
+                                </th>
+                                <th>Dealer</th>
+                                <th>Scheduled Date</th>
+                                <th>Current Status</th>
+                                <th>Started / Completed</th>
+                                <th>Availability</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var assignment in FilteredPostponeDealers)
+                            {
+                                var isCompleted = assignment.Status == AllocTaskStatus.Completed;
+                                var isPendingPostpone = assignment.PendingPostponeRequestId != null;
+                                var isEligible = !isCompleted && !isPendingPostpone;
+                                var isSelected = _selectedPostponeRowIds.Contains(assignment.RowId);
+
+                                <tr class="@(isSelected ? "table-active" : "")">
+                                    <td class="text-center">
+                                        @if (isEligible)
+                                        {
+                                            <input type="checkbox"
+                                                   class="form-check-input"
+                                                   checked="@isSelected"
+                                                   @onchange="() => TogglePostponeSelection(assignment.RowId)" />
+                                        }
+                                        else
+                                        {
+                                            <input type="checkbox"
+                                                   class="form-check-input"
+                                                   disabled
+                                                   title="@(isCompleted ? "This dealer visit has already been completed and cannot be postponed." : "A postponement request is already pending approval.")" />
+                                        }
+                                    </td>
+                                    <td>
+                                        <div class="fw-bold text-dark">@assignment.DealerName</div>
+                                        <div class="small text-muted"><i class="bi bi-person"></i> @assignment.DealerCode</div>
+                                    </td>
+                                    <td>
+                                        <span>@(assignment.PlannedDate?.ToString("dd MMM yyyy") ?? "—")</span>
+                                    </td>
+                                    <td>
+                                        <span class="ta-summary-status-pill @SummaryStatusClass(assignment.Status)">
+                                            @SummaryStatusLabel(assignment.Status)
+                                        </span>
+                                    </td>
+                                    <td>
+                                        @if (assignment.StartedAt.HasValue || assignment.CompletedAt.HasValue)
+                                        {
+                                            <div class="d-flex flex-column gap-1 small">
+                                                @if (assignment.StartedAt.HasValue)
+                                                {
+                                                    <span><i class="bi bi-play-circle text-primary"></i> Started: @FormatTaskDateTime(assignment.StartedAt)</span>
+                                                }
+                                                @if (assignment.CompletedAt.HasValue)
+                                                {
+                                                    <span><i class="bi bi-check-circle text-success"></i> Done: @FormatTaskDateTime(assignment.CompletedAt)</span>
+                                                }
+                                            </div>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted">—</span>
+                                        }
+                                    </td>
+                                    <td>
+                                        @if (isCompleted)
+                                        {
+                                            <span class="ta-avail-badge ta-avail-completed">Completed</span>
+                                            <div class="ta-avail-msg">This dealer visit has already been completed and cannot be postponed.</div>
+                                        }
+                                        else if (isPendingPostpone)
+                                        {
+                                            <span class="ta-avail-badge ta-avail-pending">Pending Approval</span>
+                                            <div class="ta-avail-msg">A postponement request is already pending approval.</div>
+                                        }
+                                        else
+                                        {
+                                            <span class="ta-avail-badge ta-avail-available">Available</span>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+
+                @if (_selectedPostponeRowIds.Count > 0)
+                {
+                    <div class="ta-postpone-form-card mt-4">
+                        <div class="ta-postpone-form-header d-flex justify-content-between align-items-center mb-3">
+                            <div class="d-flex align-items-center gap-2">
+                                <span class="ta-postpone-count-badge">
+                                    <i class="bi bi-check2-circle me-1"></i> @_selectedPostponeRowIds.Count dealer visit(s) selected
+                                </span>
+                                <button type="button" class="btn btn-sm btn-link text-decoration-none p-0 ms-2" @onclick="ClearPostponeSelection">
+                                    Clear selection
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="ta-postpone-form-body">
+                            <div class="row g-3">
+                                <div class="col-md-4">
+                                    <label class="ta-field-label" for="ta-postpone-to-date">
+                                        Postpone To <span class="text-danger">*</span>
+                                    </label>
+                                    <input id="ta-postpone-to-date"
+                                           type="date"
+                                           class="ta-filter-select @(postponeDateValidationError != null ? "is-invalid" : "")"
+                                           @bind="postponeToDate"
+                                           min="@DateTime.Today.ToString("yyyy-MM-dd")" />
+                                    @if (postponeDateValidationError != null)
+                                    {
+                                        <div class="text-danger small mt-1">@postponeDateValidationError</div>
+                                    }
+                                </div>
+                                <div class="col-md-8">
+                                    <label class="ta-field-label" for="ta-postpone-reason">
+                                        Reason for Postponement <span class="text-danger">*</span>
+                                    </label>
+                                    <textarea id="ta-postpone-reason"
+                                              class="ta-form-textarea @(postponeReasonValidationError != null ? "is-invalid" : "")"
+                                              rows="2"
+                                              placeholder="Enter mandatory reason for postponement..."
+                                              @bind="postponeReason"></textarea>
+                                    @if (postponeReasonValidationError != null)
+                                    {
+                                        <div class="text-danger small mt-1">@postponeReasonValidationError</div>
+                                    }
+                                </div>
+                            </div>
+
+                            @if (!string.IsNullOrEmpty(formValidationSummary))
+                            {
+                                <div class="alert alert-danger mt-3 mb-0 py-2 px-3 small">
+                                    <i class="bi bi-exclamation-triangle me-1"></i> @formValidationSummary
+                                </div>
+                            }
+
+                            <div class="d-flex justify-content-end mt-3">
+                                <button type="button" class="ta-filter-btn ta-filter-btn-primary" @onclick="OpenPostponeConfirmationModal">
+                                    <i class="bi bi-calendar-event me-1"></i> Request Postponement
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                }
+            }
+        }
     </div>
 
 </div>
 
-@* Request Postponement modal - select one or more visits via their card checkbox (Today's
-   Allocation/Task History), then one date (min today) + one reason applied to all of them,
-   posted to api/JmdoTaskAllocation/postpone-requests once per selected visit. See
-   TogglePostponeSelection/OpenBulkPostponeModal/SubmitPostponeRequest below. *@
-@if (_postponeModalOpen)
+@* Postponement Request Confirmation Modal *@
+@if (_showPostponeConfirmationModal)
 {
-    <div class="ta-modal-overlay">
-        <div class="ta-modal-card">
+    <div class="ta-modal-overlay" @onclick="ClosePostponeConfirmationModal">
+        <div class="ta-modal-card" @onclick:stopPropagation="true">
             <div class="ta-modal-header">
-                <h4>Request Postponement</h4>
-                <button type="button" class="ta-modal-close" @onclick="ClosePostponeModal" aria-label="Close">&times;</button>
+                <h4>Confirm Postponement Request</h4>
+                <button type="button" class="ta-modal-close" @onclick="ClosePostponeConfirmationModal" aria-label="Close" disabled="@_postponeSubmitting">&times;</button>
             </div>
             <div class="ta-modal-body">
-                <p>Move <strong>@SelectedPostponeAssignments.Count</strong> visit(s) to a different day - this needs your MDO's approval before it takes effect.</p>
+                <p class="mb-3 text-secondary">Please review the details below before submitting the postponement request for MDO review.</p>
 
-                <ul class="ta-postpone-selected-list">
-                    @foreach (var d in SelectedPostponeAssignments)
-                    {
-                        <li>@d.DealerName <span class="text-muted">(@d.DealerCode)</span></li>
-                    }
-                </ul>
-
-                <div class="ta-modal-field">
-                    <label for="ta-postpone-date">New date</label>
-                    <input id="ta-postpone-date" type="date" @bind="_postponeDate" min="@DateTime.Today.ToString("yyyy-MM-dd")" />
-                </div>
-                <div class="ta-modal-field">
-                    <label for="ta-postpone-reason">Reason</label>
-                    <textarea id="ta-postpone-reason" rows="3" placeholder="e.g. Not available that day / partially completed, need another visit" @bind="_postponeReason"></textarea>
+                <div class="ta-confirm-item mb-2">
+                    <span class="text-muted small d-block">Original Scheduled Date:</span>
+                    <strong>@(appliedPostponeScheduledDate?.ToString("dd MMM yyyy") ?? "—")</strong>
                 </div>
 
-                @if (!string.IsNullOrWhiteSpace(_postponeError))
+                <div class="ta-confirm-item mb-2">
+                    <span class="text-muted small d-block">Requested Postpone Date:</span>
+                    <strong class="text-primary">@(postponeToDate?.ToString("dd MMM yyyy") ?? "—")</strong>
+                </div>
+
+                <div class="ta-confirm-item mb-2">
+                    <span class="text-muted small d-block">Selected Dealers (@SelectedPostponeAssignments.Count):</span>
+                    <ul class="ta-postpone-selected-list mt-1">
+                        @foreach (var d in SelectedPostponeAssignments)
+                        {
+                            <li><strong>@d.DealerName</strong> <span class="text-muted">(@d.DealerCode)</span></li>
+                        }
+                    </ul>
+                </div>
+
+                <div class="ta-confirm-item mb-2">
+                    <span class="text-muted small d-block">Reason for Postponement:</span>
+                    <div class="p-2 bg-light rounded small text-break mt-1">@postponeReason</div>
+                </div>
+
+                @if (!string.IsNullOrEmpty(_postponeError))
                 {
-                    <p class="text-danger mt-2">@_postponeError</p>
+                    <div class="alert alert-danger py-2 px-3 small mt-3 mb-0">
+                        <i class="bi bi-exclamation-triangle me-1"></i> @_postponeError
+                    </div>
                 }
             </div>
             <div class="ta-modal-footer">
-                <button type="button" class="ta-modal-btn-outline" @onclick="ClosePostponeModal" disabled="@_postponeSubmitting">Cancel</button>
-                <button type="button" class="ta-modal-btn-primary" @onclick="SubmitPostponeRequest" disabled="@_postponeSubmitting">
-                    @(_postponeSubmitting ? "Submitting..." : $"Submit Request ({_selectedPostponeRowIds.Count})")
+                <button type="button" class="ta-modal-btn-outline" @onclick="ClosePostponeConfirmationModal" disabled="@_postponeSubmitting">Cancel</button>
+                <button type="button" class="ta-modal-btn-primary" @onclick="ConfirmPostponeRequest" disabled="@_postponeSubmitting">
+                    @(_postponeSubmitting ? "Submitting..." : "Confirm Request")
                 </button>
             </div>
         </div>
@@ -1330,7 +1591,7 @@
 }
 
 @code {
-    private enum TaTab { All, Today, Completed, Summary }
+    private enum TaTab { All, Today, Completed, Summary, Postpone }
 
     // Lets links like /TasksAllocation?tab=today (used by TaskDetail's
     // "Back to Tasks") land on the right tab instead of always resetting to
@@ -1348,6 +1609,7 @@
             "today" => TaTab.Today,
             "completed" => TaTab.Completed,
             "summary" => TaTab.Summary,
+            "postpone" => TaTab.Postpone,
             _ => TaTab.All
         };
     }
@@ -1359,6 +1621,7 @@
             "today" => TaTab.Today,
             "completed" => TaTab.Completed,
             "summary" => TaTab.Summary,
+            "postpone" => TaTab.Postpone,
             _ => (TaTab?)null
         };
 
@@ -1429,17 +1692,26 @@
         }
     }
 
-    // ---------- Request Postponement modal (dealer visits only - see JmdoDealerVisitPostponeRequest's
-    // own doc comment for why MD Program/SPCM/Soil Sample/PoS Liquidation aren't included) ----------
-    // Selection is a single shared set across BOTH tabs (Today's Allocation/Task History both
-    // surface the same checkbox) - a dealer row's Id means the same thing regardless of which
-    // tab it's currently being viewed from, and the selection bar/modal below read from this
-    // one set no matter which tab is open.
+    // ---------- Dedicated Postpone Tab ----------
     private readonly HashSet<int> _selectedPostponeRowIds = new();
 
-    private bool _postponeModalOpen;
-    private DateTime _postponeDate = DateTime.Today.AddDays(1);
-    private string _postponeReason = "";
+    private DateTime? postponeScheduledDate = DateTime.Today;
+    private bool _isPostponeDealerDropdownOpen;
+    private string _postponeDealerSearchQuery = "";
+    private readonly HashSet<string> _stagedPostponeDealers = new(StringComparer.OrdinalIgnoreCase);
+    private HashSet<string> _appliedPostponeDealers = new(StringComparer.OrdinalIgnoreCase);
+    private string postponeStatusFilter = "";
+
+    private DateTime? appliedPostponeScheduledDate = DateTime.Today;
+    private string appliedPostponeStatus = "";
+
+    private DateTime? postponeToDate = DateTime.Today.AddDays(1);
+    private string postponeReason = "";
+    private string? postponeDateValidationError;
+    private string? postponeReasonValidationError;
+    private string? formValidationSummary;
+
+    private bool _showPostponeConfirmationModal;
     private string? _postponeError;
     private bool _postponeSubmitting;
 
@@ -1452,44 +1724,249 @@
             .Concat(_allAllocations.SelectMany(a => a.DealerAssignments))
             .DistinctBy(d => d.RowId);
 
+    private IEnumerable<JmdoDealerAssignmentResponseDto> AllApprovedDealerAssignments =>
+        (todayAllocation != null && todayAllocation.Status == "Approved"
+            ? todayAllocation.DealerAssignments
+            : Enumerable.Empty<JmdoDealerAssignmentResponseDto>())
+        .Concat(ApprovedAllocations.SelectMany(a => a.DealerAssignments))
+        .DistinctBy(d => d.RowId);
+
     private List<JmdoDealerAssignmentResponseDto> SelectedPostponeAssignments =>
         AllKnownDealerAssignments.Where(d => _selectedPostponeRowIds.Contains(d.RowId)).ToList();
 
-    private void TogglePostponeSelection(int rowId)
+    private sealed record PostponeDealerOptionItem(string Name, string Code);
+
+    private IEnumerable<PostponeDealerOptionItem> PostponeDealerOptions =>
+        AllApprovedDealerAssignments
+            .Where(d => !string.IsNullOrWhiteSpace(d.DealerName))
+            .Select(d => new PostponeDealerOptionItem(d.DealerName, d.DealerCode))
+            .DistinctBy(d => d.Name)
+            .OrderBy(d => d.Name);
+
+    private IEnumerable<PostponeDealerOptionItem> FilteredPostponeDealerOptions =>
+        string.IsNullOrWhiteSpace(_postponeDealerSearchQuery)
+            ? PostponeDealerOptions
+            : PostponeDealerOptions.Where(d =>
+                d.Name.Contains(_postponeDealerSearchQuery, StringComparison.OrdinalIgnoreCase) ||
+                d.Code.Contains(_postponeDealerSearchQuery, StringComparison.OrdinalIgnoreCase));
+
+    private void TogglePostponeDealerDropdown()
     {
-        if (!_selectedPostponeRowIds.Add(rowId))
-            _selectedPostponeRowIds.Remove(rowId);
+        _isPostponeDealerDropdownOpen = !_isPostponeDealerDropdownOpen;
+        if (!_isPostponeDealerDropdownOpen) _postponeDealerSearchQuery = "";
     }
 
-    private void ClearPostponeSelection() => _selectedPostponeRowIds.Clear();
-
-    private void OpenBulkPostponeModal()
+    private void ClosePostponeDealerDropdown()
     {
-        if (_selectedPostponeRowIds.Count == 0) return;
-        _postponeModalOpen = true;
-        _postponeDate = DateTime.Today.AddDays(1);
-        _postponeReason = "";
+        _isPostponeDealerDropdownOpen = false;
+        _postponeDealerSearchQuery = "";
+    }
+
+    private void TogglePostponeDealerSelection(string dealerName)
+    {
+        if (!_stagedPostponeDealers.Add(dealerName))
+            _stagedPostponeDealers.Remove(dealerName);
+    }
+
+    private void SelectAllPostponeDealers()
+    {
+        foreach (var opt in FilteredPostponeDealerOptions)
+            _stagedPostponeDealers.Add(opt.Name);
+    }
+
+    private void ClearAllPostponeDealerFilter()
+    {
+        _stagedPostponeDealers.Clear();
+    }
+
+    private IEnumerable<JmdoDealerAssignmentResponseDto> FilteredPostponeDealers
+    {
+        get
+        {
+            if (!appliedPostponeScheduledDate.HasValue)
+                return Enumerable.Empty<JmdoDealerAssignmentResponseDto>();
+
+            var targetDate = appliedPostponeScheduledDate.Value.Date;
+            var dealerFilterActive = _appliedPostponeDealers.Count > 0;
+            var statusFilterActive = !string.IsNullOrWhiteSpace(appliedPostponeStatus);
+
+            return AllApprovedDealerAssignments
+                .Where(d => d.PlannedDate.HasValue && d.PlannedDate.Value.Date == targetDate)
+                .Where(d => !dealerFilterActive || _appliedPostponeDealers.Contains(d.DealerName))
+                .Where(d => !statusFilterActive || d.Status.ToString() == appliedPostponeStatus)
+                .OrderBy(d => d.DealerName);
+        }
+    }
+
+    private IEnumerable<JmdoDealerAssignmentResponseDto> EligibleDisplayedVisits =>
+        FilteredPostponeDealers.Where(d => d.Status != AllocTaskStatus.Completed && d.PendingPostponeRequestId == null);
+
+    private bool IsAllEligiblePostponeSelected
+    {
+        get
+        {
+            var eligible = EligibleDisplayedVisits.ToList();
+            return eligible.Count > 0 && eligible.All(d => _selectedPostponeRowIds.Contains(d.RowId));
+        }
+    }
+
+    private void ToggleSelectAllEligiblePostpone()
+    {
+        var eligible = EligibleDisplayedVisits.ToList();
+        if (eligible.Count == 0) return;
+
+        if (eligible.All(d => _selectedPostponeRowIds.Contains(d.RowId)))
+        {
+            foreach (var d in eligible)
+            {
+                _selectedPostponeRowIds.Remove(d.RowId);
+            }
+        }
+        else
+        {
+            foreach (var d in eligible)
+            {
+                _selectedPostponeRowIds.Add(d.RowId);
+            }
+        }
+    }
+
+    private void TogglePostponeSelection(int rowId)
+    {
+        if (_selectedPostponeRowIds.Contains(rowId))
+        {
+            _selectedPostponeRowIds.Remove(rowId);
+        }
+        else
+        {
+            var item = FilteredPostponeDealers.FirstOrDefault(d => d.RowId == rowId);
+            if (item != null && item.Status != AllocTaskStatus.Completed && item.PendingPostponeRequestId == null)
+            {
+                _selectedPostponeRowIds.Add(rowId);
+            }
+        }
+    }
+
+    private void ClearPostponeSelection()
+    {
+        _selectedPostponeRowIds.Clear();
+        ResetFormValidation();
+    }
+
+    private void ApplyPostponeFilters()
+    {
+        ClearPostponeSelection();
+        appliedPostponeScheduledDate = postponeScheduledDate;
+        _appliedPostponeDealers = new HashSet<string>(_stagedPostponeDealers, StringComparer.OrdinalIgnoreCase);
+        appliedPostponeStatus = postponeStatusFilter ?? "";
+        ClosePostponeDealerDropdown();
+        ResetFormValidation();
+    }
+
+    private void ResetPostponeFilters()
+    {
+        ClearPostponeSelection();
+        postponeScheduledDate = DateTime.Today;
+        _stagedPostponeDealers.Clear();
+        _appliedPostponeDealers.Clear();
+        postponeStatusFilter = "";
+        appliedPostponeScheduledDate = DateTime.Today;
+        appliedPostponeStatus = "";
+        ClosePostponeDealerDropdown();
+        ResetFormValidation();
+    }
+
+    private void ResetFormValidation()
+    {
+        postponeDateValidationError = null;
+        postponeReasonValidationError = null;
+        formValidationSummary = null;
         _postponeError = null;
     }
 
-    private void ClosePostponeModal()
+    private void OpenPostponeConfirmationModal()
     {
-        if (_postponeSubmitting) return;
-        // Selection deliberately survives Cancel - closing to double-check something on a card
-        // shouldn't lose the picks already made.
-        _postponeModalOpen = false;
-    }
+        ResetFormValidation();
 
-    private async Task SubmitPostponeRequest()
-    {
-        if (!_postponeModalOpen || _postponeSubmitting || _selectedPostponeRowIds.Count == 0) return;
+        var eligibleRows = EligibleDisplayedVisits.Select(d => d.RowId).ToHashSet();
+        var validSelected = _selectedPostponeRowIds.Where(eligibleRows.Contains).ToList();
 
-        if (_postponeDate.Date < DateTime.Today)
+        if (validSelected.Count == 0)
         {
-            _postponeError = "Pick a date from today onward.";
+            formValidationSummary = "Please select at least one eligible dealer visit to postpone.";
             return;
         }
-        if (string.IsNullOrWhiteSpace(_postponeReason))
+
+        if (!postponeToDate.HasValue)
+        {
+            postponeDateValidationError = "Postpone To date is required.";
+            formValidationSummary = "Please choose a valid Postpone To date.";
+            return;
+        }
+
+        var toDate = postponeToDate.Value.Date;
+        if (toDate < DateTime.Today)
+        {
+            postponeDateValidationError = "Postpone To date must be today or a future date.";
+            formValidationSummary = postponeDateValidationError;
+            return;
+        }
+
+        if (appliedPostponeScheduledDate.HasValue)
+        {
+            var originalDate = appliedPostponeScheduledDate.Value.Date;
+            if (toDate == originalDate)
+            {
+                postponeDateValidationError = "Postpone To date cannot be the same as the original Scheduled Date.";
+                formValidationSummary = postponeDateValidationError;
+                return;
+            }
+
+            if (originalDate > DateTime.Today && toDate < originalDate)
+            {
+                postponeDateValidationError = "Cannot postpone a future visit to an earlier date.";
+                formValidationSummary = postponeDateValidationError;
+                return;
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(postponeReason))
+        {
+            postponeReasonValidationError = "Reason for postponement is mandatory.";
+            formValidationSummary = postponeReasonValidationError;
+            return;
+        }
+
+        _showPostponeConfirmationModal = true;
+    }
+
+    private void ClosePostponeConfirmationModal()
+    {
+        if (_postponeSubmitting) return;
+        _showPostponeConfirmationModal = false;
+        _postponeError = null;
+    }
+
+    private async Task ConfirmPostponeRequest()
+    {
+        if (!_showPostponeConfirmationModal || _postponeSubmitting) return;
+
+        var eligibleRows = EligibleDisplayedVisits.Select(d => d.RowId).ToHashSet();
+        var toSubmit = _selectedPostponeRowIds.Where(eligibleRows.Contains).ToList();
+
+        if (toSubmit.Count == 0)
+        {
+            _postponeError = "No eligible dealer visits selected.";
+            return;
+        }
+
+        if (!postponeToDate.HasValue || postponeToDate.Value.Date < DateTime.Today)
+        {
+            _postponeError = "Postpone To date must be today or a future date.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(postponeReason))
         {
             _postponeError = "A reason is required.";
             return;
@@ -1497,20 +1974,23 @@
 
         _postponeSubmitting = true;
         _postponeError = null;
+
         try
         {
-            // One request per selected visit - the API has no batch endpoint (each visit is its
-            // own independent approval row), so this submits them one at a time and reports a
-            // combined success/failure summary rather than letting one bad row (already completed,
-            // already has a pending request, etc.) silently swallow the rest.
-            var reason = _postponeReason.Trim();
-            var date = _postponeDate.Date;
+            var reason = postponeReason.Trim();
+            var date = postponeToDate.Value.Date;
             var succeeded = 0;
             var failures = new List<string>();
 
-            foreach (var rowId in _selectedPostponeRowIds.ToList())
+            foreach (var rowId in toSubmit)
             {
-                var dto = new CreatePostponeRequestDto { DealerRowId = rowId, RequestedDate = date, Reason = reason };
+                var dto = new CreatePostponeRequestDto
+                {
+                    DealerRowId = rowId,
+                    RequestedDate = date,
+                    Reason = reason
+                };
+
                 var response = await Http.PostAsJsonAsync("api/JmdoTaskAllocation/postpone-requests", dto);
 
                 if (response.IsSuccessStatusCode)
@@ -1520,28 +2000,31 @@
                 }
                 else
                 {
-                    var dealerName = AllKnownDealerAssignments.FirstOrDefault(d => d.RowId == rowId)?.DealerName ?? $"Row {rowId}";
-                    failures.Add($"{dealerName}: {await ReadErrorMessageAsync(response) ?? "request failed"}");
+                    var dealer = AllKnownDealerAssignments.FirstOrDefault(d => d.RowId == rowId);
+                    var dealerName = dealer != null ? $"{dealer.DealerName} ({dealer.DealerCode})" : $"Row {rowId}";
+                    var errMsg = await ReadErrorMessageAsync(response) ?? "Request failed";
+                    failures.Add($"{dealerName}: {errMsg}");
                 }
             }
 
             if (succeeded > 0)
             {
                 Toast.Success(failures.Count == 0
-                    ? $"Postponement requested for {succeeded} visit(s) - awaiting MDO approval."
-                    : $"{succeeded} visit(s) submitted, {failures.Count} failed: {string.Join("; ", failures)}");
-                _postponeModalOpen = false;
+                    ? $"Postponement requested for {succeeded} visit(s) — awaiting MDO approval."
+                    : $"{succeeded} visit(s) requested successfully. {failures.Count} failed.");
 
-                // Both tabs read from data this just invalidated (the dealer's new
-                // PendingPostponeRequestId) - reload whichever of todayAllocation/_allAllocations
-                // actually carried these rows so the badges appear without a manual page refresh.
                 await Task.WhenAll(CheckExistingAllocationAsync(), LoadAllAllocationsAsync());
+            }
+
+            if (failures.Count > 0)
+            {
+                _postponeError = string.Join("; ", failures);
             }
             else
             {
-                // Nothing went through - keep the modal open with the error so the reason/date
-                // aren't lost, and the still-failed rows stay selected for another attempt.
-                _postponeError = string.Join("; ", failures);
+                _showPostponeConfirmationModal = false;
+                postponeReason = "";
+                _selectedPostponeRowIds.Clear();
             }
         }
         finally
@@ -2078,6 +2561,7 @@
     private string HeaderSubtitle => currentTab switch
     {
         TaTab.Today => "Pick your dealer tasks and set today's targets, then track them through to completion.",
+        TaTab.Postpone => "Search and postpone scheduled dealer visits.",
         _ => "Everything assigned to you, what's approved for today, and what you've finished."
     };
 
@@ -2688,9 +3172,25 @@
 
             var result = await response.Content.ReadFromJsonAsync<List<CSR1ListDto>>();
 
+            // CSR1Date is the one real date on a program - the day the JMDO is actually meant to
+            // conduct it, not just "whenever assigned". Without this filter, every active program
+            // assigned to this JMDO (see the comment above) kept reappearing in EVERY week's Step 4,
+            // not just the week it's actually scheduled for - this scopes it down to the week
+            // currently selected here (SelectedWeekStart/_weekOffset, same Previous/Next Week
+            // navigation this whole wizard already uses), so a program only ever shows up once, in
+            // the one week matching its own CSR1Date. A program with no CSR1Date set at all (legacy/
+            // incomplete record) falls back to the old always-show behaviour rather than silently
+            // vanishing for having no date to match against.
+            var selectedWeekStart = SelectedWeekStart;
+            var selectedWeekEndExclusive = selectedWeekStart.AddDays(7);
+            bool HasCsr1Date(DateTime date) => date != default && date != DateTime.MinValue;
+            bool MatchesSelectedWeek(DateTime date) =>
+                date.Date >= selectedWeekStart && date.Date < selectedWeekEndExclusive;
+
             Programs.Clear();
             Programs.AddRange((result ?? new())
                 .Where(p => p.IsActive)
+                .Where(p => !HasCsr1Date(p.CSR1Date) || MatchesSelectedWeek(p.CSR1Date))
                 .Select(p => new ProgramOption
                 {
                     Id = p.Id,

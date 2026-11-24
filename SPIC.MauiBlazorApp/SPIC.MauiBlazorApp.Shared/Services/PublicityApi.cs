@@ -9,14 +9,27 @@ namespace SPIC.MauiBlazorApp.Shared.Services;
 /// Also owns the role rules the pages use to decide which buttons to show (the API enforces them).
 /// Registered with AddScoped in both hosts.
 /// </summary>
-public sealed class PublicityApi : ApiClientBase
+public sealed class PublicityApi : ApiClientBase, IDisposable
 {
     public const long MaxFileBytes = 10L * 1024 * 1024;
     public const string Accept = ".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx";
 
     private PubLookupsDto? _lookups;
 
-    public PublicityApi(HttpClient http, LoginState login, ToastService toast) : base(http, login, toast, "api/Publicity") { }
+    public PublicityApi(HttpClient http, LoginState login, ToastService toast) : base(http, login, toast, "api/Publicity")
+    {
+        // This service is AddScoped, but a scope can outlive a single login (MAUI keeps one scope
+        // for the whole app session; a Web circuit survives client-side navigation) - without this,
+        // logging out and back in as someone else would keep serving the previous user's cached
+        // People list / MyUserId from LookupsAsync() below, silently defaulting "Requested By" on
+        // PublicityForm.razor to the wrong person. Same pattern as ClientTelemetry's own
+        // Login.OnChange subscription.
+        Login.OnChange += OnLoginChanged;
+    }
+
+    private void OnLoginChanged() => _lookups = null;
+
+    public void Dispose() => Login.OnChange -= OnLoginChanged;
 
     // ---- who is asking ----------------------------------------------------------------------
 
@@ -34,9 +47,11 @@ public sealed class PublicityApi : ApiClientBase
     public string Home => Login.CanAccess(nameof(PagePermission.PublicityReview)) && (IsApprover || IsDispatcher) ? "/PublicityReview" : "/PublicityRequest";
     /// <summary>Anyone in the workflow may raise a request, not only the RMDO (RMD or MDO) - a chain
     /// role creating its own request skips every stage at or below its own rung (API:
-    /// PublicityController.Submit). Admin/SuperAdmin keep the testing bypass.</summary>
-    public bool CanCreate => Role is AppRole.RMD or AppRole.MDO or AppRole.RM or AppRole.SMD or AppRole.SMM or AppRole.Admin or AppRole.SuperAdmin
-        || IsAdminMdCs || IsDgmMdCs;
+    /// PublicityController.Submit). Admin/SuperAdmin keep the testing bypass. ADMIN-MD CS / DGM-MD CS
+    /// are deliberately excluded here (they review/approve, they don't raise requests) - the server's
+    /// own Create() endpoint still allows them independently of this flag, so this only controls
+    /// whether the button is shown, never the actual authorization to create one.</summary>
+    public bool CanCreate => Role is AppRole.RMD or AppRole.MDO or AppRole.RM or AppRole.SMD or AppRole.SMM or AppRole.Admin or AppRole.SuperAdmin;
     /// <summary>RM, SMD, SMM: the consolidation reviewers (region / state level).</summary>
     public bool IsFieldApprover => Role is AppRole.RM or AppRole.SMD or AppRole.SMM;
     public PublicityStage? MyStage => Role switch
@@ -82,6 +97,18 @@ public sealed class PublicityApi : ApiClientBase
     public Task<bool> DeleteAsync(int id) => SendAsync(HttpMethod.Delete, $"requests/{id}", null, "delete the draft");
     public Task<bool> ReviewAsync(int id, PubReviewDto dto) => SendAsync(HttpMethod.Post, $"requests/{id}/review", dto, "update the request");
     public Task<bool> ReviewBulkAsync(PubBulkReviewDto dto) => SendAsync(HttpMethod.Post, "requests/review-bulk", dto, "approve the requests");
+    // Same endpoint, typed response - callers that need to report the server-confirmed Approved
+    // count (never the submitted id-list length, so a partial failure is never shown as "all done").
+    public Task<PubBulkResultDto?> ReviewBulkDetailedAsync(PubBulkReviewDto dto) =>
+        SendAsync<PubBulkResultDto>(HttpMethod.Post, "requests/review-bulk", dto, "approve the requests");
+    public Task<bool> MarkRequestReviewedAsync(int id, bool reviewed) =>
+        SendAsync(HttpMethod.Post, $"requests/{id}/mark-reviewed", new PubMarkReviewedDto { Reviewed = reviewed }, "update the review status");
+    public Task<bool> ApproveRegionAsync(int stateId, int regionId, string? remarks) =>
+        SendAsync(HttpMethod.Post, $"regions/{stateId}/{regionId}/approve", new PubRegionActionDto { Remarks = remarks }, "approve the Region");
+    public Task<bool> FinalizeZeroRegionAsync(int stateId, int regionId, string? remarks) =>
+        SendAsync(HttpMethod.Post, $"regions/{stateId}/{regionId}/finalize-zero", new PubRegionActionDto { Remarks = remarks }, "finalize zero requirement");
+    public Task<bool> ConfirmZeroRegionAsync(int stateId, int regionId, string? remarks) =>
+        SendAsync(HttpMethod.Post, $"regions/{stateId}/{regionId}/confirm-zero", new PubRegionActionDto { Remarks = remarks }, "confirm zero requirement");
     public Task<PubSaved?> CreateDispatchAsync(int id, PubDispatchCreateDto dto) => SendAsync<PubSaved>(HttpMethod.Post, $"requests/{id}/dispatches", dto, "create the dispatch");
     public Task<bool> DispatchStatusAsync(int dispatchId, PubDispatchStatusDto dto) => SendAsync(HttpMethod.Post, $"dispatches/{dispatchId}/status", dto, "update the dispatch");
     public Task<bool> ProofAsync(int dispatchId, PubProofDto dto) => SendAsync(HttpMethod.Post, $"dispatches/{dispatchId}/proof", dto, "submit the dispatch proof");
@@ -215,6 +242,29 @@ public static class PubText
         PublicityFileKind.CourierProof => "Courier Proof",
         PublicityFileKind.NoteApproval => "Note Approval Document",
         _ => "Document"
+    };
+
+    /// <summary>Region-level status on the consolidation screen reflecting the workflow state.</summary>
+    public static string RegionStatus(PubRegionDto g) => g.Status switch
+    {
+        PubRegionStatus.Approved => "Finalized",
+        PubRegionStatus.ZeroConfirmed => "Finalized",
+        PubRegionStatus.ZeroSubmittedByRm => "Zero Submitted by RM",
+        PubRegionStatus.Reviewed => "Reviewed by SMD",
+        PubRegionStatus.InReview => "In SMD Review",
+        PubRegionStatus.Submitted => "Submitted to SMD",
+        PubRegionStatus.SubmittedToSmm => "Submitted to SMM",
+        _ => "Pending RM Submission"
+    };
+
+    public static string RegionStatusTone(PubRegionDto g) => g.Status switch
+    {
+        PubRegionStatus.Approved or PubRegionStatus.ZeroConfirmed or PubRegionStatus.SubmittedToSmm => "green",
+        PubRegionStatus.ZeroSubmittedByRm => "violet",
+        PubRegionStatus.Reviewed => "cyan",
+        PubRegionStatus.InReview => "amber",
+        PubRegionStatus.Submitted => "blue",
+        _ => "grey"
     };
 
     public static string Size(long bytes) => bytes >= 1024 * 1024 ? $"{bytes / 1024d / 1024d:0.0} MB" : $"{Math.Max(1, bytes / 1024)} KB";

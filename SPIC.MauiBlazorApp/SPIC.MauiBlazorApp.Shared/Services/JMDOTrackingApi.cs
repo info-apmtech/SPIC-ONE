@@ -236,12 +236,18 @@ public sealed class JMDOTrackingApi
     /// Oldest-first GPS points for the given session, for drawing its route on a map. Silent on
     /// failure (empty list), same reasoning as <see cref="GetMineActiveAsync"/> - a map that just
     /// shows no route on a transient error is better than a toast.
+    ///
+    /// <paramref name="sinceId"/> is the incremental-fetch cursor for TrackPlayback's Live Tracking
+    /// tab: when given, only points newer than that id come back, instead of the whole route every
+    /// poll tick. Omitted, behaviour is unchanged from before this parameter existed.
     /// </summary>
-    public async Task<List<JMDOTrackingPointDto>> GetSessionPointsAsync(int sessionId, CancellationToken ct = default)
+    public async Task<List<JMDOTrackingPointDto>> GetSessionPointsAsync(int sessionId, int? sinceId = null, CancellationToken ct = default)
     {
         try
         {
-            var result = await _http.GetFromJsonAsync<List<JMDOTrackingPointDto>>($"{Root}/sessions/{sessionId}/points", Json, ct);
+            var url = $"{Root}/sessions/{sessionId}/points";
+            if (sinceId is > 0) url += $"?sinceId={sinceId.Value}";
+            var result = await _http.GetFromJsonAsync<List<JMDOTrackingPointDto>>(url, Json, ct);
             return result ?? new();
         }
         catch (Exception)

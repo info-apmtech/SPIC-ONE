@@ -235,6 +235,12 @@ namespace Spic.Infrastructure.Data
                 entity.HasKey(x => x.Id);
                 entity.HasIndex(x => x.AttendanceId);
                 entity.HasIndex(x => x.UserId);
+                // DB-level backstop: only one Active session per user, no matter how many requests
+                // race to create one (JmdoTaskAllocationController.GetOrCreateTaskTrackingSessionAsync
+                // and JMDOTrackingController.Start both catch the unique-violation and re-query).
+                entity.HasIndex(x => x.UserId)
+                    .HasFilter("\"Status\" = 0")
+                    .IsUnique();
                 entity.HasMany(x => x.Points)
                     .WithOne(p => p.TrackingSession)
                     .HasForeignKey(p => p.TrackingSessionId)
@@ -245,6 +251,20 @@ namespace Spic.Infrastructure.Data
             {
                 entity.HasKey(x => x.Id);
                 entity.HasIndex(x => x.TrackingSessionId);
+            });
+
+            // One row = "this task instance currently depends on this tracking session" - see
+            // JmdoTaskTrackingLink's own doc comment. (AllocationId, TaskKey) disambiguates
+            // recurring weekly task keys (spcm/soilsample/posliquidation) from each other.
+            builder.Entity<JmdoTaskTrackingLink>(entity =>
+            {
+                entity.HasKey(x => x.Id);
+                entity.HasIndex(x => new { x.AllocationId, x.TaskKey }).IsUnique();
+                entity.HasIndex(x => x.TrackingSessionId);
+                entity.HasOne(x => x.TrackingSession)
+                    .WithMany()
+                    .HasForeignKey(x => x.TrackingSessionId)
+                    .OnDelete(DeleteBehavior.Cascade);
             });
 
             builder.Entity<JmdoTaskAllocationProgram>(entity =>
@@ -348,6 +368,9 @@ namespace Spic.Infrastructure.Data
             builder.Entity<PublicityAcknowledgement>(entity => entity.HasIndex(x => x.DispatchId).IsUnique());
             builder.Entity<PublicityFile>(entity => entity.HasIndex(x => x.RequestId));
             builder.Entity<PublicityEvent>(entity => entity.HasIndex(x => x.RequestId));
+            // One current finalization per Region - re-finalizing (ApproveRegion/ConfirmZeroRegion)
+            // overwrites it rather than appending, see PublicityRegionFinalization's own doc comment.
+            builder.Entity<PublicityRegionFinalization>(entity => entity.HasIndex(x => new { x.StateId, x.RegionId }).IsUnique());
             builder.Entity<PublicityNotification>(entity =>
             {
                 entity.HasIndex(x => x.TargetUserId);
@@ -1034,6 +1057,7 @@ namespace Spic.Infrastructure.Data
         public DbSet<JMDOAttendance> JMDOAttendances { get; set; }
         public DbSet<JMDOTrackingSession> JMDOTrackingSessions { get; set; }
         public DbSet<JMDOTrackingPoint> JMDOTrackingPoints { get; set; }
+        public DbSet<JmdoTaskTrackingLink> JmdoTaskTrackingLinks { get; set; }
 
         public DbSet<RefreshToken> RefreshTokens { get; set; }
 
@@ -1063,6 +1087,7 @@ namespace Spic.Infrastructure.Data
         public DbSet<PublicityFile> PublicityFiles { get; set; }
         public DbSet<PublicityEvent> PublicityEvents { get; set; }
         public DbSet<PublicityNotification> PublicityNotifications { get; set; }
+        public DbSet<PublicityRegionFinalization> PublicityRegionFinalizations { get; set; }
 
         //// Help Desk translation review
         public DbSet<HelpReviewItem> HelpReviewItems { get; set; }

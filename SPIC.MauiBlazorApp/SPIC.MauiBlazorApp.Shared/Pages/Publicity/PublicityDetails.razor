@@ -20,7 +20,7 @@
 <div class="pub-page pub-print">
     <PageHeader Title="@(ReadOnlyReviewer ? "Request Details" : "My Publicity Material Request Details")" Subtitle="@Subtitle">
         <Actions>
-            <a class="pub-btn pub-btn--line" href="@Api.Home"><i class="bi bi-arrow-left"></i> <span class="pub-hide-sm">Back to List Page</span></a>
+            <a class="pub-btn pub-btn--line" href="@BackUrl"><i class="bi bi-arrow-left"></i> <span class="pub-hide-sm">Back to @BackLabel</span></a>
             <button type="button" class="pub-btn pub-btn--line pub-hide-sm" @onclick="DownloadReportAsync" disabled="@(_d is null)">Download Report</button>
             <button type="button" class="pub-btn pub-btn--line pub-hide-sm" @onclick="PrintAsync"><i class="bi bi-printer"></i> Print</button>
         </Actions>
@@ -102,7 +102,7 @@
                 </section>
 
                 <div class="pub-footer">
-                    <a class="pub-btn pub-btn--grey" href="@Api.Home"><i class="bi bi-chevron-double-left"></i> Back to List</a>
+                    <a class="pub-btn pub-btn--grey" href="@BackUrl"><i class="bi bi-chevron-double-left"></i> Back to @BackLabel</a>
                     <span class="pub-footer__gap"></span>
                     @if (d.CanEdit)
                     {
@@ -113,10 +113,24 @@
                         @* DGM - MD CS (final approval) is approve-only - no Edit here, for anyone including Admin. *@
                         @if (d.Stage != PublicityStage.DgmMdCsReview)
                         {
-                            <a class="pub-btn pub-btn--line-blue" href="@($"/PublicityReview/edit/{d.Id}")"><i class="bi bi-pencil-square"></i> Edit</a>
+                            <a class="pub-btn pub-btn--line-blue" href="@($"/PublicityReview/edit/{d.Id}{(FromConsolidation ? "?back=consolidation" : "")}")"><i class="bi bi-pencil-square"></i> Edit</a>
                         }
                         <button type="button" class="pub-btn pub-btn--line-red" @onclick="() => _reviewOpen = true"><i class="bi bi-x-circle"></i> Reject</button>
-                        <button type="button" class="pub-btn pub-btn--primary" disabled="@_busy" @onclick="ApproveAsync"><i class="bi bi-check2"></i> Approve &amp; Forward to @PubText.Next(d.Stage)</button>
+                        @if (d.Stage == PublicityStage.SmdReview || Api.Role == AppRole.SMD)
+                        {
+                            @if (d.SmdReviewedAt is null)
+                            {
+                                <button type="button" class="pub-btn pub-btn--primary" disabled="@_busy" @onclick="() => MarkReviewedAsync(true)"><i class="bi bi-check2-circle"></i> Mark as Reviewed</button>
+                            }
+                            else
+                            {
+                                <button type="button" class="pub-btn pub-btn--line" disabled="@_busy" @onclick="() => MarkReviewedAsync(false)"><i class="bi bi-arrow-counterclockwise"></i> Unmark Reviewed</button>
+                            }
+                        }
+                        else
+                        {
+                            <button type="button" class="pub-btn pub-btn--primary" disabled="@_busy" @onclick="ApproveAsync"><i class="bi bi-check2"></i> Approve &amp; Forward to @PubText.Next(d.Stage)</button>
+                        }
                     }
                     else if (ReadOnlyReviewer)
                     {
@@ -443,6 +457,9 @@
 
     private string[] Tabs => new[] { "Request Details & History", "Tracking & Delivery", Review ? "Exception Handling" : "Acknowledgement", "Related Documents" };
     private bool Review => Nav.ToBaseRelativePath(Nav.Uri).StartsWith("PublicityReview", StringComparison.OrdinalIgnoreCase);
+    private bool FromConsolidation => Nav.Uri.Contains("back=consolidation");
+    private string BackUrl => FromConsolidation ? "/PublicityReview/consolidation" : Api.Home;
+    private string BackLabel => FromConsolidation ? "Consolidation" : "List";
     /// <summary>A reviewer looking at a request that is not waiting for them (SMM "Request Details").</summary>
     private bool ReadOnlyReviewer => Review && _d is { CanReview: false, CanDispatch: false, CanResolve: false };
     private string Subtitle => _d is { CanReview: true } ? $"Review the request details, edit if required and approve to forward to {PubText.Next(_d.Stage)}"
@@ -521,6 +538,21 @@
         _reviewOpen = false;
         Toast.Success(done);
         Nav.NavigateTo(Api.Home);
+    }
+
+    private async Task MarkReviewedAsync(bool reviewed)
+    {
+        _busy = true;
+        var ok = await Api.MarkRequestReviewedAsync(Id, reviewed);
+        _busy = false;
+        if (!ok) return;
+        Toast.Success(reviewed ? "Request marked as reviewed." : "Review status cleared.");
+        if (reviewed && FromConsolidation)
+        {
+            Nav.NavigateTo("/PublicityReview/consolidation");
+            return;
+        }
+        await LoadAsync();
     }
 
     // ---- dispatch status (admin) -----------------------------------------------------------

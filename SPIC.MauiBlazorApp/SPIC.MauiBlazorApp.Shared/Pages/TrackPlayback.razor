@@ -2,6 +2,7 @@
 @implements IAsyncDisposable
 @using SPIC.Core.Entities
 @using SPIC.Core.DTOs
+@using SPIC.Core.Utilities
 @inject NavigationManager Navigation
 @inject SPIC.MauiBlazorApp.Shared.Services.ToastService Toast
 @inject SPIC.MauiBlazorApp.Shared.Services.FieldAttendanceState AttendanceState
@@ -9,6 +10,7 @@
 @inject SPIC.MauiBlazorApp.Shared.Services.IFormFactor FormFactor
 @inject SPIC.MauiBlazorApp.Shared.Services.NavHistoryService NavHistory
 @inject SPIC.MauiBlazorApp.Shared.Services.JmdoTrackingClientLoop TrackingLoop
+@inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
 @inject IJSRuntime JS
 
 @*
@@ -31,7 +33,92 @@
         </div>
     </div>
 
-    @if (_trackLoading)
+    @* Two views sharing this one page: Playback History (self-scoped, unchanged below) and Live
+       Tracking (read-only - never starts/stops anyone's tracking; see the @code region). Playback
+       History stays the default view on load. *@
+    <div class="ma-session-picker mb-3">
+        <button type="button" class="@("ma-session-chip" + (!_liveTabActive ? " active" : ""))" @onclick="() => SwitchTabAsync(false)">Playback History</button>
+        <button type="button" class="@("ma-session-chip" + (_liveTabActive ? " active" : ""))" @onclick="() => SwitchTabAsync(true)">Live Tracking</button>
+    </div>
+
+    @if (_liveTabActive)
+    {
+        @if (_liveLoading)
+        {
+            <div class="ma-tracking-card">
+                <EmptyState Icon="bi-hourglass-split" Title="Loading live tracking..." Compact="true" />
+            </div>
+        }
+        else if (_liveRoster.Count == 0)
+        {
+            <div class="ma-tracking-card">
+                <EmptyState Icon="bi-geo-alt"
+                            Title="No one to show"
+                            Message="You don't have permission to view anyone's tracking, or no one was found."
+                            Compact="true" />
+            </div>
+        }
+        else
+        {
+            <div class="ma-card">
+                <h4 class="ma-weekly-title">@(IsSupervisorRole ? "Your team" : "Your tracking")</h4>
+                <div class="ma-session-picker">
+                    @foreach (var row in _liveRoster)
+                    {
+                        <button type="button"
+                                class="@("ma-session-chip" + (row.UserId == _liveSelectedUserId ? " active" : ""))"
+                                @onclick="() => SelectLiveEmployee(row)">
+                            @row.JmdoName
+                            <span class="tt-status @StatusClass(row.LiveStatus, row.LastPointAt) ms-1"><span class="tt-status-dot"></span>@StatusLabel(row.LiveStatus, row.LastPointAt)</span>
+                        </button>
+                    }
+                </div>
+            </div>
+
+            @if (SelectedLiveRow is { } selected)
+            {
+                <div class="ma-tracking-card mt-3">
+                    <div class="ma-tracking-header">
+                        <div class="ma-tracking-left">
+                            <span class="ma-tracking-icon"><i class="bi bi-geo-alt-fill"></i></span>
+                            <div class="ma-tracking-left-text">
+                                <div class="ma-tracking-title">@selected.JmdoName</div>
+                                <div class="ma-tracking-sub">
+                                    @(string.IsNullOrWhiteSpace(selected.Designation) ? "" : selected.Designation + " · ")<span class="tt-status @StatusClass(selected.LiveStatus, selected.LastPointAt)"><span class="tt-status-dot"></span>@StatusLabel(selected.LiveStatus, selected.LastPointAt)</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="ma-tracking-sub mt-2">
+                        <div>Tracking started: @(selected.SessionStartTime?.ToString("dd MMM yyyy, hh:mm tt") ?? "—")</div>
+                        <div>Last location update: @(selected.LastPointAt?.ToString("dd MMM yyyy, hh:mm tt") ?? "—")</div>
+                        <div>Location: @(selected.LastLatitude is { } slat && selected.LastLongitude is { } slng ? $"{slat:0.####}, {slng:0.####}" : "—")</div>
+                        <div>GPS accuracy: @(selected.LastAccuracy is { } acc ? $"±{acc:0}m" : "—")</div>
+                    </div>
+
+                    @if (selected.SessionId is not null)
+                    {
+                        @* Live Tracking shows the current-location marker only - no route polyline, no
+                           start/end markers. Playback History (below, untouched) keeps the full route
+                           view with initTrackingRouteMap/updateTrackingRouteMap; this uses its own
+                           dedicated initLiveLocationMap/updateLiveLocationMarker pair instead. *@
+                        <div class="ma-map ma-live-map mt-2">
+                            <div id="ma-live-tracking-map" class="ma-map-canvas"></div>
+                            <button type="button" class="ma-live-recenter-btn" @onclick="RecenterLiveMapAsync" title="Recenter on current location">
+                                <i class="bi bi-crosshair"></i>
+                            </button>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="ma-tracking-sub mt-2">No tracking session to show on the map yet.</div>
+                    }
+                </div>
+            }
+        }
+    }
+    else if (_trackLoading)
     {
         <div class="ma-tracking-card">
             <EmptyState Icon="bi-hourglass-split" Title="Loading tracking history..." Compact="true" />
@@ -104,12 +191,29 @@
             <div class="ma-tracking-card mt-3">
                 @if (_liveSession is null)
                 {
+                    @* Historical playback and live tracking are conceptually separate - this heading
+                       must never say "Tracking Stopped" just because the user is viewing a route or
+                       because playback animation is paused. The status pill reflects the session's
+                       OWN actual LiveStatus (same StatusLabel/StatusClass Live Tracking uses) instead
+                       of a hardcoded label, so an Active session viewed here (e.g. on Web, where the
+                       "Tracking Active" card above is native-only and never shows) still reads
+                       correctly instead of falsely "Stopped". *@
                     <div class="ma-tracking-header">
                         <div class="ma-tracking-left">
                             <span class="ma-tracking-icon"><i class="bi bi-geo-alt-fill"></i></span>
                             <div class="ma-tracking-left-text">
-                                <div class="ma-tracking-title">Tracking Stopped</div>
-                                <div class="ma-tracking-sub">Route for @FormatSessionLabel(_trackSession)</div>
+                                <div class="ma-tracking-title">Route Playback</div>
+                                <div class="ma-tracking-sub">
+                                    @FormatSessionTimeRange(_trackSession)
+                                    @if (_trackDistanceKm > 0)
+                                    {
+                                        <span> · @(_trackDistanceKm.ToString("0.0")) km</span>
+                                    }
+                                    ·
+                                    <span class="tt-status @StatusClass(_trackSession.LiveStatus, _trackSession.LastPointAt)">
+                                        <span class="tt-status-dot"></span>@StatusLabel(_trackSession.LiveStatus, _trackSession.LastPointAt)
+                                    </span>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -158,15 +262,32 @@
     // can review any recorded route but never watch/control a session in real time.
     private bool IsNativeApp => FormFactor.GetFormFactor() != "Web";
 
+    // Same ?tab= convention TasksAllocation.razor already uses. "live" opens Live Tracking (e.g.
+    // FieldDashboard's View Route, when an Active session exists); "history" or anything else/absent
+    // keeps the existing default (Playback History) - a manual user visit to /TrackPlayback is
+    // completely unaffected.
+    [SupplyParameterFromQuery(Name = "tab")]
+    public string? TabQuery { get; set; }
+
     protected override async Task OnInitializedAsync()
     {
         await LoadTrackingViewAsync();
+
+        if (string.Equals(TabQuery, "live", StringComparison.OrdinalIgnoreCase))
+            await SwitchTabAsync(true);
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (!_trackLoading && _trackSession is not null)
+        if (_liveTabActive)
+        {
+            if (!_liveLoading && _liveSelectedSessionId is not null)
+                await RenderLiveMapAsync();
+        }
+        else if (!_trackLoading && _trackSession is not null)
+        {
             await RenderTrackingMapAsync();
+        }
     }
 
     // ---- Tracking view: a real route map (tracking-map.js, Leaflet) for one of the last 7 days'
@@ -176,12 +297,31 @@
     private List<JMDOTrackingSessionDto> _historySessions = new();
     private JMDOTrackingSessionDto? _trackSession;
     private List<JMDOTrackingPointDto> _trackPoints = new();
+    private List<List<JMDOTrackingPointDto>> _routeSegments = new();
+    private double _trackDistanceKm;
     private bool _trackLoading = true;
     private TimeSpan _trackElapsed;
     private System.Threading.Timer? _trackElapsedTimer;
     private CancellationTokenSource? _trackRefreshCts;
     private int? _mapInitializedForSessionId;
     private bool _mapPointsDirty;
+
+    private void SetTrackPoints(List<JMDOTrackingPointDto> points)
+    {
+        var cleaned = GpsTrajectoryFilter.CleanPoints(points);
+        _routeSegments = GpsTrajectoryFilter.SegmentPoints(cleaned);
+        _trackPoints = new List<JMDOTrackingPointDto>(cleaned.Count);
+        for (var s = 0; s < _routeSegments.Count; s++)
+        {
+            foreach (var pt in _routeSegments[s])
+            {
+                pt.SegmentIndex = s;
+                _trackPoints.Add(pt);
+            }
+        }
+        _trackDistanceKm = GpsTrajectoryFilter.CalculateTravelDistanceKm(_trackPoints);
+        _mapPointsDirty = true;
+    }
 
     // The caller can have at most one Active session server-side (JMDOTrackingController.Start), but
     // it may not be the one currently selected for playback (_trackSession) - the JMDO can browse an
@@ -309,7 +449,11 @@
     private async Task RenderPlaybackPositionAsync()
     {
         if (_trackPoints.Count == 0) return;
-        var points = _trackPoints.Select(p => new { latitude = p.Latitude, longitude = p.Longitude });
+        var points = _trackPoints.Select(p => new {
+            latitude = p.Latitude,
+            longitude = p.Longitude,
+            segmentIndex = p.SegmentIndex
+        });
         try { await JS.InvokeVoidAsync("setPlaybackPosition", "ma-tracking-map", points, _playbackIndex, _playbackPlaying, _playbackSpeed); }
         catch (Exception) { /* map not ready yet - next render/tick will retry */ }
     }
@@ -331,8 +475,8 @@
         _historySessions = await TrackingApi.GetMineHistoryAsync(HistoryDays);
         _trackSession = _historySessions.FirstOrDefault(s => s.Status == JMDOTrackingSessionStatus.Active)
             ?? _historySessions.FirstOrDefault(); // most-recent-first list, so First = most recently started
-        _trackPoints = _trackSession is null ? new() : await TrackingApi.GetSessionPointsAsync(_trackSession.Id);
-        _mapPointsDirty = true;
+        var points = _trackSession is null ? new() : await TrackingApi.GetSessionPointsAsync(_trackSession.Id);
+        SetTrackPoints(points);
 
         _trackLoading = false;
         StateHasChanged();
@@ -350,8 +494,8 @@
 
         PausePlayback();
         _trackSession = session;
-        _trackPoints = await TrackingApi.GetSessionPointsAsync(session.Id);
-        _mapPointsDirty = true;
+        var points = await TrackingApi.GetSessionPointsAsync(session.Id);
+        SetTrackPoints(points);
 
         StartElapsedTimer();
         StartRefreshLoopIfActive();
@@ -379,6 +523,17 @@
             : s.EndTime is { } end
                 ? $"{day} {s.StartTime:h:mm tt} – {end:h:mm tt}"
                 : $"{day} {s.StartTime:h:mm tt}";
+    }
+
+    // Same time range as FormatSessionLabel but without its own hardcoded "Live ·" prefix - used
+    // next to the Route Playback header's own accurate status pill, so the two never contradict
+    // each other (e.g. "Live · ... · Signal delayed").
+    private static string FormatSessionTimeRange(JMDOTrackingSessionDto s)
+    {
+        var day = FormatSessionDay(s.StartTime);
+        return s.EndTime is { } end
+            ? $"{day} {s.StartTime:h:mm tt} – {end:h:mm tt}"
+            : $"{day} {s.StartTime:h:mm tt}";
     }
 
     private void StartElapsedTimer()
@@ -429,8 +584,8 @@
 
                 if (_trackSession is not null)
                 {
-                    _trackPoints = await TrackingApi.GetSessionPointsAsync(_trackSession.Id, ct);
-                    _mapPointsDirty = true;
+                    var points = await TrackingApi.GetSessionPointsAsync(_trackSession.Id, ct: ct);
+                    SetTrackPoints(points);
                 }
                 if (ct.IsCancellationRequested) return;
 
@@ -469,8 +624,9 @@
 
         if (_mapInitializedForSessionId != _trackSession!.Id)
         {
-            var startLat = _trackSession.StartLatitude ?? _trackPoints.FirstOrDefault()?.Latitude ?? 0;
-            var startLng = _trackSession.StartLongitude ?? _trackPoints.FirstOrDefault()?.Longitude ?? 0;
+            var firstValid = _trackPoints.FirstOrDefault(p => GpsTrajectoryFilter.IsValidCoordinate(p.Latitude, p.Longitude));
+            var startLat = firstValid?.Latitude ?? _trackSession.StartLatitude ?? 0;
+            var startLng = firstValid?.Longitude ?? _trackSession.StartLongitude ?? 0;
             try
             {
                 await JS.InvokeVoidAsync("initTrackingRouteMap", "ma-tracking-map", startLat, startLng);
@@ -493,8 +649,16 @@
 
         if (_mapPointsDirty && _trackPoints.Count > 0)
         {
-            var points = _trackPoints.Select(p => new { latitude = p.Latitude, longitude = p.Longitude });
-            await JS.InvokeVoidAsync("updateTrackingRouteMap", "ma-tracking-map", points);
+            var segmentsPayload = _routeSegments
+                .Where(seg => seg.Count > 0)
+                .Select(seg => seg.Select(p => new {
+                    latitude = p.Latitude,
+                    longitude = p.Longitude,
+                    segmentIndex = p.SegmentIndex
+                }).ToList())
+                .ToList();
+
+            await JS.InvokeVoidAsync("updateTrackingRouteMap", "ma-tracking-map", segmentsPayload);
             _mapPointsDirty = false;
 
             if (freshSession)
@@ -502,9 +666,269 @@
         }
     }
 
+    // ---- Live Tracking tab: read-only view of whoever this viewer is authorized to see - a plain
+    // JMDO sees only themselves (mine/active, falling back to mine/latest for an honest Stopped/
+    // NotStarted row), Admin/MO/MDO see their own HQ team (GetTeamAsync, the exact same endpoint/
+    // scope TeamTracking.razor already uses). No new permission logic anywhere, client or server -
+    // this only ever calls read endpoints (GetMineActiveAsync/GetMineLatestAsync/GetTeamAsync/
+    // GetSessionPointsAsync), never StartAsync/StopAsync, so opening/closing this tab can never
+    // affect anyone's actual tracking session. Entirely separate state from Playback History above -
+    // a different map element id ("ma-live-tracking-map" vs "ma-tracking-map"), a different timer,
+    // and it never reads or mutates _historySessions/_trackSession/_mapInitializedForSessionId/
+    // _mapPointsDirty/_trackRefreshCts.
+    private const int LiveTrackingPollSeconds = 15; // same cadence as the native RefreshLoopAsync above
+
+    private bool _liveTabActive;
+    private bool _liveLoading;
+    private List<LiveRosterRow> _liveRoster = new();
+    private string? _liveSelectedUserId;
+    private int? _liveSelectedSessionId;
+    private int? _liveMapInitializedForSessionId;
+    private CancellationTokenSource? _liveRefreshCts;
+
+    private bool IsSupervisorRole => LoginState.UserRole is AppRole.Admin or AppRole.MO or AppRole.MDO;
+
+    private LiveRosterRow? SelectedLiveRow => _liveRoster.FirstOrDefault(r => r.UserId == _liveSelectedUserId);
+
+    private sealed class LiveRosterRow
+    {
+        public required string UserId { get; init; }
+        public required string JmdoName { get; init; }
+        public string? Designation { get; init; }
+        public JmdoTrackingLiveStatus LiveStatus { get; init; }
+        public DateTime? LastPointAt { get; init; }
+        public double? LastLatitude { get; init; }
+        public double? LastLongitude { get; init; }
+        public double? LastAccuracy { get; init; }
+        public DateTime? SessionStartTime { get; init; }
+        public int? SessionId { get; init; }
+    }
+
+    // Never trust LiveStatus alone as proof of "live" - ResolveLiveStatus (server-side) computes
+    // Live for a just-created session using its StartTime as a stand-in for "last point" when none
+    // has arrived yet, which is honest for staleness math but not for a viewer asking "is GPS
+    // actually coming in". LastPointAt == null is the one case that overrides it here.
+    private static string StatusLabel(JmdoTrackingLiveStatus liveStatus, DateTime? lastPointAt) => liveStatus switch
+    {
+        JmdoTrackingLiveStatus.Stopped => "Stopped",
+        JmdoTrackingLiveStatus.AutoEnded => "Stopped",
+        JmdoTrackingLiveStatus.NotStarted => "Not Started",
+        _ when lastPointAt is null => "Waiting for GPS",
+        JmdoTrackingLiveStatus.Live => "Live",
+        JmdoTrackingLiveStatus.Stale => "Stale",
+        JmdoTrackingLiveStatus.Offline => "Offline",
+        _ => "Not Started"
+    };
+
+    private static string StatusClass(JmdoTrackingLiveStatus liveStatus, DateTime? lastPointAt) => liveStatus switch
+    {
+        JmdoTrackingLiveStatus.Stopped => "tt-status-stopped",
+        JmdoTrackingLiveStatus.AutoEnded => "tt-status-autoended",
+        JmdoTrackingLiveStatus.NotStarted => "tt-status-notstarted",
+        _ when lastPointAt is null => "tt-status-waiting",
+        JmdoTrackingLiveStatus.Live => "tt-status-live",
+        JmdoTrackingLiveStatus.Stale => "tt-status-stale",
+        JmdoTrackingLiveStatus.Offline => "tt-status-offline",
+        _ => "tt-status-notstarted"
+    };
+
+    private async Task SwitchTabAsync(bool live)
+    {
+        if (_liveTabActive == live) return;
+        _liveTabActive = live;
+
+        if (live)
+        {
+            await LoadLiveRosterAsync();
+            StartLiveRefreshLoop();
+        }
+        else
+        {
+            await StopLiveRefreshAsync();
+        }
+
+        StateHasChanged();
+    }
+
+    private List<LiveRosterRow> BuildRosterFromTeam(IEnumerable<JMDOTrackingTeamRowDto> team) =>
+        team.Select(t => new LiveRosterRow
+        {
+            UserId = t.UserId,
+            JmdoName = t.JmdoName,
+            Designation = t.Designation,
+            LiveStatus = t.LiveStatus,
+            LastPointAt = t.LastPointAt,
+            LastLatitude = t.LastLatitude,
+            LastLongitude = t.LastLongitude,
+            LastAccuracy = t.LastAccuracy,
+            SessionStartTime = t.SessionStartTime,
+            SessionId = t.SessionId
+        }).ToList();
+
+    private List<LiveRosterRow> BuildSelfRoster(JMDOTrackingSessionDto? mine) => new()
+    {
+        new LiveRosterRow
+        {
+            UserId = "me",
+            JmdoName = mine?.JmdoName ?? LoginState.UserName ?? "You",
+            Designation = mine?.Designation ?? LoginState.DesignationName,
+            LiveStatus = mine?.LiveStatus ?? JmdoTrackingLiveStatus.NotStarted,
+            LastPointAt = mine?.LastPointAt,
+            LastLatitude = mine?.LastLatitude,
+            LastLongitude = mine?.LastLongitude,
+            LastAccuracy = mine?.LastAccuracy,
+            SessionStartTime = mine?.StartTime,
+            SessionId = mine?.Id
+        }
+    };
+
+    private async Task LoadLiveRosterAsync()
+    {
+        _liveLoading = true;
+        StateHasChanged();
+
+        _liveRoster = IsSupervisorRole
+            ? BuildRosterFromTeam(await TrackingApi.GetTeamAsync())
+            : BuildSelfRoster(await TrackingApi.GetMineActiveAsync() ?? await TrackingApi.GetMineLatestAsync());
+
+        if (_liveSelectedUserId is null || _liveRoster.All(r => r.UserId != _liveSelectedUserId))
+            _liveSelectedUserId = _liveRoster.FirstOrDefault()?.UserId;
+
+        _liveLoading = false;
+        StateHasChanged();
+
+        var selected = _liveRoster.FirstOrDefault(r => r.UserId == _liveSelectedUserId);
+        if (selected is not null)
+            SelectLiveEmployee(selected);
+    }
+
+    // Rejects exact/near-(0,0) - the universal "no GPS fix yet" sentinel value several platforms
+    // return - plus anything outside valid lat/lng range. Applied to the roster row's own
+    // LastLatitude/LastLongitude, which is the ONLY coordinate source Live Tracking uses now (no
+    // route/point fetch at all - see the Context note below).
+    private static bool IsPlausibleCoordinate(double? lat, double? lng) =>
+        lat is { } la && lng is { } lo
+        && la is >= -90 and <= 90 && lo is >= -180 and <= 180
+        && (Math.Abs(la) > 0.01 || Math.Abs(lo) > 0.01);
+
+    // Live Tracking shows ONLY the current-location marker now - no route polyline, no start/end
+    // markers, no GetSessionPointsAsync call at all. The roster row (Team()/MineActive(), already
+    // being polled every tick for the status badges) already carries LastLatitude/LastLongitude/
+    // LastPointAt/LastAccuracy - exactly "the latest location information needed to update the
+    // marker" - so there is nothing left to fetch separately; this is the smallest possible read
+    // surface for a live-location-only view. Playback History's own GetSessionPointsAsync calls
+    // (LoadTrackingViewAsync/SelectSession/RefreshLoopAsync, all far below, untouched) are a
+    // completely separate code path.
+    private double? _liveAnchorLat;
+    private double? _liveAnchorLng;
+
+    private void SelectLiveEmployee(LiveRosterRow row)
+    {
+        var sessionChanged = _liveSelectedSessionId != row.SessionId;
+        _liveSelectedUserId = row.UserId;
+        _liveAnchorLat = IsPlausibleCoordinate(row.LastLatitude, row.LastLongitude) ? row.LastLatitude : null;
+        _liveAnchorLng = IsPlausibleCoordinate(row.LastLatitude, row.LastLongitude) ? row.LastLongitude : null;
+
+        if (sessionChanged)
+        {
+            _liveSelectedSessionId = row.SessionId;
+            _liveMapInitializedForSessionId = null; // force re-init (new map, new employee) on next render
+        }
+
+        StateHasChanged();
+    }
+
+    private void StartLiveRefreshLoop()
+    {
+        _liveRefreshCts?.Cancel();
+        var cts = new CancellationTokenSource();
+        _liveRefreshCts = cts;
+        _ = LiveRefreshLoopAsync(cts.Token);
+    }
+
+    private async Task LiveRefreshLoopAsync(CancellationToken ct)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(LiveTrackingPollSeconds));
+        try
+        {
+            while (await timer.WaitForNextTickAsync(ct))
+            {
+                // Always re-fetch the roster (cheap - one row or one HQ team) so every visible
+                // status badge stays honest, not just the selected employee's - and this one call
+                // already carries the latest location too, so nothing else needs fetching.
+                _liveRoster = IsSupervisorRole
+                    ? BuildRosterFromTeam(await TrackingApi.GetTeamAsync())
+                    : BuildSelfRoster(await TrackingApi.GetMineActiveAsync() ?? await TrackingApi.GetMineLatestAsync());
+                if (ct.IsCancellationRequested) return;
+
+                var selectedRow = _liveRoster.FirstOrDefault(r => r.UserId == _liveSelectedUserId);
+                if (selectedRow is not null)
+                    SelectLiveEmployee(selectedRow); // updates the anchor + flags a re-init if the session changed
+
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Expected when the tab is switched away from or the page is torn down.
+        }
+    }
+
+    private async Task StopLiveRefreshAsync()
+    {
+        _liveRefreshCts?.Cancel();
+        _liveRefreshCts = null;
+
+        if (_liveMapInitializedForSessionId is not null)
+        {
+            _liveMapInitializedForSessionId = null;
+            try { await JS.InvokeVoidAsync("destroyLiveLocationMap", "ma-live-tracking-map"); }
+            catch (Exception) { /* page/circuit may already be gone */ }
+        }
+    }
+
+    // Current-location-only rendering: initLiveLocationMap/updateLiveLocationMarker are a dedicated
+    // pair distinct from initTrackingRouteMap/updateTrackingRouteMap (tracking-map.js) - no polyline,
+    // no start/end markers, no fitBounds over historical points. updateLiveLocationMarker itself
+    // only recenters the camera if the user hasn't manually panned/zoomed (see its own JS comment),
+    // so exploring the map is preserved; RecenterLiveMapAsync below is the explicit opt back in.
+    private async Task RenderLiveMapAsync()
+    {
+        if (_liveSelectedSessionId is null) return;
+        if (!IsPlausibleCoordinate(_liveAnchorLat, _liveAnchorLng))
+            return; // no real fix yet - "Waiting for GPS" already covers this in the UI; retried
+                    // automatically next render once the roster/poll loop has a valid location
+
+        if (_liveMapInitializedForSessionId != _liveSelectedSessionId)
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("initLiveLocationMap", "ma-live-tracking-map", _liveAnchorLat!.Value, _liveAnchorLng!.Value);
+                _liveMapInitializedForSessionId = _liveSelectedSessionId;
+            }
+            catch (Exception)
+            {
+                // map element not in the DOM yet - OnAfterRenderAsync retries next render
+            }
+        }
+        else
+        {
+            try { await JS.InvokeVoidAsync("updateLiveLocationMarker", "ma-live-tracking-map", _liveAnchorLat!.Value, _liveAnchorLng!.Value); }
+            catch (Exception) { /* page/circuit may already be gone */ }
+        }
+    }
+
+    private async Task RecenterLiveMapAsync()
+    {
+        if (!IsPlausibleCoordinate(_liveAnchorLat, _liveAnchorLng)) return;
+        try { await JS.InvokeVoidAsync("recenterLiveLocationMap", "ma-live-tracking-map", _liveAnchorLat!.Value, _liveAnchorLng!.Value); }
+        catch (Exception) { /* map not ready */ }
+    }
+
     public async ValueTask DisposeAsync()
     {
         await StopTrackingViewLiveUpdatesAsync();
+        await StopLiveRefreshAsync();
     }
 
     private sealed class GeoResult

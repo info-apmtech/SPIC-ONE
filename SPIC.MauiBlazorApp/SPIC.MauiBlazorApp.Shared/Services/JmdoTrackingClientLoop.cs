@@ -81,6 +81,7 @@ public sealed class JmdoTrackingClientLoop : IDisposable
                 }
 
                 if (position is null || !string.IsNullOrWhiteSpace(position.Error)) continue;
+                if (position.Accuracy > 200.0 || (Math.Abs(position.Latitude) < 0.01 && Math.Abs(position.Longitude) < 0.01)) continue;
 
                 await _trackingApi.AddPointAsync(sessionId, position.Latitude, position.Longitude, position.Accuracy, ct);
             }

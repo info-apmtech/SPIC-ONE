@@ -156,6 +156,9 @@ namespace SPIC.MauiBlazorApp.Platforms.iOS
             var lng = latest.Coordinate.Longitude;
             double? accuracy = latest.HorizontalAccuracy >= 0 ? latest.HorizontalAccuracy : null;
 
+            if (accuracy.HasValue && accuracy.Value > 200.0) return;
+            if (Math.Abs(lat) < 0.01 && Math.Abs(lng) < 0.01) return;
+
             // Request background execution time so iOS does NOT suspend the app before HTTP upload finishes!
             nint bgTaskId = UIApplication.SharedApplication.BeginBackgroundTask("JmdoReportLocation", () => { });
             _ = Task.Run(async () =>

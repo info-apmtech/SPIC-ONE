@@ -1,3 +1,5 @@
+using SPIC.Core.Utilities;
+
 namespace SPIC.Core.Entities;
 
 // ------------------------------------------------------------------------------------------------
@@ -11,8 +13,18 @@ public enum JMDODutyStatus { OnDuty = 0, OffDuty = 1, OnBreak = 2 }
 // Completed is reserved exclusively for the JMDO explicitly pressing Stop Live Tracking - never
 // set by any automatic/server-side cleanup. AutoEnded is the distinct terminal state used when a
 // session has gone silent too long (see JMDOTrackingController.CloseStaleSessionsAsync) - the UI
-// must never describe an AutoEnded session as "stopped by the JMDO".
-public enum JMDOTrackingSessionStatus { Active = 0, Completed = 1, Cancelled = 2, AutoEnded = 3 }
+// must never describe an AutoEnded session as "stopped by the JMDO". TaskEnded is likewise never
+// "the JMDO stopped it" - it's JmdoTaskAllocationController.ReleaseTaskTrackingAsync ending a
+// session that TaskDetail's Start Task created because nothing/no-one depends on it anymore.
+public enum JMDOTrackingSessionStatus { Active = 0, Completed = 1, Cancelled = 2, AutoEnded = 3, TaskEnded = 4 }
+
+// Manual: started via FieldDashboard's Start Live Tracking button (or any pre-existing session a
+// task later reuses without creating anything). TaskStarted: created by
+// JmdoTaskAllocationController.GetOrCreateTaskTrackingSessionAsync because no session was active
+// when a task started - only a TaskStarted session with zero JmdoTaskTrackingLink rows pointing at
+// it is ever auto-ended by ReleaseTaskTrackingAsync/the orphan check; Manual sessions are never
+// touched by task closure, regardless of how many tasks reused them.
+public enum JMDOTrackingSessionOwnership { Manual = 0, TaskStarted = 1 }
 
 /// <summary>One day's attendance record for a JMDO user.</summary>
 public class JMDOAttendance
@@ -56,6 +68,9 @@ public class JMDOTrackingSession
     public double? EndLatitude { get; set; }
     public double? EndLongitude { get; set; }
     public JMDOTrackingSessionStatus Status { get; set; } = JMDOTrackingSessionStatus.Active;
+    // Who/what is responsible for this session existing - never inferred from Status alone (an
+    // Active session can be either). Drives whether task closure is ever allowed to end it.
+    public JMDOTrackingSessionOwnership Ownership { get; set; } = JMDOTrackingSessionOwnership.Manual;
     public DateTime CreatedAt { get; set; } = DateTime.Now;
     public DateTime UpdatedAt { get; set; } = DateTime.Now;
 
@@ -63,7 +78,7 @@ public class JMDOTrackingSession
 }
 
 /// <summary>One GPS point recorded within a JMDOTrackingSession.</summary>
-public class JMDOTrackingPoint
+public class JMDOTrackingPoint : IGpsPoint
 {
     public int Id { get; set; }
     public int TrackingSessionId { get; set; }
