@@ -876,6 +876,18 @@ namespace SpicAPI.Controllers
                 if (d.Quantity <= 0) return BadRequest(new { Success = false, Message = "There is no quantity to dispatch for this request." });
                 if (string.IsNullOrWhiteSpace(dto.VendorName) || string.IsNullOrWhiteSpace(dto.Transporter) || dto.DispatchDate is null)
                     return BadRequest(new { Success = false, Message = "Vendor, transporter and dispatch date are required." });
+                // The Delivery Address dropdown is the only source of the destination for these two
+                // kinds now - dto.DestinationAddress (free text) is never trusted here; the AddressId
+                // is re-validated server-side (exists, active) and the dispatch's own DestinationAddress
+                // is composed from the saved record's CURRENT fields at this exact moment, so it becomes
+                // an immutable snapshot - a later edit to the address book can never retroactively change
+                // what this already-created dispatch says.
+                if (dto.DeliveryAddressId is not > 0) return BadRequest(new { Success = false, Message = "Select a delivery address." });
+                var addr = await _db.PublicityDeliveryAddresses.AsNoTracking()
+                    .FirstOrDefaultAsync(a => a.Id == dto.DeliveryAddressId && a.IsActive);
+                if (addr is null) return BadRequest(new { Success = false, Message = "Select a valid, active delivery address." });
+                d.DeliveryAddressId = addr.Id;
+                d.DestinationAddress = await ComposeAddressTextAsync(addr);
                 d.DispatchNo = await NextNoAsync("DSP");
                 d.Status = PublicityDispatchStatus.Dispatched;
                 d.VendorName = dto.VendorName!.Trim();
@@ -898,6 +910,76 @@ namespace SpicAPI.Controllers
             await RecomputeAsync(r);
             await _db.SaveChangesAsync();
             return Ok(new { d.Id, d.DispatchNo });
+        }
+
+        // ================================================================ delivery addresses (admin)
+
+        // A small, shared, Publicity-specific address book (regional offices etc.) - gated by the
+        // exact same IsDispatcherAsync() check CreateDispatch itself already uses, so nobody who
+        // couldn't create a dispatch can read or add addresses either; no separate/broader address
+        // permission exists. There is deliberately no update/delete endpoint (the spec explicitly asks
+        // not to introduce address-edit/delete permissions beyond what's needed) - IsActive exists so
+        // a bad entry can be deactivated directly in the database if that's ever needed, without an API
+        // surface for it.
+        [HttpGet("delivery-addresses")]
+        public async Task<IActionResult> DeliveryAddresses()
+        {
+            if (!await IsDispatcherAsync()) return Forbid();
+            var rows = await _db.PublicityDeliveryAddresses.AsNoTracking().Where(a => a.IsActive)
+                .OrderBy(a => a.AddressLabel).Take(500).ToListAsync();
+            var stateIds = rows.Select(a => a.StateId).Distinct().ToList();
+            var districtIds = rows.Where(a => a.DistrictId.HasValue).Select(a => a.DistrictId!.Value).Distinct().ToList();
+            var states = await _db.States.AsNoTracking().Where(s => stateIds.Contains(s.Id)).ToDictionaryAsync(s => s.Id, s => s.StateName);
+            var districts = await _db.Districts.AsNoTracking().Where(d => districtIds.Contains(d.Id)).ToDictionaryAsync(d => d.Id, d => d.DistrictName);
+            return Ok(rows.Select(a => new PubDeliveryAddressDto
+            {
+                Id = a.Id, AddressLabel = a.AddressLabel, RecipientName = a.RecipientName, ContactPerson = a.ContactPerson,
+                MobileNumber = a.MobileNumber, AddressLine1 = a.AddressLine1, AddressLine2 = a.AddressLine2, Landmark = a.Landmark,
+                StateId = a.StateId, StateName = states.GetValueOrDefault(a.StateId),
+                DistrictId = a.DistrictId, DistrictName = a.DistrictId is int did ? districts.GetValueOrDefault(did) : null,
+                City = a.City, PinCode = a.PinCode
+            }).ToList());
+        }
+
+        [HttpPost("delivery-addresses")]
+        public async Task<IActionResult> CreateDeliveryAddress([FromBody] PubDeliveryAddressCreateDto dto)
+        {
+            if (!await IsDispatcherAsync()) return Forbid();
+            string? Req(string? v, string label, int max) =>
+                string.IsNullOrWhiteSpace(v) ? $"Enter the {label}." : v.Trim().Length > max ? $"{label} is too long." : null;
+            var error = Req(dto.AddressLabel, "address name / label", 150)
+                ?? Req(dto.RecipientName, "recipient / office name", 200)
+                ?? Req(dto.AddressLine1, "address line 1", 300)
+                ?? Req(dto.City, "district / city", 150)
+                ?? (dto.ContactPerson is { Length: > 150 } ? "Contact person is too long." : null)
+                ?? (dto.AddressLine2 is { Length: > 300 } ? "Address line 2 is too long." : null)
+                ?? (dto.Landmark is { Length: > 150 } ? "Landmark is too long." : null)
+                ?? (!Regex.IsMatch(dto.MobileNumber?.Trim() ?? "", @"^[6-9]\d{9}$") ? "Enter a valid 10-digit Indian mobile number." : null)
+                ?? (!Regex.IsMatch(dto.PinCode?.Trim() ?? "", @"^\d{6}$") ? "Enter a valid 6-digit PIN code." : null)
+                ?? (!await _db.States.AnyAsync(s => s.Id == dto.StateId && s.IsActive) ? "Select the state." : null)
+                ?? (dto.DistrictId is > 0 && !await _db.Districts.AnyAsync(d => d.Id == dto.DistrictId && d.StateId == dto.StateId && d.IsActive)
+                    ? "Select a district that belongs to the selected state." : null);
+            if (error != null) return BadRequest(new { Success = false, Message = error });
+
+            var a = new PublicityDeliveryAddress
+            {
+                AddressLabel = dto.AddressLabel.Trim(), RecipientName = dto.RecipientName.Trim(), ContactPerson = Clean(dto.ContactPerson),
+                MobileNumber = dto.MobileNumber!.Trim(), AddressLine1 = dto.AddressLine1.Trim(), AddressLine2 = Clean(dto.AddressLine2),
+                Landmark = Clean(dto.Landmark), StateId = dto.StateId, DistrictId = dto.DistrictId > 0 ? dto.DistrictId : null,
+                City = dto.City.Trim(), PinCode = dto.PinCode!.Trim(), CreatedByUserId = Uid(), CreatedByName = await MyNameAsync()
+            };
+            _db.PublicityDeliveryAddresses.Add(a);
+            await _db.SaveChangesAsync();
+            return Ok(new { a.Id });
+        }
+
+        private async Task<string> ComposeAddressTextAsync(PublicityDeliveryAddress a)
+        {
+            var stateName = await _db.States.AsNoTracking().Where(s => s.Id == a.StateId).Select(s => s.StateName).FirstOrDefaultAsync();
+            var parts = new List<string?> { a.RecipientName, a.AddressLine1, a.AddressLine2,
+                string.IsNullOrWhiteSpace(a.Landmark) ? null : $"Near {a.Landmark}", a.City, stateName, a.PinCode };
+            var text = string.Join(", ", parts.Where(p => !string.IsNullOrWhiteSpace(p)));
+            return string.IsNullOrWhiteSpace(a.MobileNumber) ? text : $"{text} (Ph: {a.MobileNumber})";
         }
 
         [HttpPost("dispatches/{id:int}/status")]
@@ -1424,7 +1506,7 @@ namespace SpicAPI.Controllers
                 Id = d.Id, DispatchNo = d.DispatchNo, RequestId = d.RequestId, RequestIndentNo = dest.IndentNo, Kind = d.Kind, Status = d.Status,
                 SourceName = d.Kind == PublicityDispatchKind.Transfer ? sourceHq ?? "Source HQ" : d.VendorName ?? "Vendor",
                 SourceHqId = d.SourceHqId, SourceRequestId = d.SourceRequestId, SourceIndentNo = source?.IndentNo,
-                DestinationHq = destHq, DestinationAddress = d.DestinationAddress, Quantity = d.Quantity,
+                DestinationHq = destHq, DestinationAddress = d.DestinationAddress, DeliveryAddressId = d.DeliveryAddressId, Quantity = d.Quantity,
                 Transporter = d.Transporter, TrackingNo = d.TrackingNo, VehicleNo = d.VehicleNo,
                 ResponsibleName = d.ResponsibleName, ResponsibleRole = d.ResponsibleRole,
                 DispatchDate = d.DispatchDate, ExpectedDeliveryDate = d.ExpectedDeliveryDate, CurrentLocation = d.CurrentLocation,

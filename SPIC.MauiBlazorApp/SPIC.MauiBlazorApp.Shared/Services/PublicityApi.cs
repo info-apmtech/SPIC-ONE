@@ -110,6 +110,10 @@ public sealed class PublicityApi : ApiClientBase, IDisposable
     public Task<bool> ConfirmZeroRegionAsync(int stateId, int regionId, string? remarks) =>
         SendAsync(HttpMethod.Post, $"regions/{stateId}/{regionId}/confirm-zero", new PubRegionActionDto { Remarks = remarks }, "confirm zero requirement");
     public Task<PubSaved?> CreateDispatchAsync(int id, PubDispatchCreateDto dto) => SendAsync<PubSaved>(HttpMethod.Post, $"requests/{id}/dispatches", dto, "create the dispatch");
+    // Deliberately NOT cached like LookupsAsync() - the dropdown must reflect a just-added address
+    // immediately, and the list is small/cheap enough that a fresh fetch every time is simplest.
+    public Task<List<PubDeliveryAddressDto>?> DeliveryAddressesAsync() => GetAsync<List<PubDeliveryAddressDto>>("delivery-addresses", "the saved addresses");
+    public Task<PubSaved?> CreateDeliveryAddressAsync(PubDeliveryAddressCreateDto dto) => SendAsync<PubSaved>(HttpMethod.Post, "delivery-addresses", dto, "save the address");
     public Task<bool> DispatchStatusAsync(int dispatchId, PubDispatchStatusDto dto) => SendAsync(HttpMethod.Post, $"dispatches/{dispatchId}/status", dto, "update the dispatch");
     public Task<bool> ProofAsync(int dispatchId, PubProofDto dto) => SendAsync(HttpMethod.Post, $"dispatches/{dispatchId}/proof", dto, "submit the dispatch proof");
     public Task<bool> AcknowledgeAsync(int dispatchId, PubAckUpsertDto dto) => SendAsync(HttpMethod.Put, $"dispatches/{dispatchId}/ack", dto, "save the acknowledgement");
