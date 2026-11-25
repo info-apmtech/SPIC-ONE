@@ -1,10 +1,12 @@
-﻿@* SDWA admin dashboard *@
+@* SDWA admin dashboard *@
 @page "/ReportDashboard"
 @using SPIC.Core.DTOs
 @using SPIC.Core.Entities
 @using System.Globalization
+@using Microsoft.Extensions.Logging
 @inject HttpClient Http
 @inject NavigationManager Navigation
+@inject ILogger<ReportDashboard> Logger
 
 
 <div class="container-fluid py-4 px-0 dsh-page">
@@ -621,11 +623,16 @@
         try
         {
             var value = await Http.GetFromJsonAsync<T>(url);
-            if (value is null) return (default, false);
+            if (value is null)
+            {
+                Logger.LogWarning("SafeGetAsync returned null data for {Url}", url);
+                return (default, false);
+            }
             return (value, true);
         }
-        catch
+        catch (Exception ex)
         {
+            Logger.LogError(ex, "SafeGetAsync failed to fetch or deserialize data from {Url}. Error: {Message}", url, ex.Message);
             return (default, false);
         }
     }
@@ -1019,7 +1026,7 @@
         public int AvailableQuantity { get; set; }
         public int RoomStatus { get; set; }
         public int? CurrentBookingId { get; set; }
-        public int BookingStatus { get; set; }
+        public int? BookingStatus { get; set; }
     }
 
     private class GuestHouseOccupancyItem
