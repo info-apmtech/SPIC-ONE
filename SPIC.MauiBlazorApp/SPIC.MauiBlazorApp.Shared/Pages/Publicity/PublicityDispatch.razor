@@ -125,16 +125,61 @@
 
         <section class="pub-card">
             <h2 class="pub-h2">Delivery Address</h2>
-            <p class="pub-muted">Select an existing address or type a new address</p>
+            <p class="pub-muted">Select a saved delivery address, or add a new one.</p>
             <div class="pub-field">
-                <label class="pub-label pub-req" for="cd-addr">Delivery Address</label>
-                <textarea id="cd-addr" rows="3" class="pub-input pub-textarea" @bind="_dto.DestinationAddress" placeholder="e.g. 123, SPIC Building, Anna Salai, Chennai - 600002"></textarea>
-                @if (_d.KnownAddresses.Count > 0)
+                <div class="pub-field__head">
+                    <label class="pub-label pub-req" for="cd-addr">Delivery Address</label>
+                    <button type="button" class="pub-link-btn" @onclick="OpenAddAddress"><i class="bi bi-plus-circle"></i> Add Address</button>
+                </div>
+                <select id="cd-addr" class="pub-input" @onchange="e => OnNativeSelect(e, OnAddressChanged)">
+                    <option value="">Select Delivery Address</option>
+                    @foreach (var a in _addresses) { <option value="@a.Id" selected="@(_dto.DeliveryAddressId == a.Id)">@AddressOptionLabel(a)</option> }
+                </select>
+                @if (SelectedAddress is { } sel)
                 {
-                    <div class="pub-chips">@foreach (var a in _d.KnownAddresses) { <button type="button" class="pub-chip pub-chip--btn" @onclick="() => _dto.DestinationAddress = a">@a</button> }</div>
+                    <div class="pub-remarks">
+                        <b>@sel.RecipientName</b>@(string.IsNullOrWhiteSpace(sel.ContactPerson) ? "" : $" (Attn: {sel.ContactPerson})")<br />
+                        @sel.AddressLine1@(string.IsNullOrWhiteSpace(sel.AddressLine2) ? "" : $", {sel.AddressLine2}")@(string.IsNullOrWhiteSpace(sel.Landmark) ? "" : $", Near {sel.Landmark}")<br />
+                        @sel.City, @sel.StateName - @sel.PinCode<br />
+                        Mobile: @sel.MobileNumber
+                    </div>
                 }
             </div>
         </section>
+
+        <BottomSheet @bind-IsOpen="_addAddressOpen" Title="Add Delivery Address">
+            <ChildContent>
+                <div class="pub-form pub-form--2">
+                    <div class="pub-field"><label class="pub-label pub-req" for="na-label">Address Name / Label</label>
+                        <input id="na-label" class="pub-input" @bind="_newAddr.AddressLabel" placeholder="e.g. SPIC Regional Office - Salem" /></div>
+                    <div class="pub-field"><label class="pub-label pub-req" for="na-recipient">Recipient / Office Name</label>
+                        <input id="na-recipient" class="pub-input" @bind="_newAddr.RecipientName" placeholder="e.g. SPIC Regional Office" /></div>
+                    <div class="pub-field"><label class="pub-label" for="na-contact">Contact Person (Optional)</label>
+                        <input id="na-contact" class="pub-input" @bind="_newAddr.ContactPerson" /></div>
+                    <div class="pub-field"><label class="pub-label pub-req" for="na-mobile">Mobile Number</label>
+                        <input id="na-mobile" class="pub-input" @bind="_newAddr.MobileNumber" placeholder="10-digit mobile number" /></div>
+                    <div class="pub-field pub-field--full"><label class="pub-label pub-req" for="na-l1">Address Line 1</label>
+                        <input id="na-l1" class="pub-input" @bind="_newAddr.AddressLine1" /></div>
+                    <div class="pub-field pub-field--full"><label class="pub-label" for="na-l2">Address Line 2 (Optional)</label>
+                        <input id="na-l2" class="pub-input" @bind="_newAddr.AddressLine2" /></div>
+                    <div class="pub-field"><label class="pub-label" for="na-landmark">Landmark (Optional)</label>
+                        <input id="na-landmark" class="pub-input" @bind="_newAddr.Landmark" /></div>
+                    <div class="pub-field"><label class="pub-label pub-req" for="na-state">State</label>
+                        <select id="na-state" class="pub-input" @bind="_newAddr.StateId">
+                            <option value="0">Select State</option>
+                            @foreach (var s in _states) { <option value="@s.Id">@s.Name</option> }
+                        </select></div>
+                    <div class="pub-field"><label class="pub-label pub-req" for="na-city">District / City</label>
+                        <input id="na-city" class="pub-input" @bind="_newAddr.City" /></div>
+                    <div class="pub-field"><label class="pub-label pub-req" for="na-pin">PIN Code</label>
+                        <input id="na-pin" class="pub-input" maxlength="6" @bind="_newAddr.PinCode" placeholder="6-digit PIN code" /></div>
+                </div>
+            </ChildContent>
+            <Footer>
+                <button type="button" class="pub-btn pub-btn--grey" @onclick="() => _addAddressOpen = false">Cancel</button>
+                <button type="button" class="pub-btn pub-btn--primary" disabled="@_savingAddr" @onclick="SaveAddressAsync">Save Address</button>
+            </Footer>
+        </BottomSheet>
 
         <div class="pub-footer">
             <a class="pub-btn pub-btn--grey" href="@Back"><i class="bi bi-chevron-double-left"></i> Back to List</a>
@@ -163,6 +208,14 @@
     private List<IBrowserFile> _noteFiles = new(), _docFiles = new(), _proofFiles = new();
     private bool _busy, _reading, _ocrFound;
 
+    // Saved Delivery Address dropdown + Add Address popup.
+    private List<PubDeliveryAddressDto> _addresses = new();
+    private List<PubOption> _states = new();
+    private bool _addAddressOpen, _savingAddr;
+    private PubDeliveryAddressCreateDto _newAddr = new();
+    private PubDeliveryAddressDto? SelectedAddress => _addresses.FirstOrDefault(a => a.Id == _dto.DeliveryAddressId);
+    private static string AddressOptionLabel(PubDeliveryAddressDto a) => $"{a.RecipientName} - {a.City} - {a.PinCode}";
+
     protected override async Task OnInitializedAsync()
     {
         _lookups = await Api.LookupsAsync();
@@ -178,8 +231,9 @@
         _dto.Kind = Kind;
         _dto.Quantity = Kind == PublicityDispatchKind.ReInitiation ? _d.Summary.Outstanding : _d.Quantity;
         _dto.DispatchDate = PubText.Today;
-        _dto.DestinationAddress = _d.KnownAddresses.FirstOrDefault();
         _dto.ResponsibleUserId = _d.RequestedByUserId;
+        _addresses = await Api.DeliveryAddressesAsync() ?? new();
+        _states = await Api.StatesAsync() ?? new();
     }
 
     // Responsible Officer becomes searchable (Select2), same wiring as every other list/filter page
@@ -187,13 +241,30 @@
     private DotNetObjectReference<PublicityDispatch>? _objRef;
     private bool _select2Ready;
 
+    // After a new address is saved, the <option> it needs is added to the DOM by THIS render pass -
+    // only the NEXT OnAfterRenderAsync can safely tell Select2 to pick it up (same ordering reason as
+    // PublicityForm.razor's _pendingSelect2Sync for the Product field).
+    private int? _pendingAddrSyncId;
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (Proof || _d is null || _lookups is null || _select2Ready) return;
-        _select2Ready = true;
-        _objRef ??= DotNetObjectReference.Create(this);
-        var configs = new[] { new { id = "cd-resp", method = nameof(OnResponsibleChanged), parent = (string?)null } };
-        await JS.InvokeVoidAsync("spicSelect2.initMultiple", configs, _objRef);
+        if (Proof || _d is null || _lookups is null) return;
+        if (!_select2Ready)
+        {
+            _select2Ready = true;
+            _objRef ??= DotNetObjectReference.Create(this);
+            var configs = new[]
+            {
+                new { id = "cd-resp", method = nameof(OnResponsibleChanged), parent = (string?)null },
+                new { id = "cd-addr", method = nameof(OnAddressChanged), parent = (string?)null }
+            };
+            await JS.InvokeVoidAsync("spicSelect2.initMultiple", configs, _objRef);
+        }
+        if (_pendingAddrSyncId is int newId)
+        {
+            _pendingAddrSyncId = null;
+            await JS.InvokeVoidAsync("spicSelect2.setValue", "cd-addr", newId);
+        }
     }
 
     private static Task OnNativeSelect(ChangeEventArgs e, Action<List<string>?> handler)
@@ -209,6 +280,39 @@
         StateHasChanged();
     }
 
+    [JSInvokable]
+    public void OnAddressChanged(List<string>? values)
+    {
+        _dto.DeliveryAddressId = values is { Count: > 0 } && int.TryParse(values[0], out var id) ? id : null;
+        StateHasChanged();
+    }
+
+    private void OpenAddAddress()
+    {
+        _newAddr = new PubDeliveryAddressCreateDto { StateId = _d?.StateId ?? 0 };
+        _addAddressOpen = true;
+    }
+
+    private async Task SaveAddressAsync()
+    {
+        string? error = string.IsNullOrWhiteSpace(_newAddr.AddressLabel) ? "Enter the address name / label."
+            : string.IsNullOrWhiteSpace(_newAddr.RecipientName) ? "Enter the recipient / office name."
+            : !System.Text.RegularExpressions.Regex.IsMatch(_newAddr.MobileNumber.Trim(), @"^[6-9]\d{9}$") ? "Enter a valid 10-digit Indian mobile number."
+            : string.IsNullOrWhiteSpace(_newAddr.AddressLine1) ? "Enter address line 1."
+            : _newAddr.StateId <= 0 ? "Select the state."
+            : string.IsNullOrWhiteSpace(_newAddr.City) ? "Enter the district / city."
+            : !System.Text.RegularExpressions.Regex.IsMatch(_newAddr.PinCode.Trim(), @"^\d{6}$") ? "Enter a valid 6-digit PIN code." : null;
+        if (error != null) { Toast.Error(error); return; }
+        _savingAddr = true;
+        var saved = await Api.CreateDeliveryAddressAsync(_newAddr);
+        _savingAddr = false;
+        if (saved is null) return; // popup stays open; ToastFailureAsync already showed the real error
+        _addresses = await Api.DeliveryAddressesAsync() ?? _addresses;
+        _dto.DeliveryAddressId = saved.Id;
+        _pendingAddrSyncId = saved.Id;
+        _addAddressOpen = false;
+    }
+
     public void Dispose() => _objRef?.Dispose();
 
     private async Task CreateAsync()
@@ -218,7 +322,7 @@
             : string.IsNullOrWhiteSpace(_dto.VendorName) ? "Select the vendor."
             : string.IsNullOrWhiteSpace(_dto.Transporter) ? "Enter the transporter / courier."
             : string.IsNullOrWhiteSpace(_dto.ResponsibleUserId) ? "Select the responsible officer."
-            : string.IsNullOrWhiteSpace(_dto.DestinationAddress) ? "Enter the delivery address."
+            : _dto.DeliveryAddressId is not > 0 ? "Select a delivery address."
             : Kind == PublicityDispatchKind.Original && _noteFiles.Count == 0 ? "Upload the dispatch / note approval document." : null;
         if (error != null) { Toast.Error(error); return; }
         _busy = true;

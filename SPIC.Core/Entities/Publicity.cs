@@ -142,7 +142,17 @@ namespace SPIC.Core.Entities
         [MaxLength(200)] public string? VendorName { get; set; }
         public int? SourceHqId { get; set; }
         public int? SourceRequestId { get; set; }
+        // DestinationAddress stays the free-text field actually shown everywhere (PubDispatchCard,
+        // dispatch history) - CreateDispatch now always COMPOSES it from the selected
+        // PublicityDeliveryAddress's fields at the moment of creation, so it is already the
+        // immutable snapshot the business requires: a later edit to the address book (there is no
+        // edit endpoint today, but even if one existed) can never retroactively change what this
+        // dispatch's own row says, because this is a copy, not a live reference.
         [MaxLength(500)] public string? DestinationAddress { get; set; }
+        // The structured reference, kept alongside the text snapshot above purely for reporting/
+        // filtering by address book entry - never read back to regenerate DestinationAddress.
+        public int? DeliveryAddressId { get; set; }
+        public PublicityDeliveryAddress? DeliveryAddress { get; set; }
         public int Quantity { get; set; }
         [MaxLength(150)] public string? Transporter { get; set; }
         [MaxLength(100)] public string? TrackingNo { get; set; }
@@ -193,6 +203,34 @@ namespace SPIC.Core.Entities
         public long SizeBytes { get; set; }
         [MaxLength(200)] public string? UploadedByName { get; set; }
         public DateTime UploadedAt { get; set; } = DateTime.UtcNow;
+    }
+
+    /// <summary>A reusable, saved shipping destination for Publicity dispatches (e.g. a regional
+    /// office) - a small Publicity-specific address book, not a duplicate of any employee/customer
+    /// personal-address record (confirmed none existed anywhere in SPIC.Core to reuse). Selecting one
+    /// for a dispatch copies its fields into that PublicityDispatch's own DestinationAddress text at
+    /// that moment (see PublicityDispatch.DestinationAddress's doc comment) - this row itself may be
+    /// edited/deactivated later without touching any dispatch already created against it.</summary>
+    public class PublicityDeliveryAddress
+    {
+        public int Id { get; set; }
+        [MaxLength(150)] public string AddressLabel { get; set; } = "";
+        [MaxLength(200)] public string RecipientName { get; set; } = "";
+        [MaxLength(150)] public string? ContactPerson { get; set; }
+        [MaxLength(15)] public string MobileNumber { get; set; } = "";
+        [MaxLength(300)] public string AddressLine1 { get; set; } = "";
+        [MaxLength(300)] public string? AddressLine2 { get; set; }
+        [MaxLength(150)] public string? Landmark { get; set; }
+        public int StateId { get; set; }
+        public int? DistrictId { get; set; }
+        [MaxLength(150)] public string City { get; set; } = "";
+        [MaxLength(6)] public string PinCode { get; set; } = "";
+        public bool IsActive { get; set; } = true;
+        [MaxLength(100)] public string CreatedByUserId { get; set; } = "";
+        [MaxLength(200)] public string? CreatedByName { get; set; }
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        [MaxLength(100)] public string? UpdatedByUserId { get; set; }
+        public DateTime? UpdatedAt { get; set; }
     }
 
     /// <summary>Approval history + timeline: one row per action.</summary>

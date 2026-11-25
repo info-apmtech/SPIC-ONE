@@ -362,6 +362,7 @@ namespace Spic.Infrastructure.Data
                 entity.HasIndex(x => x.DispatchNo).IsUnique();
                 entity.HasIndex(x => x.SourceRequestId);
                 entity.HasIndex(x => x.SourceHqId);
+                entity.HasOne(x => x.DeliveryAddress).WithMany().HasForeignKey(x => x.DeliveryAddressId).OnDelete(DeleteBehavior.Restrict);
                 entity.HasOne(x => x.Acknowledgement).WithOne(a => a.Dispatch)
                     .HasForeignKey<PublicityAcknowledgement>(a => a.DispatchId).OnDelete(DeleteBehavior.Cascade);
             });
@@ -376,6 +377,7 @@ namespace Spic.Infrastructure.Data
                 entity.HasIndex(x => x.TargetUserId);
                 entity.HasIndex(x => new { x.TargetRole, x.TargetHqId });
             });
+            builder.Entity<PublicityDeliveryAddress>(entity => entity.HasIndex(x => x.IsActive));
 
             builder.Entity<SampleLabResult>(entity =>
             {
@@ -1088,6 +1090,7 @@ namespace Spic.Infrastructure.Data
         public DbSet<PublicityEvent> PublicityEvents { get; set; }
         public DbSet<PublicityNotification> PublicityNotifications { get; set; }
         public DbSet<PublicityRegionFinalization> PublicityRegionFinalizations { get; set; }
+        public DbSet<PublicityDeliveryAddress> PublicityDeliveryAddresses { get; set; }
 
         //// Help Desk translation review
         public DbSet<HelpReviewItem> HelpReviewItems { get; set; }

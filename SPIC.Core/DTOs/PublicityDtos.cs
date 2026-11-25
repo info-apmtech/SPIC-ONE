@@ -194,6 +194,7 @@ namespace SPIC.Core.DTOs
         public string? SourceIndentNo { get; set; }
         public string DestinationHq { get; set; } = "";
         public string? DestinationAddress { get; set; }
+        public int? DeliveryAddressId { get; set; }
         public int Quantity { get; set; }
         public string? Transporter { get; set; }
         public string? TrackingNo { get; set; }
@@ -392,8 +393,47 @@ namespace SPIC.Core.DTOs
         public string? ResponsibleUserId { get; set; }
         public DateTime? DispatchDate { get; set; }
         public DateTime? ExpectedDeliveryDate { get; set; }
+        // Original/ReInitiation dispatches: this is now the ONLY way the client picks a destination -
+        // the server resolves it to a PublicityDeliveryAddress row, validates it's active, and
+        // composes DestinationAddress from it server-side (see CreateDispatch) - never trusted as
+        // free text for these two kinds. Transfer dispatches (a different page/flow) still send
+        // DestinationAddress directly, unchanged from before.
+        public int? DeliveryAddressId { get; set; }
         public string? DestinationAddress { get; set; }
         public string? Remarks { get; set; }
+    }
+
+    public sealed class PubDeliveryAddressDto
+    {
+        public int Id { get; set; }
+        public string AddressLabel { get; set; } = "";
+        public string RecipientName { get; set; } = "";
+        public string? ContactPerson { get; set; }
+        public string MobileNumber { get; set; } = "";
+        public string AddressLine1 { get; set; } = "";
+        public string? AddressLine2 { get; set; }
+        public string? Landmark { get; set; }
+        public int StateId { get; set; }
+        public string? StateName { get; set; }
+        public int? DistrictId { get; set; }
+        public string? DistrictName { get; set; }
+        public string City { get; set; } = "";
+        public string PinCode { get; set; } = "";
+    }
+
+    public sealed class PubDeliveryAddressCreateDto
+    {
+        public string AddressLabel { get; set; } = "";
+        public string RecipientName { get; set; } = "";
+        public string? ContactPerson { get; set; }
+        public string MobileNumber { get; set; } = "";
+        public string AddressLine1 { get; set; } = "";
+        public string? AddressLine2 { get; set; }
+        public string? Landmark { get; set; }
+        public int StateId { get; set; }
+        public int? DistrictId { get; set; }
+        public string City { get; set; } = "";
+        public string PinCode { get; set; } = "";
     }
 
     public sealed class PubDispatchStatusDto
