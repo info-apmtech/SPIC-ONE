@@ -15,6 +15,7 @@ using Spic.Infrastructure.Data;
 using Spic.Infrastructure.Services.Payments;
 using SPIC.Core.Entities;
 using SpicAPI.Controllers;
+using GuestHouseBillPdfHelper = SpicAPI.Services.GuestHouseBillPdfHelper;
 
 namespace SPIC.RegressionHarness;
 
@@ -55,6 +56,7 @@ internal static class GuestHouseSingleRoomBookingTests
 		Step("12. guest counts through the booking API", GuestCountsApi);
 		Step("13. Guest Details page wiring (source checks)", GuestDetailsWiring);
 		Step("14. 'Employee Stay' wording; internal values unchanged", EmployeeStayWording);
+		Step("15. edited guest code: identity, eligibility and invoice GSTIN unaffected", EditedGuestCode);
 	}
 
 	// A crash inside one scenario must show up as a failure, not abort the whole harness.
@@ -608,12 +610,12 @@ internal static class GuestHouseSingleRoomBookingTests
 		var admin = await fx.Booking("u-admin", AppRole.Admin).GetBookerIdentity();
 		Check.That("Admin keeps the manual field (not bound)", !Prop<bool>(admin, "Bound") && Prop<string>(admin, "Code") == null);
 
-		// The server applies the same value when the booking is created - the request value is ignored.
+		// The pre-filled code can be edited for this booking's guest (scenario 15 covers what it can NOT affect).
 		var asEmployee = await Book(fx.Booking("u-emp", AppRole.RM), Req(1, guest: "Emp Guest", code: "EMP-9999"));
-		Check.Equal("employee booking ignores a forged code and saves the employee's own", "EMP-0050", await SavedCode(fx, asEmployee.BookingId) ?? "");
+		Check.Equal("employee booking saves the guest code edited on the form", "EMP-9999", await SavedCode(fx, asEmployee.BookingId) ?? "");
 
 		var asDealer = await Book(fx.Booking("u-dealer", AppRole.Dealer), Req(1, guest: "Dealer Guest", code: "D-5678"));
-		Check.Equal("dealer booking ignores another dealer's code and saves their own", "D-1234", await SavedCode(fx, asDealer.BookingId) ?? "");
+		Check.Equal("dealer booking saves the guest code edited on the form", "D-5678", await SavedCode(fx, asDealer.BookingId) ?? "");
 
 		var noCode = await Book(fx.Booking("u-dealer", AppRole.Dealer), Req(2, guest: "Dealer Guest 2", code: null));
 		Check.Equal("dealer booking with no code typed still gets the dealer's code", "D-1234", await SavedCode(fx, noCode.BookingId) ?? "");
@@ -645,6 +647,58 @@ internal static class GuestHouseSingleRoomBookingTests
 		var endpoint = typeof(GuestHouseBookingController).GetMethod(nameof(GuestHouseBookingController.GetBookerIdentity));
 		Check.Equal("the identity endpoint requires the GuestHouseBooking permission", (PagePermission?)PagePermission.GuestHouseBooking,
 			endpoint?.GetCustomAttributes(typeof(GuestHouseBookingAccessAttribute), false).Cast<GuestHouseBookingAccessAttribute>().FirstOrDefault()?.Permission);
+	}
+
+	// ---- 15. Edited guest code ------------------------------------------------------------------------------
+	// The Employee ID / Dealer Code pre-filled on Guest Details can be edited for the booking's guest. The edit
+	// is stored on the guest row only: the booker, eligibility, masters and invoice GSTIN must not follow it.
+
+	private static async Task EditedGuestCode()
+	{
+		using var fx = new Fx();
+		// Real roles on the user rows (the invoice GSTIN rule reads the booker's role from here).
+		fx.Db.Users.Add(new UserInfo { Id = "u-dealer", UserName = "user.dealer", DesignationId = 1, Name = "Dealer", Password = "x", UpdatedBy = "test", Role = AppRole.Dealer });
+		fx.Db.Users.Add(new UserInfo { Id = "u-emp", UserName = "user.emp", DesignationId = 1, Name = "Emp", Password = "x", UpdatedBy = "test", Role = AppRole.RM });
+		fx.Db.Users.Add(new UserInfo { Id = "u-admin", UserName = "user.admin", DesignationId = 1, Name = "Admin", Password = "x", UpdatedBy = "test", Role = AppRole.Admin });
+		(await fx.Db.DealerRegistrations.SingleAsync(d => d.DealerCode == "D-1234")).GSTNumber = "33OWNGST0000Z1";
+		(await fx.Db.DealerRegistrations.SingleAsync(d => d.DealerCode == "D-5678")).GSTNumber = "33OTHERGST000Z1";
+		await fx.Db.SaveChangesAsync();
+
+		async Task<string?> Gst(int bookingId) => (await GuestHouseBillPdfHelper.ResolveGuestCompanyAndGstAsync(fx.Db, bookingId)).GstNumber;
+
+		// Dealer keeps the pre-filled own code: invoice GSTIN resolves exactly as before.
+		var own = await Book(fx.Booking("u-dealer", AppRole.Dealer), Req(1, guest: "Own", code: "D-1234"));
+		Check.Equal("dealer with own code: GSTIN from own dealer record (unchanged)", "33OWNGST0000Z1", await Gst(own.BookingId) ?? "");
+
+		// Dealer edits the code to another dealer's code.
+		var edited = await Book(fx.Booking("u-dealer", AppRole.Dealer), Req(2, guest: "Edited", code: "  D-5678 "));
+		Check.Equal("edited code is saved (trimmed) on the guest row", "D-5678", await SavedCode(fx, edited.BookingId) ?? "");
+		var editedRow = await fx.Db.GuestHouseBookings.AsNoTracking().SingleAsync(b => b.Id == edited.BookingId);
+		Check.Equal("booking owner is still the signed-in dealer", "u-dealer", editedRow.CreatedBy ?? "");
+		Check.That("edited dealer booking is still a paying booking", !edited.IsFreeBooking);
+		Check.That("another dealer's GSTIN is NOT put on the invoice", await Gst(edited.BookingId) == null);
+
+		// Employee edits the code to a dealer's code: still free (role-based), no dealer GSTIN.
+		var empEdited = await Book(fx.Booking("u-emp", AppRole.RM), Req(1, guest: "Emp Edited", code: "D-5678"));
+		Check.That("employee with edited code is still an Employee Stay (role-based)", empEdited.IsFreeBooking);
+		Check.That("employee's edited dealer code does not pull a dealer GSTIN", await Gst(empEdited.BookingId) == null);
+
+		// Roles without a pre-filled code keep the previous behaviour (manual code -> dealer GSTIN lookup).
+		var admin = await Book(fx.Booking("u-admin", AppRole.Admin), Req(2, guest: "Admin", code: "D-5678"));
+		Check.Equal("Admin-entered code keeps the previous GSTIN lookup", "33OTHERGST000Z1", await Gst(admin.BookingId) ?? "");
+
+		// Blank code from a bound user falls back to their own code.
+		var blank = await Book(fx.Booking("u-dealer", AppRole.Dealer), Req(3, guest: "Blank", code: "   "));
+		Check.Equal("blank code falls back to the booker's own code", "D-1234", await SavedCode(fx, blank.BookingId) ?? "");
+
+		// Masters and identity are untouched.
+		Check.Equal("dealer master code unchanged", "D-1234", (await fx.Db.DealerRegistrations.AsNoTracking().SingleAsync(d => d.UserTableId == "u-dealer")).DealerCode ?? "");
+		Check.Equal("employee master code unchanged", "EMP-0050", (await fx.Db.EmployeeInformation.AsNoTracking().SingleAsync(e => e.Id == 50)).EmployeeCode ?? "");
+		Check.Equal("identity endpoint still pre-fills the account's own code", "D-1234", Prop<string>(await fx.Booking("u-dealer", AppRole.Dealer).GetBookerIdentity(), "Code") ?? "");
+
+		// The edited code cannot be used to obtain a free booking.
+		var cheat = await fx.Booking("u-dealer", AppRole.Dealer).CreateBooking(Req(1, method: GuestHousePaymentMethod.Complimentary, guest: "Cheat", code: "EMP-0050"));
+		Check.Equal("dealer typing an employee code still cannot get Complimentary", 400, Status(cheat));
 	}
 
 	// ---- 10. Complimentary eligibility drives the binding ----------------------------------------------------
@@ -852,7 +906,12 @@ internal static class GuestHouseSingleRoomBookingTests
 		Check.That("Continue is disabled while the guest-count rule fails", page.Contains("@onclick=\"ContinueToPreview\" disabled=\"@(_guestCountError != null)\""));
 		Check.That("the shared rule is used (page and API apply the same check)", page.Contains("SPIC.Core.Entities.GuestHouseGuestCounts.Validate("));
 		Check.That("the rule is re-run in ValidateForm before navigating to the preview", page.Contains("_guestCountError = SPIC.Core.Entities.GuestHouseGuestCounts.Validate("));
-		Check.That("the code field is locked when bound", page.Contains("readonly=\"@_codeLocked\""));
+		Check.That("the bound code is shown read-only until Edit", page.Contains("@if (_codeLocked)") && System.Text.RegularExpressions.Regex.IsMatch(page, "@bind=\"_form\\.EmployeeOrDealerCode\"\\s+readonly"));
+		Check.That("Edit / Save / Cancel are wired", page.Contains("@onclick=\"StartCodeEdit\"") && page.Contains("@onclick=\"SaveCodeEdit\"") && page.Contains("@onclick=\"CancelCodeEdit\""));
+		Check.That("Edit works on a draft; Save copies it into the form", page.Contains("@bind=\"_codeDraft\"") && page.Contains("_form.EmployeeOrDealerCode = value;"));
+		Check.That("Cancel discards the draft without touching the form value", System.Text.RegularExpressions.Regex.IsMatch(page, @"void CancelCodeEdit\(\)\s*\{(?:(?!_form\.EmployeeOrDealerCode)[^}])*\}"));
+		Check.That("Save keeps the required-field rule", page.Contains("_codeEditError = \"Employee ID / Dealer Code is required.\""));
+		Check.That("Continue is blocked while an edit is unsaved", page.Contains("if (_codeEditing) return"));
 		Check.That("the code comes from the booker-identity endpoint", page.Contains("api/GuestHouseBooking/booker-identity"));
 		Check.That("a missing required code blocks Continue", page.Contains("if (_identityError != null) return _identityError;"));
 		Check.That("a failed identity lookup is retried before continuing", page.Contains("if (!_identityLoaded)"));

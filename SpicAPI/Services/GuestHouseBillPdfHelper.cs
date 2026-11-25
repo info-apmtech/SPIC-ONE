@@ -90,9 +90,33 @@ namespace SpicAPI.Services
             string? gstNumber = guest.GstinNumber;
             if (string.IsNullOrWhiteSpace(gstNumber) && !string.IsNullOrWhiteSpace(guest.EmployeeOrDealerCode))
             {
-                gstNumber = await db.DealerRegistrations
+                var dealers = db.DealerRegistrations
                     .AsNoTracking()
-                    .Where(d => d.DealerCode == guest.EmployeeOrDealerCode)
+                    .Where(d => d.DealerCode == guest.EmployeeOrDealerCode);
+
+                // A Dealer / employee booker's code is pre-filled from their own record but may be edited
+                // for the guest on the Guest Details page. For such a booker the Dealer-master GSTIN is
+                // only taken from the booker's OWN dealer registration, so an edited guest code can never
+                // put another dealer's GSTIN on the invoice. (Before the edit option existed these bookers
+                // could only store their own code, so their existing invoices resolve exactly as before.)
+                // Bookings made by other roles keep the previous lookup unchanged.
+                var createdBy = await db.GuestHouseBookings
+                    .AsNoTracking()
+                    .Where(b => b.Id == guestHouseBookingId)
+                    .Select(b => b.CreatedBy)
+                    .FirstOrDefaultAsync();
+                if (!string.IsNullOrWhiteSpace(createdBy))
+                {
+                    var creatorRole = await db.Users
+                        .AsNoTracking()
+                        .Where(u => u.Id == createdBy)
+                        .Select(u => (AppRole?)u.Role)
+                        .FirstOrDefaultAsync();
+                    if (creatorRole == AppRole.Dealer || GuestHouseBookingPolicy.IsEmployeeFreeBooking(creatorRole))
+                        dealers = dealers.Where(d => d.UserTableId == createdBy);
+                }
+
+                gstNumber = await dealers
                     .Select(d => d.GSTNumber)
                     .FirstOrDefaultAsync();
             }
