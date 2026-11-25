@@ -1001,6 +1001,12 @@ namespace SpicAPI.Controllers
             if (dto.DispatchDate.HasValue) d.DispatchDate = dto.DispatchDate;
             if (dto.ExpectedDeliveryDate.HasValue) d.ExpectedDeliveryDate = dto.ExpectedDeliveryDate;
             if (!string.IsNullOrWhiteSpace(dto.CurrentLocation)) d.CurrentLocation = dto.CurrentLocation.Trim();
+            if (Clean(dto.VehicleNo) is { } vehicleNo) d.VehicleNo = vehicleNo;
+            if (!string.IsNullOrWhiteSpace(dto.Remarks)) d.Remarks = dto.Remarks.Trim();
+            // Admin Review confirming a transfer (Dispatched) is the one place the admin assigns who at
+            // the destination is responsible for it - Mark In Transit / Mark Delivered never send this,
+            // so SetResponsibleAsync only ever runs here when the caller actually provided a value.
+            if (!string.IsNullOrWhiteSpace(dto.ResponsibleUserId)) await SetResponsibleAsync(d, dto.ResponsibleUserId);
             var label = dto.Status switch
             {
                 PublicityDispatchStatus.Dispatched => d.Kind == PublicityDispatchKind.Transfer ? "Transfer Created" : "Dispatched",
@@ -1029,16 +1035,18 @@ namespace SpicAPI.Controllers
             var d = await _db.PublicityDispatches.FirstOrDefaultAsync(x => x.Id == id);
             if (d is null || d.Kind != PublicityDispatchKind.Transfer) return NotFound(new { Success = false, Message = "Transfer order not found." });
             if (!await CanSubmitProofAsync(d)) return Forbid();
-            if (string.IsNullOrWhiteSpace(dto.Transporter) || string.IsNullOrWhiteSpace(dto.TrackingNo) || dto.DispatchDate is null)
-                return BadRequest(new { Success = false, Message = "Courier, tracking number and dispatch date are required." });
             if (!await _db.PublicityFiles.AnyAsync(f => f.DispatchId == d.Id && f.Kind == PublicityFileKind.CourierProof))
                 return BadRequest(new { Success = false, Message = "Upload the courier / dispatch proof first." });
 
+            // The source RMDO only uploads the proof document now (no manual/editable courier fields on
+            // that page anymore) - whatever OCR silently read off the document is accepted as-is, and
+            // DispatchDate falls back to the submission moment rather than blocking on a value nobody is
+            // ever asked to enter.
             var name = await MyNameAsync();
-            d.Transporter = dto.Transporter.Trim();
-            d.TrackingNo = dto.TrackingNo.Trim();
-            d.DispatchDate = dto.DispatchDate;
-            d.VehicleNo = Clean(dto.VehicleNo);
+            d.Transporter = Clean(dto.Transporter) ?? d.Transporter;
+            d.TrackingNo = Clean(dto.TrackingNo) ?? d.TrackingNo;
+            d.DispatchDate = dto.DispatchDate ?? d.DispatchDate ?? DateTime.UtcNow;
+            d.VehicleNo = Clean(dto.VehicleNo) ?? d.VehicleNo;
             if (!string.IsNullOrWhiteSpace(dto.Remarks)) d.Remarks = dto.Remarks.Trim();
             d.Status = PublicityDispatchStatus.ProofSubmitted;
             d.ProofByName = name;
@@ -1414,8 +1422,13 @@ namespace SpicAPI.Controllers
                 .OrderBy(f => f.Id).ToListAsync();
             var outgoing = await _db.PublicityDispatches.AsNoTracking().Include(d => d.Acknowledgement)
                 .Where(d => d.SourceRequestId == r.Id).OrderBy(d => d.Id).ToListAsync();
+            // The courier proof for an outgoing transfer is uploaded from THIS source request's own
+            // page (api/requests/{sourceId}/files), so it is stored with RequestId == r.Id - excluding
+            // f.RequestId == r.Id here (as this query previously did) silently hid the proof the source
+            // RMDO had just submitted, leaving Proof permanently null on their own tracking page and the
+            // "Create Transfer" action visible even after submission.
             var transferFiles = await _db.PublicityFiles.AsNoTracking().Where(f => f.DispatchId != null &&
-                outgoing.Select(o => o.Id).Contains(f.DispatchId.Value) && f.RequestId != r.Id).ToListAsync();
+                outgoing.Select(o => o.Id).Contains(f.DispatchId.Value)).ToListAsync();
             var requestedRole = r.RequestedByUserId is null ? null
                 : RoleLabel(await _db.Users.AsNoTracking().Where(u => u.Id == r.RequestedByUserId).Select(u => (AppRole?)u.Role).FirstOrDefaultAsync());
 
@@ -1436,7 +1449,10 @@ namespace SpicAPI.Controllers
                 CanResolve = isDispatcher && r.Status == PublicityStatus.ExceptionRaised,
                 SmdReviewedAt = r.SmdReviewedAt,
                 SmdReviewedByName = r.SmdReviewedByName,
-                Files = files.Concat(transferFiles).Select(ToFile).ToList(),
+                // An outgoing transfer's proof file has RequestId == r.Id (uploaded from this very
+                // request's own page) AND its DispatchId is in the outgoing set, so it legitimately
+                // matches both `files` and `transferFiles` above - dedupe by Id so it is listed once.
+                Files = files.Concat(transferFiles).DistinctBy(f => f.Id).Select(ToFile).ToList(),
                 Summary = await SummaryAsync(r)
             };
 
@@ -1504,6 +1520,7 @@ namespace SpicAPI.Controllers
                             RequestId = c.Id, IndentNo = c.IndentNo, Hq = srcNames.Hqs.GetValueOrDefault(c.HeadquarterId, ""),
                             StateId = c.StateId, State = srcNames.States.GetValueOrDefault(c.StateId, ""),
                             RegionId = c.RegionId, Region = srcNames.Regions.GetValueOrDefault(c.RegionId, ""),
+                            HqId = c.HeadquarterId,
                             ReportedExcess = s.Excess, Remaining = remaining, LastUpdated = c.UpdatedAt
                         });
                 }
@@ -1516,15 +1533,26 @@ namespace SpicAPI.Controllers
             var source = d.SourceRequestId is int sid ? await LoadAsync(sid) : null;
             var sourceHq = source is null ? null
                 : (await NamesAsync(Array.Empty<int>(), Array.Empty<int>(), new[] { source.HeadquarterId })).Hqs.GetValueOrDefault(source.HeadquarterId);
+            var destNames = await NamesAsync(new[] { dest.StateId }, new[] { dest.RegionId }, Array.Empty<int>());
+            // A Transfer dispatch never collects its own delivery address (CreateDispatch's Transfer
+            // branch has no address step) - fall back to whatever address the destination request's own
+            // most recent dispatch was actually sent to, so the source RMDO creating the transfer knows
+            // where to physically ship without guessing or fabricating a new one.
+            var destinationAddress = d.DestinationAddress ?? (d.Kind == PublicityDispatchKind.Transfer
+                ? await _db.PublicityDispatches.AsNoTracking()
+                    .Where(x => x.RequestId == dest.Id && x.DestinationAddress != null)
+                    .OrderByDescending(x => x.CreatedAt).Select(x => x.DestinationAddress).FirstOrDefaultAsync()
+                : null);
             var a = d.Acknowledgement;
             var dto = new PubDispatchDto
             {
                 Id = d.Id, DispatchNo = d.DispatchNo, RequestId = d.RequestId, RequestIndentNo = dest.IndentNo, Kind = d.Kind, Status = d.Status,
                 SourceName = d.Kind == PublicityDispatchKind.Transfer ? sourceHq ?? "Source HQ" : d.VendorName ?? "Vendor",
                 SourceHqId = d.SourceHqId, SourceRequestId = d.SourceRequestId, SourceIndentNo = source?.IndentNo,
-                DestinationHq = destHq, DestinationAddress = d.DestinationAddress, DeliveryAddressId = d.DeliveryAddressId, Quantity = d.Quantity,
+                DestinationHq = destHq, DestinationState = destNames.States.GetValueOrDefault(dest.StateId), DestinationRegion = destNames.Regions.GetValueOrDefault(dest.RegionId),
+                DestinationAddress = destinationAddress, DeliveryAddressId = d.DeliveryAddressId, Quantity = d.Quantity,
                 Transporter = d.Transporter, TrackingNo = d.TrackingNo, VehicleNo = d.VehicleNo,
-                ResponsibleName = d.ResponsibleName, ResponsibleRole = d.ResponsibleRole,
+                ResponsibleUserId = d.ResponsibleUserId, ResponsibleName = d.ResponsibleName, ResponsibleRole = d.ResponsibleRole,
                 DispatchDate = d.DispatchDate, ExpectedDeliveryDate = d.ExpectedDeliveryDate, CurrentLocation = d.CurrentLocation,
                 DeliveredAt = d.DeliveredAt, Remarks = d.Remarks, CreatedByName = d.CreatedByName, CreatedAt = d.CreatedAt,
                 ProofByName = d.ProofByName, ProofAt = d.ProofAt,
@@ -1551,6 +1579,11 @@ namespace SpicAPI.Controllers
                     ("Transfer Created", d.Transporter, d.Status >= PublicityDispatchStatus.Dispatched ? d.DispatchDate : null, d.Status >= PublicityDispatchStatus.Dispatched),
                     ("In Transit", d.CurrentLocation ?? (d.ExpectedDeliveryDate is { } e ? $"Expected Delivery {e:dd MMM yyyy}" : null), d.InTransitAt, d.Status >= PublicityDispatchStatus.InTransit),
                     ("Acknowledgement", ackPill, a?.SubmittedAt, acked));
+                // The current/active milestone (e.g. "Proof Submitted" while proof is still pending)
+                // must never render with the same checkmark icon as a completed one - only the State==1
+                // (current, not done) step gets the spinner, same convention as the 3-step timeline below.
+                var currentStep = dto.Steps.FirstOrDefault(s => s.State == 1);
+                if (currentStep is not null) currentStep.UseSpinner = true;
             }
             else
             {

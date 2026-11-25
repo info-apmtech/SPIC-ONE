@@ -33,25 +33,32 @@
                     <PubInfo Icon="bi-upc-scan" Label="Tracking Number" Value="@X.TrackingNo" />
                 </div>
                 <div>
-                    <PubInfo Icon="bi-person-badge" Tone="green" Label="Responsible Person" Value="@X.ResponsibleName" Sub="@(X.ResponsibleRole is null ? null : $"({X.ResponsibleRole})")" />
+                    <PubInfo Icon="bi-person-badge" Tone="green" Label="Responsible Person" Value="@(X.ResponsibleName ?? "Not Assigned")" Sub="@(X.ResponsibleRole is null ? null : $"({X.ResponsibleRole})")" />
                     <PubInfo Icon="bi-map" Tone="violet" Label="State" Value="@D.State" />
                     <PubInfo Icon="bi-pin-map" Label="Region" Value="@D.Region" />
                     <PubInfo Icon="bi-buildings" Label="Headquarter (HQ)" Value="@X.DestinationHq" />
                 </div>
             </div>
 
-            @if (X.Kind == PublicityDispatchKind.Transfer && Proof is not null)
+            @if (X.Kind == PublicityDispatchKind.Transfer)
             {
                 <h3 class="pub-h3">Courier / Dispatch Proof</h3>
-                <div class="pub-proof">
-                    <div class="pub-proof__thumb">
-                        @if (PubText.IsImage(Proof.FileName)) { <img src="@Api.FileUrl(Proof.Path)" alt="Courier proof" /> }
-                        else { <i class="bi bi-receipt" aria-hidden="true"></i> }
+                @if (Proof is not null)
+                {
+                    <div class="pub-proof">
+                        <a class="pub-proof__thumb" href="@Api.FileUrl(Proof.Path)" target="_blank" rel="noopener" title="View / download proof">
+                            @if (PubText.IsImage(Proof.FileName)) { <img src="@Api.FileUrl(Proof.Path)" alt="Courier proof" /> }
+                            else { <i class="bi bi-receipt" aria-hidden="true"></i> }
+                        </a>
+                        <PubInfo Label="File Name" Value="@Proof.FileName" Icon="bi-paperclip" />
+                        <PubInfo Label="Uploaded By" Value="@Proof.UploadedByName" Icon="bi-person" Tone="green" />
+                        <PubInfo Label="Uploaded At" Value="@PubText.DateTime(Proof.UploadedAt)" Icon="bi-clock" Tone="violet" />
                     </div>
-                    <PubInfo Label="File Name" Value="@Proof.FileName" Icon="bi-paperclip" />
-                    <PubInfo Label="Uploaded By" Value="@Proof.UploadedByName" Icon="bi-person" Tone="green" />
-                    <PubInfo Label="Uploaded At" Value="@PubText.DateTime(Proof.UploadedAt)" Icon="bi-clock" Tone="violet" />
-                </div>
+                }
+                else
+                {
+                    <span class="pub-note pub-note--amber">Courier proof is pending from the authorized source employee.</span>
+                }
             }
 
             <div class="pub-sub-head">

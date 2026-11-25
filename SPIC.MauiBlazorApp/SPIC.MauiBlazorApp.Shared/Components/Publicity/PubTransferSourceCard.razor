@@ -1,0 +1,138 @@
+@namespace SPIC.MauiBlazorApp.Shared.Components.Publicity
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
+@inject PublicityApi Api
+@* Figma "Admin Transfer Request Details" + "Create Transfer & Dispatch (To be Filled By RDMO)" - the
+   SOURCE HQ's own view of a Transfer-kind dispatch that an admin raised against ITS excess stock. This
+   is deliberately a different layout from PubTransferCard (the ADMIN/destination view's "Stock Transfer
+   Request" + "Courier / Dispatch Proof" cards) - the source RMDO's job here is to read what was
+   requested and then go create the transfer/dispatch, not to review a courier proof someone else owes. *@
+<section class="pub-card pub-card--flush">
+    <button type="button" class="pub-card__band pub-band--green pub-collapse" aria-expanded="@_openRequest" @onclick="() => _openRequest = !_openRequest">
+        <div class="pub-collapse__title">
+            <h2 class="pub-h2">Admin Transfer Request Details</h2>
+            <span class="pub-muted">Transfer request by Admin using the excess quantity from @D.Hq</span>
+        </div>
+        <div class="pub-collapse__right">
+            <PubPill Text="Transfer Request Received" Tone="green" />
+            <i class="bi bi-chevron-@(_openRequest ? "up" : "down")" aria-hidden="true"></i>
+        </div>
+    </button>
+    @if (_openRequest)
+    {
+        <div class="pub-card__body">
+            <div class="pub-grid pub-grid--3">
+                <PubInfo Icon="bi-journals" Tone="pink" Label="Destination Request ID" Value="@X.RequestIndentNo" />
+                <PubInfo Icon="bi-person-badge" Tone="green" Label="Request By" Value="@X.CreatedByName" />
+                <PubInfo Icon="bi-pin-map" Tone="violet" Label="Region" Value="@X.DestinationRegion" />
+                <PubInfo Icon="bi-geo-alt" Tone="pink" Label="Destination HQ" Value="@X.DestinationHq" />
+                <PubInfo Icon="bi-buildings" Tone="green" Label="Headquarter (HQ)" Value="@D.Hq" />
+                <PubInfo Icon="bi-map" Tone="violet" Label="State" Value="@X.DestinationState" />
+                <PubInfo Icon="bi-box-seam" Label="Product / Material" Value="@D.Product" Sub="@D.Material" />
+                <PubInfo Icon="bi-calendar-event" Tone="green" Label="Request Date" Value="@PubText.DateTime(X.CreatedAt)" />
+                <PubInfo Icon="bi-123" Tone="pink" Label="Transfer Quantity" Value="@($"{X.Quantity} Nos")" />
+            </div>
+            <div class="pub-grid pub-grid--2">
+                <PubInfo Icon="bi-truck" Label="Delivery Address" Value="@(X.DestinationAddress ?? "Not available yet")" Sub="@($"As delivered to {X.RequestIndentNo}")" />
+                <div class="pub-field">
+                    <span class="pub-label">Remarks</span>
+                    <b class="pub-info__value pub-info__value--sm">@(X.Remarks ?? "-")</b>
+                </div>
+            </div>
+        </div>
+    }
+</section>
+
+@if (Proof is not null)
+{
+    <section class="pub-card pub-card--flush">
+        <button type="button" class="pub-card__band pub-band--green pub-collapse" aria-expanded="@_openProof" @onclick="() => _openProof = !_openProof">
+            <div class="pub-collapse__title">
+                <h2 class="pub-h2">Courier / Dispatch Proof <small>(Submitted by RMDO)</small></h2>
+            </div>
+            <div class="pub-collapse__right">
+                <PubPill Text="Proof Submitted to Admin" Tone="green" />
+                <i class="bi bi-chevron-@(_openProof ? "up" : "down")" aria-hidden="true"></i>
+            </div>
+        </button>
+        @if (_openProof)
+        {
+            <div class="pub-card__body">
+                <div class="pub-card__head">
+                    <div class="pub-proof__intro">
+                        <div class="pub-proof__thumb">
+                            @if (PubText.IsImage(Proof.FileName)) { <img src="@Api.FileUrl(Proof.Path)" alt="Courier proof" /> }
+                            else { <i class="bi bi-receipt" aria-hidden="true"></i> }
+                        </div>
+                        <div class="pub-field">
+                            <span class="pub-label">Courier Proof</span>
+                            <PubPill Text="Uploaded" Tone="green" />
+                        </div>
+                    </div>
+                    <div class="pub-actions-right">
+                        <a class="pub-btn pub-btn--line-blue pub-btn--sm" href="@Api.FileUrl(Proof.Path)" target="_blank" rel="noopener">View Documents</a>
+                        <a class="pub-btn pub-btn--line pub-btn--sm" href="@Api.FileUrl(Proof.Path, download: true)" target="_blank" rel="noopener">Download Documents</a>
+                    </div>
+                </div>
+                <div class="pub-grid pub-grid--3">
+                    <div><span class="pub-info__label">File Name</span><b class="pub-info__value">@Proof.FileName</b></div>
+                    <div><span class="pub-info__label">Uploaded By</span><b class="pub-info__value">@Proof.UploadedByName</b></div>
+                    <div><span class="pub-info__label">Uploaded At</span><b class="pub-info__value">@PubText.DateTime(Proof.UploadedAt)</b></div>
+                </div>
+                @if (X.CanSubmitProof)
+                {
+                    <div class="pub-actions-right">
+                        <a class="pub-btn pub-btn--line" href="@($"/PublicityRequest/{D.Id}/transfer/{X.Id}")"><i class="bi bi-pencil"></i> Update Proof</a>
+                    </div>
+                }
+            </div>
+        }
+    </section>
+}
+
+<section class="pub-card pub-card--flush">
+    <button type="button" class="pub-card__band pub-band--green pub-collapse" aria-expanded="@_openCreate" @onclick="() => _openCreate = !_openCreate">
+        <div class="pub-collapse__title">
+            <h2 class="pub-h2">Create Transfer &amp; Dispatch <small>(To be Filled By RDMO)</small></h2>
+        </div>
+        <div class="pub-collapse__right">
+            <PubPill Text="Transfer Request Received" Tone="green" />
+            <i class="bi bi-chevron-@(_openCreate ? "up" : "down")" aria-hidden="true"></i>
+        </div>
+    </button>
+    @if (_openCreate)
+    {
+        <div class="pub-card__body">
+            @if (Proof is null)
+            {
+                @if (X.CanSubmitProof)
+                {
+                    <div class="pub-banner pub-banner--blue">
+                        <span class="pub-banner__icon"><i class="bi bi-info-circle"></i></span>
+                        <div><p>Admin has requested to transfer @X.Quantity Nos to @X.DestinationHq. Please create the transfer and enter dispatch details.</p></div>
+                        <a class="pub-btn pub-btn--primary" href="@($"/PublicityRequest/{D.Id}/transfer/{X.Id}")"><i class="bi bi-truck"></i> Create Transfer</a>
+                    </div>
+                }
+            }
+            else
+            {
+                <p class="pub-muted">Awaiting admin review and confirmation. Admin will verify the proof, enter/confirm dispatch details and create the transfer.</p>
+            }
+            <div class="pub-sub-head">
+                <h3 class="pub-h3">Transfer Delivery Status</h3>
+            </div>
+            <PubStepper Steps="X.Steps" Label="Transfer delivery status" />
+        </div>
+    }
+</section>
+
+@code {
+    [Parameter, EditorRequired] public PubDispatchDto X { get; set; } = default!;
+    [Parameter, EditorRequired] public PubDetailDto D { get; set; } = default!;
+    [Parameter] public bool StartOpen { get; set; } = true;
+    private bool _openRequest = true;
+    private bool _openProof = true;
+    private bool _openCreate = true;
+    protected override void OnInitialized() { _openRequest = _openProof = _openCreate = StartOpen; }
+    private PubFileDto? Proof => X.Files.LastOrDefault(f => f.Kind == PublicityFileKind.CourierProof);
+}

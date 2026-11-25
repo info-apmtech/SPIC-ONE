@@ -153,66 +153,47 @@
                 @for (var i = 0; i < d.Dispatches.Count; i++)
                 {
                     var x = d.Dispatches[i];
-                    <PubDispatchCard X="x" D="d" Heading="@($"Dispatch {i + 1}")" StartOpen="@(i == d.Dispatches.Count - 1 || d.Dispatches.Count < 3)" ShowAck="false">
-                        <Notice>
-                            @if (x.Status == PublicityDispatchStatus.TransferRequested) { <span class="pub-note pub-note--amber">Courier proof is pending from the source RMDO.</span> }
-                            @if (x.Status == PublicityDispatchStatus.ProofSubmitted) { <span class="pub-note pub-note--blue">Source RMDO uploaded the dispatch proof. Admin review pending.</span> }
-                        </Notice>
-                        <Actions>
-                            @if (Api.IsDispatcher && x.Status is >= PublicityDispatchStatus.ProofSubmitted and < PublicityDispatchStatus.Acknowledged)
-                            {
-                                <div class="pub-actions-right">
+                    if (x.Kind == PublicityDispatchKind.Transfer)
+                    {
+                        <PubTransferCard X="x" StartOpen="@(i == d.Dispatches.Count - 1 || d.Dispatches.Count < 3)">
+                            <ProofActions>
+                                @if (Api.IsDispatcher)
+                                {
                                     @if (x.Status == PublicityDispatchStatus.ProofSubmitted)
                                     {
-                                        <button type="button" class="pub-btn pub-btn--primary" @onclick="() => OpenStatus(x, PublicityDispatchStatus.Dispatched)">Update Dispatch Details</button>
+                                        <a class="pub-btn pub-btn--line-grey pub-btn--sm" href="@($"/PublicityReview/{d.Id}/transfer/{x.Id}/review")">Update Dispatch Details</a>
                                     }
-                                    @* Mark In Transit / Mark Delivered are a Transfer-kind-only manual progression (no
-                                       courier integration exists for inter-HQ transfers); Original / ReInitiation
-                                       dispatches no longer expose them - their 3-step timeline's "In Transit" segment
-                                       represents the whole dispatched-and-awaiting-acknowledgement window instead of a
-                                       claimed real-time courier scan, and Acknowledge is the only way they advance. *@
-                                    @if (x.Kind == PublicityDispatchKind.Transfer && x.Status == PublicityDispatchStatus.Dispatched)
+                                    else
                                     {
-                                        <button type="button" class="pub-btn pub-btn--line" @onclick="() => OpenStatus(x, PublicityDispatchStatus.InTransit)"><i class="bi bi-truck"></i> Mark In Transit</button>
+                                        <button type="button" class="pub-btn pub-btn--line-grey pub-btn--sm" disabled>Update Dispatch Details</button>
                                     }
-                                    @if (x.Kind == PublicityDispatchKind.Transfer && x.Status is PublicityDispatchStatus.Dispatched or PublicityDispatchStatus.InTransit)
-                                    {
-                                        <button type="button" class="pub-btn pub-btn--primary" @onclick="() => OpenStatus(x, PublicityDispatchStatus.Delivered)"><i class="bi bi-box-seam"></i> Mark Delivered</button>
-                                    }
-                                </div>
-                            }
-                            @* The Acknowledgement Pending / Awaiting Acknowledgement status for this dispatch is
-                               shown once, in the single compact banner below the dispatch/transfer cards - showing
-                               it again here per-card was the duplicate "two banners for the same thing" this
-                               section used to cause. *@
-                        </Actions>
-                    </PubDispatchCard>
+                                }
+                            </ProofActions>
+                        </PubTransferCard>
+                    }
+                    else
+                    {
+                        <PubDispatchCard X="x" D="d" Heading="@DispatchHeading(x, i)" StartOpen="@(i == d.Dispatches.Count - 1 || d.Dispatches.Count < 3)" ShowAck="false" />
+                    }
                 }
 
-                @for (var i = 0; i < d.OutgoingTransfers.Count; i++)
-                {
-                    var x = d.OutgoingTransfers[i];
-                    <PubDispatchCard X="x" D="d" Heading="Stock Transfer Order" ShowAck="false">
-                        <Notice>
-                            @if (x.Status == PublicityDispatchStatus.TransferRequested) { <span class="pub-note pub-note--blue">Admin has requested to transfer @x.Quantity Nos to @x.DestinationHq from your excess stock.</span> }
-                        </Notice>
-                        <Actions>
-                            @if (x.CanSubmitProof)
-                            {
-                                <div class="pub-actions-right">
-                                    <a class="pub-btn pub-btn--primary" href="@($"/PublicityRequest/{d.Id}/transfer/{x.Id}")"><i class="bi bi-truck"></i> @(x.Status == PublicityDispatchStatus.TransferRequested ? "Create Transfer" : "Update Proof")</a>
-                                </div>
-                            }
-                        </Actions>
-                    </PubDispatchCard>
-                }
-
-                @if (d.Dispatches.Count > 0)
+                @* Once a Stock Transfer exists for this request (either side), its own cards already show
+                   "Transfer Request Sent / Proof Submitted / Admin Review / ... / Acknowledgement" - a
+                   second, generic "Exception Raised" read of the same underlying Summary here would just
+                   repeat that in a separate place. It only still earns its own banner when there is a
+                   genuine, currently-actionable item for THIS viewer (_ackTarget - "you personally have a
+                   delivered dispatch, original or transfer, awaiting your acknowledgement") that isn't
+                   otherwise surfaced anywhere on this tab. *@
+                @if (d.Dispatches.Count > 0 && (_ackTarget is not null || !(d.Dispatches.Any(x => x.Kind == PublicityDispatchKind.Transfer) || d.OutgoingTransfers.Count > 0)))
                 {
                     // Full-width status banner only - the actual quantities/condition/remarks/evidence
                     // live exclusively in the Acknowledgement / Exception Handling tab (case 2 below);
                     // every value here is read straight from the same persisted request Status /
                     // Summary that tab itself is built from, never invented for display purposes.
+                    // This is strictly about d.Dispatches (the ORIGINAL/ReInitiation dispatch(es) landing
+                    // on THIS request) - rendered here, directly under that section and before any Stock
+                    // Transfer cards below, so it is never mistaken for the transfer's own (separately
+                    // tracked, independently Pending-until-acknowledged) status.
                     var anyAck = d.Dispatches.Any(x => x.Ack is { IsDraft: false });
                     string icon, heading, message, tone;
                     if (d.Status == PublicityStatus.Completed)
@@ -257,6 +238,12 @@
                             <button type="button" class="pub-btn pub-btn--line" @onclick="() => _tab = 2">View Acknowledgement <i class="bi bi-arrow-right"></i></button>
                         }
                     </div>
+                }
+
+                @for (var i = 0; i < d.OutgoingTransfers.Count; i++)
+                {
+                    var x = d.OutgoingTransfers[i];
+                    <PubTransferSourceCard X="x" D="d" StartOpen="@(i == d.OutgoingTransfers.Count - 1 || d.OutgoingTransfers.Count < 3)" />
                 }
 
                 break;
@@ -454,28 +441,6 @@
             </Footer>
         </BottomSheet>
 
-        <BottomSheet @bind-IsOpen="_statusOpen" Title="@(_statusTo switch { PublicityDispatchStatus.Dispatched => "Confirm Transfer & Dispatch", PublicityDispatchStatus.InTransit => "Mark In Transit", _ => "Mark Delivered" })">
-            <ChildContent>
-                <div class="pub-form">
-                    @if (_statusTo == PublicityDispatchStatus.Dispatched)
-                    {
-                        <div class="pub-field"><label class="pub-label pub-req" for="st-tr">Transporter / Courier</label><input id="st-tr" class="pub-input" @bind="_status.Transporter" /></div>
-                        <div class="pub-field"><label class="pub-label pub-req" for="st-awb">Tracking No. (AWB)</label><input id="st-awb" class="pub-input" @bind="_status.TrackingNo" /></div>
-                        <div class="pub-field"><label class="pub-label" for="st-dd">Transfer / Dispatch Date</label><input id="st-dd" type="date" class="pub-input" @bind="_status.DispatchDate" /></div>
-                    }
-                    @if (_statusTo != PublicityDispatchStatus.Delivered)
-                    {
-                        <div class="pub-field"><label class="pub-label" for="st-ed">Expected Delivery Date</label><input id="st-ed" type="date" class="pub-input" @bind="_status.ExpectedDeliveryDate" /></div>
-                    }
-                    <div class="pub-field"><label class="pub-label" for="st-loc">Current Location / Hub</label><input id="st-loc" class="pub-input" placeholder="e.g. Bengaluru Hub" @bind="_status.CurrentLocation" /></div>
-                </div>
-            </ChildContent>
-            <Footer>
-                <button type="button" class="pub-btn pub-btn--grey" @onclick="() => _statusOpen = false">Cancel</button>
-                <button type="button" class="pub-btn pub-btn--primary" disabled="@_busy" @onclick="StatusAsync">Save</button>
-            </Footer>
-        </BottomSheet>
-
     }
 </div>
 
@@ -501,11 +466,8 @@
     private PubAckUpsertDto _ack = new();
     private List<IBrowserFile> _ackFiles = new();
 
-    private bool _reviewOpen, _statusOpen;
+    private bool _reviewOpen;
     private string? _reviewRemarks;
-    private PubDispatchDto? _statusFor;
-    private PublicityDispatchStatus _statusTo;
-    private PubDispatchStatusDto _status = new();
 
     private int AckShortage => _ackTarget is null ? 0 : Math.Max(0, _ackTarget.Quantity - _ack.ReceivedQty);
     private int AckExcess => _ackTarget is null ? 0 : Math.Max(0, _ack.ReceivedQty - _ackTarget.Quantity);
@@ -530,6 +492,17 @@
             ? new PubAckUpsertDto { ReceivedQty = a.ReceivedQty, IsDamaged = a.IsDamaged, DamagedQty = a.DamagedQty, AcknowledgedByUserId = a.AcknowledgedByUserId, Remarks = a.Remarks }
             : new PubAckUpsertDto { ReceivedQty = _ackTarget?.Quantity ?? 0, AcknowledgedByUserId = _lookups?.MyUserId };
     }
+
+    // A Transfer-kind dispatch landing on this request (this request is the transfer's destination)
+    // must never share the generic "Dispatch N" heading with the Original/ReInitiation dispatch it's
+    // mixed alongside in d.Dispatches - that's what made a stock transfer read as "Dispatch 2 - Stock
+    // Transfer" instead of its own distinct "Stock Transfer Request" section.
+    private static string DispatchHeading(PubDispatchDto x, int i) => x.Kind switch
+    {
+        PublicityDispatchKind.Transfer => "Stock Transfer Request",
+        PublicityDispatchKind.Original => "Original Dispatch Details & Exception",
+        _ => $"Dispatch {i + 1}"
+    };
 
     private static string ActionTone(string action) => action switch
     {
@@ -578,32 +551,6 @@
             Nav.NavigateTo("/PublicityReview/consolidation");
             return;
         }
-        await LoadAsync();
-    }
-
-    // ---- dispatch status (admin) -----------------------------------------------------------
-
-    private void OpenStatus(PubDispatchDto x, PublicityDispatchStatus to)
-    {
-        _statusFor = x;
-        _statusTo = to;
-        _status = new PubDispatchStatusDto { Status = to, Transporter = x.Transporter, TrackingNo = x.TrackingNo, DispatchDate = x.DispatchDate ?? PubText.Today, ExpectedDeliveryDate = x.ExpectedDeliveryDate, CurrentLocation = x.CurrentLocation };
-        _statusOpen = true;
-    }
-
-    private async Task StatusAsync()
-    {
-        _busy = true;
-        var ok = await Api.DispatchStatusAsync(_statusFor!.Id, _status);
-        _busy = false;
-        if (!ok) return;
-        _statusOpen = false;
-        if (_statusTo == PublicityDispatchStatus.Dispatched && _statusFor.Kind == PublicityDispatchKind.Transfer)
-        {
-            Nav.NavigateTo($"{Api.Home}/done?type=dispatch&id={Id}&no={Uri.EscapeDataString(_statusFor.DispatchNo)}");
-            return;
-        }
-        Toast.Success("Dispatch updated.");
         await LoadAsync();
     }
 
