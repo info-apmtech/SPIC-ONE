@@ -773,7 +773,7 @@ namespace SpicAPI.Controllers
                 if (string.IsNullOrWhiteSpace(remarks)) return "Enter the reason for returning the request.";
                 await AddEvent(r, r.Stage, "Returned", name, remarks);
                 r.Status = PublicityStatus.Returned;
-                Notify(PublicityNotificationType.Approval, r, null, r.CreatedByUserId, null, null,
+                await NotifyAsync(PublicityNotificationType.Approval, r, null, r.CreatedByUserId, null, null,
                     $"Request {r.IndentNo} returned", $"{StageLabel(r.Stage)}: {remarks!.Trim()}", "Edit and resubmit the request.");
             }
             else if (normalized == "reject")
@@ -781,6 +781,8 @@ namespace SpicAPI.Controllers
                 if (string.IsNullOrWhiteSpace(remarks)) return "Enter the reason for rejecting the request.";
                 await AddEvent(r, r.Stage, "Rejected", name, remarks);
                 r.Status = PublicityStatus.Rejected;
+                await NotifyAsync(PublicityNotificationType.Approval, r, null, r.CreatedByUserId, null, null,
+                    $"Request {r.IndentNo} rejected", $"{StageLabel(r.Stage)}: {remarks!.Trim()}", "View the reason and correct the request.");
             }
             else
             {
@@ -801,7 +803,7 @@ namespace SpicAPI.Controllers
                 {
                     r.Stage = PublicityStage.Dispatch;
                     r.Status = PublicityStatus.FinalApproved;
-                    Notify(PublicityNotificationType.Approval, r, null, r.CreatedByUserId, null, null,
+                    await NotifyAsync(PublicityNotificationType.Approval, r, null, r.CreatedByUserId, null, null,
                         $"Request {r.IndentNo} final approved", "Your publicity material request is approved and ready for dispatch.", null);
                     await NotifyReadyForDispatchAsync(r);
                 }
@@ -848,7 +850,7 @@ namespace SpicAPI.Controllers
                 await AddEvent(r, PublicityStage.InterHqTransfer, "Transfer Requested", name, dto.Remarks, d.Id);
                 await AddEvent(source, PublicityStage.TransferCreation, "Transfer Order Received", name, $"{d.Quantity} Nos to {r.IndentNo}", d.Id);
                 var hqs = await NamesAsync(Array.Empty<int>(), Array.Empty<int>(), new[] { r.HeadquarterId });
-                Notify(PublicityNotificationType.StockTransfer, source, d.Id, source.CreatedByUserId, AppRole.RMD, source.HeadquarterId,
+                await NotifyAsync(PublicityNotificationType.StockTransfer, source, d.Id, source.CreatedByUserId, AppRole.RMD, source.HeadquarterId,
                     "Stock Transfer Order Received",
                     $"{d.Quantity} Nos {await ProductMaterialAsync(r)} to be dispatched to {hqs.Hqs.GetValueOrDefault(r.HeadquarterId, "the destination HQ")}",
                     $"From your available excess stock (Request ID: {source.IndentNo})");
@@ -903,7 +905,7 @@ namespace SpicAPI.Controllers
                     await AddEvent(r, PublicityStage.Dispatch, "Note Approved", name, "Dispatch / note approval document uploaded.", d.Id);
                 await AddEvent(r, dto.Kind == PublicityDispatchKind.Original ? PublicityStage.Dispatch : PublicityStage.ReInitiation,
                     "Dispatched", name, $"{d.DispatchNo}: {d.Quantity} Nos via {d.Transporter}", d.Id);
-                Notify(PublicityNotificationType.Dispatch, r, d.Id, r.CreatedByUserId, null, null,
+                await NotifyAsync(PublicityNotificationType.Dispatch, r, d.Id, r.CreatedByUserId, null, null,
                     $"Material dispatched ({d.DispatchNo})", $"{d.Quantity} Nos dispatched via {d.Transporter}.", d.TrackingNo is null ? null : $"Tracking No: {d.TrackingNo}");
             }
 
@@ -1019,10 +1021,26 @@ namespace SpicAPI.Controllers
             d.Status = dto.Status;
             await AddEvent(r, d.Kind == PublicityDispatchKind.Transfer ? PublicityStage.InterHqTransfer : PublicityStage.Delivery, label, name, d.CurrentLocation, d.Id);
             if (dto.Status == PublicityDispatchStatus.Delivered)
-                Notify(PublicityNotificationType.Dispatch, r, d.Id, r.CreatedByUserId, null, null,
+                await NotifyAsync(PublicityNotificationType.Dispatch, r, d.Id, r.CreatedByUserId, null, null,
                     $"Material delivered ({d.DispatchNo})", "Please submit the receipt acknowledgement.", null);
+            if (dto.Status == PublicityDispatchStatus.Dispatched && d.Kind == PublicityDispatchKind.Transfer)
+                // Admin just confirmed the courier proof and created the transfer (Step 3/4 of the stock
+                // transfer workflow) - the destination's own responsible employee (r.CreatedByUserId,
+                // same recipient the existing Delivered-notify above already uses) needs to know
+                // material is now actually in transit toward them.
+                await NotifyAsync(PublicityNotificationType.StockTransfer, r, d.Id, r.CreatedByUserId, null, null,
+                    $"Stock Transfer Dispatched ({d.DispatchNo})", $"{d.Quantity} Nos dispatched via {d.Transporter ?? "the assigned courier"} and in transit.", "Track the incoming transfer.");
             await RecomputeAsync(r);
-            if (d.SourceRequestId is int sid && await LoadAsync(sid, tracking: true) is { } source) await RecomputeAsync(source);
+            if (d.SourceRequestId is int sid && await LoadAsync(sid, tracking: true) is { } source)
+            {
+                await RecomputeAsync(source);
+                if (dto.Status == PublicityDispatchStatus.Dispatched && d.Kind == PublicityDispatchKind.Transfer)
+                    // The source RMDO who submitted the proof is told the admin accepted it and the
+                    // transfer has actually been created - same recipient resolution CanSubmitProofAsync
+                    // already uses (creator-of-source-request, widened to the source HQ's RMDO/MDO team).
+                    await NotifyAsync(PublicityNotificationType.StockTransfer, source, d.Id, source.CreatedByUserId, AppRole.RMD, source.HeadquarterId,
+                        $"Transfer Approved ({d.DispatchNo})", "Admin confirmed the dispatch details - the transfer is now in transit.", null);
+            }
             await _db.SaveChangesAsync();
             return Ok(new { Success = true });
         }
@@ -1059,8 +1077,8 @@ namespace SpicAPI.Controllers
                 await AddEvent(source, PublicityStage.TransferCreation, "Proof Submitted", name, $"{d.DispatchNo} to {r.IndentNo}", d.Id);
                 await RecomputeAsync(source);
             }
-            Notify(PublicityNotificationType.StockTransfer, r, d.Id, null, AppRole.MDAdmin, null,
-                $"Dispatch proof submitted ({d.DispatchNo})", $"{name} uploaded the courier proof for {d.Quantity} Nos.", "Review and confirm the transfer.");
+            await NotifyAsync(PublicityNotificationType.StockTransfer, r, d.Id, null, AppRole.MDAdmin, null,
+                $"Courier Proof Submitted - Review Required ({d.DispatchNo})", $"{name} uploaded the courier proof for {d.Quantity} Nos.", "Review and confirm the transfer.");
             await RecomputeAsync(r);
             await _db.SaveChangesAsync();
             return Ok(new { Success = true });
@@ -1147,12 +1165,18 @@ namespace SpicAPI.Controllers
                 if (type != "None" && type != "Excess")
                 {
                     var parts = new List<string>();
-                    if (shortage > 0) parts.Add($"shortage of {shortage} Nos");
-                    if (ack.DamagedQty > 0) parts.Add($"damage of {ack.DamagedQty} Nos");
-                    Notify(PublicityNotificationType.Exception, r, d.Id, null, AppRole.MDAdmin, null,
-                        "Publicity Dispatch Exception Raised",
-                        $"Request {r.IndentNo} has an acknowledgement exception: {string.Join(" and ", parts)}. Review required.", ack.Remarks);
+                    if (shortage > 0) parts.Add("Shortage");
+                    if (ack.DamagedQty > 0) parts.Add("Damaged");
+                    await NotifyAsync(PublicityNotificationType.Exception, r, d.Id, null, AppRole.MDAdmin, null,
+                        $"Exception Raised - {string.Join(" + ", parts)}",
+                        $"{r.IndentNo} reported {string.Join(" and ", parts).ToLowerInvariant()} material ({(shortage > 0 ? $"{shortage} Nos short" : "")}{(shortage > 0 && ack.DamagedQty > 0 ? ", " : "")}{(ack.DamagedQty > 0 ? $"{ack.DamagedQty} Nos damaged" : "")}). Review required.", ack.Remarks);
                 }
+                else if (d.Kind == PublicityDispatchKind.Transfer)
+                    // Clean transfer acknowledgement (no shortage/damage) - this is specifically the
+                    // TRANSFER's own acknowledgement (this exact dispatch row, never the original
+                    // dispatch's), so ADMIN-MD CS is told the transfer itself actually completed.
+                    await NotifyAsync(PublicityNotificationType.StockTransfer, r, d.Id, null, AppRole.MDAdmin, null,
+                        $"Transfer Acknowledgement Received ({d.DispatchNo})", $"{r.IndentNo} confirmed receipt of {ack.ReceivedQty} Nos.", null);
                 await _db.SaveChangesAsync();
                 var before = r.Status;
                 await RecomputeAsync(r);
@@ -1267,6 +1291,7 @@ namespace SpicAPI.Controllers
                 dto.DestinationIndentNo = dest.IndentNo;
                 dto.DestinationHq = names.Hqs.GetValueOrDefault(dest.HeadquarterId);
                 dto.TransferQty = d.Quantity;
+                dto.Status = DispatchStatusLabel(d.Status, d.Kind);
                 dto.Reason = d.Remarks ?? $"Shortage resolution for {dto.DestinationHq}";
                 var pm = await ProductMaterialPartsAsync(dest);
                 dto.Product = pm.Product;
@@ -1916,7 +1941,7 @@ namespace SpicAPI.Controllers
                 // The creator IS the last rung (DGM - MD CS): nothing left to approve.
                 r.Stage = PublicityStage.Dispatch;
                 r.Status = PublicityStatus.FinalApproved;
-                Notify(PublicityNotificationType.Approval, r, null, r.CreatedByUserId, null, null,
+                await NotifyAsync(PublicityNotificationType.Approval, r, null, r.CreatedByUserId, null, null,
                     $"Request {r.IndentNo} final approved", "Your publicity material request is approved and ready for dispatch.", null);
                 await NotifyReadyForDispatchAsync(r);
             }
@@ -1931,13 +1956,35 @@ namespace SpicAPI.Controllers
                 ActorName = name, ActorRole = await MyRoleLabelAsync(), Remarks = Clean(remarks)
             });
 
-        private void Notify(PublicityNotificationType type, PublicityRequest r, int? dispatchId, string? userId, AppRole? role, int? hqId,
-            string title, string message, string? sub) =>
+        /// <summary>Business Event + Entity + Recipient dedup: an identical, still-unread notification
+        /// for the same (Type, RequestId, DispatchId, TargetUserId, TargetRole, TargetHqId, Title) is
+        /// never inserted twice - this is what actually makes a page refresh or a retried POST safe,
+        /// since every Notify() call site already only ever runs from a successfully persisted business
+        /// transition, never from a GET/page-render. Once the existing one is read, a genuinely repeated
+        /// action (e.g. proof re-submitted a second time) still gets its own fresh notification.</summary>
+        private async Task NotifyAsync(PublicityNotificationType type, PublicityRequest r, int? dispatchId, string? userId, AppRole? role, int? hqId,
+            string title, string message, string? sub)
+        {
+            var exists = await _db.PublicityNotifications.AnyAsync(n =>
+                n.Type == type && n.RequestId == r.Id && n.DispatchId == dispatchId && n.TargetUserId == userId &&
+                n.TargetRole == role && n.TargetHqId == hqId && n.Title == title && n.ReadAt == null);
+            if (exists) return;
             _db.PublicityNotifications.Add(new PublicityNotification
             {
                 Type = type, RequestId = r.Id, DispatchId = dispatchId, TargetUserId = userId, TargetRole = role,
                 TargetHqId = hqId, Title = title, Message = message, SubText = sub
             });
+        }
+
+        private static string DispatchStatusLabel(PublicityDispatchStatus s, PublicityDispatchKind k) => s switch
+        {
+            PublicityDispatchStatus.TransferRequested => "Awaiting Dispatch Proof",
+            PublicityDispatchStatus.ProofSubmitted => "Proof Submitted to Admin",
+            PublicityDispatchStatus.Dispatched => k == PublicityDispatchKind.Transfer ? "Transfer Created" : "Dispatched",
+            PublicityDispatchStatus.InTransit => "In Transit",
+            PublicityDispatchStatus.Delivered => "Delivered",
+            _ => "Completed"
+        };
 
         // DGM - MD CS's final approval (both the normal chain in ReviewOneAsync and the chain-skip
         // case in Submit() where the creator already outranks every stage) always notifies the
@@ -1954,7 +2001,7 @@ namespace SpicAPI.Controllers
             var pm = await ProductMaterialPartsAsync(r);
             var sub = $"{names.States.GetValueOrDefault(r.StateId)} / {names.Regions.GetValueOrDefault(r.RegionId)} / {names.Hqs.GetValueOrDefault(r.HeadquarterId)}"
                 + $" - {pm.Material} - {r.Quantity} Nos - Approved {DateTime.Now:dd MMM yyyy, hh:mm tt}";
-            Notify(PublicityNotificationType.Approval, r, null, null, AppRole.MDAdmin, null,
+            await NotifyAsync(PublicityNotificationType.Approval, r, null, null, AppRole.MDAdmin, null,
                 "Ready for Dispatch", $"Publicity Request {r.IndentNo} has received final approval from DGM-MD-CS and is ready for dispatch.", sub);
         }
 

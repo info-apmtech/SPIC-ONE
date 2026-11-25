@@ -528,6 +528,7 @@ namespace SPIC.Core.DTOs
         public string? Product { get; set; }
         public string? Material { get; set; }
         public int TransferQty { get; set; }
+        public string? Status { get; set; }
         public int ReportedExcess { get; set; }
         public int AlreadyTransferred { get; set; }
         public int RemainingExcess { get; set; }
