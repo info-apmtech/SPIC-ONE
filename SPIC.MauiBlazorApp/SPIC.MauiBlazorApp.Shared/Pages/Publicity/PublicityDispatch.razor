@@ -63,23 +63,6 @@
             @if (_reading) { <p class="pub-muted"><span class="spinner-border spinner-border-sm"></span> Reading the receipt...</p> }
         </section>
 
-        <section class="pub-card">
-            <div class="pub-card__head"><h2 class="pub-h2">Extracted Details <small>(Auto-read from Document)</small></h2>
-                @if (_ocrFound) { <PubPill Text="Auto-filled using OCR" Tone="green" /> }</div>
-            <div class="pub-form pub-form--4">
-                <div class="pub-field"><label class="pub-label pub-req" for="pp-tr">Courier / Transporter</label>
-                    <input id="pp-tr" class="pub-input" list="pub-couriers" @bind="_proof.Transporter" placeholder="e.g. Blue Dart Express" /></div>
-                <div class="pub-field"><label class="pub-label pub-req" for="pp-awb">Tracking No. / AWB</label>
-                    <input id="pp-awb" class="pub-input" @bind="_proof.TrackingNo" placeholder="AWB-9842019" /></div>
-                <div class="pub-field"><label class="pub-label pub-req" for="pp-dd">Dispatch Date</label>
-                    <input id="pp-dd" type="date" class="pub-input" @bind="_proof.DispatchDate" /></div>
-                <div class="pub-field"><label class="pub-label" for="pp-vn">Vehicle No</label>
-                    <input id="pp-vn" class="pub-input" @bind="_proof.VehicleNo" placeholder="e.g. TN 09 AB 1234" /></div>
-                <div class="pub-field pub-field--full"><label class="pub-label" for="pp-rem">Remarks (Optional)</label>
-                    <input id="pp-rem" class="pub-input" @bind="_proof.Remarks" placeholder="Enter remarks about dispatch" /></div>
-            </div>
-        </section>
-
         <div class="pub-footer">
             <a class="pub-btn pub-btn--grey" href="@Back"><i class="bi bi-chevron-double-left"></i> Back to List</a>
             <span class="pub-footer__gap"></span>
@@ -206,7 +189,7 @@
     private readonly PubDispatchCreateDto _dto = new();
     private readonly PubProofDto _proof = new();
     private List<IBrowserFile> _noteFiles = new(), _docFiles = new(), _proofFiles = new();
-    private bool _busy, _reading, _ocrFound;
+    private bool _busy, _reading;
 
     // Saved Delivery Address dropdown + Add Address popup.
     private List<PubDeliveryAddressDto> _addresses = new();
@@ -350,7 +333,6 @@
             _proofFiles = new();
             if (PubText.IsImage(file.Name) && await Api.OcrAsync(file) is { Found: true } ocr)
             {
-                _ocrFound = true;
                 _proof.Transporter = ocr.Transporter ?? _proof.Transporter;
                 _proof.TrackingNo = ocr.TrackingNo ?? _proof.TrackingNo;
                 _proof.DispatchDate = ocr.DispatchDate ?? _proof.DispatchDate;
@@ -368,8 +350,6 @@
     private async Task SubmitProofAsync()
     {
         if (_x!.Files.All(f => f.Kind != PublicityFileKind.CourierProof)) { Toast.Error("Upload the courier / dispatch proof."); return; }
-        if (string.IsNullOrWhiteSpace(_proof.Transporter) || string.IsNullOrWhiteSpace(_proof.TrackingNo) || _proof.DispatchDate is null)
-        { Toast.Error("Courier, tracking number and dispatch date are required."); return; }
         _busy = true;
         var ok = await Api.ProofAsync(_x.Id, _proof);
         _busy = false;

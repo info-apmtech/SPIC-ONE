@@ -198,12 +198,15 @@ namespace SPIC.Core.DTOs
         public int? SourceRequestId { get; set; }
         public string? SourceIndentNo { get; set; }
         public string DestinationHq { get; set; } = "";
+        public string? DestinationState { get; set; }
+        public string? DestinationRegion { get; set; }
         public string? DestinationAddress { get; set; }
         public int? DeliveryAddressId { get; set; }
         public int Quantity { get; set; }
         public string? Transporter { get; set; }
         public string? TrackingNo { get; set; }
         public string? VehicleNo { get; set; }
+        public string? ResponsibleUserId { get; set; }
         public string? ResponsibleName { get; set; }
         public string? ResponsibleRole { get; set; }
         public DateTime? DispatchDate { get; set; }
@@ -298,6 +301,7 @@ namespace SPIC.Core.DTOs
         public string State { get; set; } = "";
         public int RegionId { get; set; }
         public string Region { get; set; } = "";
+        public int HqId { get; set; }
         // The raw excess this source acknowledged (Usable - Requested), before subtracting quantity
         // already committed to other transfer orders sourced from it.
         public int ReportedExcess { get; set; }
@@ -461,6 +465,9 @@ namespace SPIC.Core.DTOs
         public string? Transporter { get; set; }
         public string? TrackingNo { get; set; }
         public DateTime? DispatchDate { get; set; }
+        public string? VehicleNo { get; set; }
+        public string? ResponsibleUserId { get; set; }
+        public string? Remarks { get; set; }
     }
 
     public sealed class PubProofDto
@@ -521,6 +528,7 @@ namespace SPIC.Core.DTOs
         public string? Product { get; set; }
         public string? Material { get; set; }
         public int TransferQty { get; set; }
+        public string? Status { get; set; }
         public int ReportedExcess { get; set; }
         public int AlreadyTransferred { get; set; }
         public int RemainingExcess { get; set; }

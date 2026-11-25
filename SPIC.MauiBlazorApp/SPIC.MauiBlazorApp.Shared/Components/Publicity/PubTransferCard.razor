@@ -1,0 +1,120 @@
+@namespace SPIC.MauiBlazorApp.Shared.Components.Publicity
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
+@inject PublicityApi Api
+@* Figma "Stock Transfer Request" + "Courier / Dispatch Proof" - two independently collapsible cards
+   for a Transfer-kind dispatch, followed by its own "Transfer Delivery Status" timeline. Used instead
+   of PubDispatchCard only for X.Kind == Transfer, so Original/ReInitiation dispatches keep their
+   existing look untouched. *@
+<section class="pub-card pub-card--flush">
+    <button type="button" class="pub-card__band pub-band--green pub-collapse" aria-expanded="@_openRequest" @onclick="() => _openRequest = !_openRequest">
+        <div class="pub-collapse__title">
+            <h2 class="pub-h2">Stock Transfer Request</h2>
+            <span class="pub-muted">Requested to transfer available excess stock from the source HQ to resolve the shortage/damage.</span>
+        </div>
+        <div class="pub-collapse__right">
+            <PubPill Text="Transfer Request Sent" Tone="green" />
+            <i class="bi bi-chevron-@(_openRequest ? "up" : "down")" aria-hidden="true"></i>
+        </div>
+    </button>
+    @if (_openRequest)
+    {
+        <div class="pub-card__body">
+            @Notice
+            <div class="pub-grid pub-grid--4">
+                <PubInfo Icon="bi-journals" Tone="pink" Label="Source Request ID (Excess)" Value="@X.SourceIndentNo" />
+                <PubInfo Icon="bi-person-badge" Tone="green" Label="Requested By" Value="@X.CreatedByName" />
+                <PubInfo Icon="bi-123" Tone="violet" Label="Transfer Quantity (Excess)" Value="@($"{X.Quantity} Nos")" />
+                <PubInfo Icon="bi-shop" Label="Source HQ (From)" Value="@X.SourceName" />
+                <PubInfo Icon="bi-journals" Tone="pink" Label="Destination Request ID (Shortage)" Value="@X.RequestIndentNo" />
+                <PubInfo Icon="bi-geo-alt" Tone="green" Label="Destination HQ (To)" Value="@X.DestinationHq" />
+                <PubInfo Icon="bi-calendar-event" Label="Requested On" Value="@PubText.DateTime(X.CreatedAt)" />
+                <PubInfo Label="Status"><PubPill Text="Transfer Request Sent" Tone="green" /></PubInfo>
+            </div>
+            <div class="pub-field">
+                <span class="pub-label">Remarks</span>
+                <b class="pub-info__value pub-info__value--sm">@(X.Remarks ?? "-")</b>
+            </div>
+        </div>
+    }
+</section>
+
+<section class="pub-card pub-card--flush">
+    <button type="button" class="pub-card__band pub-band--green pub-collapse" aria-expanded="@_openProof" @onclick="() => _openProof = !_openProof">
+        <div class="pub-collapse__title">
+            <h2 class="pub-h2">Courier / Dispatch Proof</h2>
+        </div>
+        <div class="pub-collapse__right">
+            <PubPill Text="@PubText.DispatchStatus(X.Status, X.Kind)" Tone="@(Proof is null ? "amber" : "green")" />
+            <i class="bi bi-chevron-@(_openProof ? "up" : "down")" aria-hidden="true"></i>
+        </div>
+    </button>
+    @if (_openProof)
+    {
+        <div class="pub-card__body">
+            <div class="pub-proof-box">
+                <div class="pub-card__head">
+                    <div class="pub-proof__intro">
+                        <div class="pub-proof__thumb">
+                            @if (Proof is not null && PubText.IsImage(Proof.FileName)) { <img src="@Api.FileUrl(Proof.Path)" alt="Courier proof" /> }
+                            else { <i class="bi bi-receipt" aria-hidden="true"></i> }
+                        </div>
+                        <div class="pub-field">
+                            <span class="pub-label">Courier Proof</span>
+                            <PubPill Text="@PubText.DispatchStatus(X.Status, X.Kind)" Tone="@(Proof is null ? "amber" : "green")" />
+                        </div>
+                    </div>
+                    <div class="pub-actions-right">
+                        @if (Proof is not null)
+                        {
+                            <a class="pub-btn pub-btn--line-blue pub-btn--sm" href="@Api.FileUrl(Proof.Path)" target="_blank" rel="noopener">View Documents</a>
+                            <a class="pub-btn pub-btn--line pub-btn--sm" href="@Api.FileUrl(Proof.Path, download: true)" target="_blank" rel="noopener">Download Documents</a>
+                        }
+                        else
+                        {
+                            <button type="button" class="pub-btn pub-btn--line-blue pub-btn--sm" disabled>View Documents</button>
+                            <button type="button" class="pub-btn pub-btn--line pub-btn--sm" disabled>Download Documents</button>
+                        }
+                    </div>
+                </div>
+                <div class="pub-grid pub-grid--3">
+                    <div><span class="pub-info__label">File Name</span><b class="pub-info__value">@(Proof?.FileName ?? "--")</b></div>
+                    <div><span class="pub-info__label">Uploaded By</span><b class="pub-info__value">@(Proof?.UploadedByName ?? "--")</b></div>
+                    <div><span class="pub-info__label">Uploaded At</span><b class="pub-info__value">@(Proof is null ? "--" : PubText.DateTime(Proof.UploadedAt))</b></div>
+                </div>
+            </div>
+            @if (X.Status is PublicityDispatchStatus.TransferRequested or PublicityDispatchStatus.ProofSubmitted)
+            {
+                <div class="pub-proof-note">
+                    <span class="pub-proof-note__text">
+                        <i class="bi bi-info-circle" aria-hidden="true"></i>
+                        @(Proof is null
+                            ? "Courier proof is pending from the authorized source employee. Once the proof is submitted, the dispatch details can be updated."
+                            : "Courier proof has been submitted. Admin review is pending before the dispatch details can be updated.")
+                    </span>
+                    @ProofActions
+                </div>
+            }
+            else if (ProofActions is not null)
+            {
+                <div class="pub-actions-right">@ProofActions</div>
+            }
+        </div>
+    }
+</section>
+
+<section class="pub-card">
+    <h2 class="pub-h2">Transfer Delivery Status</h2>
+    <PubStepper Steps="X.Steps" Label="Transfer delivery status" />
+</section>
+
+@code {
+    [Parameter, EditorRequired] public PubDispatchDto X { get; set; } = default!;
+    [Parameter] public bool StartOpen { get; set; } = true;
+    [Parameter] public RenderFragment? Notice { get; set; }
+    [Parameter] public RenderFragment? ProofActions { get; set; }
+    private bool _openRequest = true;
+    private bool _openProof = true;
+    protected override void OnInitialized() { _openRequest = StartOpen; _openProof = StartOpen; }
+    private PubFileDto? Proof => X.Files.LastOrDefault(f => f.Kind == PublicityFileKind.CourierProof);
+}

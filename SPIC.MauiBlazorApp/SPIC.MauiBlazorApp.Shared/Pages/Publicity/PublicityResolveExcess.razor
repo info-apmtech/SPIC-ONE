@@ -29,17 +29,17 @@
             </div>
             <div class="pub-card__body">
                 <div class="pub-grid pub-grid--5">
-                    <PubInfo Label="Request ID" Value="@_d.IndentNo" />
-                    <PubInfo Label="Destination HQ" Value="@_d.Hq" Sub="@($"{_d.Region}, {_d.State}")" />
+                    <PubInfo Label="Request ID" Tone="pink" Value="@_d.IndentNo" />
+                    <PubInfo Label="Destination HQ" Tone="green" Value="@_d.Hq" Sub="@($"{_d.Region}, {_d.State}")" />
                     <PubInfo Label="Product / Material" Value="@_d.Product" Sub="@_d.Material" />
-                    <PubInfo Label="Reported By" Value="@_d.RequestedByName" Sub="@_d.RequestedByRole" />
+                    <PubInfo Label="Reported By" Tone="green" Value="@_d.RequestedByName" Sub="@_d.RequestedByRole" />
                     <PubInfo Label="Request Date" Value="@PubText.Date(_d.CreatedAt)" />
                 </div>
                 <h3 class="pub-h3">Quantity Details</h3>
                 <div class="pub-grid pub-grid--5">
-                    <PubInfo Label="Request Quantity" Value="@($"{_d.Quantity} Nos")" />
-                    <PubInfo Label="Original Dispatched" Value="@($"{_d.Summary.OriginalDispatched} Nos")" />
-                    <PubInfo Label="Received Quantity" Value="@($"{_d.Summary.OriginalReceived} Nos")" />
+                    <PubInfo Label="Request Quantity" Tone="violet" Value="@($"{_d.Quantity} Nos")" />
+                    <PubInfo Label="Original Dispatched" Tone="violet" Value="@($"{_d.Summary.OriginalDispatched} Nos")" />
+                    <PubInfo Label="Received Quantity" Tone="green" Value="@($"{_d.Summary.OriginalReceived} Nos")" />
                     <PubInfo Label="Shortage Quantity" Tone="pink" Value="@($"{_d.Summary.Shortage} Nos")" />
                     <PubInfo Label="Damaged Quantity" Tone="pink" Value="@($"{_d.Summary.Damaged} Nos")" />
                 </div>
@@ -58,27 +58,26 @@
                     <a class="pub-btn pub-btn--primary" href="@($"/PublicityReview/{Id}/dispatch?kind=1")">Create Re-Dispatch <i class="bi bi-chevron-double-right"></i></a>
                 </div>
             </div>
-            <div class="pub-form pub-form--4">
+            <div class="pub-form pub-form--5">
                 <div class="pub-field"><label class="pub-label">State</label>
-                    <select class="pub-input" @bind="_filterState">
-                        <option value="">All State</option>
-                        @foreach (var s in _rows.Select(x => x.Row.State).Distinct().OrderBy(x => x)) { <option value="@s">@s</option> }
+                    <select class="pub-input" @onchange="OnStateChangedAsync">
+                        <option value="" selected="@(_filterStateId is null)">All States</option>
+                        @foreach (var s in _states) { <option value="@s.Id" selected="@(_filterStateId == s.Id)">@s.Name</option> }
                     </select></div>
                 <div class="pub-field"><label class="pub-label">Region</label>
-                    <select class="pub-input" @bind="_filterRegion">
-                        <option value="">All Region</option>
-                        @foreach (var s in _rows.Where(x => _filterState == "" || x.Row.State == _filterState).Select(x => x.Row.Region).Distinct().OrderBy(x => x)) { <option value="@s">@s</option> }
+                    <select class="pub-input" @onchange="OnRegionChangedAsync">
+                        <option value="" selected="@(_filterRegionId is null)">All Regions</option>
+                        @foreach (var s in _regions) { <option value="@s.Id" selected="@(_filterRegionId == s.Id)">@s.Name</option> }
                     </select></div>
                 <div class="pub-field"><label class="pub-label">HQ</label>
-                    <select class="pub-input" @bind="_filterHq">
-                        <option value="">All HQ</option>
-                        @foreach (var s in _rows.Where(x => (_filterState == "" || x.Row.State == _filterState) && (_filterRegion == "" || x.Row.Region == _filterRegion)).Select(x => x.Row.Hq).Distinct().OrderBy(x => x)) { <option value="@s">@s</option> }
+                    <select class="pub-input" @onchange="OnHqChanged">
+                        <option value="" selected="@(_filterHqId is null)">All HQs</option>
+                        @foreach (var s in _hqs) { <option value="@s.Id" selected="@(_filterHqId == s.Id)">@s.Name</option> }
                     </select></div>
                 <div class="pub-field"><label class="pub-label">Product</label>
-                    <input class="pub-input" value="@($"{_d.Product} ({_d.Material})")" readonly title="Fixed to this exception's own product/material" /></div>
-            </div>
-            <div class="pub-actions-right">
-                <button type="button" class="pub-btn pub-btn--grey" @onclick="ClearFilters">Clear All</button>
+                    <input class="pub-input pub-input--readonly" value="@($"{_d.Product} ({_d.Material})")" readonly disabled title="Fixed to this exception's own product/material" /></div>
+                <div class="pub-field"><label class="pub-label">&nbsp;</label>
+                    <button type="button" class="pub-btn pub-btn--grey pub-btn--sm" @onclick="ClearFiltersAsync">Clear All</button></div>
             </div>
 
             @if (FilteredRows.Count == 0)
@@ -175,14 +174,16 @@
 
     private PubDetailDto? _d;
     private List<RowVm> _rows = new();
-    private string _filterState = "", _filterRegion = "", _filterHq = "", _search = "";
+    private List<PubOption> _states = new(), _regions = new(), _hqs = new();
+    private int? _filterStateId, _filterRegionId, _filterHqId;
+    private string _search = "";
     private string? _remarks;
     private bool _busy;
 
     private List<RowVm> FilteredRows => _rows.Where(x =>
-        (_filterState == "" || x.Row.State == _filterState) &&
-        (_filterRegion == "" || x.Row.Region == _filterRegion) &&
-        (_filterHq == "" || x.Row.Hq == _filterHq) &&
+        (_filterStateId is null || x.Row.StateId == _filterStateId) &&
+        (_filterRegionId is null || x.Row.RegionId == _filterRegionId) &&
+        (_filterHqId is null || x.Row.HqId == _filterHqId) &&
         (string.IsNullOrWhiteSpace(_search) ||
             (x.Row.State + " " + x.Row.Region + " " + x.Row.Hq).Contains(_search, StringComparison.OrdinalIgnoreCase))).ToList();
 
@@ -195,11 +196,74 @@
         if (_d is null) return;
         _rows = _d.ExcessSources.Select(r => new RowVm { Row = r }).ToList();
         _remarks = $"Shortage resolution for {_d.Hq}";
+
+        _states = await Api.StatesAsync() ?? new();
+        await ReloadRegionsAsync();
+        await ReloadHqsAsync();
     }
 
-    private void ClearFilters()
+    private async Task ReloadRegionsAsync()
     {
-        _filterState = ""; _filterRegion = ""; _filterHq = ""; _search = "";
+        _regions = _filterStateId is int stateId
+            ? await Api.RegionsAsync(stateId) ?? new()
+            : (await AllRegionsAsync());
+    }
+
+    private async Task<List<PubOption>> AllRegionsAsync()
+    {
+        var all = new List<PubOption>();
+        foreach (var s in _states)
+        {
+            var regions = await Api.RegionsAsync(s.Id);
+            if (regions is not null) all.AddRange(regions);
+        }
+        return all.GroupBy(r => r.Id).Select(g => g.First()).OrderBy(r => r.Name).ToList();
+    }
+
+    private async Task ReloadHqsAsync()
+    {
+        if (_filterRegionId is int regionId)
+        {
+            _hqs = await Api.HqsAsync(regionId) ?? new();
+            return;
+        }
+
+        var regions = _filterStateId is int ? _regions : await AllRegionsAsync();
+        var all = new List<PubOption>();
+        foreach (var r in regions)
+        {
+            var hqs = await Api.HqsAsync(r.Id);
+            if (hqs is not null) all.AddRange(hqs);
+        }
+        _hqs = all.GroupBy(h => h.Id).Select(g => g.First()).OrderBy(h => h.Name).ToList();
+    }
+
+    private async Task OnStateChangedAsync(ChangeEventArgs e)
+    {
+        _filterStateId = int.TryParse(e.Value?.ToString(), out var v) ? v : null;
+        _filterRegionId = null;
+        _filterHqId = null;
+        await ReloadRegionsAsync();
+        await ReloadHqsAsync();
+    }
+
+    private async Task OnRegionChangedAsync(ChangeEventArgs e)
+    {
+        _filterRegionId = int.TryParse(e.Value?.ToString(), out var v) ? v : null;
+        _filterHqId = null;
+        await ReloadHqsAsync();
+    }
+
+    private void OnHqChanged(ChangeEventArgs e)
+    {
+        _filterHqId = int.TryParse(e.Value?.ToString(), out var v) ? v : null;
+    }
+
+    private async Task ClearFiltersAsync()
+    {
+        _filterStateId = null; _filterRegionId = null; _filterHqId = null; _search = "";
+        await ReloadRegionsAsync();
+        await ReloadHqsAsync();
     }
 
     private void OnRowToggled(RowVm row, ChangeEventArgs e)

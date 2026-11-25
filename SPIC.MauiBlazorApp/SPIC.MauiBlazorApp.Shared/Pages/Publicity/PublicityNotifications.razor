@@ -5,6 +5,8 @@
 @using SPIC.MauiBlazorApp.Shared.Components.Publicity
 @inject PublicityApi Api
 @inject NavigationManager Nav
+@inject FileDownloadService Downloads
+@inject IJSRuntime JS
 
 @* Publicity notifications (stock transfer orders, exceptions, dispatches, approvals) with the
    transfer-order drawer (Figma "Stock Transfer Order Received"). *@
@@ -13,6 +15,8 @@
     <PageHeader Title="Notifications" Subtitle="Stay updated with important alerts, approvals and stock transfer orders.">
         <Actions>
             <a class="pub-btn pub-btn--line" href="@Api.Home" data-help="pub-notif-back"><i class="bi bi-arrow-left"></i> Back to List Page</a>
+            <button type="button" class="pub-btn pub-btn--line" @onclick="DownloadReportAsync" disabled="@(_items is null)">Download Report</button>
+            <button type="button" class="pub-btn pub-btn--line" @onclick="PrintAsync"><i class="bi bi-printer"></i> Print</button>
             <button type="button" class="pub-btn pub-btn--line" data-help="pub-notif-readall" @onclick="ReadAllAsync" disabled="@(_items?.All(n => n.IsRead) != false)">Mark All As Read</button>
         </Actions>
     </PageHeader>
@@ -73,6 +77,7 @@
                             <PubInfo Label="To" Hint="Destination HQ" Value="@_detail.DestinationHq" />
                             <PubInfo Label="Product / Material" Value="@($"{_detail.Product} {_detail.Material}")" />
                             <PubInfo Label="Transfer Quantity" Value="@($"{_detail.TransferQty} Nos")" />
+                            @if (_detail.Status is not null) { <PubInfo Label="Current Transfer Status"><PubPill Text="@_detail.Status" Tone="blue" /></PubInfo> }
                         </div>
                     </section>
                     @if (_detail.SourceIndentNo is not null)
@@ -107,7 +112,7 @@
                 @if (_detail.Notice.Type == PublicityNotificationType.Exception)
                 {
                     <a class="pub-btn pub-btn--line" href="@($"{Api.Home}/{_detail.Notice.RequestId}?tab=acknowledgement")">View Acknowledgement</a>
-                    <a class="pub-btn pub-btn--primary" href="@($"{Api.Home}/{_detail.Notice.RequestId}?tab=tracking")">View Exception <i class="bi bi-chevron-double-right"></i></a>
+                    <a class="pub-btn pub-btn--primary" href="@($"{Api.Home}/{_detail.Notice.RequestId}?tab=tracking")">View Exception Details <i class="bi bi-chevron-double-right"></i></a>
                 }
             }
         </Footer>
@@ -115,8 +120,11 @@
 </div>
 
 @code {
+    // "Related Documents" (Figma's 4th tab) folds every non-StockTransfer/Exception notification
+    // (Dispatch/Approval/General) into one place, same as the old "Dispatch & Approvals" label did -
+    // nothing is lost, they still also show up under "All".
     private static readonly (string, int?)[] Tabs =
-        { ("All", null), ("Stock Transfer", (int)PublicityNotificationType.StockTransfer), ("Exception", (int)PublicityNotificationType.Exception), ("Dispatch & Approvals", (int)PublicityNotificationType.Dispatch) };
+        { ("All", null), ("Stock Transfer", (int)PublicityNotificationType.StockTransfer), ("Exception", (int)PublicityNotificationType.Exception), ("Related Documents", (int)PublicityNotificationType.Dispatch) };
     private List<PubNotificationDto>? _items;
     private int? _type;
     private bool _open;
@@ -151,6 +159,22 @@
     private async Task ReadAllAsync()
     {
         if (await Api.MarkReadAsync(0)) await LoadAsync(_type);
+    }
+
+    private async Task PrintAsync()
+    {
+        try { await JS.InvokeVoidAsync("print"); } catch (Exception) { }
+    }
+
+    private async Task DownloadReportAsync()
+    {
+        var rows = (_items ?? new()).Select(n => new List<string>
+        {
+            n.Title, n.Message + (n.SubText is null ? "" : $" ({n.SubText})"), PubText.DateTime(n.CreatedAt), n.IsRead ? "Read" : "Unread"
+        }).ToList();
+        await Downloads.PostAsync("api/Export/table-pdf",
+            new { Title = "Publicity Notifications", Headers = new[] { "Title", "Message", "Date & Time", "Status" }, Rows = rows },
+            $"Publicity_Notifications_{DateTime.Now:yyyyMMdd}.pdf");
     }
 
     private static string Icon(PublicityNotificationType t) => t switch

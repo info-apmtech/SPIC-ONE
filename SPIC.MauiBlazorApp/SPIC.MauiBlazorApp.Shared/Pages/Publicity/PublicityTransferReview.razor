@@ -1,0 +1,143 @@
+@page "/PublicityReview/{Id:int}/transfer/{DispatchId:int}/review"
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
+@using SPIC.MauiBlazorApp.Shared.Components.Publicity
+@inject PublicityApi Api
+@inject NavigationManager Nav
+@inject ToastService Toast
+
+@*
+    ADMIN-MD CS's "Update Dispatch Details" step for a submitted stock transfer: review the courier
+    proof the source RMDO uploaded, confirm/edit the courier details it was auto-filled from, assign the
+    destination's responsible person, and confirm - this is what actually calls the existing
+    dispatches/{id}/status endpoint (Status=Dispatched) that advances the transfer to "Transfer Created".
+*@
+
+<div class="pub-page">
+    <PageHeader Title="Tracking &amp; Delivery" Subtitle="View dispatch details, track the current status and update delivery, acknowledgment and completion.">
+        <Actions><a class="pub-btn pub-btn--line" href="@Back"><i class="bi bi-arrow-left"></i> Back to Tracking Details</a></Actions>
+    </PageHeader>
+
+    @if (_d is null)
+    {
+        <Skeleton Rows="8" />
+    }
+    else if (_x is null)
+    {
+        <EmptyState Icon="bi-truck" Title="Nothing to review" Message="This transfer is no longer waiting for admin review." />
+    }
+    else
+    {
+        var x = _x;
+        <section class="pub-card pub-strip">
+            <div class="pub-strip__cell"><div class="pub-strip__id">@_d.IndentNo <PubPill Text="Approved" Tone="green" /></div><span class="pub-muted">Created on @PubText.DateTime(_d.CreatedAt)</span></div>
+            <div class="pub-strip__cell"><span class="pub-strip__cap">Current Stage</span><PubPill Text="Admin Review" Tone="amber" CssClass="pub-pill--lg" /></div>
+            <div class="pub-strip__cell"><span class="pub-strip__cap">Status</span><PubPill Text="@PubText.DispatchStatus(x.Status, x.Kind)" Tone="violet" CssClass="pub-pill--lg" /></div>
+            <div class="pub-strip__cell"><span class="pub-strip__cap">From HQ &rarr; To HQ</span><b>@x.SourceName &rarr; @x.DestinationHq</b></div>
+            <div class="pub-strip__cell"><span class="pub-strip__cap">Transfer Quantity</span><b>@x.Quantity Nos</b></div>
+        </section>
+
+        <section class="pub-card">
+            <h2 class="pub-h2">Dispatch Details - Admin Review</h2>
+            <p class="pub-muted">View the courier proof, auto filled dispatch details, update missing information and confirm the transfer.</p>
+            <div class="pub-grid pub-grid--2">
+                <div>
+                    <div class="pub-card__head"><h3 class="pub-h3">Courier / Dispatch Proof</h3>
+                        @if (Proof is not null) { <a class="pub-btn pub-btn--line pub-btn--sm" href="@Api.FileUrl(Proof.Path, download: true)" target="_blank" rel="noopener">Download Image</a> }
+                    </div>
+                    @if (Proof is not null)
+                    {
+                        <div class="pub-proof__thumb pub-proof__thumb--lg">
+                            @if (PubText.IsImage(Proof.FileName)) { <img src="@Api.FileUrl(Proof.Path)" alt="Courier proof" /> }
+                            else { <i class="bi bi-receipt" aria-hidden="true"></i> }
+                        </div>
+                    }
+                    else
+                    {
+                        <EmptyState Icon="bi-receipt" Title="No proof uploaded" Message="The source RMDO has not uploaded a courier proof yet." />
+                    }
+                </div>
+                <div>
+                    <h3 class="pub-h3">Enter Courier Details <small>(From uploaded image)</small></h3>
+                    <div class="pub-form pub-form--3">
+                        <div class="pub-field"><label class="pub-label pub-req" for="tr-dd">Transfer / Dispatch Date</label>
+                            <input id="tr-dd" type="date" class="pub-input" @bind="_status.DispatchDate" /></div>
+                        <div class="pub-field"><label class="pub-label pub-req" for="tr-tr">Transfer / Courier</label>
+                            <input id="tr-tr" class="pub-input" @bind="_status.Transporter" placeholder="e.g. Blue Dart Express" /></div>
+                        <div class="pub-field"><label class="pub-label pub-req" for="tr-awb">Tracking No. / AWB</label>
+                            <input id="tr-awb" class="pub-input" @bind="_status.TrackingNo" placeholder="AWB-9842019" /></div>
+                        <div class="pub-field"><label class="pub-label" for="tr-vn">Vehicle No</label>
+                            <input id="tr-vn" class="pub-input" @bind="_status.VehicleNo" placeholder="e.g. TN 09 AB 1234" /></div>
+                        <div class="pub-field"><label class="pub-label pub-req" for="tr-resp">Responsible Person</label>
+                            <input id="tr-resp" class="pub-input" value="@ResponsibleDisplay" readonly title="Automatically assigned - the destination's own registered responsible employee" /></div>
+                        <div class="pub-field"><label class="pub-label" for="tr-ed">Expected Delivery Date</label>
+                            <input id="tr-ed" type="date" class="pub-input" @bind="_status.ExpectedDeliveryDate" /></div>
+                        <div class="pub-field pub-field--full"><label class="pub-label" for="tr-rem">Remarks (Optional)</label>
+                            <input id="tr-rem" class="pub-input" @bind="_status.Remarks" placeholder="Enter remarks about Dispatch" /></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <div class="pub-footer">
+            <span class="pub-footer__gap"></span>
+            <button type="button" class="pub-btn pub-btn--grey" @onclick="() => Nav.NavigateTo(Back)">Cancel</button>
+            <button type="button" class="pub-btn pub-btn--primary" disabled="@_busy" @onclick="ConfirmAsync">Confirm &amp; Create Transfer <i class="bi bi-chevron-double-right"></i></button>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public int Id { get; set; }
+    [Parameter] public int DispatchId { get; set; }
+
+    private PubDetailDto? _d;
+    private PubDispatchDto? _x;
+    private PubDispatchStatusDto _status = new();
+    private bool _busy;
+
+    private string Back => $"/PublicityReview/{Id}?tab=tracking";
+    private PubFileDto? Proof => _x?.Files.LastOrDefault(f => f.Kind == PublicityFileKind.CourierProof);
+    // Never a manual choice here - the destination's own registered responsible employee (who already
+    // requested / owns this request, same person who will acknowledge the transfer on arrival) is
+    // fetched automatically. Falls back to whatever name the dispatch itself already recorded, for the
+    // (normally unreachable, since this page only loads for ProofSubmitted) case it was set previously.
+    private string ResponsibleDisplay
+    {
+        get
+        {
+            var name = _x?.ResponsibleName ?? _d?.RequestedByName;
+            if (string.IsNullOrWhiteSpace(name)) return "Not available";
+            var role = _x?.ResponsibleRole ?? _d?.RequestedByRole;
+            return role is null ? name : $"{name} ({role})";
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        _d = await Api.GetAsync(Id);
+        if (_d is null) return;
+        _x = _d.Dispatches.FirstOrDefault(d => d.Id == DispatchId && d.Kind == PublicityDispatchKind.Transfer && d.Status == PublicityDispatchStatus.ProofSubmitted);
+        if (_x is null) return;
+        _status = new PubDispatchStatusDto
+        {
+            Status = PublicityDispatchStatus.Dispatched,
+            Transporter = _x.Transporter, TrackingNo = _x.TrackingNo, VehicleNo = _x.VehicleNo,
+            DispatchDate = _x.DispatchDate ?? PubText.Today, ExpectedDeliveryDate = _x.ExpectedDeliveryDate,
+            ResponsibleUserId = _x.ResponsibleUserId ?? _d.RequestedByUserId, CurrentLocation = _x.CurrentLocation
+        };
+    }
+
+    private async Task ConfirmAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_status.Transporter) || string.IsNullOrWhiteSpace(_status.TrackingNo) || _status.DispatchDate is null)
+        { Toast.Error("Courier, tracking number and dispatch date are required."); return; }
+        if (string.IsNullOrWhiteSpace(_status.ResponsibleUserId)) { Toast.Error("Select the responsible officer at the destination."); return; }
+        _busy = true;
+        var ok = await Api.DispatchStatusAsync(_x!.Id, _status);
+        _busy = false;
+        if (!ok) return;
+        Toast.Success("Transfer created and dispatch details saved.");
+        Nav.NavigateTo(Back);
+    }
+}
