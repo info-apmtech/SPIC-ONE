@@ -828,7 +828,10 @@ internal static class GuestHouseSingleRoomBookingTests
 			Check.Equal($"{file}: no user-facing 'Complimentary' text", 0, shown.Count);
 		}
 		var payment = File.ReadAllText(Path.Combine(pages, "Payment.razor"));
-		Check.That("the Payment page shows the Employee Stay label, summary pill and confirmation", payment.Contains(">Employee Stay</div>") && payment.Contains(">Employee Stay</h3>") && payment.Contains(">Employee Stay</span>") && payment.Contains("Employee Stay booking - no payment is required."));
+		Check.That("the Payment page shows the Employee Stay label, summary pill and confirmation", payment.Contains(">Employee Stay</div>") && payment.Contains(">Employee Stay</h3>") && payment.Contains(">Employee Stay</span>") && payment.Contains("Employee Stay booking - payment can be made after your stay."));
+		Check.That("no 'free' / 'no payment required' wording on the employee booking screens",
+			!System.Text.RegularExpressions.Regex.IsMatch(payment + File.ReadAllText(Path.Combine(pages, "BookingPreview.razor")),
+				"(?i)(free of charge|no payment (is )?required|Free booking for|\\(Employee Stay\\))"));
 	}
 
 	// ---- 13. Guest Details page wiring ---------------------------------------------------------------------------
