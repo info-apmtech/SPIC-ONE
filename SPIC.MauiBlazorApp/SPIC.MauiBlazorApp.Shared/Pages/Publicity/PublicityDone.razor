@@ -19,6 +19,11 @@
             <tbody>
                 <tr><td>Request ID</td><td>@(_d?.IndentNo ?? "-")</td><td>Product / Material</td><td>@(_d is null ? "-" : $"{_d.Product} {_d.Material}")</td></tr>
                 <tr><td>Destination HQ</td><td>@(_d?.Hq ?? "-")</td><td>Submitted On</td><td>@PubText.DateTime(DateTime.UtcNow)</td></tr>
+                @if (_type == "transfer")
+                {
+                    <tr><td>Source HQ</td><td>@(_transfer?.SourceName ?? "-")</td><td>Transfer Quantity</td><td>@(_transfer is null ? "-" : $"{_transfer.Quantity} Nos")</td></tr>
+                    <tr><td>Transfer Order ID</td><td>@(_transfer?.DispatchNo ?? _no)</td><td>Status</td><td>@(_transfer is null ? "-" : PubText.DispatchStatus(_transfer.Status, _transfer.Kind))</td></tr>
+                }
             </tbody>
         </table>
         <div class="pub-done__actions">
@@ -32,6 +37,11 @@
     private string _type = "dispatch", _no = "";
     private int _id;
     private PubDetailDto? _d;
+    // The transfer dispatch itself is recorded against the DESTINATION/shortage request (RequestId =
+    // Id here) with SourceRequestId pointing at the excess source - so it's found in _d.Dispatches
+    // (incoming to this request), never _d.OutgoingTransfers (that list is for excess THIS request is
+    // sending elsewhere, the opposite direction).
+    private PubDispatchDto? _transfer;
     private string Root => Nav.ToBaseRelativePath(Nav.Uri).StartsWith("PublicityReview", StringComparison.OrdinalIgnoreCase) ? "/PublicityReview" : "/PublicityRequest";
 
     private string Heading => _type switch { "transfer" => "Transfer Order Sent Successfully!", "proof" => "Stock Transfer Dispatch", _ => "Dispatch Created" };
@@ -56,5 +66,6 @@
         _no = q["no"] ?? "";
         int.TryParse(q["id"], out _id);
         if (_id > 0) _d = await Api.GetAsync(_id);
+        if (_type == "transfer") _transfer = _d?.Dispatches.FirstOrDefault(x => x.DispatchNo == _no);
     }
 }

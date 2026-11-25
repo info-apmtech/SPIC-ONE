@@ -1493,13 +1493,19 @@ namespace SpicAPI.Controllers
                 var candidates = await _db.PublicityRequests.AsNoTracking().Where(x => !x.IsDeleted && x.Id != r.Id &&
                     x.ProductId == r.ProductId && x.MaterialTypeId == r.MaterialTypeId &&
                     (x.Status == PublicityStatus.Completed || x.Status == PublicityStatus.TransferOrderReceived)).Take(50).ToListAsync();
-                var hqNames = await NamesAsync(Array.Empty<int>(), Array.Empty<int>(), candidates.Select(c => c.HeadquarterId));
+                var srcNames = await NamesAsync(candidates.Select(c => c.StateId), candidates.Select(c => c.RegionId), candidates.Select(c => c.HeadquarterId));
                 foreach (var c in candidates)
                 {
                     var s = await SummaryAsync(c);
                     var remaining = s.Excess - s.TransferredOut;
                     if (remaining > 0)
-                        dto.ExcessSources.Add(new PubExcessDto { RequestId = c.Id, IndentNo = c.IndentNo, Hq = hqNames.Hqs.GetValueOrDefault(c.HeadquarterId, ""), Remaining = remaining });
+                        dto.ExcessSources.Add(new PubExcessDto
+                        {
+                            RequestId = c.Id, IndentNo = c.IndentNo, Hq = srcNames.Hqs.GetValueOrDefault(c.HeadquarterId, ""),
+                            StateId = c.StateId, State = srcNames.States.GetValueOrDefault(c.StateId, ""),
+                            RegionId = c.RegionId, Region = srcNames.Regions.GetValueOrDefault(c.RegionId, ""),
+                            ReportedExcess = s.Excess, Remaining = remaining, LastUpdated = c.UpdatedAt
+                        });
                 }
             }
             return dto;

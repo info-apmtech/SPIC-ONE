@@ -294,7 +294,19 @@ namespace SPIC.Core.DTOs
         public int RequestId { get; set; }
         public string IndentNo { get; set; } = "";
         public string Hq { get; set; } = "";
+        public int StateId { get; set; }
+        public string State { get; set; } = "";
+        public int RegionId { get; set; }
+        public string Region { get; set; } = "";
+        // The raw excess this source acknowledged (Usable - Requested), before subtracting quantity
+        // already committed to other transfer orders sourced from it.
+        public int ReportedExcess { get; set; }
+        // ReportedExcess minus everything already transferred out (any PublicityDispatch already
+        // created with this request as SourceRequestId, regardless of that transfer's own further
+        // progress) - this is what's actually left to offer, and is what callers must validate
+        // Transfer Quantity against, never Remaining/ReportedExcess alone.
         public int Remaining { get; set; }
+        public DateTime? LastUpdated { get; set; }
     }
 
     /// <summary>Approver consolidation: requests waiting at my stage, grouped by region. At the SMD

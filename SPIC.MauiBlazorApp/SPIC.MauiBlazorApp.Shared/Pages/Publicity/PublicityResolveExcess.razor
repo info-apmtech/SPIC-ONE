@@ -1,0 +1,240 @@
+@page "/PublicityReview/{Id:int}/resolve-exception"
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
+@using SPIC.MauiBlazorApp.Shared.Components.Publicity
+@inject PublicityApi Api
+@inject NavigationManager Nav
+@inject ToastService Toast
+
+
+<div class="pub-page">
+    <PageHeader Title="Check Stock Availability &amp; Create Transfer" Subtitle="Review shortage details, identify available excess stock and create a transfer request.">
+        <Actions><a class="pub-btn pub-btn--line" href="@($"/PublicityReview/{Id}?tab=tracking")"><i class="bi bi-arrow-left"></i> Back to Exception Details</a></Actions>
+    </PageHeader>
+
+    @if (_d is null)
+    {
+        <Skeleton Rows="8" />
+    }
+    else if (!_d.CanResolve)
+    {
+        <EmptyState Icon="bi-shield-lock" Title="Not authorized" Message="You are not authorized to resolve this exception." />
+    }
+    else
+    {
+        <section class="pub-card pub-card--flush">
+            <div class="pub-card__band pub-band--red">
+                <h2 class="pub-h2 pub-text-red">Destination Request Details (Shortage)</h2>
+                <PubPill Text="Shortage Identified" Tone="red" />
+            </div>
+            <div class="pub-card__body">
+                <div class="pub-grid pub-grid--5">
+                    <PubInfo Label="Request ID" Value="@_d.IndentNo" />
+                    <PubInfo Label="Destination HQ" Value="@_d.Hq" Sub="@($"{_d.Region}, {_d.State}")" />
+                    <PubInfo Label="Product / Material" Value="@_d.Product" Sub="@_d.Material" />
+                    <PubInfo Label="Reported By" Value="@_d.RequestedByName" Sub="@_d.RequestedByRole" />
+                    <PubInfo Label="Request Date" Value="@PubText.Date(_d.CreatedAt)" />
+                </div>
+                <h3 class="pub-h3">Quantity Details</h3>
+                <div class="pub-grid pub-grid--5">
+                    <PubInfo Label="Request Quantity" Value="@($"{_d.Quantity} Nos")" />
+                    <PubInfo Label="Original Dispatched" Value="@($"{_d.Summary.OriginalDispatched} Nos")" />
+                    <PubInfo Label="Received Quantity" Value="@($"{_d.Summary.OriginalReceived} Nos")" />
+                    <PubInfo Label="Shortage Quantity" Tone="pink" Value="@($"{_d.Summary.Shortage} Nos")" />
+                    <PubInfo Label="Damaged Quantity" Tone="pink" Value="@($"{_d.Summary.Damaged} Nos")" />
+                </div>
+            </div>
+        </section>
+
+        <section class="pub-card">
+            <div class="pub-card__head">
+                <h2 class="pub-h2">Available Stock Across All HQ (Excess)</h2>
+                <div class="pub-actions-right">
+                    <input class="pub-input pub-input--search" placeholder="Search zones..." @bind="_search" @bind:event="oninput" />
+                    @* Same existing vendor re-dispatch route/permissions as before (/dispatch?kind=1) -
+                       always a deliberate click, never auto-chosen when stock is unavailable. Shown once
+                       here (Figma position) instead of also inside the empty-state below, so there is
+                       never more than one vendor-re-dispatch action on this page. *@
+                    <a class="pub-btn pub-btn--primary" href="@($"/PublicityReview/{Id}/dispatch?kind=1")">Create Re-Dispatch <i class="bi bi-chevron-double-right"></i></a>
+                </div>
+            </div>
+            <div class="pub-form pub-form--4">
+                <div class="pub-field"><label class="pub-label">State</label>
+                    <select class="pub-input" @bind="_filterState">
+                        <option value="">All State</option>
+                        @foreach (var s in _rows.Select(x => x.Row.State).Distinct().OrderBy(x => x)) { <option value="@s">@s</option> }
+                    </select></div>
+                <div class="pub-field"><label class="pub-label">Region</label>
+                    <select class="pub-input" @bind="_filterRegion">
+                        <option value="">All Region</option>
+                        @foreach (var s in _rows.Where(x => _filterState == "" || x.Row.State == _filterState).Select(x => x.Row.Region).Distinct().OrderBy(x => x)) { <option value="@s">@s</option> }
+                    </select></div>
+                <div class="pub-field"><label class="pub-label">HQ</label>
+                    <select class="pub-input" @bind="_filterHq">
+                        <option value="">All HQ</option>
+                        @foreach (var s in _rows.Where(x => (_filterState == "" || x.Row.State == _filterState) && (_filterRegion == "" || x.Row.Region == _filterRegion)).Select(x => x.Row.Hq).Distinct().OrderBy(x => x)) { <option value="@s">@s</option> }
+                    </select></div>
+                <div class="pub-field"><label class="pub-label">Product</label>
+                    <input class="pub-input" value="@($"{_d.Product} ({_d.Material})")" readonly title="Fixed to this exception's own product/material" /></div>
+            </div>
+            <div class="pub-actions-right">
+                <button type="button" class="pub-btn pub-btn--grey" @onclick="ClearFilters">Clear All</button>
+            </div>
+
+            @if (FilteredRows.Count == 0)
+            {
+                <EmptyState Icon="bi-inbox" Title="No available excess stock" Message="No other HQ currently has verified, unreserved excess of this exact product/material." />
+            }
+            else
+            {
+                <div class="pub-table-wrap">
+                    <table class="pub-table">
+                        <thead><tr>
+                            <th></th><th>State</th><th>Region</th><th>Headquarter (HQ)</th>
+                            <th>Reported Excess</th><th>Available Stock</th><th>Source Request</th><th>Last Updated</th><th>Transfer Quantity (Nos)</th>
+                        </tr></thead>
+                        <tbody>
+                            @foreach (var row in FilteredRows)
+                            {
+                                <tr>
+                                    <td><input type="checkbox" checked="@(row.Qty > 0)" @onchange="e => OnRowToggled(row, e)" /></td>
+                                    <td data-label="State">@row.Row.State</td>
+                                    <td data-label="Region">@row.Row.Region</td>
+                                    <td data-label="HQ">@row.Row.Hq</td>
+                                    <td data-label="Reported Excess">@row.Row.ReportedExcess Nos</td>
+                                    <td data-label="Available Stock"><b class="pub-text-green">@row.Row.Remaining Nos</b></td>
+                                    <td data-label="Source Request">@row.Row.IndentNo</td>
+                                    <td data-label="Last Updated">@(row.Row.LastUpdated is null ? "-" : PubText.Date(row.Row.LastUpdated))</td>
+                                    <td data-label="Transfer Quantity">
+                                        <input type="number" min="0" max="@row.Row.Remaining" class="pub-input pub-input--sm" @bind="row.Qty" @bind:event="oninput" />
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+
+            <div class="pub-field">
+                <label class="pub-label pub-req" for="rx-rem">Reason for Transfer</label>
+                <textarea id="rx-rem" rows="3" class="pub-input pub-textarea" placeholder="Enter remarks about Dispatch" @bind="_remarks"></textarea>
+            </div>
+        </section>
+
+        @if (Selected.Count > 0)
+        {
+            <section class="pub-card">
+                <h2 class="pub-h2">Transfer Summary</h2>
+                @foreach (var row in Selected)
+                {
+                    <div class="pub-grid pub-grid--5">
+                        <PubInfo Label="State" Value="@row.Row.State" />
+                        <PubInfo Label="Region" Value="@row.Row.Region" />
+                        <PubInfo Label="Source HQ" Value="@row.Row.Hq" />
+                        <PubInfo Label="Source Request ID" Value="@row.Row.IndentNo" />
+                        <PubInfo Label="Reported Excess" Value="@($"{row.Row.ReportedExcess} Nos")" />
+                    </div>
+                    <div class="pub-grid pub-grid--2">
+                        <PubInfo Label="Transfer Quantity" Tone="green" Value="@($"{row.Qty} Nos")" />
+                        <PubInfo Label="Reason for Transfer" Value="@_remarks" />
+                    </div>
+                }
+                <div class="pub-grid pub-grid--2">
+                    <PubInfo Label="Destination HQ" Value="@_d.Hq" />
+                    <PubInfo Label="Product / Material" Value="@($"{_d.Product} {_d.Material}")" />
+                </div>
+                <p class="pub-muted">Total selected: @TotalQty Nos @(_d.Summary.Outstanding > 0 ? $"(remaining shortage: {_d.Summary.Outstanding} Nos)" : "")</p>
+            </section>
+        }
+
+        <div class="pub-banner pub-banner--amber">
+            <span class="pub-banner__icon"><i class="bi bi-info-circle"></i></span>
+            <div><h3>Important Information</h3>
+                <p>
+                    Only verified available excess stock can be transferred.<br />
+                    A transfer request will be sent to the selected source HQ's authorized receiving/dispatch employee.<br />
+                    Transfer order creation does not mean stock has already been dispatched.<br />
+                    Actual transfer dispatch and destination acknowledgement are separate steps.
+                </p>
+            </div>
+        </div>
+
+        <div class="pub-footer">
+            <a class="pub-btn pub-btn--grey" href="@($"/PublicityReview/{Id}?tab=tracking")"><i class="bi bi-chevron-double-left"></i> Back to Exception Details</a>
+            <span class="pub-footer__gap"></span>
+            <a class="pub-btn pub-btn--grey" href="@($"/PublicityReview/{Id}?tab=tracking")">Cancel</a>
+            <button type="button" class="pub-btn pub-btn--primary" disabled="@(_busy || Selected.Count == 0)" @onclick="SubmitAsync">Send Transfer Order <i class="bi bi-chevron-double-right"></i></button>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private sealed class RowVm { public PubExcessDto Row = default!; public int Qty; }
+
+    private PubDetailDto? _d;
+    private List<RowVm> _rows = new();
+    private string _filterState = "", _filterRegion = "", _filterHq = "", _search = "";
+    private string? _remarks;
+    private bool _busy;
+
+    private List<RowVm> FilteredRows => _rows.Where(x =>
+        (_filterState == "" || x.Row.State == _filterState) &&
+        (_filterRegion == "" || x.Row.Region == _filterRegion) &&
+        (_filterHq == "" || x.Row.Hq == _filterHq) &&
+        (string.IsNullOrWhiteSpace(_search) ||
+            (x.Row.State + " " + x.Row.Region + " " + x.Row.Hq).Contains(_search, StringComparison.OrdinalIgnoreCase))).ToList();
+
+    private List<RowVm> Selected => _rows.Where(x => x.Qty > 0).ToList();
+    private int TotalQty => Selected.Sum(x => x.Qty);
+
+    protected override async Task OnInitializedAsync()
+    {
+        _d = await Api.GetAsync(Id);
+        if (_d is null) return;
+        _rows = _d.ExcessSources.Select(r => new RowVm { Row = r }).ToList();
+        _remarks = $"Shortage resolution for {_d.Hq}";
+    }
+
+    private void ClearFilters()
+    {
+        _filterState = ""; _filterRegion = ""; _filterHq = ""; _search = "";
+    }
+
+    private void OnRowToggled(RowVm row, ChangeEventArgs e)
+    {
+        var @checked = e.Value is bool b && b;
+        row.Qty = @checked ? Math.Min(row.Row.Remaining, Math.Max(1, _d!.Summary.Outstanding - TotalQty)) : 0;
+    }
+
+    private async Task SubmitAsync()
+    {
+        if (Selected.Count == 0) { Toast.Error("Select at least one source and a transfer quantity."); return; }
+        foreach (var row in Selected)
+        {
+            if (row.Qty <= 0 || row.Qty > row.Row.Remaining) { Toast.Error($"{row.Row.Hq}: enter a transfer quantity between 1 and {row.Row.Remaining} Nos."); return; }
+        }
+        if (TotalQty > _d!.Summary.Outstanding)
+        {
+            Toast.Error($"Total transfer quantity ({TotalQty} Nos) cannot exceed the remaining shortage ({_d.Summary.Outstanding} Nos)."); return;
+        }
+        if (string.IsNullOrWhiteSpace(_remarks)) { Toast.Error("Enter the reason for transfer."); return; }
+        if (!await Toast.ConfirmAsync("Send transfer order",
+                $"Transfer {TotalQty} Nos of {_d.Product} from {Selected.Count} source HQ(s) to {_d.Hq}?", "Send Transfer Order")) return;
+
+        _busy = true;
+        string? lastNo = null;
+        foreach (var row in Selected)
+        {
+            var saved = await Api.CreateDispatchAsync(Id, new PubDispatchCreateDto
+            {
+                Kind = PublicityDispatchKind.Transfer, SourceRequestId = row.Row.RequestId, Quantity = row.Qty, Remarks = _remarks
+            });
+            if (saved is null) { _busy = false; return; }
+            lastNo = saved.DispatchNo;
+        }
+        _busy = false;
+        Nav.NavigateTo($"/PublicityReview/done?type=transfer&id={Id}&no={Uri.EscapeDataString(lastNo ?? "")}");
+    }
+}

@@ -181,23 +181,10 @@
                                     }
                                 </div>
                             }
-                            @if (x.CanAcknowledge)
-                            {
-                                <div class="pub-banner pub-banner--blue">
-                                    <span class="pub-banner__icon"><i class="bi bi-hourglass-split"></i></span>
-                                    <div><h3>Acknowledgement Pending</h3><p>Material delivery is awaiting receipt acknowledgement.</p></div>
-                                    <button type="button" class="pub-btn pub-btn--primary" @onclick="() => _tab = 2">Create Acknowledgement <i class="bi bi-arrow-right"></i></button>
-                                </div>
-                            }
-                            else if (x.Ack is not { IsDraft: false } && x.Status != PublicityDispatchStatus.Acknowledged)
-                            {
-                                @* Any authorized viewer who is NOT the assigned Responsible Person (e.g. ADMIN-MD
-                                   CS) sees this instead of an action they are not allowed to perform. *@
-                                <div class="pub-banner pub-banner--blue">
-                                    <span class="pub-banner__icon"><i class="bi bi-hourglass-split"></i></span>
-                                    <div><h3>Awaiting Delivery / Acknowledgement</h3><p>Material has been dispatched and is awaiting acknowledgement from the responsible receiving employee.</p></div>
-                                </div>
-                            }
+                            @* The Acknowledgement Pending / Awaiting Acknowledgement status for this dispatch is
+                               shown once, in the single compact banner below the dispatch/transfer cards - showing
+                               it again here per-card was the duplicate "two banners for the same thing" this
+                               section used to cause. *@
                         </Actions>
                     </PubDispatchCard>
                 }
@@ -248,12 +235,15 @@
                         (icon, heading, tone) = ("bi-patch-check-fill", "Acknowledged", "green");
                         message = "Receipt confirmed by the assigned responsible employee.";
                     }
+                    else if (_ackTarget is not null)
+                    {
+                        (icon, heading, tone) = ("bi-hourglass-split", "Acknowledgement Pending", "blue");
+                        message = "Material delivery is awaiting receipt acknowledgement.";
+                    }
                     else
                     {
-                        (icon, heading, tone) = ("bi-hourglass-split", "Awaiting Acknowledgement", "amber");
-                        message = _ackTarget is not null
-                            ? "Material delivery is awaiting your receipt acknowledgement."
-                            : "Material has been dispatched and is awaiting acknowledgement from the responsible receiving employee.";
+                        (icon, heading, tone) = ("bi-hourglass-split", "Awaiting Acknowledgement", "blue");
+                        message = "Material has been dispatched and is awaiting acknowledgement from the responsible receiving employee.";
                     }
                     <div class="pub-banner pub-banner--@tone">
                         <span class="pub-banner__icon"><i class="bi @icon"></i></span>
@@ -421,7 +411,7 @@
                     <section class="pub-card pub-card--flush">
                         <div class="pub-card__band pub-band--red">
                             <div><h2 class="pub-h2 pub-text-red">Exception Raised</h2><span class="pub-muted">@d.Summary.ExceptionType reported in the acknowledgement.</span></div>
-                            @if (d.CanResolve) { <button type="button" class="pub-btn pub-btn--primary" @onclick="OpenResolve">Resolve Exception <i class="bi bi-arrow-right"></i></button> }
+                            @if (d.CanResolve) { <a class="pub-btn pub-btn--primary" href="@($"/PublicityReview/{d.Id}/resolve-exception")">Resolve Exception <i class="bi bi-arrow-right"></i></a> }
                         </div>
                         <div class="pub-grid pub-grid--3">
                             <PubInfo Label="Exception Type">
@@ -486,28 +476,6 @@
             </Footer>
         </BottomSheet>
 
-        <BottomSheet @bind-IsOpen="_resolveOpen" Title="Resolve Exception" Subtitle="@($"Outstanding: {d.Summary.Outstanding} Nos ({d.Summary.ExceptionType})")">
-            <ChildContent>
-                <div class="pub-radios pub-radios--stack">
-                    <label class="pub-radio @(_resolveTransfer ? "" : "is-good")"><input type="radio" name="rs" checked="@(!_resolveTransfer)" @onchange="() => _resolveTransfer = false" /> Re-initiate dispatch from the vendor</label>
-                    <label class="pub-radio @(_resolveTransfer ? "is-good" : "")"><input type="radio" name="rs" checked="@_resolveTransfer" @onchange="() => _resolveTransfer = true" disabled="@(d.ExcessSources.Count == 0)" /> Stock transfer from another HQ's excess @(d.ExcessSources.Count == 0 ? "(no excess available)" : "")</label>
-                </div>
-                @if (_resolveTransfer)
-                {
-                    <div class="pub-form">
-                        <div class="pub-field"><label class="pub-label pub-req" for="rs-src">Source Request (Excess)</label>
-                            <select id="rs-src" class="pub-input" @bind="_transfer.SourceRequestId"><option value="">Select source</option>
-                                @foreach (var s in d.ExcessSources) { <option value="@s.RequestId">@s.IndentNo - @s.Hq (@s.Remaining Nos available)</option> }</select></div>
-                        <div class="pub-field"><label class="pub-label pub-req" for="rs-qty">Transfer Quantity</label><input id="rs-qty" type="number" min="1" class="pub-input" @bind="_transfer.Quantity" /></div>
-                        <div class="pub-field"><label class="pub-label" for="rs-rem">Remarks</label><textarea id="rs-rem" rows="3" class="pub-input pub-textarea" @bind="_transfer.Remarks"></textarea></div>
-                    </div>
-                }
-            </ChildContent>
-            <Footer>
-                <button type="button" class="pub-btn pub-btn--grey" @onclick="() => _resolveOpen = false">Cancel</button>
-                <button type="button" class="pub-btn pub-btn--primary" disabled="@_busy" @onclick="ResolveAsync">@(_resolveTransfer ? "Send Transfer Order" : "Continue to Dispatch") <i class="bi bi-arrow-right"></i></button>
-            </Footer>
-        </BottomSheet>
     }
 </div>
 
@@ -533,12 +501,11 @@
     private PubAckUpsertDto _ack = new();
     private List<IBrowserFile> _ackFiles = new();
 
-    private bool _reviewOpen, _statusOpen, _resolveOpen, _resolveTransfer;
+    private bool _reviewOpen, _statusOpen;
     private string? _reviewRemarks;
     private PubDispatchDto? _statusFor;
     private PublicityDispatchStatus _statusTo;
     private PubDispatchStatusDto _status = new();
-    private PubDispatchCreateDto _transfer = new();
 
     private int AckShortage => _ackTarget is null ? 0 : Math.Max(0, _ackTarget.Quantity - _ack.ReceivedQty);
     private int AckExcess => _ackTarget is null ? 0 : Math.Max(0, _ack.ReceivedQty - _ackTarget.Quantity);
@@ -638,30 +605,6 @@
         }
         Toast.Success("Dispatch updated.");
         await LoadAsync();
-    }
-
-    // ---- exception resolution (admin) ------------------------------------------------------
-
-    private void OpenResolve()
-    {
-        _resolveTransfer = false;
-        _transfer = new PubDispatchCreateDto { Kind = PublicityDispatchKind.Transfer, Quantity = _d!.Summary.Outstanding, Remarks = $"Shortage / damage resolution for {_d.Hq}" };
-        _resolveOpen = true;
-    }
-
-    private async Task ResolveAsync()
-    {
-        if (!_resolveTransfer)
-        {
-            Nav.NavigateTo($"/PublicityReview/{Id}/dispatch?kind=1");
-            return;
-        }
-        if (_transfer.SourceRequestId is not > 0 || _transfer.Quantity <= 0) { Toast.Error("Select the source request and quantity."); return; }
-        _busy = true;
-        var saved = await Api.CreateDispatchAsync(Id, _transfer);
-        _busy = false;
-        if (saved is null) return;
-        Nav.NavigateTo($"/PublicityReview/done?type=transfer&id={Id}&no={Uri.EscapeDataString(saved.DispatchNo ?? "")}");
     }
 
     // ---- acknowledgement (RMDO) ------------------------------------------------------------
