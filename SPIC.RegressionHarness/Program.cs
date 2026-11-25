@@ -44,6 +44,10 @@ internal static class Program
 		GuestHouseLateCheckOutTests.Run();
 		Console.WriteLine();
 
+		// Front Office Booking Details: current + future Confirmed/CheckedIn bookings, one row per booking.
+		GuestHouseFrontOfficeBookingListTests.Run();
+		Console.WriteLine();
+
 		// GPS Settings entity, DTOs, controller authorization, and role access.
 		GpsSettingsTests.Run();
 		Console.WriteLine();

@@ -14,7 +14,7 @@
         <PageHeader Title="Front Office" Subtitle="Room availability, check-in and check-out management" ShowBack="false">
             <Actions>
                 <button class="fo-btn fo-btn-secondary" @onclick="GoToGenerateBill" data-help="gh-fo-bill"><i class="bi bi-receipt"></i> Generate Bill</button>
-                <button class="fo-btn fo-btn-secondary" @onclick="LoadRoomsAsync" aria-label="Refresh"><i class="bi bi-arrow-clockwise"></i> <span class="fo-btn-text">Refresh</span></button>
+                <button class="fo-btn fo-btn-secondary" @onclick="LoadAllAsync" aria-label="Refresh"><i class="bi bi-arrow-clockwise"></i> <span class="fo-btn-text">Refresh</span></button>
             </Actions>
         </PageHeader>
     </div>
@@ -26,7 +26,7 @@
     else if (!string.IsNullOrWhiteSpace(_loadError) && _houses.Count == 0)
     {
         <EmptyState Icon="bi-exclamation-circle" Title="Could not load rooms" Message="@_loadError">
-            <button class="fo-btn fo-btn-secondary" @onclick="LoadRoomsAsync"><i class="bi bi-arrow-clockwise"></i> Retry</button>
+            <button class="fo-btn fo-btn-secondary" @onclick="LoadAllAsync"><i class="bi bi-arrow-clockwise"></i> Retry</button>
         </EmptyState>
     }
     else
@@ -59,112 +59,114 @@
             </div>
         </div>
 
-        <div class="fo-tabs-container" data-help="gh-fo-tabs">
-            <button class="fo-tab @(_statusFilter == "All" ? "active" : "")" @onclick='() => SetFilter("All")'>All</button>
-            <button class="fo-tab @(_statusFilter == "Available" ? "active" : "")" @onclick='() => SetFilter("Available")'>Available</button>
-            <button class="fo-tab @(_statusFilter == "Reserved" ? "active" : "")" @onclick='() => SetFilter("Reserved")'>Reserved / Booked</button>
-            <button class="fo-tab @(_statusFilter == "CheckedIn" ? "active" : "")" @onclick='() => SetFilter("CheckedIn")'>Checked-In</button>
-        </div>
+        @* ---------------------- BOOKING DETAILS (one row per booking) ----------------------
+           Current and future Confirmed / Checked-In bookings from GET bookings/active.
+           The summary cards above still come from GET rooms (today's room inventory). *@
+        <div class="fo-bookings-section">
+            <h4 class="fo-section-title">Booking Details</h4>
 
-        <SpicDataTable Items="FilteredRooms"
-                       Title="Rooms"
-                       FileName="FrontOffice_Rooms"
-                       ExportColumns="GetExportColumns()"
-                       SearchText="@_searchText"
-                       EmptyTitle="No rooms found"
-                       EmptyMessage="Try another status, guest house or search term.">
+            <div class="fo-tabs-container" data-help="gh-fo-tabs">
+                <button class="fo-tab @(_bookingPeriod == "All" ? "active" : "")" @onclick='() => SetBookingPeriod("All")'>All (@_bookings.Count)</button>
+                <button class="fo-tab @(_bookingPeriod == "Today" ? "active" : "")" @onclick='() => SetBookingPeriod("Today")'>Today (@TodayBookingCount)</button>
+                <button class="fo-tab @(_bookingPeriod == "Upcoming" ? "active" : "")" @onclick='() => SetBookingPeriod("Upcoming")'>Upcoming (@UpcomingBookingCount)</button>
+            </div>
 
-            <FilterControls>
-                <div class="search-box" data-help="gh-fo-search">
-                    <i class="bi bi-search"></i>
-                    <input type="text" placeholder="Search rooms..."
-                           @bind="_searchText" @bind:event="oninput" @bind:after="StateHasChanged" />
-                </div>
-                <select class="filter-select" @bind="_guestHouseFilter">
-                    <option value="All">All Guest Houses</option>
-                    @foreach (var gh in _houses.Select(h => h.GuestHouseName).Distinct())
-                    {
-                        <option value="@gh">@gh</option>
-                    }
-                </select>
-            </FilterControls>
+            @if (!string.IsNullOrWhiteSpace(_bookingsError))
+            {
+                <div class="fo-error-card">@_bookingsError</div>
+            }
 
-            <TableHeader>
-                <th>Guest House</th>
-                <th>Room No</th>
-                <th>Room Type</th>
-                <th>Status</th>
-                <th>Booking / Guest</th>
-                <th>Check-in</th>
-                <th>Check-out</th>
-                <th>Actions</th>
-            </TableHeader>
+            <SpicDataTable Items="FilteredBookings"
+                           Title="Bookings"
+                           FileName="FrontOffice_Bookings"
+                           ExportColumns="GetBookingExportColumns()"
+                           SearchText="@_bookingSearchText"
+                           EmptyTitle="No bookings found"
+                           EmptyMessage="There are no current or upcoming confirmed bookings for this selection.">
 
-            <TableRow Context="room">
-                <td>@room.GuestHouseName</td>
-                <td><span class="fo-room-no">@(string.IsNullOrEmpty(room.RoomNumber) ? "-" : room.RoomNumber)</span></td>
-                <td>
-                    <span class="fo-room-type">@room.RoomType</span>
-                    <div class="fo-room-capacity">Capacity: @(room.Capacity?.ToString() ?? "-")</div>
-                </td>
-                <td><span class="fo-badge @StatusBadge(room.StatusKey)">@room.StatusText</span></td>
-                <td>
-                    @if (room.CurrentBookingId.HasValue)
-                    {
-                        <div class="fo-guest-strong">@room.BookingReference</div>
-                        <div class="fo-guest-muted">@(string.IsNullOrEmpty(room.GuestName) ? "-" : room.GuestName)</div>
-                    }
-                    else
-                    {
-                        <span class="fo-muted">-</span>
-                    }
-                </td>
-                <td><span class="fo-date-value">@FormatDate(room.CheckInDate)</span></td>
-                <td><span class="fo-date-value">@FormatDate(room.CheckOutDate)</span></td>
-                <td style="white-space:nowrap;">
-                    @if (room.StatusKey == "Reserved")
-                    {
-                        <button class="fo-btn fo-btn-checkin" @onclick="() => OpenCheckIn(room.CurrentBookingId.GetValueOrDefault())"><i class="bi bi-box-arrow-in-right"></i> Check-In</button>
-                    }
-                    else if (room.StatusKey == "CheckedIn")
-                    {
-                        <button class="fo-btn fo-btn-checkout" @onclick="() => OpenCheckOut(room.CurrentBookingId.GetValueOrDefault())"><i class="bi bi-box-arrow-right"></i> Check-Out</button>
-                    }
-                </td>
-            </TableRow>
-
-            <CardTemplate Context="room">
-                <div class="fo-card-head">
-                    <div>
-                        <span class="fo-room-no">@(string.IsNullOrEmpty(room.RoomNumber) ? "-" : room.RoomNumber)</span>
-                        <span class="fo-room-type">@room.RoomType</span>
+                <FilterControls>
+                    <div class="search-box" data-help="gh-fo-search">
+                        <i class="bi bi-search"></i>
+                        <input type="text" placeholder="Search bookings..."
+                               @bind="_bookingSearchText" @bind:event="oninput" @bind:after="StateHasChanged" />
                     </div>
-                    <span class="fo-badge @StatusBadge(room.StatusKey)">@room.StatusText</span>
-                </div>
-                <div class="fo-card-rows">
-                    <div class="fo-kv"><span class="fo-kv-label">Guest House</span><span class="fo-kv-value">@room.GuestHouseName</span></div>
-                    <div class="fo-kv"><span class="fo-kv-label">Capacity</span><span class="fo-kv-value">@(room.Capacity?.ToString() ?? "-")</span></div>
-                    @if (room.CurrentBookingId.HasValue)
-                    {
-                        <div class="fo-kv"><span class="fo-kv-label">Booking</span><span class="fo-kv-value">@room.BookingReference</span></div>
-                        <div class="fo-kv"><span class="fo-kv-label">Guest</span><span class="fo-kv-value">@(string.IsNullOrEmpty(room.GuestName) ? "-" : room.GuestName)</span></div>
-                    }
-                    <div class="fo-kv"><span class="fo-kv-label">Check-in</span><span class="fo-kv-value">@FormatDate(room.CheckInDate)</span></div>
-                    <div class="fo-kv"><span class="fo-kv-label">Check-out</span><span class="fo-kv-value">@FormatDate(room.CheckOutDate)</span></div>
-                </div>
-            </CardTemplate>
+                    <select class="filter-select" @bind="_bookingGuestHouseFilter">
+                        <option value="All">All Guest Houses</option>
+                        @foreach (var gh in _bookings.Select(b => b.GuestHouseName).Distinct())
+                        {
+                            <option value="@gh">@gh</option>
+                        }
+                    </select>
+                </FilterControls>
 
-            <CardActions Context="room">
-                @if (room.StatusKey == "Reserved")
-                {
-                    <button class="fo-btn fo-btn-checkin" @onclick="() => OpenCheckIn(room.CurrentBookingId.GetValueOrDefault())"><i class="bi bi-box-arrow-in-right"></i> Check-In</button>
-                }
-                else if (room.StatusKey == "CheckedIn")
-                {
-                    <button class="fo-btn fo-btn-checkout" @onclick="() => OpenCheckOut(room.CurrentBookingId.GetValueOrDefault())"><i class="bi bi-box-arrow-right"></i> Check-Out</button>
-                }
-            </CardActions>
-        </SpicDataTable>
+                <TableHeader>
+                    <th>Booking / Guest</th>
+                    <th>Guest House</th>
+                    <th>Room Type</th>
+                    <th>Room No</th>
+                    <th>Check-in</th>
+                    <th>Check-out</th>
+                    <th>Status</th>
+                    <th>Payment</th>
+                    <th>Actions</th>
+                </TableHeader>
+
+                <TableRow Context="bk">
+                    <td>
+                        <div class="fo-guest-strong">@bk.BookingReference</div>
+                        <div class="fo-guest-muted">@(string.IsNullOrEmpty(bk.GuestName) ? "-" : bk.GuestName)</div>
+                    </td>
+                    <td>@bk.GuestHouseName</td>
+                    <td>
+                        <span class="fo-room-type">@bk.RoomType</span>
+                        <div class="fo-room-capacity">Rooms: @bk.NumberOfRooms</div>
+                    </td>
+                    <td>
+                        @if (bk.IsRoomAssigned)
+                        {
+                            <span class="fo-room-no">@bk.RoomNumber</span>
+                        }
+                        else
+                        {
+                            <span class="fo-muted">@BookingRoomText(bk)</span>
+                        }
+                    </td>
+                    <td><span class="fo-date-value">@FormatDate(bk.CheckInDate)</span></td>
+                    <td><span class="fo-date-value">@FormatDate(bk.CheckOutDate)</span></td>
+                    <td>
+                        <span class="fo-badge @BookingBadge(bk)">@bk.StatusText</span>
+                        <div class="fo-guest-muted">@PeriodText(bk.Period)</div>
+                    </td>
+                    <td><span class="fo-badge @(bk.PaymentStatus == 1 ? "fo-badge-paid" : "fo-badge-pending")">@BookingPaymentText(bk.PaymentStatus)</span></td>
+                    <td style="white-space:nowrap;">
+                        @BookingActions(bk)
+                    </td>
+                </TableRow>
+
+                <CardTemplate Context="bk">
+                    <div class="fo-card-head">
+                        <div>
+                            <span class="fo-room-no">@bk.BookingReference</span>
+                            <span class="fo-room-type">@bk.RoomType</span>
+                        </div>
+                        <span class="fo-badge @BookingBadge(bk)">@bk.StatusText</span>
+                    </div>
+                    <div class="fo-card-rows">
+                        <div class="fo-kv"><span class="fo-kv-label">Guest</span><span class="fo-kv-value">@(string.IsNullOrEmpty(bk.GuestName) ? "-" : bk.GuestName)</span></div>
+                        <div class="fo-kv"><span class="fo-kv-label">Guest House</span><span class="fo-kv-value">@bk.GuestHouseName</span></div>
+                        <div class="fo-kv"><span class="fo-kv-label">Room No</span><span class="fo-kv-value">@BookingRoomText(bk)</span></div>
+                        <div class="fo-kv"><span class="fo-kv-label">Check-in</span><span class="fo-kv-value">@FormatDate(bk.CheckInDate)</span></div>
+                        <div class="fo-kv"><span class="fo-kv-label">Check-out</span><span class="fo-kv-value">@FormatDate(bk.CheckOutDate)</span></div>
+                        <div class="fo-kv"><span class="fo-kv-label">Period</span><span class="fo-kv-value">@PeriodText(bk.Period)</span></div>
+                        <div class="fo-kv"><span class="fo-kv-label">Payment</span><span class="fo-kv-value">@BookingPaymentText(bk.PaymentStatus)</span></div>
+                    </div>
+                </CardTemplate>
+
+                <CardActions Context="bk">
+                    @BookingActions(bk)
+                </CardActions>
+            </SpicDataTable>
+        </div>
     }
 </div>
 
@@ -363,9 +365,12 @@
     private List<FrontOfficeHouseDto> _houses = new();
     private bool _isLoading = true;
     private string? _loadError;
-    private string _statusFilter = "All";
-    private string _guestHouseFilter = "All";
-    private string _searchText = "";
+    // Booking Details section (one row per booking)
+    private List<FrontOfficeActiveBookingDto> _bookings = new();
+    private string? _bookingsError;
+    private string _bookingPeriod = "All";
+    private string _bookingGuestHouseFilter = "All";
+    private string _bookingSearchText = "";
 
     // Check-in modal state
     private bool _showCheckIn;
@@ -391,34 +396,76 @@
     private int ReservedCount => _houses.SelectMany(h => h.Rooms).Count(r => r.StatusKey == "Reserved");
     private int CheckedInCount => _houses.SelectMany(h => h.Rooms).Count(r => r.StatusKey == "CheckedIn");
 
-    // Flattened room list (across every Guest House) feeding the single LocationMaster-style
-    // DataTable. Guest House is preserved as its own column/filter rather than a section
-    // grouping. Same underlying _houses data - no API/query change.
-    private List<FrontOfficeRoomDto> FilteredRooms => _houses
-        .SelectMany(h => h.Rooms)
-        .Where(r => _statusFilter == "All" || r.StatusKey == _statusFilter)
-        .Where(r => _guestHouseFilter == "All" || r.GuestHouseName == _guestHouseFilter)
+    // Booking Details: Period 0 = Today, 1 = Upcoming (computed server-side on the IST business date).
+    private const int PeriodToday = 0;
+    private const int PeriodUpcoming = 1;
+
+    private int TodayBookingCount => _bookings.Count(b => b.Period == PeriodToday);
+    private int UpcomingBookingCount => _bookings.Count(b => b.Period == PeriodUpcoming);
+
+    private List<FrontOfficeActiveBookingDto> FilteredBookings => _bookings
+        .Where(b => _bookingPeriod == "All"
+            || (_bookingPeriod == "Today" && b.Period == PeriodToday)
+            || (_bookingPeriod == "Upcoming" && b.Period == PeriodUpcoming))
+        .Where(b => _bookingGuestHouseFilter == "All" || b.GuestHouseName == _bookingGuestHouseFilter)
         .ToList();
 
-    private List<ExportColumn<FrontOfficeRoomDto>> GetExportColumns()
+    private List<ExportColumn<FrontOfficeActiveBookingDto>> GetBookingExportColumns()
     {
-        return new List<ExportColumn<FrontOfficeRoomDto>>
+        return new List<ExportColumn<FrontOfficeActiveBookingDto>>
         {
-            new() { Header = "Guest House", ValueSelector = r => r.GuestHouseName },
-            new() { Header = "Room No", ValueSelector = r => r.RoomNumber ?? "-" },
-            new() { Header = "Room Type", ValueSelector = r => r.RoomType },
-            new() { Header = "Status", ValueSelector = r => r.StatusText },
-            new() { Header = "Booking Ref", ValueSelector = r => r.BookingReference ?? "-" },
-            new() { Header = "Guest Name", ValueSelector = r => r.GuestName ?? "-" },
-            new() { Header = "Check-in", ValueSelector = r => FormatDate(r.CheckInDate) },
-            new() { Header = "Check-out", ValueSelector = r => FormatDate(r.CheckOutDate) },
+            new() { Header = "Booking Ref", ValueSelector = b => b.BookingReference },
+            new() { Header = "Guest Name", ValueSelector = b => b.GuestName ?? "-" },
+            new() { Header = "Guest House", ValueSelector = b => b.GuestHouseName },
+            new() { Header = "Room Type", ValueSelector = b => b.RoomType },
+            new() { Header = "Rooms", ValueSelector = b => b.NumberOfRooms.ToString(CultureInfo.InvariantCulture) },
+            new() { Header = "Room No", ValueSelector = b => BookingRoomText(b) },
+            new() { Header = "Check-in", ValueSelector = b => FormatDate(b.CheckInDate) },
+            new() { Header = "Check-out", ValueSelector = b => FormatDate(b.CheckOutDate) },
+            new() { Header = "Status", ValueSelector = b => b.StatusText },
+            new() { Header = "Period", ValueSelector = b => PeriodText(b.Period) },
+            new() { Header = "Payment", ValueSelector = b => BookingPaymentText(b.PaymentStatus) },
         };
     }
 
     protected override async Task OnInitializedAsync()
     {
-        await LoadRoomsAsync();
+        await LoadAllAsync();
     }
+
+    // Refresh both the room grid and the Booking Details list.
+    private async Task LoadAllAsync()
+    {
+        await Task.WhenAll(LoadRoomsAsync(), LoadBookingsAsync());
+    }
+
+    private async Task LoadBookingsAsync()
+    {
+        _bookingsError = null;
+        try
+        {
+            var response = await Http.GetAsync("api/GuestHouseFrontOffice/bookings/active");
+            if (response.IsSuccessStatusCode)
+            {
+                _bookings = await response.Content.ReadFromJsonAsync<List<FrontOfficeActiveBookingDto>>() ?? new();
+            }
+            else if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized
+                || response.StatusCode == System.Net.HttpStatusCode.Forbidden)
+            {
+                _bookingsError = "You do not have permission to view booking details.";
+            }
+            else
+            {
+                _bookingsError = "We could not load booking details. Please try again.";
+            }
+        }
+        catch (Exception)
+        {
+            _bookingsError = "We could not load booking details. Please try again.";
+        }
+    }
+
+    private void SetBookingPeriod(string period) => _bookingPeriod = period;
 
     private async Task LoadRoomsAsync()
     {
@@ -452,7 +499,6 @@
         }
     }
 
-    private void SetFilter(string filter) => _statusFilter = filter;
 
     private void GoToGenerateBill() => Navigation.NavigateTo("/GenerateBill");
 
@@ -512,7 +558,7 @@
                 _checkInMessage = result.Message ?? "Guest checked in successfully.";
                 await Task.Delay(800);
                 _showCheckIn = false;
-                await LoadRoomsAsync();
+                await LoadAllAsync();
             }
             else
             {
@@ -628,7 +674,7 @@
                 _checkOutMessage = result.Message ?? "Check-out completed.";
                 await Task.Delay(800);
                 _showCheckOut = false;
-                await LoadRoomsAsync();
+                await LoadAllAsync();
             }
             else
             {
@@ -725,12 +771,48 @@
     }
 
     // ---------------------------- Helpers ----------------------------
-    private static string StatusBadge(string statusKey) => statusKey switch
+    // ---- Booking Details helpers ----
+    // BookingStatus: 2 = Confirmed, 5 = CheckedIn (the only two the endpoint returns).
+    private const int BookingConfirmed = 2;
+    private const int BookingCheckedIn = 5;
+
+    private static string BookingBadge(FrontOfficeActiveBookingDto b) =>
+        b.BookingStatus == BookingCheckedIn ? "fo-badge-checkedin" : "fo-badge-reserved";
+
+    private static string PeriodText(int period) => period == PeriodUpcoming ? "Upcoming" : "Today";
+
+    // Only real allocations are shown; an unallocated Confirmed booking gets its room at check-in.
+    private static string BookingRoomText(FrontOfficeActiveBookingDto b) =>
+        b.IsRoomAssigned && !string.IsNullOrWhiteSpace(b.RoomNumber) ? b.RoomNumber!
+        : b.BookingStatus == BookingCheckedIn ? "-"
+        : "Assigned at check-in";
+
+    private static string BookingPaymentText(int status) => status switch
     {
-        "CheckedIn" => "fo-badge-checkedin",
-        "Reserved" => "fo-badge-reserved",
-        _ => "fo-badge-available"
+        1 => "Paid",
+        2 => "Failed",
+        3 => "Refunded",
+        4 => "Partially Refunded",
+        _ => "Pending"
     };
+
+    // Existing Check-In / Check-Out modals and endpoints. Check-In is offered only
+    // for today's Confirmed stays; the server still enforces eligibility.
+    private RenderFragment BookingActions(FrontOfficeActiveBookingDto bk) =>
+        @<text>
+            @if (bk.BookingStatus == BookingCheckedIn)
+            {
+                <button class="fo-btn fo-btn-checkout" @onclick="() => OpenCheckOut(bk.BookingId)"><i class="bi bi-box-arrow-right"></i> Check-Out</button>
+            }
+            else if (bk.BookingStatus == BookingConfirmed && bk.Period == PeriodToday)
+            {
+                <button class="fo-btn fo-btn-checkin" @onclick="() => OpenCheckIn(bk.BookingId)"><i class="bi bi-box-arrow-in-right"></i> Check-In</button>
+            }
+            else
+            {
+                <span class="fo-muted">Check-in from @FormatDate(bk.CheckInDate)</span>
+            }
+        </text>;
 
     private static string FormatDate(DateTime? value)
     {
@@ -810,6 +892,26 @@
         public string? GuestName { get; set; }
         public DateTime? CheckInDate { get; set; }
         public DateTime? CheckOutDate { get; set; }
+    }
+
+    public class FrontOfficeActiveBookingDto
+    {
+        public int BookingId { get; set; }
+        public string BookingReference { get; set; } = "";
+        public int GuestHouseId { get; set; }
+        public string GuestHouseName { get; set; } = "";
+        public string RoomType { get; set; } = "";
+        public int NumberOfRooms { get; set; }
+        public string? RoomNumber { get; set; }
+        public bool IsRoomAssigned { get; set; }
+        public string? GuestName { get; set; }
+        public int? NumberOfPersons { get; set; }
+        public DateTime? CheckInDate { get; set; }
+        public DateTime? CheckOutDate { get; set; }
+        public int BookingStatus { get; set; }
+        public string StatusText { get; set; } = "";
+        public int PaymentStatus { get; set; }
+        public int Period { get; set; }
     }
 
     public class FrontOfficeBookingDto

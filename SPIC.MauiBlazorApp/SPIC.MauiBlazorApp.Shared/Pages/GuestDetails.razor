@@ -80,6 +80,34 @@
             color: var(--text-main);
         }
 
+    /* Employee ID / Dealer Code edit: icon buttons sit inside the input's right edge, so the
+       field keeps its full width and the rest of the form does not move. */
+    .code-edit-wrap { position: relative; }
+    .code-edit-input { padding-right: 2.75rem; }
+    .code-edit-input.code-edit-input-2 { padding-right: 5rem; }
+    .code-edit-actions {
+        position: absolute;
+        top: 50%;
+        right: 0.4rem;
+        transform: translateY(-50%);
+        display: flex;
+        gap: 0.25rem;
+    }
+    .code-edit-btn {
+        width: 2rem;
+        height: 2rem;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border: none;
+        border-radius: 6px;
+        background: transparent;
+        color: var(--text-main);
+        cursor: pointer;
+    }
+        .code-edit-btn:hover, .code-edit-btn:focus-visible { background: rgba(59, 130, 246, 0.1); color: var(--primary-blue); outline: none; }
+    .code-edit-save { color: #059669; }
+
         .form-control-custom:focus, .form-select-custom:focus {
             border-color: var(--primary-blue);
             background-color: #ffffff;
@@ -276,8 +304,38 @@
                     
                     <div class="col-md-6">
                         <label class="form-label">Employee ID / Dealer Code</label>
-                        <input type="text" class="form-control-custom" placeholder="Enter Employee ID / Dealer Code" @bind="_form.EmployeeOrDealerCode"
-                               readonly="@_codeLocked" title="@(_codeLocked ? "Filled automatically from your account" : null)">
+                        @if (_codeLocked)
+                        {
+                            @* Pre-filled from the account. Edit changes ONLY this booking's guest code (the
+                               account, master records and booking owner are never touched). *@
+                            <div class="code-edit-wrap">
+                                @if (_codeEditing)
+                                {
+                                    <input type="text" class="form-control-custom code-edit-input code-edit-input-2" placeholder="Enter Employee ID / Dealer Code"
+                                           @bind="_codeDraft" @bind:event="oninput" aria-label="Employee ID / Dealer Code">
+                                    <div class="code-edit-actions">
+                                        <button type="button" class="code-edit-btn code-edit-save" title="Save" aria-label="Save Employee ID / Dealer Code" @onclick="SaveCodeEdit"><i class="bi bi-check-lg"></i></button>
+                                        <button type="button" class="code-edit-btn" title="Cancel" aria-label="Cancel editing" @onclick="CancelCodeEdit"><i class="bi bi-x-lg"></i></button>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <input type="text" class="form-control-custom code-edit-input" placeholder="Enter Employee ID / Dealer Code" @bind="_form.EmployeeOrDealerCode"
+                                           readonly title="@(_codeEdited ? "Edited for this booking" : "Filled automatically from your account")">
+                                    <div class="code-edit-actions">
+                                        <button type="button" class="code-edit-btn" title="Edit" aria-label="Edit Employee ID / Dealer Code" @onclick="StartCodeEdit"><i class="bi bi-pencil"></i></button>
+                                    </div>
+                                }
+                            </div>
+                            @if (_codeEditError != null)
+                            {
+                                <div class="mt-1" style="color:#b91c1c;font-size:0.85rem;" role="alert">@_codeEditError</div>
+                            }
+                        }
+                        else
+                        {
+                            <input type="text" class="form-control-custom" placeholder="Enter Employee ID / Dealer Code" @bind="_form.EmployeeOrDealerCode">
+                        }
                         @if (!string.IsNullOrEmpty(_identityError))
                         {
                             <div class="mt-1" style="color:#b91c1c;font-size:0.85rem;" role="alert">@_identityError</div>
@@ -534,6 +592,11 @@
 
     // Employee ID / Dealer Code binding and guest-count validation state.
     private bool _codeLocked;
+    // Edit of the pre-filled code: a draft is edited and only copied into the form on Save.
+    private bool _codeEditing;
+    private bool _codeEdited;
+    private string? _codeDraft;
+    private string? _codeEditError;
     private bool _identityLoaded;
     private string? _identityError;
     private string? _guestCountError;
@@ -592,7 +655,7 @@
 
         await LoadRoomAsync();
 
-        // Employee ID / Dealer Code comes from the signed-in user's own record (never typed).
+        // Employee ID / Dealer Code is pre-filled from the signed-in user's own record (editable for this booking's guest).
         await LoadBookerIdentityAsync();
 
         // Company Master dropdown — load companies applicable to the selected Guest House.
@@ -609,8 +672,9 @@
 
     // Asks the API for the signed-in user's own Employee ID / Dealer Code (Dealer: Dealer Code; the
     // Complimentary employee roles: Employee ID; other roles: nothing, the field stays manual). The API
-    // resolves it from the authenticated user and applies the same value again when the booking is
-    // created, so locking the field here is a convenience - not the security control.
+    // resolves it from the authenticated user and still requires it to exist when the booking is created.
+    // The booker may edit the pre-filled value for this booking's guest only (Edit / Save / Cancel); the
+    // value is never used for identity, ownership, eligibility or authorization.
     private async Task LoadBookerIdentityAsync()
     {
         _identityError = null;
@@ -646,6 +710,38 @@
         {
             if (_identityError == null) _identityLoaded = true;
         }
+    }
+
+    // ---- Employee ID / Dealer Code: Edit / Save / Cancel (this booking's guest details only) ----
+    private void StartCodeEdit()
+    {
+        _codeDraft = _form.EmployeeOrDealerCode;
+        _codeEditError = null;
+        _codeEditing = true;
+    }
+
+    private void SaveCodeEdit()
+    {
+        var value = _codeDraft?.Trim();
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            // Same required-field rule as Continue.
+            _codeEditError = "Employee ID / Dealer Code is required.";
+            return;
+        }
+        if (!string.Equals(value, _form.EmployeeOrDealerCode, StringComparison.Ordinal))
+            _codeEdited = true;
+        _form.EmployeeOrDealerCode = value;
+        _codeEditError = null;
+        _codeEditing = false;
+    }
+
+    // Discards the draft; the value shown before Edit (the fetched one, or the last saved edit) stays.
+    private void CancelCodeEdit()
+    {
+        _codeDraft = null;
+        _codeEditError = null;
+        _codeEditing = false;
     }
 
     // Number of Persons / Adults / Children: the shared GuestHouseGuestCounts rule (also applied by the API).
@@ -984,6 +1080,7 @@
     {
         // A role that must use its own code but has none on file cannot continue (never a blank or wrong value).
         if (_identityError != null) return _identityError;
+        if (_codeEditing) return "Please save or cancel your Employee ID / Dealer Code change before continuing.";
         if (string.IsNullOrWhiteSpace(_form.EmployeeOrDealerCode)) return "Employee ID / Dealer Code is required to continue.";
         if (string.IsNullOrWhiteSpace(_form.GuestName)) return "Guest Name is required to continue.";
         if (string.IsNullOrWhiteSpace(_form.PhoneNumber)) return "Phone Number is required to continue.";

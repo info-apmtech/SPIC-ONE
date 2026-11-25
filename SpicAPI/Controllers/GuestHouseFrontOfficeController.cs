@@ -261,6 +261,104 @@ namespace SpicAPI.Controllers
 			return Ok(houses);
 		}
 
+		// GET /api/GuestHouseFrontOffice/bookings/active
+		// Read-only Booking Details list for the Front Office: ONE ROW PER BOOKING (not per
+		// physical room) for every current and future stay. Kept separate from GetRooms, which
+		// still drives today's room inventory grid and summary cards unchanged.
+		//
+		// Included:
+		//   - CheckedIn: always (an overdue guest stays until the actual check-out).
+		//   - Confirmed: while the scheduled check-out date is after the India business date.
+		//     A Confirmed booking whose check-out date has arrived/passed without check-in
+		//     (no-show) is left out; its status, payment and billing are not touched.
+		// Excluded: Draft, PendingPayment (including live payment holds), Cancelled, Completed.
+		//
+		// Period ("Today" / "Upcoming") is computed against the India (IST) business date:
+		//   Today    = CheckedIn, or check-in date on/before today (and check-out after today)
+		//   Upcoming = Confirmed with check-in date after today
+		//
+		// Room numbers come ONLY from real GuestHouseRoomAllocation rows (assigned at check-in, or
+		// reserved at booking time for multi-record bookings). Unallocated bookings return no
+		// number - the UI shows "Assigned at check-in"; nothing is guessed.
+		[HttpGet("bookings/active")]
+		public async Task<IActionResult> GetActiveBookings()
+		{
+			// Receptionist state scope (null = unrestricted), same rule as GetRooms.
+			var scope = await GetGuestHouseScopeAsync();
+			var today = BusinessDate();
+
+			var bookings = await _db.GuestHouseBookings
+				.AsNoTracking()
+				.Where(b => scope == null || scope.Contains(b.GuestHouseId))
+				.Where(b => b.BookingStatus == GuestHouseBookingStatus.CheckedIn
+					|| (b.BookingStatus == GuestHouseBookingStatus.Confirmed
+						&& b.CheckInDate.HasValue && b.CheckOutDate.HasValue
+						&& b.CheckOutDate.Value.Date > today))
+				.Include(b => b.GuestHouse)
+				.Include(b => b.GuestHouseRoom)
+				.Include(b => b.Guests)
+				.Include(b => b.RoomAllocations)
+				.ToListAsync();
+
+			var rows = bookings
+				.Select(b =>
+				{
+					var isUpcoming = b.BookingStatus == GuestHouseBookingStatus.Confirmed
+						&& b.CheckInDate.HasValue && b.CheckInDate.Value.Date > today;
+					var roomNumber = AllocatedRoomNumber(b);
+					var guest = b.Guests.FirstOrDefault();
+					return new FrontOfficeActiveBookingDto
+					{
+						BookingId = b.Id,
+						BookingReference = b.BookingReference ?? $"BK{b.Id}",
+						GuestHouseId = b.GuestHouseId,
+						GuestHouseName = b.GuestHouse?.Name ?? "",
+						RoomType = b.GuestHouseRoom?.RoomType ?? "Room",
+						NumberOfRooms = Math.Max(1, b.NumberOfRooms ?? 1),
+						RoomNumber = roomNumber,
+						IsRoomAssigned = roomNumber != null,
+						GuestName = guest?.GuestName,
+						NumberOfPersons = b.NumberOfPersons ?? guest?.NumberOfPersons,
+						CheckInDate = b.CheckInDate,
+						CheckOutDate = b.CheckOutDate,
+						BookingStatus = b.BookingStatus,
+						StatusText = b.BookingStatus == GuestHouseBookingStatus.CheckedIn ? "Checked-In" : "Confirmed",
+						PaymentStatus = b.PaymentStatus,
+						Period = isUpcoming ? FrontOfficeBookingPeriod.Upcoming : FrontOfficeBookingPeriod.Today
+					};
+				})
+				.OrderBy(r => r.Period)
+				.ThenBy(r => r.CheckInDate)
+				.ThenBy(r => r.BookingId)
+				.ToList();
+
+			return Ok(rows);
+		}
+
+		// India (IST) business date used by the Booking Details list. Asia/Kolkata (IANA) then
+		// "India Standard Time" (Windows); a fixed +05:30 offset if neither tz database is present.
+		// Settable so the regression harness can pin "today".
+		internal Func<DateTime> BusinessDate { get; set; } = () => IndiaToday();
+
+		private static readonly TimeZoneInfo? IndiaTimeZone = FindIndiaTimeZone();
+
+		internal static DateTime IndiaToday()
+		{
+			var utcNow = DateTime.UtcNow;
+			var local = IndiaTimeZone is { } tz ? TimeZoneInfo.ConvertTimeFromUtc(utcNow, tz) : utcNow.AddHours(5.5);
+			return DateTime.SpecifyKind(local.Date, DateTimeKind.Unspecified);
+		}
+
+		private static TimeZoneInfo? FindIndiaTimeZone()
+		{
+			foreach (var id in new[] { "Asia/Kolkata", "India Standard Time" })
+			{
+				try { return TimeZoneInfo.FindSystemTimeZoneById(id); }
+				catch (Exception) { /* try the next id */ }
+			}
+			return null;
+		}
+
 		// GET /api/GuestHouseFrontOffice/bookings/{bookingId}
 		// Returns the details needed to display the Check-In form and validates that
 		// the booking is currently eligible for check-in.
@@ -1738,6 +1836,33 @@ namespace SpicAPI.Controllers
 		public GuestHouseBookingStatus? BookingStatus { get; set; }
 		public GuestHousePaymentStatus? PaymentStatus { get; set; }
 		public GuestHousePaymentMethod? PaymentMethod { get; set; }
+	}
+
+	public enum FrontOfficeBookingPeriod
+	{
+		Today = 0,     // CheckedIn, or a Confirmed stay that includes the India business date
+		Upcoming = 1   // Confirmed stay whose check-in date is after the India business date
+	}
+
+	/// <summary>One row per booking for the Front Office Booking Details list (GET bookings/active).</summary>
+	public class FrontOfficeActiveBookingDto
+	{
+		public int BookingId { get; set; }
+		public string BookingReference { get; set; } = "";
+		public int GuestHouseId { get; set; }
+		public string GuestHouseName { get; set; } = "";
+		public string RoomType { get; set; } = "";
+		public int NumberOfRooms { get; set; }
+		public string? RoomNumber { get; set; }        // Only real allocations; null = assigned at check-in
+		public bool IsRoomAssigned { get; set; }
+		public string? GuestName { get; set; }
+		public int? NumberOfPersons { get; set; }
+		public DateTime? CheckInDate { get; set; }
+		public DateTime? CheckOutDate { get; set; }
+		public GuestHouseBookingStatus BookingStatus { get; set; }
+		public string StatusText { get; set; } = "";
+		public GuestHousePaymentStatus PaymentStatus { get; set; }
+		public FrontOfficeBookingPeriod Period { get; set; }
 	}
 
 	public class FrontOfficeBookingDto
