@@ -131,6 +131,44 @@ namespace SPIC.Core.DTOs
         public bool Submit { get; set; }
     }
 
+    /// <summary>One parsed, not-yet-saved row from a "Specific Product" Excel import - the client
+    /// shows/edits these in the Request Items table before anything is persisted.</summary>
+    public sealed class PubBulkImportRowDto
+    {
+        public int RowNumber { get; set; }
+        public string? ProductName { get; set; }
+        public int ProductId { get; set; }
+        public int Quantity { get; set; }
+        public string? Error { get; set; }
+    }
+
+    public sealed class PubBulkItemDto
+    {
+        public int ProductId { get; set; }
+        public int Quantity { get; set; }
+    }
+
+    /// <summary>"Specific Product" bulk create - one PublicityRequest per Item, sharing every other
+    /// field; no schema change, just the single-item Create path looped per item server-side.</summary>
+    public sealed class PubBulkUpsertDto
+    {
+        public int MaterialTypeId { get; set; }
+        public string? RequestedByUserId { get; set; }
+        public int StateId { get; set; }
+        public int RegionId { get; set; }
+        public int HeadquarterId { get; set; }
+        public string? Remarks { get; set; }
+        public bool Submit { get; set; }
+        public List<PubBulkItemDto> Items { get; set; } = new();
+    }
+
+    public sealed class PubBulkCreatedDto
+    {
+        public int Id { get; set; }
+        public string IndentNo { get; set; } = "";
+        public int ProductId { get; set; }
+    }
+
     /// <summary>One node of a stepper. State: 0 pending, 1 current, 2 done, 3 warning.</summary>
     public sealed class PubStepDto
     {

@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Security.Claims;
 using System.Text;
 using System.Text.RegularExpressions;
+using ClosedXML.Excel;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -633,6 +634,118 @@ namespace SpicAPI.Controllers
             }
             await _db.SaveChangesAsync();
             return Ok(new { r.Id, r.IndentNo });
+        }
+
+        // ================================================================ specific product (bulk)
+
+        /// <summary>Parses a "Product, Quantity" Excel upload into unsaved rows for the "Specific
+        /// Product" Request Items table - nothing is persisted here, the client reviews/edits the
+        /// parsed rows and only POSTs requests/bulk once the user actually submits/saves.</summary>
+        [HttpPost("requests/import-excel")]
+        [RequestSizeLimit(10L * 1024 * 1024)]
+        public async Task<IActionResult> ImportExcel(IFormFile file)
+        {
+            var isChainRole = MyRole() is AppRole.RMD or AppRole.MDO or AppRole.MO or AppRole.JMDO or AppRole.RM or AppRole.SMD or AppRole.SMM;
+            if (!isChainRole && !await IsAdminMdCsAsync() && !await IsDgmMdCsAsync() && !IsSuper()) return Forbid();
+            if (file is null || file.Length == 0) return BadRequest(new { Success = false, Message = "No file uploaded." });
+            if (file.Length > 10 * 1024 * 1024) return BadRequest(new { Success = false, Message = "File must be under 10 MB." });
+            var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
+            if (ext != ".xlsx" && ext != ".xls") return BadRequest(new { Success = false, Message = "Only Excel files (.xlsx/.xls) are supported." });
+
+            var products = await _db.Products.AsNoTracking().Where(p => p.IsActive).Select(p => new { p.Id, p.Name }).ToListAsync();
+            var byName = products.GroupBy(p => p.Name.Trim().ToLowerInvariant())
+                .ToDictionary(g => g.Key, g => g.First().Id, StringComparer.Ordinal);
+
+            List<PubBulkImportRowDto> result;
+            try
+            {
+                using var stream = file.OpenReadStream();
+                using var workbook = new XLWorkbook(stream);
+                var ws = workbook.Worksheets.First();
+                var headerRow = ws.Row(1);
+                var lastCol = headerRow.LastCellUsed()?.Address.ColumnNumber ?? 0;
+                if (lastCol == 0) return BadRequest(new { Success = false, Message = "Empty worksheet or missing header row." });
+
+                var headerMap = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+                for (var c = 1; c <= lastCol; c++)
+                {
+                    var h = headerRow.Cell(c).GetString().Trim().Replace(" ", "").ToLowerInvariant();
+                    if (!string.IsNullOrEmpty(h) && !headerMap.ContainsKey(h)) headerMap[h] = c;
+                }
+                string GetCell(IXLRow row, string key) => headerMap.TryGetValue(key, out var col) ? row.Cell(col).GetString().Trim() : "";
+                if (!headerMap.ContainsKey("product")) return BadRequest(new { Success = false, Message = "Missing required column: Product." });
+                if (!headerMap.ContainsKey("quantity")) return BadRequest(new { Success = false, Message = "Missing required column: Quantity." });
+
+                result = new List<PubBulkImportRowDto>();
+                foreach (var row in ws.RowsUsed().Skip(1).Take(500))
+                {
+                    var productName = GetCell(row, "product");
+                    var qtyText = GetCell(row, "quantity");
+                    if (string.IsNullOrWhiteSpace(productName) && string.IsNullOrWhiteSpace(qtyText)) continue;
+                    var dto = new PubBulkImportRowDto { RowNumber = row.RowNumber(), ProductName = productName };
+                    var errors = new List<string>();
+                    if (string.IsNullOrWhiteSpace(productName)) errors.Add("Product is required.");
+                    else if (byName.TryGetValue(productName.Trim().ToLowerInvariant(), out var pid)) dto.ProductId = pid;
+                    else errors.Add($"Product \"{productName}\" not found.");
+                    if (!int.TryParse(qtyText, out var qty) || qty < 0) errors.Add("Enter a valid quantity.");
+                    else dto.Quantity = qty;
+                    if (errors.Count > 0) dto.Error = string.Join(" ", errors);
+                    result.Add(dto);
+                }
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { Success = false, Message = $"Could not read the Excel file: {ex.Message}" });
+            }
+            if (result.Count == 0) return BadRequest(new { Success = false, Message = "No data rows found in the uploaded file." });
+            return Ok(result);
+        }
+
+        /// <summary>"Specific Product" submit: one PublicityRequest per Item, sharing every other
+        /// field - reuses the exact same Validate/Apply/Submit path Create() uses, looped, so every
+        /// resulting row goes through the existing RM -> SMD -> SMM -> ADMIN -> DGM chain completely
+        /// unchanged. Two passes (validate all, then create all) so one bad row never leaves earlier
+        /// rows already persisted.</summary>
+        [HttpPost("requests/bulk")]
+        public async Task<IActionResult> CreateBulk([FromBody] PubBulkUpsertDto dto)
+        {
+            var isChainRole = MyRole() is AppRole.RMD or AppRole.MDO or AppRole.MO or AppRole.JMDO or AppRole.RM or AppRole.SMD or AppRole.SMM;
+            if (!isChainRole && !await IsAdminMdCsAsync() && !await IsDgmMdCsAsync() && !IsSuper()) return Forbid();
+            if (dto.Items is null || dto.Items.Count == 0) return BadRequest(new { Success = false, Message = "Add at least one item." });
+            if (dto.Items.Count > 200) return BadRequest(new { Success = false, Message = "Too many items in a single request (max 200)." });
+
+            PubUpsertDto RowDto(PubBulkItemDto item) => new()
+            {
+                MaterialTypeId = dto.MaterialTypeId, ProductId = item.ProductId, Quantity = item.Quantity,
+                RequestedByUserId = dto.RequestedByUserId, StateId = dto.StateId, RegionId = dto.RegionId,
+                HeadquarterId = dto.HeadquarterId, Remarks = dto.Remarks, Submit = dto.Submit
+            };
+
+            for (var i = 0; i < dto.Items.Count; i++)
+            {
+                var error = await ValidateAsync(RowDto(dto.Items[i]));
+                if (error != null) return BadRequest(new { Success = false, Message = $"Row {i + 1}: {error}" });
+            }
+
+            var name = await MyNameAsync();
+            var created = new List<PubBulkCreatedDto>();
+            foreach (var item in dto.Items)
+            {
+                var r = new PublicityRequest
+                {
+                    IndentNo = await NextNoAsync("IND"), CreatedByUserId = Uid(), CreatedByName = name,
+                    Stage = PublicityStage.IndentCreation, Status = PublicityStatus.Draft
+                };
+                await ApplyAsync(r, RowDto(item));
+                r.OriginalQuantity = r.Quantity;
+                _db.PublicityRequests.Add(r);
+                await _db.SaveChangesAsync();
+                await AddEvent(r, PublicityStage.IndentCreation, "Created", name, dto.Remarks);
+                if (dto.Submit) await Submit(r, name, dto.Remarks);
+                await _db.SaveChangesAsync();
+                created.Add(new PubBulkCreatedDto { Id = r.Id, IndentNo = r.IndentNo, ProductId = item.ProductId });
+            }
+            return Ok(created);
         }
 
         [HttpDelete("requests/{id:int}")]

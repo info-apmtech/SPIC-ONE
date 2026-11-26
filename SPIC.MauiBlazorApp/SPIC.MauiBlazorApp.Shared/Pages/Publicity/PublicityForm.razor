@@ -12,7 +12,16 @@
 
 @* Create / edit a request (RMDO). Draft keeps it private; Submit sends it to RM review.
    /PublicityReview/edit/{id}: the approver whose turn it is edits every field ("Edit Publicity
-   Material Request"); the request stays on its stage and the changes land in the history. *@
+   Material Request"); the request stays on its stage and the changes land in the history.
+
+   The Publicity Material/Gift Articles and Specific/General Product segmented toggles (and the
+   "Specific Product" Excel-import multi-row flow) ONLY apply to brand-new requests (Id is null) -
+   editing an existing request (own draft/returned, or an approver's edit-in-turn) always renders
+   the original single-item form unconditionally, exactly as before. A "Specific Product" Excel
+   import creates one independent PublicityRequest per row (see CreateBulk in PublicityController) -
+   once created, each row is edited individually via this same single-item edit page like any other
+   request; there is no persisted "multi-row draft" concept, since PublicityRequest itself is and
+   remains strictly one product + one quantity per row. *@
 
 <div class="pub-page">
     <PageHeader Title="@(Id is null ? "Create Publicity Material Request" : Approver ? "Edit Publicity Material Request" : $"Edit Request {_indent}")"
@@ -27,69 +36,211 @@
     }
     else
     {
-        <section class="pub-card">
-            <h2 class="pub-h2">Request Details</h2>
-            <p class="pub-muted">Provide the publicity material, product, quantity and supporting file details</p>
-            <div class="pub-form pub-form--4">
-                <div class="pub-field" data-help="pub-material">
-                    <label class="pub-label pub-req" for="pr-mat">Type of Publicity Material</label>
-                    <select id="pr-mat" class="pub-input" @bind="_dto.MaterialTypeId"><option value="0">Select Material</option>
-                        @foreach (var m in _lookups.Materials) { <option value="@m.Id">@m.Name</option> }</select>
+        @if (Id is null)
+        {
+            <div class="pub-segment-row" data-help="pub-mode">
+                <div class="pub-segment">
+                    <button type="button" class="pub-segment__btn @(_mainMode == MainMode.PublicityMaterial ? "is-selected" : "")" @onclick="() => SetMainMode(MainMode.PublicityMaterial)">Publicity Material</button>
+                    <button type="button" class="pub-segment__btn @(_mainMode == MainMode.GiftArticles ? "is-selected" : "")" @onclick="() => SetMainMode(MainMode.GiftArticles)">Gift Articles</button>
                 </div>
-                <div class="pub-field">
-                    <label class="pub-label pub-req" for="pr-prod">Product</label>
-                    <select id="pr-prod" class="pub-input" @onchange="e => OnNativeSelect(e, OnProductChanged)">
-                        <option value="0">Select Product</option>
-                        @foreach (var p in _lookups.Products) { <option value="@p.Id" selected="@(_dto.ProductId == p.Id)">@p.Name</option> }
-                    </select>
-                </div>
-                <div class="pub-field" data-help="pub-qty">
-                    <label class="pub-label pub-req" for="pr-qty">Quantity</label>
-                    <input id="pr-qty" class="pub-input" type="number" min="0" placeholder="Enter Required Quantity" @bind="_qty" />
-                </div>
-                <div class="pub-field">
-                    <label class="pub-label pub-req" for="pr-by">Requested By</label>
-                    <select id="pr-by" class="pub-input" @onchange="e => OnNativeSelect(e, OnRequestedByChanged)">
-                        @foreach (var p in _lookups.People) { <option value="@p.UserId" selected="@(_dto.RequestedByUserId == p.UserId)">@p.Name @(p.Role is null ? "" : $"({p.Role})")</option> }
-                    </select>
-                </div>
+                @if (_mainMode == MainMode.PublicityMaterial)
+                {
+                    <span class="pub-segment-row__divider"></span>
+                    <div class="pub-segment">
+                        <button type="button" class="pub-segment__btn @(_productMode == ProductMode.Specific ? "is-selected" : "")" @onclick="() => SetProductMode(ProductMode.Specific)">
+                            <i class="bi @(_productMode == ProductMode.Specific ? "bi-record-circle" : "bi-circle")"></i> Specific Product</button>
+                        <button type="button" class="pub-segment__btn @(_productMode == ProductMode.General ? "is-selected" : "")" @onclick="() => SetProductMode(ProductMode.General)">
+                            <i class="bi @(_productMode == ProductMode.General ? "bi-record-circle" : "bi-circle")"></i> General Product</button>
+                    </div>
+                }
             </div>
+        }
 
-            @if (_existing.Count > 0)
-            {
-                <PubDocs Files="_existing" OnDelete="RemoveExisting" />
-            }
-            <div data-help="pub-design">
-                <PubDrop @bind-Files="_files" Multiple="false" Title="Drag and drop your design file here" />
-            </div>
+        @if (ShowBulk)
+        {
+            <section class="pub-card">
+                <h2 class="pub-h2">Request Details</h2>
+                <p class="pub-muted">Provide the publicity material, requested by and location details</p>
+                <div class="pub-form pub-form--5">
+                    <div class="pub-field">
+                        <label class="pub-label pub-req" for="prb-mat">Type of Publicity Material</label>
+                        <select id="prb-mat" class="pub-input" @bind="_dto.MaterialTypeId"><option value="0">Select Material</option>
+                            @foreach (var m in _lookups.Materials) { <option value="@m.Id">@m.Name</option> }</select>
+                    </div>
+                    <div class="pub-field">
+                        <label class="pub-label pub-req" for="prb-by">Requested By</label>
+                        <select id="prb-by" class="pub-input" @onchange="e => OnNativeSelect(e, OnRequestedByChanged)">
+                            @foreach (var p in _lookups.People) { <option value="@p.UserId" selected="@(_dto.RequestedByUserId == p.UserId)">@p.Name @(p.Role is null ? "" : $"({p.Role})")</option> }
+                        </select>
+                    </div>
+                    <div class="pub-field">
+                        <label class="pub-label pub-req" for="prb-state">State</label>
+                        <select id="prb-state" class="pub-input" value="@_dto.StateId" @onchange="StateChanged"><option value="0">Select State</option>
+                            @foreach (var s in _states) { <option value="@s.Id">@s.Name</option> }</select>
+                    </div>
+                    <div class="pub-field">
+                        <label class="pub-label pub-req" for="prb-region">Region</label>
+                        <select id="prb-region" class="pub-input" value="@_dto.RegionId" @onchange="RegionChanged"><option value="0">Select Region</option>
+                            @foreach (var s in _regions) { <option value="@s.Id">@s.Name</option> }</select>
+                    </div>
+                    <div class="pub-field">
+                        <label class="pub-label pub-req" for="prb-hq">Headquarter (HQ)</label>
+                        <select id="prb-hq" class="pub-input" @bind="_dto.HeadquarterId"><option value="0">Select Headquarter</option>
+                            @foreach (var s in _hqs) { <option value="@s.Id">@s.Name</option> }</select>
+                    </div>
+                </div>
 
-            <div class="pub-field">
-                <label class="pub-label" for="pr-rem">Remarks</label>
-                <textarea id="pr-rem" class="pub-input pub-textarea" rows="4" placeholder="Need to add your remarks" @bind="_dto.Remarks"></textarea>
-            </div>
-        </section>
+                <div class="pub-upload-box">
+                    <div class="pub-upload-box__icon"><i class="bi bi-file-earmark-excel" aria-hidden="true"></i></div>
+                    <div class="pub-upload-box__text">
+                        <span class="pub-upload-box__title">Upload Request Details via Excel</span>
+                        <span class="pub-muted">Upload an Excel file with product, quantity, requested by and design details.</span>
+                    </div>
+                    <div class="pub-upload-box__action">
+                        <label class="pub-btn pub-btn--primary" style="cursor:pointer">
+                            @(_importing ? "Importing..." : "Choose Excel File")
+                            <InputFile OnChange="OnExcelPicked" accept=".xlsx,.xls" style="display:none" disabled="@_importing" />
+                        </label>
+                        @if (_excelFileName is not null) { <span class="pub-muted pub-upload-box__hint">@_excelFileName</span> }
+                    </div>
+                </div>
+            </section>
 
-        <section class="pub-card" data-help="pub-location">
-            <h2 class="pub-h2">Location</h2>
-            <p class="pub-muted">Select the state, region and headquarters where the material is required.</p>
-            <div class="pub-form pub-form--3">
-                <div class="pub-field">
-                    <label class="pub-label pub-req" for="pr-state">State</label>
-                    <select id="pr-state" class="pub-input" value="@_dto.StateId" @onchange="StateChanged"><option value="0">Select State</option>
-                        @foreach (var s in _states) { <option value="@s.Id">@s.Name</option> }</select>
+            <section class="pub-card">
+                <div class="pub-card__head">
+                    <div>
+                        <h2 class="pub-h2">Request Items (@_bulkRows.Count)</h2>
+                        <p class="pub-muted">Review the imported details, edit if needed, update design and then submit the request.</p>
+                    </div>
+                    <div class="pub-actions-right">
+                        <label class="pub-btn pub-btn--line" style="cursor:pointer">
+                            <i class="bi bi-upload"></i> Apply Design to Selected (@SelectedCount)
+                            <InputFile OnChange="ApplyDesignToSelected" style="display:none" disabled="@(SelectedCount == 0)" />
+                        </label>
+                        <button type="button" class="pub-btn pub-btn--line" @onclick="AddRow"><i class="bi bi-plus-circle"></i> Add New</button>
+                    </div>
                 </div>
+
+                @if (_bulkRows.Count == 0)
+                {
+                    <EmptyState Icon="bi-upload" Title="No items yet" Message="Upload an Excel file or add a row manually to get started." Compact="true" />
+                }
+                else
+                {
+                    <div class="pub-table-wrap">
+                        <table class="pub-table">
+                            <thead><tr>
+                                <th></th><th>S.No</th><th>Product</th><th>Quantity</th><th>Design Document</th><th>Action</th>
+                            </tr></thead>
+                            <tbody>
+                                @for (var i = 0; i < _bulkRows.Count; i++)
+                                {
+                                    var row = _bulkRows[i];
+                                    var idx = i;
+                                    <tr>
+                                        <td><input type="checkbox" checked="@row.Selected" @onchange="e => row.Selected = e.Value is bool b && b" /></td>
+                                        <td data-label="S.No">@(idx + 1)</td>
+                                        <td data-label="Product">
+                                            <select class="pub-input" value="@row.ProductId" @onchange="e => OnRowProductChanged(row, e)">
+                                                <option value="0">Select Product</option>
+                                                @foreach (var p in _lookups.Products) { <option value="@p.Id" selected="@(row.ProductId == p.Id)">@p.Name</option> }
+                                            </select>
+                                            @if (row.Error is not null) { <small class="pub-text-red">@row.Error</small> }
+                                        </td>
+                                        <td data-label="Quantity"><input type="number" min="0" class="pub-input pub-input--sm" @bind="row.Quantity" @bind:event="oninput" /></td>
+                                        <td data-label="Design Document">
+                                            @if (row.File is not null)
+                                            {
+                                                <span class="pub-doc__meta">@row.File.Name <button type="button" class="pub-icon-btn" @onclick="() => row.File = null"><i class="bi bi-x-lg"></i></button></span>
+                                            }
+                                            else
+                                            {
+                                                <label class="pub-link-btn" style="cursor:pointer">
+                                                    <i class="bi bi-upload"></i> Upload Design
+                                                    <InputFile OnChange="e => OnRowFilePicked(row, e)" style="display:none" />
+                                                </label>
+                                            }
+                                        </td>
+                                        <td data-label="Action"><button type="button" class="pub-icon-btn" @onclick="() => RemoveRow(row)" aria-label="Remove row"><i class="bi bi-trash pub-text-red"></i></button></td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+
                 <div class="pub-field">
-                    <label class="pub-label pub-req" for="pr-region">Region</label>
-                    <select id="pr-region" class="pub-input" value="@_dto.RegionId" @onchange="RegionChanged"><option value="0">Select Region</option>
-                        @foreach (var s in _regions) { <option value="@s.Id">@s.Name</option> }</select>
+                    <label class="pub-label" for="prb-rem">Remarks</label>
+                    <textarea id="prb-rem" class="pub-input pub-textarea pub-textarea--sm" rows="2" placeholder="Need to add your remarks" @bind="_dto.Remarks"></textarea>
                 </div>
+            </section>
+        }
+        else
+        {
+            <section class="pub-card">
+                <h2 class="pub-h2">Request Details</h2>
+                <p class="pub-muted">Provide the @(GiftMode ? "gift article" : "publicity material"), product, quantity and supporting file details</p>
+                <div class="pub-form pub-form--4">
+                    <div class="pub-field" data-help="pub-material">
+                        <label class="pub-label pub-req" for="pr-mat">@(GiftMode ? "Type of Gift Article" : "Type of Publicity Material")</label>
+                        <select id="pr-mat" class="pub-input" @bind="_dto.MaterialTypeId"><option value="0">Select Material</option>
+                            @foreach (var m in _lookups.Materials) { <option value="@m.Id">@m.Name</option> }</select>
+                    </div>
+                    <div class="pub-field">
+                        <label class="pub-label pub-req" for="pr-prod">@(GiftMode ? "Product / Article" : "Product")</label>
+                        <select id="pr-prod" class="pub-input" @onchange="e => OnNativeSelect(e, OnProductChanged)">
+                            <option value="0">Select Product</option>
+                            @foreach (var p in _lookups.Products) { <option value="@p.Id" selected="@(_dto.ProductId == p.Id)">@p.Name</option> }
+                        </select>
+                    </div>
+                    <div class="pub-field" data-help="pub-qty">
+                        <label class="pub-label pub-req" for="pr-qty">Quantity</label>
+                        <input id="pr-qty" class="pub-input" type="number" min="0" placeholder="Enter Required Quantity" @bind="_qty" />
+                    </div>
+                    <div class="pub-field">
+                        <label class="pub-label pub-req" for="pr-by">Requested By</label>
+                        <select id="pr-by" class="pub-input" @onchange="e => OnNativeSelect(e, OnRequestedByChanged)">
+                            @foreach (var p in _lookups.People) { <option value="@p.UserId" selected="@(_dto.RequestedByUserId == p.UserId)">@p.Name @(p.Role is null ? "" : $"({p.Role})")</option> }
+                        </select>
+                    </div>
+                </div>
+
+                @if (_existing.Count > 0)
+                {
+                    <PubDocs Files="_existing" OnDelete="RemoveExisting" />
+                }
+                <div data-help="pub-design">
+                    <PubDrop @bind-Files="_files" Multiple="false" Compact="true" Title="Upload Design (Optional)" Subtitle="@(GiftMode ? "Attach the article design if available" : "Attach the material design if available")" />
+                </div>
+
                 <div class="pub-field">
-                    <label class="pub-label pub-req" for="pr-hq">Headquarter (HQ)</label>
-                    <select id="pr-hq" class="pub-input" @bind="_dto.HeadquarterId"><option value="0">Select Headquarter</option>
-                        @foreach (var s in _hqs) { <option value="@s.Id">@s.Name</option> }</select>
+                    <label class="pub-label" for="pr-rem">Remarks</label>
+                    <textarea id="pr-rem" class="pub-input pub-textarea pub-textarea--sm" rows="2" placeholder="Need to add your remarks" @bind="_dto.Remarks"></textarea>
                 </div>
-            </div>
-        </section>
+            </section>
+
+            <section class="pub-card" data-help="pub-location">
+                <h2 class="pub-h2">Location</h2>
+                <p class="pub-muted">Select the state, region and headquarters where the material is required.</p>
+                <div class="pub-form pub-form--3">
+                    <div class="pub-field">
+                        <label class="pub-label pub-req" for="pr-state">State</label>
+                        <select id="pr-state" class="pub-input" value="@_dto.StateId" @onchange="StateChanged"><option value="0">Select State</option>
+                            @foreach (var s in _states) { <option value="@s.Id">@s.Name</option> }</select>
+                    </div>
+                    <div class="pub-field">
+                        <label class="pub-label pub-req" for="pr-region">Region</label>
+                        <select id="pr-region" class="pub-input" value="@_dto.RegionId" @onchange="RegionChanged"><option value="0">Select Region</option>
+                            @foreach (var s in _regions) { <option value="@s.Id">@s.Name</option> }</select>
+                    </div>
+                    <div class="pub-field">
+                        <label class="pub-label pub-req" for="pr-hq">Headquarter (HQ)</label>
+                        <select id="pr-hq" class="pub-input" @bind="_dto.HeadquarterId"><option value="0">Select Headquarter</option>
+                            @foreach (var s in _hqs) { <option value="@s.Id">@s.Name</option> }</select>
+                    </div>
+                </div>
+            </section>
+        }
 
         <div class="pub-footer" data-help="pub-submit">
             <a class="pub-btn pub-btn--grey" href="@Back"><i class="bi bi-chevron-double-left"></i> Back to List</a>
@@ -122,6 +273,46 @@
     private List<PubOption> _states = new(), _regions = new(), _hqs = new();
     private bool _busy;
 
+    // ---- mode toggles (new-request only; Id is null) --------------------------------------
+    private enum MainMode { PublicityMaterial, GiftArticles }
+    private enum ProductMode { Specific, General }
+    private MainMode _mainMode = MainMode.PublicityMaterial;
+    private ProductMode _productMode = ProductMode.General;
+    private bool GiftMode => Id is null && _mainMode == MainMode.GiftArticles;
+    private bool ShowBulk => Id is null && _mainMode == MainMode.PublicityMaterial && _productMode == ProductMode.Specific;
+
+    // Switching to/from the bulk (Specific Product) view conditionally destroys and recreates the
+    // #pr-prod/#pr-by <select> elements (Blazor @if, not just CSS hide/show) - Select2's own binding
+    // on the OLD element is lost, so _select2Ready must be reset to force OnAfterRenderAsync to
+    // re-initialize it against whichever new <select> actually exists once the manual form reappears.
+    private void SetMainMode(MainMode mode)
+    {
+        if (_mainMode == mode) return;
+        _mainMode = mode;
+        _select2Ready = false;
+    }
+
+    private void SetProductMode(ProductMode mode)
+    {
+        if (_productMode == mode) return;
+        _productMode = mode;
+        _select2Ready = false;
+    }
+
+    // ---- "Specific Product" bulk Excel import ----------------------------------------------
+    private sealed class BulkRowVm
+    {
+        public int ProductId;
+        public int Quantity = 1;
+        public IBrowserFile? File;
+        public bool Selected;
+        public string? Error;
+    }
+    private List<BulkRowVm> _bulkRows = new();
+    private string? _excelFileName;
+    private bool _importing;
+    private int SelectedCount => _bulkRows.Count(r => r.Selected);
+
     // /PublicityRequest/new, /PublicityRequest/edit/{id} and /PublicityReview/edit/{id} all route
     // here (same component type), so the Blazor router reuses this instance across them instead of
     // recreating it - OnInitializedAsync only ever runs once per instance, so navigating from one
@@ -149,6 +340,10 @@
         _qty = null;
         _dto.MaterialTypeId = _dto.ProductId = 0;
         _dto.Remarks = null;
+        _mainMode = MainMode.PublicityMaterial;
+        _productMode = ProductMode.General;
+        _bulkRows = new();
+        _excelFileName = null;
 
         _lookups = await Api.LookupsAsync();
         _states = await Api.StatesAsync() ?? new();
@@ -195,7 +390,7 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (_lookups is null) return;
+        if (_lookups is null || ShowBulk) return;
         if (!_select2Ready)
         {
             _select2Ready = true;
@@ -261,8 +456,73 @@
         if (await Api.DeleteFileAsync(f.Id)) _existing.Remove(f);
     }
 
+    // ---- "Specific Product" bulk rows -------------------------------------------------------
+
+    private async Task OnExcelPicked(InputFileChangeEventArgs e)
+    {
+        _excelFileName = e.File.Name;
+        _importing = true;
+        var rows = await Api.ImportExcelAsync(e.File);
+        _importing = false;
+        if (rows is null) return;
+        foreach (var row in rows)
+            _bulkRows.Add(new BulkRowVm { ProductId = row.ProductId, Quantity = row.Quantity, Error = row.Error });
+        Toast.Success($"{rows.Count} row(s) imported.");
+    }
+
+    private void AddRow() => _bulkRows.Add(new BulkRowVm { Quantity = 1 });
+    private void RemoveRow(BulkRowVm row) => _bulkRows.Remove(row);
+
+    private void OnRowProductChanged(BulkRowVm row, ChangeEventArgs e)
+    {
+        row.ProductId = int.TryParse(e.Value?.ToString(), out var v) ? v : 0;
+        row.Error = null;
+    }
+
+    private void OnRowFilePicked(BulkRowVm row, InputFileChangeEventArgs e) => row.File = e.File;
+
+    private void ApplyDesignToSelected(InputFileChangeEventArgs e)
+    {
+        var selected = _bulkRows.Where(r => r.Selected).ToList();
+        foreach (var row in selected) row.File = e.File;
+        if (selected.Count > 0) Toast.Success($"Design applied to {selected.Count} row(s).");
+    }
+
+    private async Task SaveBulkAsync(bool submit)
+    {
+        string? error = _dto.MaterialTypeId <= 0 ? "Select the type of publicity material."
+            : _dto.HeadquarterId <= 0 ? "Select the state, region and headquarter."
+            : _bulkRows.Count == 0 ? "Import or add at least one item." : null;
+        if (error != null) { Toast.Error(error); return; }
+        foreach (var row in _bulkRows)
+            row.Error = row.ProductId <= 0 ? "Select the product." : row.Quantity < 0 ? "Enter a valid quantity." : null;
+        if (_bulkRows.Any(r => r.Error != null)) { Toast.Error("Fix the highlighted rows before continuing."); return; }
+        if (submit && !await Toast.ConfirmAsync("Submit request", $"Submit {_bulkRows.Count} request(s) for RM review? You cannot edit them after submission unless they are returned.", "Submit")) return;
+
+        _busy = true;
+        var bulk = new PubBulkUpsertDto
+        {
+            MaterialTypeId = _dto.MaterialTypeId, RequestedByUserId = _dto.RequestedByUserId,
+            StateId = _dto.StateId, RegionId = _dto.RegionId, HeadquarterId = _dto.HeadquarterId,
+            Remarks = _dto.Remarks, Submit = submit,
+            Items = _bulkRows.Select(r => new PubBulkItemDto { ProductId = r.ProductId, Quantity = r.Quantity }).ToList()
+        };
+        var created = await Api.CreateBulkAsync(bulk);
+        if (created is null) { _busy = false; return; }
+        for (var i = 0; i < created.Count && i < _bulkRows.Count; i++)
+        {
+            var file = _bulkRows[i].File;
+            if (file is not null) await Api.UploadAsync(created[i].Id, PublicityFileKind.Design, new[] { file });
+        }
+        _busy = false;
+        Toast.Success(submit ? $"{created.Count} request(s) submitted for RM review." : $"{created.Count} draft(s) saved.");
+        Nav.NavigateTo("/PublicityRequest");
+    }
+
     private async Task SaveAsync(bool submit)
     {
+        if (ShowBulk) { await SaveBulkAsync(submit); return; }
+
         string? error = _dto.MaterialTypeId <= 0 ? "Select the type of publicity material."
             : _dto.ProductId <= 0 ? "Select the product."
             : _qty is not >= 0 ? "Enter the required quantity."
