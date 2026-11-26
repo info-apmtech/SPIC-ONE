@@ -65,7 +65,7 @@
                     <div class="pub-field">
                         <label class="pub-label pub-req" for="prb-mat">Type of Publicity Material</label>
                         <select id="prb-mat" class="pub-input" @bind="_dto.MaterialTypeId"><option value="0">Select Material</option>
-                            @foreach (var m in _lookups.Materials) { <option value="@m.Id">@m.Name</option> }</select>
+                            @foreach (var m in VisibleMaterials) { <option value="@m.Id">@m.Name</option> }</select>
                     </div>
                     <div class="pub-field">
                         <label class="pub-label pub-req" for="prb-by">Requested By</label>
@@ -127,10 +127,17 @@
                 }
                 else
                 {
+                    @* The table's own thead (and the Select All checkbox inside it) is hidden on
+                       phone by the shared "tables become cards" rule (.pub-table thead), so this
+                       gives phone the same Select All affordance via .pub-show-sm instead of
+                       reintroducing the whole column-header row there. *@
+                    <label class="pub-show-sm pub-muted" style="margin-bottom:8px;">
+                        <input type="checkbox" checked="@AllRowsSelected" @onchange="ToggleSelectAll" aria-label="Select all rows" /> Select All
+                    </label>
                     <div class="pub-table-wrap">
                         <table class="pub-table">
                             <thead><tr>
-                                <th></th><th>S.No</th><th>Product</th><th>Quantity</th><th>Design Document</th><th>Action</th>
+                                <th><input type="checkbox" @ref="_selectAllCheckboxRef" checked="@AllRowsSelected" @onchange="ToggleSelectAll" aria-label="Select all rows" /></th><th>S.No</th><th>Product</th><th>Quantity</th><th>Design Document</th><th>Action</th>
                             </tr></thead>
                             <tbody>
                                 @for (var i = 0; i < _bulkRows.Count; i++)
@@ -184,7 +191,7 @@
                     <div class="pub-field" data-help="pub-material">
                         <label class="pub-label pub-req" for="pr-mat">@(GiftMode ? "Type of Gift Article" : "Type of Publicity Material")</label>
                         <select id="pr-mat" class="pub-input" @bind="_dto.MaterialTypeId"><option value="0">Select Material</option>
-                            @foreach (var m in _lookups.Materials) { <option value="@m.Id">@m.Name</option> }</select>
+                            @foreach (var m in VisibleMaterials) { <option value="@m.Id">@m.Name</option> }</select>
                     </div>
                     <div class="pub-field">
                         <label class="pub-label pub-req" for="pr-prod">@(GiftMode ? "Product / Article" : "Product")</label>
@@ -281,6 +288,25 @@
     private bool GiftMode => Id is null && _mainMode == MainMode.GiftArticles;
     private bool ShowBulk => Id is null && _mainMode == MainMode.PublicityMaterial && _productMode == ProductMode.Specific;
 
+    // Publicity Material Master (2026-11-26): Specific Product only ever shows Category.Specific
+    // materials; General Product and Gift Articles both show Category.General (Gift Articles has no
+    // category of its own - it reuses the General Product-style manual-entry list, per the master
+    // plan's "do not mix Gift Articles into the material type list unless the data model requires
+    // it", and the data model does not). Editing an existing request (Id is not null) always shows
+    // the full unfiltered list exactly as before - the Specific/General toggle only ever applies to
+    // brand-new requests (see the big comment at the top of this file).
+    // GiftMode forces General regardless of _productMode's current value - _productMode is only
+    // ever shown/changed while _mainMode == PublicityMaterial (the Specific/General buttons are
+    // hidden entirely in Gift Articles, see the segmented row above), so it can be left stale at
+    // Specific from an earlier PublicityMaterial selection; without this guard, switching to Gift
+    // Articles right after picking Specific Product would wrongly keep filtering to Specific.
+    private PublicityMaterialCategory CurrentMaterialCategory =>
+        !GiftMode && _productMode == ProductMode.Specific ? PublicityMaterialCategory.Specific : PublicityMaterialCategory.General;
+
+    private IEnumerable<PubMaterialOption> VisibleMaterials => _lookups is null
+        ? Enumerable.Empty<PubMaterialOption>()
+        : Id is not null ? _lookups.Materials : _lookups.Materials.Where(m => m.Category == CurrentMaterialCategory);
+
     // Switching to/from the bulk (Specific Product) view conditionally destroys and recreates the
     // #pr-prod/#pr-by <select> elements (Blazor @if, not just CSS hide/show) - Select2's own binding
     // on the OLD element is lost, so _select2Ready must be reset to force OnAfterRenderAsync to
@@ -290,6 +316,7 @@
         if (_mainMode == mode) return;
         _mainMode = mode;
         _select2Ready = false;
+        _dto.MaterialTypeId = 0;
     }
 
     private void SetProductMode(ProductMode mode)
@@ -297,6 +324,11 @@
         if (_productMode == mode) return;
         _productMode = mode;
         _select2Ready = false;
+        // VisibleMaterials just changed category (Specific <-> General) - a previously-picked
+        // MaterialTypeId from the old category is no longer in the dropdown, and ValidateAsync
+        // server-side only checks existence/active, not category, so a stale value could otherwise
+        // slip through mismatched. Force a fresh pick.
+        _dto.MaterialTypeId = 0;
     }
 
     // ---- "Specific Product" bulk Excel import ----------------------------------------------
@@ -312,6 +344,19 @@
     private string? _excelFileName;
     private bool _importing;
     private int SelectedCount => _bulkRows.Count(r => r.Selected);
+
+    // ---- Select All (Request Items table header checkbox) ---------------------------------
+    // Dynamic by construction, not by any extra bookkeeping: AllRowsSelected/SelectedCount both
+    // read _bulkRows live, so rows added (AddRow/Excel import) or removed (RemoveRow) automatically
+    // fall in/out of "all selected" without any special-case reset code.
+    private ElementReference _selectAllCheckboxRef;
+    private bool AllRowsSelected => _bulkRows.Count > 0 && _bulkRows.All(r => r.Selected);
+
+    private void ToggleSelectAll(ChangeEventArgs e)
+    {
+        var select = e.Value is bool b && b;
+        foreach (var row in _bulkRows) row.Selected = select;
+    }
 
     // /PublicityRequest/new, /PublicityRequest/edit/{id} and /PublicityReview/edit/{id} all route
     // here (same component type), so the Blazor router reuses this instance across them instead of
@@ -367,6 +412,16 @@
                     Id = d.ProductId,
                     Name = string.IsNullOrWhiteSpace(d.Product) ? $"Product #{d.ProductId} (unavailable)" : $"{d.Product} (Inactive)"
                 });
+            // Same gap, same fix, for Material - Lookups only returns ACTIVE materials (so a request
+            // can be edited after its material is deactivated via Publicity Material Master without
+            // losing the saved value from the dropdown). Category doesn't matter here: edit mode's
+            // VisibleMaterials above never filters by category, only create mode does.
+            if (_lookups is not null && d.MaterialTypeId > 0 && _lookups.Materials.All(m => m.Id != d.MaterialTypeId))
+                _lookups.Materials.Insert(0, new PubMaterialOption
+                {
+                    Id = d.MaterialTypeId,
+                    Name = string.IsNullOrWhiteSpace(d.Material) ? $"Material #{d.MaterialTypeId} (unavailable)" : $"{d.Material} (Inactive)"
+                });
             _indent = d.IndentNo;
             (_dto.MaterialTypeId, _dto.ProductId, _qty, _dto.RequestedByUserId, _dto.Remarks) = (d.MaterialTypeId, d.ProductId, d.Quantity, d.RequestedByUserId, d.Remarks);
             (_dto.StateId, _dto.RegionId, _dto.HeadquarterId) = (d.StateId, d.RegionId, d.HeadquarterId);
@@ -390,7 +445,21 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (_lookups is null || ShowBulk) return;
+        if (ShowBulk)
+        {
+            // .indeterminate is a DOM property, not an HTML attribute/Blazor-bindable value, so the
+            // header checkbox's "some but not all rows selected" state has to be pushed via JS after
+            // every render where it could have changed (a row toggled, added or removed). Guarded on
+            // _bulkRows.Count > 0 because the checkbox (and its @ref) only exists in the DOM once the
+            // EmptyState ("No items yet") branch is no longer showing.
+            if (_bulkRows.Count > 0)
+            {
+                var indeterminate = SelectedCount > 0 && SelectedCount < _bulkRows.Count;
+                await JS.InvokeVoidAsync("setIndeterminate", _selectAllCheckboxRef, indeterminate);
+            }
+            return;
+        }
+        if (_lookups is null) return;
         if (!_select2Ready)
         {
             _select2Ready = true;

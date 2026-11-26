@@ -87,7 +87,8 @@ namespace SpicAPI.Controllers
             return Ok(new PubLookupsDto
             {
                 Materials = await _db.PublicityMaterialTypes.AsNoTracking().Where(m => m.IsActive)
-                    .OrderBy(m => m.SortOrder).ThenBy(m => m.Name).Select(m => new PubOption { Id = m.Id, Name = m.Name }).ToListAsync(),
+                    .OrderBy(m => m.SortOrder).ThenBy(m => m.Name)
+                    .Select(m => new PubMaterialOption { Id = m.Id, Name = m.Name, Category = m.Category }).ToListAsync(),
                 Products = await _db.Products.AsNoTracking().Where(p => p.IsActive)
                     .OrderBy(p => p.Name).Select(p => new PubOption { Id = p.Id, Name = p.Name }).ToListAsync(),
                 Couriers = couriers.Concat(KnownCouriers).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(x => x).ToList(),
@@ -100,6 +101,105 @@ namespace SpicAPI.Controllers
                 MyHqId = ClaimInt("spic:hq_id"),
                 MyScope = await ScopeLabelAsync()
             });
+        }
+
+        // ================================================================ material master (ADMIN-MD CS only)
+        // Every endpoint below is gated on IsAdminMdCsAsync() (plus the super-admin bypass every other
+        // admin-only Publicity action already allows) - never DGM-MD CS, SMM, SMD, RM or RMDO, even
+        // though those roles DO reach the ordinary Lookups endpoint above for request creation.
+
+        [HttpGet("materials")]
+        public async Task<IActionResult> MaterialsAdmin()
+        {
+            if (!await IsAdminMdCsAsync() && !IsSuper()) return Forbid();
+            var rows = await _db.PublicityMaterialTypes.AsNoTracking()
+                .OrderBy(m => m.Category).ThenBy(m => m.SortOrder).ThenBy(m => m.Name)
+                .Select(m => new PubMaterialAdminDto { Id = m.Id, Name = m.Name, Category = m.Category, IsActive = m.IsActive, SortOrder = m.SortOrder })
+                .ToListAsync();
+            return Ok(rows);
+        }
+
+        [HttpPost("materials")]
+        public async Task<IActionResult> CreateMaterial([FromBody] PubMaterialUpsertDto dto)
+        {
+            if (!await IsAdminMdCsAsync() && !IsSuper()) return Forbid();
+            var error = await ValidateMaterialAsync(dto, null);
+            if (error is not null) return BadRequest(error);
+
+            var maxSort = await _db.PublicityMaterialTypes.AsNoTracking()
+                .Where(m => m.Category == dto.Category).Select(m => (int?)m.SortOrder).MaxAsync() ?? 0;
+            var m2 = new PublicityMaterialType
+            {
+                Name = dto.Name.Trim(),
+                Category = dto.Category,
+                IsActive = dto.IsActive,
+                SortOrder = maxSort + 1
+            };
+            _db.PublicityMaterialTypes.Add(m2);
+            await _db.SaveChangesAsync();
+            return Ok(new PubMaterialAdminDto { Id = m2.Id, Name = m2.Name, Category = m2.Category, IsActive = m2.IsActive, SortOrder = m2.SortOrder });
+        }
+
+        [HttpPut("materials/{id:int}")]
+        public async Task<IActionResult> UpdateMaterial(int id, [FromBody] PubMaterialUpsertDto dto)
+        {
+            if (!await IsAdminMdCsAsync() && !IsSuper()) return Forbid();
+            var m2 = await _db.PublicityMaterialTypes.FirstOrDefaultAsync(m => m.Id == id);
+            if (m2 is null) return NotFound();
+            var error = await ValidateMaterialAsync(dto, id);
+            if (error is not null) return BadRequest(error);
+
+            m2.Name = dto.Name.Trim();
+            m2.Category = dto.Category;
+            m2.IsActive = dto.IsActive;
+            await _db.SaveChangesAsync();
+            return Ok(new PubMaterialAdminDto { Id = m2.Id, Name = m2.Name, Category = m2.Category, IsActive = m2.IsActive, SortOrder = m2.SortOrder });
+        }
+
+        [HttpDelete("materials/{id:int}")]
+        public async Task<IActionResult> DeleteMaterial(int id)
+        {
+            if (!await IsAdminMdCsAsync() && !IsSuper()) return Forbid();
+            var m2 = await _db.PublicityMaterialTypes.FirstOrDefaultAsync(m => m.Id == id);
+            if (m2 is null) return NotFound();
+
+            // FK_PublicityRequests_PublicityMaterialTypes_MaterialTypeId is ReferentialAction.Restrict
+            // (V31_PublicityTracking) - the database would already reject this delete if any request
+            // (including a soft-deleted one, IsDeleted is a display flag only, not a real row removal)
+            // references it. Checking first gives a clear message instead of a raw DbUpdateException,
+            // and - per the master plan - deactivation is the safe alternative so existing requests
+            // keep displaying their saved material type (PublicityForm/PubDetailDto.Material already
+            // resolve the name with no IsActive filter either way).
+            var inUse = await _db.PublicityRequests.AsNoTracking().CountAsync(r => r.MaterialTypeId == id);
+            if (inUse > 0)
+                return BadRequest(new
+                {
+                    Message = $"Cannot delete \"{m2.Name}\" - it is used by {inUse} publicity request(s). Deactivate it instead to hide it from new requests."
+                });
+
+            _db.PublicityMaterialTypes.Remove(m2);
+            await _db.SaveChangesAsync();
+            return Ok(new { Success = true });
+        }
+
+        private async Task<string?> ValidateMaterialAsync(PubMaterialUpsertDto dto, int? id)
+        {
+            var name = dto.Name?.Trim();
+            if (string.IsNullOrWhiteSpace(name)) return "Enter the material name.";
+            if (name.Length > 100) return "Material name must be 100 characters or fewer.";
+            if (!Enum.IsDefined(typeof(PublicityMaterialCategory), dto.Category)) return "Select a valid category.";
+            // Duplicate check only ever blocks another ACTIVE row with the same name in the same
+            // category - an inactive (deactivated) material keeping its old name never blocks a
+            // fresh/renamed active one from reusing it, consistent with "prefer deactivation over
+            // deletion" (the deactivated row stays only for historical FK integrity, not as a name
+            // reservation).
+            if (dto.IsActive)
+            {
+                var dup = await _db.PublicityMaterialTypes.AsNoTracking().AnyAsync(m =>
+                    m.Id != (id ?? 0) && m.IsActive && m.Category == dto.Category && m.Name.ToLower() == name.ToLower());
+                if (dup) return "An active material with this name already exists in this category.";
+            }
+            return null;
         }
 
         private async Task<List<PubPerson>> GetAuthorizedPeopleAsync()
@@ -713,6 +813,16 @@ namespace SpicAPI.Controllers
             if (!isChainRole && !await IsAdminMdCsAsync() && !await IsDgmMdCsAsync() && !IsSuper()) return Forbid();
             if (dto.Items is null || dto.Items.Count == 0) return BadRequest(new { Success = false, Message = "Add at least one item." });
             if (dto.Items.Count > 200) return BadRequest(new { Success = false, Message = "Too many items in a single request (max 200)." });
+
+            // This endpoint is the "Specific Product" Excel-import flow only (PublicityForm's
+            // ShowBulk) - unlike the single-item Create/Update path, the server here definitely knows
+            // the intended category (there is no General/Gift Articles equivalent of this endpoint),
+            // so it can and must reject a General-category material slipping through, not just check
+            // existence/active like ValidateAsync already does for every row below.
+            var materialCategory = await _db.PublicityMaterialTypes.AsNoTracking()
+                .Where(m => m.Id == dto.MaterialTypeId).Select(m => (PublicityMaterialCategory?)m.Category).FirstOrDefaultAsync();
+            if (materialCategory != PublicityMaterialCategory.Specific)
+                return BadRequest(new { Success = false, Message = "Select a Specific Product material type for this import." });
 
             PubUpsertDto RowDto(PubBulkItemDto item) => new()
             {
@@ -1989,7 +2099,20 @@ namespace SpicAPI.Controllers
         private async Task<string?> ValidateAsync(PubUpsertDto dto, int? requestId = null)
         {
             if (dto.Quantity < 0) return "Enter the required quantity.";
-            if (!await _db.PublicityMaterialTypes.AnyAsync(m => m.Id == dto.MaterialTypeId)) return "Select the type of publicity material.";
+            var material = await _db.PublicityMaterialTypes.AsNoTracking()
+                .Where(m => m.Id == dto.MaterialTypeId).Select(m => new { m.IsActive }).FirstOrDefaultAsync();
+            if (material is null) return "Select the type of publicity material.";
+            if (!material.IsActive)
+            {
+                // Deactivated materials are rejected for a brand-new pick, but an existing request
+                // that already held this (now-inactive) material before the edit must still be
+                // allowed to save unrelated changes without being forced to switch it - see
+                // PublicityMaterialMaster's deactivate action and PublicityForm's historical-material
+                // handling (PubDetailDto.Material resolves the name with no IsActive filter either).
+                var unchanged = requestId.HasValue && await _db.PublicityRequests.AsNoTracking()
+                    .AnyAsync(r => r.Id == requestId.Value && r.MaterialTypeId == dto.MaterialTypeId);
+                if (!unchanged) return "The selected publicity material type is no longer active. Please choose another.";
+            }
             if (!await _db.Products.AnyAsync(p => p.Id == dto.ProductId)) return "Select the product.";
             if (!await _db.Headquarters.AnyAsync(h => h.Id == dto.HeadquarterId && h.RegionId == dto.RegionId)) return "Select the headquarter.";
             if (!await _db.Regions.AnyAsync(x => x.Id == dto.RegionId && x.StateId == dto.StateId)) return "Select the region.";

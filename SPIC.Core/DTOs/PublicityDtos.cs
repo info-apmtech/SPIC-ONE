@@ -26,6 +26,35 @@ namespace SPIC.Core.DTOs
         public string Name { get; set; } = "";
     }
 
+    /// <summary>Materials lookup row - like PubOption, plus Category so PublicityForm can filter the
+    /// one active-materials list into Specific Product / General Product (Gift Articles reuses the
+    /// General bucket) without a second API call.</summary>
+    public sealed class PubMaterialOption
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = "";
+        public PublicityMaterialCategory Category { get; set; }
+    }
+
+    /// <summary>Publicity Material Master grid row (ADMIN-MD CS only) - every material regardless of
+    /// active status, since deactivated ones must still be visible/manageable here even though
+    /// PubLookupsDto.Materials (used by request creation) only ever returns active ones.</summary>
+    public sealed class PubMaterialAdminDto
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = "";
+        public PublicityMaterialCategory Category { get; set; }
+        public bool IsActive { get; set; }
+        public int SortOrder { get; set; }
+    }
+
+    public sealed class PubMaterialUpsertDto
+    {
+        public string Name { get; set; } = "";
+        public PublicityMaterialCategory Category { get; set; }
+        public bool IsActive { get; set; } = true;
+    }
+
     public sealed class PubPerson
     {
         public string UserId { get; set; } = "";
@@ -35,7 +64,7 @@ namespace SPIC.Core.DTOs
 
     public sealed class PubLookupsDto
     {
-        public List<PubOption> Materials { get; set; } = new();
+        public List<PubMaterialOption> Materials { get; set; } = new();
         public List<PubOption> Products { get; set; } = new();
         public List<string> Couriers { get; set; } = new();
         public List<string> Vendors { get; set; } = new();

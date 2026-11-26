@@ -3,6 +3,15 @@
 // inline versions of everything below.
 
 // ---------------------------------------------------------------------------
+// Checkbox indeterminate state (PublicityForm's "Select All" header checkbox,
+// Request Items table) - .indeterminate is a DOM property, not an HTML
+// attribute, so it can't be set via a plain Razor bool attribute/@bind.
+// ---------------------------------------------------------------------------
+window.setIndeterminate = (el, value) => {
+    if (el) el.indeterminate = value;
+};
+
+// ---------------------------------------------------------------------------
 // Leaflet map helpers (Logistics, LogisticsMaster, Register, SubDealerRegistration)
 // ---------------------------------------------------------------------------
 var mapInstances = {};

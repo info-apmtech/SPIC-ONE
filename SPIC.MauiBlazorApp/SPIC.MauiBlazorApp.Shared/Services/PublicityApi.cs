@@ -42,6 +42,10 @@ public sealed class PublicityApi : ApiClientBase, IDisposable
     public bool IsDgmMdCs => Role == AppRole.MDHOD ||
         (Role == AppRole.CommonRole && Login.DesignationName is "DGM MD CS" or "DGM-MD CS");
     public bool IsDispatcher => IsAdminMdCs || IsDgmMdCs || Role is AppRole.Admin or AppRole.SuperAdmin or AppRole.CorporateAdmin;
+    /// <summary>Publicity Material Master (ADMIN-MD CS only, deliberately excluding IsDgmMdCs unlike
+    /// IsDispatcher above - matches PublicityController's IsAdminMdCsAsync()/IsSuper() gate on the
+    /// materials endpoints exactly, so the menu/page never show a button the API would 403.</summary>
+    public bool CanManageMaterials => IsAdminMdCs || Role is AppRole.Admin or AppRole.SuperAdmin;
     public bool IsApprover => Role is AppRole.RM or AppRole.SMD or AppRole.SMM or AppRole.Admin or AppRole.SuperAdmin || IsAdminMdCs || IsDgmMdCs;
     /// <summary>Route root of the signed-in user's pages (also the PageGuard key).</summary>
     public string Home => Login.CanAccess(nameof(PagePermission.PublicityReview)) && (IsApprover || IsDispatcher) ? "/PublicityReview" : "/PublicityRequest";
@@ -74,6 +78,14 @@ public sealed class PublicityApi : ApiClientBase, IDisposable
         if (regionId is null) _lookups = result;
         return result;
     }
+
+    // ---- material master (ADMIN-MD CS only - IsAdminMdCs above decides whether the menu/page show;
+    // the API independently enforces the same rule, see PublicityController's IsAdminMdCsAsync) -----
+
+    public Task<List<PubMaterialAdminDto>?> MaterialsAdminAsync() => GetAsync<List<PubMaterialAdminDto>>("materials", "the material list");
+    public Task<PubMaterialAdminDto?> CreateMaterialAsync(PubMaterialUpsertDto dto) => SendAsync<PubMaterialAdminDto>(HttpMethod.Post, "materials", dto, "save the material");
+    public Task<PubMaterialAdminDto?> UpdateMaterialAsync(int id, PubMaterialUpsertDto dto) => SendAsync<PubMaterialAdminDto>(HttpMethod.Put, $"materials/{id}", dto, "save the material");
+    public Task<bool> DeleteMaterialAsync(int id) => SendAsync(HttpMethod.Delete, $"materials/{id}", null, "delete the material");
 
     public Task<List<PubOption>?> StatesAsync() => GetRawAsync("api/RMDHQMapping/states");
     public Task<List<PubOption>?> RegionsAsync(int stateId) => GetRawAsync($"api/RMDHQMapping/regions/{stateId}");

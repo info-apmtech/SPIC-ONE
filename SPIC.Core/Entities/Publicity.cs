@@ -48,6 +48,14 @@ namespace SPIC.Core.Entities
     // RmZeroSubmitted is when the Region's RM explicitly submitted Zero Requirement, awaiting SMD finalization.
     public enum PublicityRegionFinalizationStatus { Approved = 0, ZeroConfirmed = 1, RmZeroSubmitted = 2 }
 
+    // Publicity Material Master (2026-11-26): Specific Product materials go through the
+    // Excel-import + per-SKU-quantity flow (PublicityForm's ShowBulk); General Product materials
+    // (and Gift Articles, which reuses the General list - see PublicityForm's GiftMode) go through
+    // plain manual entry. Pre-existing rows (seeded before this Category column existed) default to
+    // General, since that is the least disruptive bucket for materials that were previously shown to
+    // both flows undifferentiated.
+    public enum PublicityMaterialCategory { Specific = 0, General = 1 }
+
     public class PublicityMaterialType
     {
         public int Id { get; set; }
@@ -55,6 +63,7 @@ namespace SPIC.Core.Entities
         [MaxLength(30)] public string? Code { get; set; }
         public bool IsActive { get; set; } = true;
         public int SortOrder { get; set; }
+        public PublicityMaterialCategory Category { get; set; } = PublicityMaterialCategory.General;
     }
 
     public class PublicityRequest
