@@ -12,6 +12,50 @@ window.setIndeterminate = (el, value) => {
 };
 
 // ---------------------------------------------------------------------------
+// Notification sound (Publicity live unread badge, MainLayout) - a short two-tone
+// chime synthesized with the Web Audio API, so no binary audio asset needs to
+// ship in the repo. Browsers block audio before the user has interacted with
+// the page at all ("autoplay restrictions") - AudioContext construction or
+// .resume() throws/stays suspended in that case, so this always no-ops quietly
+// (caller sees a resolved promise either way) rather than throwing into Blazor.
+// The mute flag is persisted in localStorage so it survives reloads without
+// needing a server round trip for a pure client-side preference.
+// ---------------------------------------------------------------------------
+window.pubNotifySound = {
+    play: function () {
+        try {
+            var Ctx = window.AudioContext || window.webkitAudioContext;
+            if (!Ctx) return;
+            var ctx = new Ctx();
+            if (ctx.state === 'suspended') {
+                ctx.resume().catch(function () { });
+            }
+            var now = ctx.currentTime;
+            [660, 880].forEach(function (freq, i) {
+                var osc = ctx.createOscillator();
+                var gain = ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.value = freq;
+                var start = now + i * 0.12;
+                gain.gain.setValueAtTime(0.0001, start);
+                gain.gain.exponentialRampToValueAtTime(0.12, start + 0.015);
+                gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.16);
+                osc.connect(gain).connect(ctx.destination);
+                osc.start(start);
+                osc.stop(start + 0.18);
+            });
+            setTimeout(function () { ctx.close().catch(function () { }); }, 500);
+        } catch (e) { /* autoplay blocked or unsupported - visual badge still shows */ }
+    },
+    isMuted: function () {
+        try { return localStorage.getItem('pub-notify-muted') === '1'; } catch (e) { return false; }
+    },
+    setMuted: function (muted) {
+        try { localStorage.setItem('pub-notify-muted', muted ? '1' : '0'); } catch (e) { }
+    }
+};
+
+// ---------------------------------------------------------------------------
 // Leaflet map helpers (Logistics, LogisticsMaster, Register, SubDealerRegistration)
 // ---------------------------------------------------------------------------
 var mapInstances = {};

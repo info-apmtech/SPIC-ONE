@@ -14,14 +14,16 @@
    /PublicityReview/edit/{id}: the approver whose turn it is edits every field ("Edit Publicity
    Material Request"); the request stays on its stage and the changes land in the history.
 
-   The Publicity Material/Gift Articles and Specific/General Product segmented toggles (and the
-   "Specific Product" Excel-import multi-row flow) ONLY apply to brand-new requests (Id is null) -
-   editing an existing request (own draft/returned, or an approver's edit-in-turn) always renders
-   the original single-item form unconditionally, exactly as before. A "Specific Product" Excel
-   import creates one independent PublicityRequest per row (see CreateBulk in PublicityController) -
-   once created, each row is edited individually via this same single-item edit page like any other
-   request; there is no persisted "multi-row draft" concept, since PublicityRequest itself is and
-   remains strictly one product + one quantity per row. *@
+   The Publicity Material/Gift Articles and Specific/General Product segmented TOGGLES only apply
+   to brand-new requests (Id is null) - editing an existing request never shows them (its category
+   is already fixed). The multi-item Request Items TABLE, however, is shared between create
+   (ShowBulk) and edit (ShowItemsEditor): a "Specific Product" Excel import creates ONE parent
+   PublicityRequest with N PublicityRequestItem children (CreateBulk), and editing that same
+   request (ShowItemsEditor := Id is not null && _detail.Items.Count > 0) reuses the identical
+   table/Select-All/Apply-Design-to-Selected markup and row state (_bulkRows), just populated from
+   the saved items instead of an Excel file, and saved via UpdateItemsAsync instead of
+   CreateBulkAsync. A General Product / Gift Articles request never has Items, so it always falls
+   through to the single-item form below unaffected. *@
 
 <div class="pub-page">
     <PageHeader Title="@(Id is null ? "Create Publicity Material Request" : Approver ? "Edit Publicity Material Request" : $"Edit Request {_indent}")"
@@ -56,7 +58,7 @@
             </div>
         }
 
-        @if (ShowBulk)
+        @if (ShowBulk || ShowItemsEditor)
         {
             <section class="pub-card">
                 <h2 class="pub-h2">Request Details</h2>
@@ -160,6 +162,18 @@
                                             {
                                                 <span class="pub-doc__meta">@row.File.Name <button type="button" class="pub-icon-btn" @onclick="() => row.File = null"><i class="bi bi-x-lg"></i></button></span>
                                             }
+                                            else if (row.ExistingFileName is not null)
+                                            {
+                                                <span class="pub-doc__meta">
+                                                    @row.ExistingFileName
+                                                    <a class="pub-icon-btn" href="@Api.FileUrl(row.ExistingFilePath)" target="_blank" aria-label="View @row.ExistingFileName" title="View"><i class="bi bi-eye"></i></a>
+                                                    <a class="pub-icon-btn" href="@Api.FileUrl(row.ExistingFilePath, download: true)" aria-label="Download @row.ExistingFileName" title="Download"><i class="bi bi-download"></i></a>
+                                                </span>
+                                                <label class="pub-link-btn" style="cursor:pointer">
+                                                    Replace
+                                                    <InputFile OnChange="e => OnRowFilePicked(row, e)" style="display:none" />
+                                                </label>
+                                            }
                                             else
                                             {
                                                 <label class="pub-link-btn" style="cursor:pointer">
@@ -168,7 +182,7 @@
                                                 </label>
                                             }
                                         </td>
-                                        <td data-label="Action"><button type="button" class="pub-icon-btn" @onclick="() => RemoveRow(row)" aria-label="Remove row"><i class="bi bi-trash pub-text-red"></i></button></td>
+                                        <td data-label="Action"><button type="button" class="pub-icon-btn" @onclick="() => RemoveRowAsync(row)" aria-label="Remove row"><i class="bi bi-trash pub-text-red"></i></button></td>
                                     </tr>
                                 }
                             </tbody>
@@ -287,6 +301,12 @@
     private ProductMode _productMode = ProductMode.General;
     private bool GiftMode => Id is null && _mainMode == MainMode.GiftArticles;
     private bool ShowBulk => Id is null && _mainMode == MainMode.PublicityMaterial && _productMode == ProductMode.Specific;
+    // Editing an existing Specific Product (multi-item) request - _detail.Items.Count > 0 is the one
+    // authoritative signal for this (General Product/Gift Articles requests never have Items, since
+    // only CreateBulk ever populates them). Shares ShowBulk's entire table/Select-All/Apply-Design
+    // markup and _bulkRows state; only how the rows are loaded/saved differs (see OnParametersSetAsync
+    // and SaveItemsEditAsync below).
+    private bool ShowItemsEditor => Id is not null && _detail is { Items.Count: > 0 };
 
     // Publicity Material Master (2026-11-26): Specific Product only ever shows Category.Specific
     // materials; General Product and Gift Articles both show Category.General (Gift Articles has no
@@ -305,6 +325,9 @@
 
     private IEnumerable<PubMaterialOption> VisibleMaterials => _lookups is null
         ? Enumerable.Empty<PubMaterialOption>()
+        // Editing a multi-item request must stay Specific Product - the saved mode is never editable
+        // into General (there would be nowhere for the other items to go).
+        : ShowItemsEditor ? _lookups.Materials.Where(m => m.Category == PublicityMaterialCategory.Specific)
         : Id is not null ? _lookups.Materials : _lookups.Materials.Where(m => m.Category == CurrentMaterialCategory);
 
     // Switching to/from the bulk (Specific Product) view conditionally destroys and recreates the
@@ -334,11 +357,21 @@
     // ---- "Specific Product" bulk Excel import ----------------------------------------------
     private sealed class BulkRowVm
     {
+        // Edit mode only (ShowItemsEditor): the saved PublicityRequestItem.Id this row came from, so
+        // SaveItemsEditAsync updates it in place instead of creating a duplicate. Null for a row that
+        // doesn't exist on the server yet (AddRow, or any row from Excel import/create mode).
+        public int? Id;
         public int ProductId;
         public int Quantity = 1;
         public IBrowserFile? File;
         public bool Selected;
         public string? Error;
+        // Edit mode only: a design file already saved against this item (PubRequestItemDto). Picking a
+        // new File doesn't delete it server-side - Upload just adds another PublicityFile row tagged
+        // with the same requestItemId (see Upload's append-only design) - this field purely controls
+        // what the cell shows locally before Save.
+        public string? ExistingFileName;
+        public string? ExistingFilePath;
     }
     private List<BulkRowVm> _bulkRows = new();
     private string? _excelFileName;
@@ -426,6 +459,18 @@
             (_dto.MaterialTypeId, _dto.ProductId, _qty, _dto.RequestedByUserId, _dto.Remarks) = (d.MaterialTypeId, d.ProductId, d.Quantity, d.RequestedByUserId, d.Remarks);
             (_dto.StateId, _dto.RegionId, _dto.HeadquarterId) = (d.StateId, d.RegionId, d.HeadquarterId);
             _existing = d.Files.Where(f => f.Kind == PublicityFileKind.Design).ToList();
+            // Specific Product (multi-item) request - populate _bulkRows from the saved items so
+            // ShowItemsEditor's table (shared with ShowBulk) renders them, same as Excel import does
+            // for a brand-new request. Empty for a General Product/Gift Articles request (d.Items is
+            // always empty there), which just falls through to the single-item form below unaffected.
+            _bulkRows = d.Items.Select(i => new BulkRowVm
+            {
+                Id = i.Id,
+                ProductId = i.ProductId,
+                Quantity = i.Quantity,
+                ExistingFileName = i.DesignFileName,
+                ExistingFilePath = i.DesignFilePath
+            }).ToList();
         }
         else if (_lookups is not null)
         {
@@ -445,7 +490,7 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (ShowBulk)
+        if (ShowBulk || ShowItemsEditor)
         {
             // .indeterminate is a DOM property, not an HTML attribute/Blazor-bindable value, so the
             // header checkbox's "some but not all rows selected" state has to be pushed via JS after
@@ -542,6 +587,15 @@
     private void AddRow() => _bulkRows.Add(new BulkRowVm { Quantity = 1 });
     private void RemoveRow(BulkRowVm row) => _bulkRows.Remove(row);
 
+    // Confirm before removing a row that's already saved server-side (ShowItemsEditor) - an unsaved
+    // row from AddRow/Excel import (row.Id is null, nothing to lose yet) still removes immediately,
+    // matching ShowBulk's existing create-mode behavior.
+    private async Task RemoveRowAsync(BulkRowVm row)
+    {
+        if (row.Id is not null && !await Toast.ConfirmAsync("Delete item", "Remove this product from the request? This cannot be undone once saved.", "Delete")) return;
+        _bulkRows.Remove(row);
+    }
+
     private void OnRowProductChanged(BulkRowVm row, ChangeEventArgs e)
     {
         row.ProductId = int.TryParse(e.Value?.ToString(), out var v) ? v : 0;
@@ -566,7 +620,7 @@
         foreach (var row in _bulkRows)
             row.Error = row.ProductId <= 0 ? "Select the product." : row.Quantity < 0 ? "Enter a valid quantity." : null;
         if (_bulkRows.Any(r => r.Error != null)) { Toast.Error("Fix the highlighted rows before continuing."); return; }
-        if (submit && !await Toast.ConfirmAsync("Submit request", $"Submit {_bulkRows.Count} request(s) for RM review? You cannot edit them after submission unless they are returned.", "Submit")) return;
+        if (submit && !await Toast.ConfirmAsync("Submit request", $"Submit request with {_bulkRows.Count} item(s) for RM review? You cannot edit it after submission unless it is returned.", "Submit")) return;
 
         _busy = true;
         var bulk = new PubBulkUpsertDto
@@ -578,25 +632,90 @@
         };
         var created = await Api.CreateBulkAsync(bulk);
         if (created is null) { _busy = false; return; }
-        for (var i = 0; i < created.Count && i < _bulkRows.Count; i++)
+        for (var i = 0; i < created.Items.Count && i < _bulkRows.Count; i++)
         {
             var file = _bulkRows[i].File;
-            if (file is not null) await Api.UploadAsync(created[i].Id, PublicityFileKind.Design, new[] { file });
+            if (file is not null) await Api.UploadAsync(created.Id, PublicityFileKind.Design, new[] { file }, requestItemId: created.Items[i].Id);
         }
         _busy = false;
-        Toast.Success(submit ? $"{created.Count} request(s) submitted for RM review." : $"{created.Count} draft(s) saved.");
-        Nav.NavigateTo("/PublicityRequest");
+        Toast.Success(submit ? $"Request {created.IndentNo} with {created.Items.Count} item(s) submitted for RM review." : $"Draft {created.IndentNo} with {created.Items.Count} item(s) saved.");
+        Nav.NavigateTo(submit ? $"/PublicityRequest/{created.Id}" : "/PublicityRequest");
+    }
+
+    // Editing an existing Specific Product (multi-item) request. Two separate server calls, same
+    // split as the rest of this page: Api.SaveAsync(Id, _dto) updates the parent-level fields
+    // (material/requested by/location/remarks) through the EXACT SAME single-item Update endpoint
+    // and permission check every other edit already uses; Api.UpdateItemsAsync is the one genuinely
+    // new call, touching only the PublicityRequestItem rows. Never resets RequestedByUserId - _dto
+    // already holds whatever was loaded (or explicitly re-picked), same as the single-item path.
+    private async Task SaveItemsEditAsync(bool submit)
+    {
+        string? error = _dto.MaterialTypeId <= 0 ? "Select the type of publicity material."
+            : _dto.HeadquarterId <= 0 ? "Select the state, region and headquarter."
+            : _bulkRows.Count == 0 ? "Keep at least one item." : null;
+        if (error != null) { Toast.Error(error); return; }
+        foreach (var row in _bulkRows)
+            row.Error = row.ProductId <= 0 ? "Select the product." : row.Quantity < 0 ? "Enter a valid quantity." : null;
+        if (_bulkRows.Any(r => r.Error != null)) { Toast.Error("Fix the highlighted rows before continuing."); return; }
+        if (!Approver && submit && !await Toast.ConfirmAsync("Submit request", $"Submit request with {_bulkRows.Count} item(s) for RM review? You cannot edit it after submission unless it is returned.", "Submit")) return;
+
+        _busy = true;
+        _dto.ProductId = _bulkRows[0].ProductId;
+        _dto.Quantity = _bulkRows.Sum(r => r.Quantity);
+        _dto.Submit = false;
+        var savedParent = await Api.SaveAsync(Id, _dto);
+        if (savedParent is null) { _busy = false; return; }
+
+        var itemsDto = new PubItemsUpdateDto { Items = _bulkRows.Select(r => new PubItemUpdateDto { Id = r.Id, ProductId = r.ProductId, Quantity = r.Quantity }).ToList() };
+        var result = await Api.UpdateItemsAsync(Id!.Value, itemsDto);
+        if (result is null) { _busy = false; return; }
+        for (var i = 0; i < result.Items.Count && i < _bulkRows.Count; i++)
+        {
+            var file = _bulkRows[i].File;
+            if (file is not null) await Api.UploadAsync(Id!.Value, PublicityFileKind.Design, new[] { file }, requestItemId: result.Items[i].Id);
+        }
+
+        if (Approver)
+        {
+            if (FromConsolidation || _detail?.Stage == PublicityStage.SmdReview)
+            {
+                await Api.MarkRequestReviewedAsync(Id!.Value, true);
+                _busy = false;
+                Toast.Success("Changes saved and marked as reviewed.");
+                Nav.NavigateTo(Back);
+                return;
+            }
+            var next = PubText.Next(_detail!.Stage);
+            var ok = await Api.ReviewAsync(Id!.Value, new PubReviewDto { Action = "Approve" });
+            _busy = false;
+            if (!ok) return;
+            Toast.Success($"Changes saved and forwarded to {next}.");
+            Nav.NavigateTo(Back);
+            return;
+        }
+
+        if (submit)
+        {
+            _dto.Submit = true;
+            savedParent = await Api.SaveAsync(Id, _dto);
+        }
+        _busy = false;
+        if (savedParent is null) return;
+        Toast.Success(submit ? $"Request {savedParent.IndentNo} submitted for RM review." : $"Draft {savedParent.IndentNo} saved.");
+        Nav.NavigateTo(submit ? $"/PublicityRequest/{savedParent.Id}" : "/PublicityRequest");
     }
 
     private async Task SaveAsync(bool submit)
     {
         if (ShowBulk) { await SaveBulkAsync(submit); return; }
+        if (ShowItemsEditor) { await SaveItemsEditAsync(submit); return; }
 
         string? error = _dto.MaterialTypeId <= 0 ? "Select the type of publicity material."
             : _dto.ProductId <= 0 ? "Select the product."
             : _qty is not >= 0 ? "Enter the required quantity."
             : _dto.HeadquarterId <= 0 ? "Select the state, region and headquarter." : null;
         if (error != null) { Toast.Error(error); return; }
+        _dto.IsGiftArticle = GiftMode;
         if (Approver)
         {
             _busy = true;

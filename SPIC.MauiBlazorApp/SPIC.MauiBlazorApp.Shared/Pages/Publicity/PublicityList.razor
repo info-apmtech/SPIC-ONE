@@ -9,21 +9,24 @@
 @inject FileDownloadService Downloads
 @inject ToastService Toast
 @inject IJSRuntime JS
+@inject PublicityNotificationState PubNotify
 @implements IDisposable
 
 @*
     One list for both sides of the module:
-      /PublicityRequest  RMDO "My Publicity Material Request" (8 KPI cards, own HQ requests, create)
-      /PublicityReview   approvers / MD CS "Submitted Requests" (6 KPI cards, review banner,
-                         state / region / HQ / stage filters)
-    The API scopes the rows by role; this page only changes captions and columns.
+      /PublicityRequest  RMDO "My Publicity Material Request"
+      /PublicityReview   approvers / MD CS "Submitted Requests"
+    Segmented top tabs: General Product | Specific Product matching Figma screenshots 2 & 3.
 *@
 
 <div class="pub-page">
     <PageHeader Title="@(Review && Api.Role != AppRole.RM ? "Submitted Requests" : "My Publicity Material Request")" Subtitle="@Subtitle">
         <Actions>
             @if (Review && !string.IsNullOrEmpty(_lookups?.MyScope)) { <span class="pub-pill pub-pill--green pub-pill--lg pub-hide-sm"><i class="bi bi-geo-alt"></i> @_lookups.MyScope</span> }
-            <a class="pub-btn pub-btn--ghost" href="@($"{Api.Home}/notifications")"><i class="bi bi-bell"></i> <span class="pub-hide-sm">Notifications</span></a>
+            <a class="pub-btn pub-btn--ghost" href="@($"{Api.Home}/notifications")" style="position:relative;">
+                <i class="bi bi-bell"></i> <span class="pub-hide-sm">Notifications</span>
+                @if (PubNotify.UnreadCount > 0) { <span class="icon-btn__badge">@(PubNotify.UnreadCount > 99 ? "99+" : PubNotify.UnreadCount.ToString())</span> }
+            </a>
             @* RM has no separate Consolidation page - its own Region-level actions (bulk forward /
                Zero Requirement) live directly below in this same list instead, see the RM action
                banner further down. *@
@@ -38,6 +41,22 @@
         </Actions>
     </PageHeader>
 
+    @* Segmented top toggle: General Product | Specific Product (Figma Images 2 & 3) *@
+    <div class="pub-segment-row" style="margin-top:-6px;margin-bottom:6px;">
+        <div class="pub-segment" style="background:#f3f4f6;padding:4px;border-radius:10px;border:1px solid #e5e7eb;display:inline-flex;gap:4px;">
+            <button type="button" class="pub-segment__btn"
+                    style="@(_selectedCategory == 1 ? "background:#006B3E;color:#fff;font-weight:600;padding:8px 24px;border-radius:8px;border:none;box-shadow:0 1px 3px rgba(0,0,0,0.12);cursor:pointer;" : "background:transparent;color:#4b5563;font-weight:500;padding:8px 24px;border-radius:8px;border:none;cursor:pointer;")"
+                    @onclick="() => SetCategoryTab(1)">
+                General Product
+            </button>
+            <button type="button" class="pub-segment__btn"
+                    style="@(_selectedCategory == 0 ? "background:#006B3E;color:#fff;font-weight:600;padding:8px 24px;border-radius:8px;border:none;box-shadow:0 1px 3px rgba(0,0,0,0.12);cursor:pointer;" : "background:transparent;color:#4b5563;font-weight:500;padding:8px 24px;border-radius:8px;border:none;cursor:pointer;")"
+                    @onclick="() => SetCategoryTab(0)">
+                Specific Product
+            </button>
+        </div>
+    </div>
+
     @if (Review && Api.Role != AppRole.RM && _stats?.PendingMine > 0)
     {
         <section class="pub-banner pub-banner--red">
@@ -51,7 +70,7 @@
         </section>
     }
 
-    <div data-help="pub-cards" class="pub-kpis @(!Review ? "" : Api.Role == AppRole.RM ? "pub-kpis--5" : "pub-kpis--3")">
+    <div data-help="pub-cards" class="pub-kpis @(_selectedCategory == 1 ? "pub-kpis--5" : "")">
         @foreach (var k in Kpis)
         {
             <button type="button" class="pub-kpi @(k.Status == _status && k.Status != null ? "is-active" : "")" @onclick="() => QuickStatus(k.Status)">
@@ -76,16 +95,27 @@
                         <label class="pub-label">Date Range</label>
                         <div class="pub-dates"><input type="date" class="pub-input" @bind="_from" aria-label="From date" /><span>to</span><input type="date" class="pub-input" @bind="_to" aria-label="To date" /></div>
                     </div>
-                    <div class="pub-field">
-                        <label class="pub-label" for="pf-prod">Product</label>
-                        <select id="pf-prod" class="pub-input" @bind="_product"><option value="0">All Product</option>
-                            @foreach (var p in _lookups?.Products ?? new()) { <option value="@p.Id">@p.Name</option> }</select>
-                    </div>
+                    @if (_selectedCategory == 1)
+                    {
+                        <div class="pub-field">
+                            <label class="pub-label" for="pf-prod">Product</label>
+                            <select id="pf-prod" class="pub-input" @bind="_product"><option value="0">All Product</option>
+                                @foreach (var p in _lookups?.Products ?? new()) { <option value="@p.Id">@p.Name</option> }</select>
+                        </div>
+                    }
                     <div class="pub-field">
                         <label class="pub-label" for="pf-mat">Publicity Material</label>
                         <select id="pf-mat" class="pub-input" @bind="_material"><option value="0">All Material</option>
-                            @foreach (var m in _lookups?.Materials ?? new()) { <option value="@m.Id">@m.Name</option> }</select>
+                            @foreach (var m in FilterMaterials) { <option value="@m.Id">@m.Name</option> }</select>
                     </div>
+                    @if (!Review && _selectedCategory == 0)
+                    {
+                        <div class="pub-field">
+                            <label class="pub-label" for="pf-hq">HQ</label>
+                            <select id="pf-hq" class="pub-input" @bind="_hq"><option value="0">All HQ</option>
+                                @foreach (var s in _hqs) { <option value="@s.Id">@s.Name</option> }</select>
+                        </div>
+                    }
                     @if (Review && ShowState)
                     {
                         <div class="pub-field">
@@ -132,7 +162,7 @@
 
     <section class="pub-card" id="pub-request-list">
         <div class="pub-card__head">
-            <h2 class="pub-h2">@(_awaitingMe ? "Awaiting My Review" : Review ? "All My Requests" : "Submitted Request")</h2>
+            <h2 class="pub-h2">@TableTitle</h2>
             <div class="pub-card__tools">
                 @if (Review && Api.MyStageLabel is not null)
                 {
@@ -152,12 +182,6 @@
         }
         else if (_page.Items.Count == 0)
         {
-            @* RM's Zero Requirement action lives here, reusing the page's own existing empty-state
-               slot rather than a dashboard banner. Gated on _stats.Total == 0 - genuinely zero
-               requests EVER raised for this Region, never "nothing currently pending at my stage"
-               (an approved/forwarded request also empties this exact table once awaitingMe narrows
-               it down, and that must never be mistaken for "the Region has no requirements" - see
-               PubStatsDto.Total, which only Draft rows are excluded from). *@
             @if (Review && Api.Role == AppRole.RM && _stats is { Total: 0 } && _rmConsolidation is { Groups.Count: > 0 } rmc)
             {
                 <EmptyState Icon="bi-info-circle" Title="No Publicity Requests from HQs"
@@ -167,53 +191,127 @@
             }
             else
             {
-                <EmptyState Icon="bi-megaphone" Title="No requests found" Message="@(Review ? "Nothing matches these filters." : "Create your first publicity material request.")" />
+                <EmptyState Icon="@(_selectedCategory == 1 ? "bi-megaphone" : "bi-file-earmark-excel")"
+                            Title="@(_selectedCategory == 1 ? "No General Product Requests Found" : "No Specific Product Requests Found")"
+                            Message="@(Review ? "Nothing matches these filters." : _selectedCategory == 1 ? "Create your first general publicity material request." : "Upload an Excel file to create a specific product publicity request.")" />
             }
         }
         else
         {
             <div class="pub-table-wrap" data-help="pub-table">
-                <table class="pub-table">
-                    <thead>
-                        <tr>
-                            <th>S.No</th><th>Indent No.</th><th>Product</th>
-                            @if (Review) { <th>Request Date</th> }
-                            <th>Publicity Material</th><th>Quantity</th>
-                            @if (Review && ShowState) { <th>State</th> }
-                            <th>HQ</th><th>Current Stage</th><th>Status</th><th>Created Date</th><th>Action</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @for (var i = 0; i < _page.Items.Count; i++)
-                        {
-                            var r = _page.Items[i];
-                            <tr class="@(r.AwaitingMe ? "is-mine" : "")">
-                                <td data-label="S.No">@((_pageNo - 1) * _size + i + 1)</td>
-                                <td data-label="Indent No."><b>@r.IndentNo</b></td>
-                                <td data-label="Product">@r.Product</td>
-                                @if (Review) { <td data-label="Request Date">@PubText.Date(r.CreatedAt)</td> }
-                                <td data-label="Material">@r.Material</td>
-                                <td data-label="Quantity">@r.Quantity</td>
-                                @if (Review && ShowState) { <td data-label="State">@r.State</td> }
-                                <td data-label="HQ">@r.Hq</td>
-                                <td data-label="Stage"><PubPill Text="@(r.StatusNote ?? (Review ? PubText.StageShort(r.Stage) : PubText.Stage(r.Stage)))" Tone="@(r.StatusNote is null ? PubText.StageTone(r.Stage) : "red")" /></td>
-                                <td data-label="Status"><PubPill Text="@StatusFor(r).Text" Tone="@StatusFor(r).Tone" /></td>
-                                <td data-label="Created">@PubText.Date(r.CreatedAt)</td>
-                                <td data-label="Action" class="pub-row-actions">
-                                    <a class="pub-icon-btn" href="@($"{Api.Home}/{r.Id}")" aria-label="View @r.IndentNo" title="View"><i class="bi bi-eye"></i></a>
-                                    @if (!Review && r.Status is PublicityStatus.Draft or PublicityStatus.Returned)
-                                    {
-                                        <a class="pub-icon-btn pub-icon-btn--violet" href="@($"/PublicityRequest/edit/{r.Id}")" aria-label="Edit @r.IndentNo" title="Edit"><i class="bi bi-pencil"></i></a>
-                                    }
-                                    @if (!Review && r.Status == PublicityStatus.Draft)
-                                    {
-                                        <button type="button" class="pub-icon-btn pub-icon-btn--red" aria-label="Delete @r.IndentNo" title="Delete" @onclick="() => DeleteAsync(r)"><i class="bi bi-trash"></i></button>
-                                    }
-                                </td>
+                @if (_selectedCategory == 1)
+                {
+                    @* General Product Table (Screenshot 2: Submitted Request) *@
+                    <table class="pub-table">
+                        <thead>
+                            <tr>
+                                <th>S.NO</th>
+                                <th>Indent No.</th>
+                                <th>Material Category</th>
+                                <th>Product</th>
+                                <th>Publicity Material</th>
+                                <th>Quantity</th>
+                                <th>Current Stage</th>
+                                <th>Status</th>
+                                <th>Created Date</th>
+                                <th>Action</th>
                             </tr>
-                        }
-                    </tbody>
-                </table>
+                        </thead>
+                        <tbody>
+                            @for (var i = 0; i < _page.Items.Count; i++)
+                            {
+                                var r = _page.Items[i];
+                                <tr class="@(r.AwaitingMe ? "is-mine" : "")">
+                                    <td data-label="S.NO">@((_pageNo - 1) * _size + i + 1)</td>
+                                    <td data-label="Indent No."><b>@r.IndentNo</b></td>
+                                    <td data-label="Material Category">
+                                        @if (r.IsGiftArticle)
+                                        {
+                                            <span style="background:#f3e8ff;color:#7e22ce;border:1px solid #d8b4fe;font-weight:600;padding:3px 10px;border-radius:16px;font-size:12px;display:inline-block;">Gift Articles</span>
+                                        }
+                                        else
+                                        {
+                                            <span style="background:#e0f2fe;color:#0369a1;border:1px solid #bae6fd;font-weight:600;padding:3px 10px;border-radius:16px;font-size:12px;display:inline-block;">Publicity Material</span>
+                                        }
+                                    </td>
+                                    <td data-label="Product">@r.Product</td>
+                                    <td data-label="Publicity Material">@r.Material</td>
+                                    <td data-label="Quantity">@r.Quantity</td>
+                                    <td data-label="Current Stage"><PubPill Text="@(r.StatusNote ?? (Review ? PubText.StageShort(r.Stage) : PubText.Stage(r.Stage)))" Tone="@(r.StatusNote is null ? PubText.StageTone(r.Stage) : "red")" /></td>
+                                    <td data-label="Status"><PubPill Text="@StatusFor(r).Text" Tone="@StatusFor(r).Tone" /></td>
+                                    <td data-label="Created Date">@r.CreatedAt.ToString("dd-MMM-yyyy")</td>
+                                    <td data-label="Action" class="pub-row-actions">
+                                        <a class="pub-icon-btn" href="@($"{Api.Home}/{r.Id}")" aria-label="View @r.IndentNo" title="View"><i class="bi bi-eye"></i></a>
+                                        @if (!Review && r.Status is PublicityStatus.Draft or PublicityStatus.Returned)
+                                        {
+                                            <a class="pub-icon-btn pub-icon-btn--violet" href="@($"/PublicityRequest/edit/{r.Id}")" aria-label="Edit @r.IndentNo" title="Edit"><i class="bi bi-pencil"></i></a>
+                                        }
+                                        @if (!Review && r.Status == PublicityStatus.Draft)
+                                        {
+                                            <button type="button" class="pub-icon-btn pub-icon-btn--red" aria-label="Delete @r.IndentNo" title="Delete" @onclick="() => DeleteAsync(r)"><i class="bi bi-trash"></i></button>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+                else
+                {
+                    @* Specific Product Table (Screenshot 3: Excel Upload Request) *@
+                    <table class="pub-table">
+                        <thead>
+                            <tr>
+                                <th>S.NO</th>
+                                <th>Request ID</th>
+                                <th>Publicity Material</th>
+                                <th>Product</th>
+                                <th>Designs Files</th>
+                                <th>HQ</th>
+                                <th>Current Stage</th>
+                                <th>Status</th>
+                                <th>Created Date</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @for (var i = 0; i < _page.Items.Count; i++)
+                            {
+                                var r = _page.Items[i];
+                                <tr class="@(r.AwaitingMe ? "is-mine" : "")">
+                                    <td data-label="S.NO">@((_pageNo - 1) * _size + i + 1)</td>
+                                    <td data-label="Request ID"><b>@r.IndentNo</b></td>
+                                    <td data-label="Publicity Material">@r.Material</td>
+                                    <td data-label="Product">
+                                        <span style="display:inline-flex;align-items:center;gap:6px;background:#f3f4f6;color:#374151;border:1px solid #e5e7eb;padding:3px 10px;border-radius:6px;font-size:12px;font-weight:600;">
+                                            <i class="bi bi-layers" style="color:#6b7280;font-size:13px;"></i> @r.ItemCount
+                                        </span>
+                                    </td>
+                                    <td data-label="Designs Files">
+                                        <span style="display:inline-flex;align-items:center;gap:6px;background:#f3f4f6;color:#374151;border:1px solid #e5e7eb;padding:3px 10px;border-radius:6px;font-size:12px;font-weight:600;">
+                                            <i class="bi bi-folder2-open" style="color:#6b7280;font-size:13px;"></i> @r.DesignFilesCount
+                                        </span>
+                                    </td>
+                                    <td data-label="HQ">@r.Hq</td>
+                                    <td data-label="Current Stage"><PubPill Text="@(r.StatusNote ?? (Review ? PubText.StageShort(r.Stage) : PubText.Stage(r.Stage)))" Tone="@(r.StatusNote is null ? PubText.StageTone(r.Stage) : "red")" /></td>
+                                    <td data-label="Status"><PubPill Text="@StatusFor(r).Text" Tone="@StatusFor(r).Tone" /></td>
+                                    <td data-label="Created Date">@r.CreatedAt.ToString("dd-MMM-yyyy")</td>
+                                    <td data-label="Action" class="pub-row-actions">
+                                        <a class="pub-icon-btn" href="@($"{Api.Home}/{r.Id}")" aria-label="View @r.IndentNo" title="View"><i class="bi bi-eye"></i></a>
+                                        @if (!Review && r.Status is PublicityStatus.Draft or PublicityStatus.Returned)
+                                        {
+                                            <a class="pub-icon-btn pub-icon-btn--violet" href="@($"/PublicityRequest/edit/{r.Id}")" aria-label="Edit @r.IndentNo" title="Edit"><i class="bi bi-pencil"></i></a>
+                                        }
+                                        @if (!Review && r.Status == PublicityStatus.Draft)
+                                        {
+                                            <button type="button" class="pub-icon-btn pub-icon-btn--red" aria-label="Delete @r.IndentNo" title="Delete" @onclick="() => DeleteAsync(r)"><i class="bi bi-trash"></i></button>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
             </div>
             <LabPager Page="_pageNo" PageSize="_size" Total="_page.Total" PageChanged="LoadAsync" PageSizeChanged="SizeAsync" />
         }
@@ -222,6 +320,8 @@
 
 @code {
     private bool Review => Nav.ToBaseRelativePath(Nav.Uri).StartsWith("PublicityReview", StringComparison.OrdinalIgnoreCase);
+
+    private int _selectedCategory = 1; // 1 = General Product, 0 = Specific Product
 
     private PubStatsDto? _stats;
     private PubPageDto? _page;
@@ -241,7 +341,11 @@
 
     private bool ShowState => Api.Role is not (AppRole.RM or AppRole.SMD or AppRole.SMM);
 
-    private string Subtitle => !Review ? "View, track and manage all your publicity material requests"
+    private string TableTitle => _awaitingMe ? "Awaiting My Review"
+        : _selectedCategory == 0 ? "Excel Upload Request"
+        : Review ? "Submitted Request" : "Submitted Request";
+
+    private string Subtitle => !Review ? "View, track and manage all your publicity material request"
         : Api.Role switch
         {
             AppRole.RM => "Review, approve and track publicity material requests from RMDO under your region.",
@@ -249,24 +353,17 @@
             _ => "Track submissions, final approvals, dispatches and exceptions."
         };
 
-    /// <summary>Reviewer wording: "Pending" when it waits for me, "Approved" once I forwarded it.</summary>
     private (string Text, string Tone) StatusFor(PubRowDto r)
     {
         if (Review && r.AwaitingMe) return ("Pending", "amber");
-        // Forwarded past my own stage, still inside the approval chain - name who it's actually WITH
-        // now (reusing the same StageShort label the existing Current Stage column already shows),
-        // rather than the old bare "Approved" which didn't say where the request currently sits once
-        // it leaves the viewer's own queue. Dispatch-onward stages are untouched below - PubText.
-        // Status already has adequate labels for those ("In Dispatch", "Delivered", "Completed", ...).
         if (Review && Api.MyStage is { } mine && r.Stage > mine && r.Stage <= PublicityStage.DgmMdCsReview
             && r.Status is PublicityStatus.PendingApproval or PublicityStatus.PendingFinalApproval)
             return ($"With {PubText.StageShort(r.Stage).Replace(" Approval", "")}", "blue");
+        if (r.Status == PublicityStatus.ExceptionRaised && !string.IsNullOrWhiteSpace(r.ExceptionType))
+            return (PubText.ExceptionStatus(r.ExceptionType), "red");
         return (PubText.Status(r.Status), PubText.StatusTone(r.Status));
     }
 
-    // "All My Requests" (default) vs "Awaiting My Review" - an explicit, visible toggle within the
-    // existing table section (the KPI cards already offer this indirectly via QuickStatus, but this
-    // is the direct switch the two tracking views need).
     private Task SwitchView(bool awaitingMe)
     {
         _awaitingMe = awaitingMe;
@@ -274,52 +371,48 @@
         return LoadAsync(1);
     }
 
-    private IEnumerable<Kpi> Kpis => Review && Api.Role == AppRole.RM
-        ? new Kpi[]
-        {
-            new("Pending for My Approval", "Need your action", "bi-file-earmark-text", "blue", s => s.PendingMine),
-            new("Approved by RM", "Your approved requests", "bi-clock", "green", s => s.ApprovedByMe),
-            new("Dispatch & Delivery", "In transit / delivery", "bi-truck", "amber", s => s.InDispatch, PublicityStatus.InDispatch),
-            new("Completed", "Delivery & acknowledged", "bi-check2-circle", "green", s => s.Completed, PublicityStatus.Completed),
-            new("Returned", "Returned for correction", "bi-arrow-counterclockwise", "red", s => s.Returned, PublicityStatus.Returned)
-        }
-        : Review && Api.Role is AppRole.SMD or AppRole.SMM
-        ? new Kpi[]
-        {
-            new("Total Submitted", $"All submissions received from {PubText.Prev(Api.MyStage!.Value)}", "bi-file-earmark-text", "blue", s => s.Total),
-            new($"{Api.Role} Review", "Awaiting your review and decision", "bi-hourglass-split", "amber", s => s.PendingMine),
-            new("Final Approval", $"Approved by {Api.Role} and moved on towards ADMIN - MD CS", "bi-file-earmark-check", "violet", s => s.FinalApproval),
-            new("Dispatch & Delivery", "Final approval completed, dispatch / delivery in progress", "bi-clock", "green", s => s.InDispatch, PublicityStatus.InDispatch),
-            new("Acknowledgement", "Material delivered; acknowledgement pending", "bi-clock", "cyan", s => s.AckPending, PublicityStatus.AcknowledgementPending),
-            new("Completed", "Acknowledgement completed; request closed", "bi-check2-circle", "green", s => s.Completed, PublicityStatus.Completed)
-        }
-        : Review
-        ? new Kpi[]
-        {
-            new("Total Submitted", "Received for review", "bi-file-earmark-text", "blue", s => s.Total),
-            new("Pending Review", $"Awaiting {Api.MyStageLabel ?? "approval"}", "bi-hourglass-split", "amber", s => s.PendingMine > 0 ? s.PendingMine : s.PendingApproval),
-            new("With DGM-MD CS", "Awaiting final approval", "bi-file-earmark-check", "violet", s => s.WithDgm),
-            new("Dispatch Pending", "Ready for dispatch creation", "bi-clock", "green", s => s.DispatchPending, PublicityStatus.FinalApproved),
-            new("Exceptions", "Requires action", "bi-exclamation-octagon", "cyan", s => s.Exception, PublicityStatus.ExceptionRaised),
-            new("Completed", "Process completed", "bi-check2-circle", "green", s => s.Completed, PublicityStatus.Completed)
-        }
-        : new Kpi[]
-        {
-            new("Total Request", "All requests created", "bi-file-earmark-text", "blue", s => s.Total + s.Draft),
-            new("Draft", "Not yet submitted", "bi-file-earmark", "amber", s => s.Draft, PublicityStatus.Draft),
-            new("Pending Approval", "Under review with RM/SMD/SMM", "bi-clock", "red", s => s.PendingApproval, PublicityStatus.PendingApproval),
-            new("Final Approved", "Note approval completed", "bi-file-earmark-check", "green", s => s.FinalApproved, PublicityStatus.FinalApproved),
-            new("In Dispatch", "Material dispatched", "bi-truck", "violet", s => s.InDispatch, PublicityStatus.InDispatch),
-            new("Acknowledgement Pending", "Waiting for receipt confirmation", "bi-inbox", "cyan", s => s.AckPending, PublicityStatus.AcknowledgementPending),
-            new("Completed", "Received and closed", "bi-check2-circle", "green", s => s.Completed, PublicityStatus.Completed),
-            new("Exception", "Shortage / Excess / Damaged", "bi-exclamation-octagon", "red", s => s.Exception, PublicityStatus.ExceptionRaised)
-        };
+    private async Task SetCategoryTab(int category)
+    {
+        if (_selectedCategory == category) return;
+        _selectedCategory = category;
+        _product = _material = 0;
+        _status = null;
+        _pageNo = 1;
+        _stats = await Api.StatsAsync(_selectedCategory);
+        await LoadAsync(1);
+    }
 
-    // /PublicityRequest and /PublicityReview both route here (same component type), so the Blazor
-    // router reuses this instance across the two aliases instead of recreating it - OnInitializedAsync
-    // only ever runs once per instance, so switching between them would otherwise keep showing
-    // whichever one's data loaded first. OnParametersSetAsync runs on every navigation (including the
-    // first), so re-fetch whenever the path itself actually changed.
+    private IEnumerable<PubMaterialOption> FilterMaterials =>
+        _lookups?.Materials.Where(m => (int)m.Category == _selectedCategory) ?? Enumerable.Empty<PubMaterialOption>();
+
+    private IEnumerable<Kpi> Kpis => _selectedCategory == 1 ? GeneralKpis : SpecificKpis;
+
+    private IEnumerable<Kpi> GeneralKpis => new Kpi[]
+    {
+        new("Total Request", "All request created", "bi-file-earmark-text", "blue", s => s.Total + s.Draft),
+        new("Publicity Material", "Leaflet, Poster, Banner, etc", "bi-journals", "blue", s => s.PublicityMaterialCount),
+        new("Gift Articles", "Caps, Bags, etc", "bi-gift", "purple", s => s.GiftArticlesCount),
+        new("Draft", "Not yet submitted", "bi-file-earmark", "amber", s => s.Draft, PublicityStatus.Draft),
+        new("Pending Approval", "Under review with RM/SMD/SMM", "bi-clock", "red", s => s.PendingApproval, PublicityStatus.PendingApproval),
+        new("Final Approved", "Note approval completed", "bi-file-earmark-check", "green", s => s.FinalApproved, PublicityStatus.FinalApproved),
+        new("In Dispatch", "Material dispatched", "bi-truck", "violet", s => s.InDispatch, PublicityStatus.InDispatch),
+        new("Acknowledge Pending", "Waiting for receipt confirmation", "bi-inbox", "cyan", s => s.AckPending, PublicityStatus.AcknowledgementPending),
+        new("Completed", "Received and closed", "bi-check2-circle", "green", s => s.Completed, PublicityStatus.Completed),
+        new("Exception", "Shortage / Excess / Damaged", "bi-exclamation-octagon", "red", s => s.Exception, PublicityStatus.ExceptionRaised)
+    };
+
+    private IEnumerable<Kpi> SpecificKpis => new Kpi[]
+    {
+        new("Total Request", "All request created", "bi-file-earmark-text", "blue", s => s.Total + s.Draft),
+        new("Draft", "Not yet submitted", "bi-file-earmark", "amber", s => s.Draft, PublicityStatus.Draft),
+        new("Pending Approval", "Under review with RM/SMD/SMM", "bi-clock", "red", s => s.PendingApproval, PublicityStatus.PendingApproval),
+        new("Final Approved", "Note approval completed", "bi-file-earmark-check", "green", s => s.FinalApproved, PublicityStatus.FinalApproved),
+        new("In Dispatch", "Material dispatched", "bi-truck", "violet", s => s.InDispatch, PublicityStatus.InDispatch),
+        new("Acknowledgement Pending", "Waiting for receipt confirmation", "bi-inbox", "cyan", s => s.AckPending, PublicityStatus.AcknowledgementPending),
+        new("Completed", "Received and closed", "bi-check2-circle", "green", s => s.Completed, PublicityStatus.Completed),
+        new("Exception", "Shortage / Excess / Damaged", "bi-exclamation-octagon", "red", s => s.Exception, PublicityStatus.ExceptionRaised)
+    };
+
     private string? _loadedPath;
 
     protected override async Task OnParametersSetAsync()
@@ -328,8 +421,6 @@
         if (string.Equals(path, _loadedPath, StringComparison.OrdinalIgnoreCase)) return;
         _loadedPath = path;
 
-        // Request and Review hide different filters (state/region/HQ are Review-only), so a stale
-        // selection from the other side would otherwise keep silently filtering the new list.
         _from = _to = null;
         _product = _material = _state = _region = _hq = 0;
         _stage = _q = "";
@@ -337,22 +428,19 @@
         _states = _regions = _hqs = new();
 
         var uri = Nav.ToAbsoluteUri(Nav.Uri);
-        // "All My Requests" (awaitingMe=false) is the default tracking view - forwarding a request
-        // must never make it disappear from the page. ?mine=1 (the "View New Requests" banner, and
-        // the explicit Awaiting My Review toggle below) switches to the pending-only view on demand.
         _awaitingMe = uri.Query.Contains("mine=1");
-        var statsTask = Api.StatsAsync();
-        // RM's own Region-level actions (bulk forward / Zero Requirement) now live on this page
-        // instead of the Consolidation page RM no longer has - same underlying data RM's share of
-        // that page always used.
+        var statsTask = Api.StatsAsync(_selectedCategory);
         var rmConsolidationTask = Review && Api.Role == AppRole.RM ? Api.ConsolidationAsync() : Task.FromResult<PubConsolidationDto?>(null);
         _lookups = await Api.LookupsAsync();
         if (Review && ShowState) _states = await Api.StatesAsync() ?? new();
         else if (Review && _lookups is not null)
         {
-            // region / state reviewers filter inside their own area
             _regions = await Api.RegionsAsync(_lookups.MyStateId) ?? new();
             if (Api.Role == AppRole.RM) _hqs = await Api.HqsAsync(_lookups.MyRegionId) ?? new();
+        }
+        else if (_lookups is not null)
+        {
+            _hqs = await Api.HqsAsync(_lookups.MyRegionId) ?? new();
         }
         _stats = await statsTask;
         _rmConsolidation = await rmConsolidationTask;
@@ -364,7 +452,7 @@
         _pageNo = page;
         _cts?.Cancel();
         _cts = new CancellationTokenSource();
-        var q = new List<string> { $"page={page}", $"size={_size}" };
+        var q = new List<string> { $"page={page}", $"size={_size}", $"category={_selectedCategory}" };
         if (_from.HasValue) q.Add($"from={_from:yyyy-MM-dd}");
         if (_to.HasValue) q.Add($"to={_to:yyyy-MM-dd}");
         if (_product > 0) q.Add($"productId={_product}");
@@ -391,28 +479,15 @@
         return LoadAsync(1);
     }
 
-    // Set by ShowMine() once its data load has actually finished; consumed by OnAfterRenderAsync
-    // below. Scrolling can only happen AFTER Blazor has rendered the new _page into the DOM - calling
-    // the JS interop directly from ShowMine, right after awaiting LoadAsync, would race the render
-    // and frequently scroll to the list's old, pre-filter contents (or scroll to nothing new at all,
-    // which is exactly the "click does nothing" symptom this exists to fix).
     private bool _scrollToResultsPending;
 
     private async Task ShowMine()
     {
-        // RM no longer has a Consolidation page to redirect to - its own pending work already shows
-        // right here (awaitingMe below), with the Region-level banner above handling bulk forward /
-        // Zero Requirement directly.
         if (Api.Role is AppRole.SMD or AppRole.SMM || Api.IsAdminMdCs || Api.IsDgmMdCs)
         {
             Nav.NavigateTo("/PublicityReview/consolidation");
             return;
         }
-        // Any filter left over from an earlier search (state/region/HQ/stage/date-range/text) would
-        // otherwise stack on top of awaitingMe=true and silently narrow the result to nothing - a
-        // DGM-MD CS reviewer's pending requests span every state/region, so a stale state/region/HQ
-        // filter in particular would reliably hide all of them. "View New Requests" must always show
-        // every one of the caller's own pending requests, not whatever was still filtered.
         _from = _to = null;
         _product = _material = _state = _region = _hq = 0;
         _stage = _q = "";
@@ -429,11 +504,6 @@
         try { await JS.InvokeVoidAsync("scrollToElementId", "pub-request-list"); } catch (JSException) { }
     }
 
-    // RM's Zero Requirement action, moved here from the Consolidation page RM no longer has access to
-    // - reuses the exact same API call that page's RM path already used, so the server-side
-    // authorization/validation (ConfirmZeroRegion's own RM-only gate) is completely unchanged. There
-    // is deliberately no bulk "Approve & Submit to SMD" method here anymore - see the banner markup's
-    // own comment for why removing it doesn't touch the real RM-to-SMD forward.
     private async Task RmSubmitZeroAsync()
     {
         if (_rmConsolidation is not { Groups.Count: > 0 } rmc) return;
@@ -445,7 +515,7 @@
         if (!ok) return;
         Toast.Success($"Zero Requirement submitted for {g.Region}.");
         _rmConsolidation = await Api.ConsolidationAsync();
-        _stats = await Api.StatsAsync();
+        _stats = await Api.StatsAsync(_selectedCategory);
         await LoadAsync(_pageNo);
     }
 
@@ -486,14 +556,13 @@
         if (await Api.DeleteAsync(r.Id))
         {
             Toast.Success("Draft deleted.");
-            _stats = await Api.StatsAsync();
+            _stats = await Api.StatsAsync(_selectedCategory);
             await LoadAsync(_pageNo);
         }
     }
 
     private async Task ExportAsync()
     {
-        // export every row that matches the filters, not just the visible page
         var size = _size;
         _size = 1000;
         await LoadAsync(1);
@@ -502,19 +571,33 @@
         try
         {
             using var wb = new XLWorkbook();
-            var sheet = wb.Worksheets.Add("Publicity Requests");
-            string[] head = { "S.No", "Indent No.", "Product", "Publicity Material", "Quantity", "State", "Region", "HQ", "Current Stage", "Status", "Created Date" };
-            for (var c = 0; c < head.Length; c++) sheet.Cell(1, c + 1).Value = head[c];
-            for (var i = 0; i < rows.Count; i++)
+            var sheet = wb.Worksheets.Add(_selectedCategory == 1 ? "General Requests" : "Specific Requests");
+            if (_selectedCategory == 1)
             {
-                var r = rows[i];
-                object[] v = { i + 1, r.IndentNo, r.Product, r.Material, r.Quantity, r.State, r.Region, r.Hq, PubText.Stage(r.Stage), PubText.Status(r.Status), PubText.Date(r.CreatedAt) };
-                for (var c = 0; c < v.Length; c++) sheet.Cell(i + 2, c + 1).Value = XLCellValue.FromObject(v[c]);
+                string[] head = { "S.No", "Indent No.", "Material Category", "Product", "Publicity Material", "Quantity", "State", "Region", "HQ", "Current Stage", "Status", "Created Date" };
+                for (var c = 0; c < head.Length; c++) sheet.Cell(1, c + 1).Value = head[c];
+                for (var i = 0; i < rows.Count; i++)
+                {
+                    var r = rows[i];
+                    object[] v = { i + 1, r.IndentNo, r.IsGiftArticle ? "Gift Articles" : "Publicity Material", r.Product, r.Material, r.Quantity, r.State, r.Region, r.Hq, PubText.Stage(r.Stage), PubText.Status(r.Status), r.CreatedAt.ToString("dd-MMM-yyyy") };
+                    for (var c = 0; c < v.Length; c++) sheet.Cell(i + 2, c + 1).Value = XLCellValue.FromObject(v[c]);
+                }
+            }
+            else
+            {
+                string[] head = { "S.No", "Request ID", "Publicity Material", "Product Items", "Designs Files", "HQ", "Current Stage", "Status", "Created Date" };
+                for (var c = 0; c < head.Length; c++) sheet.Cell(1, c + 1).Value = head[c];
+                for (var i = 0; i < rows.Count; i++)
+                {
+                    var r = rows[i];
+                    object[] v = { i + 1, r.IndentNo, r.Material, r.ItemCount, r.DesignFilesCount, r.Hq, PubText.Stage(r.Stage), PubText.Status(r.Status), r.CreatedAt.ToString("dd-MMM-yyyy") };
+                    for (var c = 0; c < v.Length; c++) sheet.Cell(i + 2, c + 1).Value = XLCellValue.FromObject(v[c]);
+                }
             }
             sheet.Columns().AdjustToContents();
             using var ms = new MemoryStream();
             wb.SaveAs(ms);
-            await Downloads.SaveAsync($"PublicityRequests_{DateTime.Now:yyyyMMdd}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", ms.ToArray());
+            await Downloads.SaveAsync($"PublicityRequests_{(_selectedCategory == 1 ? "General" : "Specific")}_{DateTime.Now:yyyyMMdd}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", ms.ToArray());
         }
         catch (Exception)
         {
@@ -523,9 +606,23 @@
         await LoadAsync(1);
     }
 
+    // ---- live unread badge (header bell + this page's own Notifications button share one
+    // PublicityNotificationState instance - EnsurePolling() is idempotent, so it doesn't matter
+    // whether MainLayout or this page's OnInitializedAsync reaches it first) ----
+    protected override async Task OnInitializedAsync()
+    {
+        PubNotify.OnChange += HandlePubNotifyChanged;
+        PubNotify.EnsurePolling();
+        try { PubNotify.SetMuted(await JS.InvokeAsync<bool>("pubNotifySound.isMuted")); }
+        catch (Exception) { /* JS interop not ready yet during prerender - defaults to unmuted */ }
+    }
+
+    private void HandlePubNotifyChanged() => InvokeAsync(StateHasChanged);
+
     public void Dispose()
     {
         _cts?.Cancel();
         _cts?.Dispose();
+        PubNotify.OnChange -= HandlePubNotifyChanged;
     }
 }

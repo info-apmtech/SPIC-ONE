@@ -93,6 +93,21 @@ namespace SPIC.Core.DTOs
         public int FinalApproval { get; set; }
         public int WithDgm { get; set; }
         public int DispatchPending { get; set; }
+        public int PublicityMaterialCount { get; set; }
+        public int GiftArticlesCount { get; set; }
+    }
+
+    public sealed class PubRequestItemDto
+    {
+        public int Id { get; set; }
+        public int ProductId { get; set; }
+        public string ProductName { get; set; } = "";
+        public int Quantity { get; set; }
+        public int OriginalQuantity { get; set; }
+        public int? DesignFileId { get; set; }
+        public string? DesignFileName { get; set; }
+        public string? DesignFilePath { get; set; }
+        public long DesignFileSizeBytes { get; set; }
     }
 
     public sealed class PubRowDto
@@ -112,6 +127,12 @@ namespace SPIC.Core.DTOs
         public bool AwaitingMe { get; set; }
         public DateTime CreatedAt { get; set; }
         public string? CreatedByName { get; set; }
+        public int ItemCount { get; set; }
+        public int DesignFilesCount { get; set; }
+        public PublicityMaterialCategory MaterialCategory { get; set; }
+        public bool IsGiftArticle { get; set; }
+        public string? ExceptionType { get; set; }
+        public List<PubRequestItemDto> Items { get; set; } = new();
         // Who actually performed the RM-stage "Approved" action on this request - resolved from the
         // existing PublicityEvent audit trail (Action="Approved", Stage=RmReview), never from the
         // Region's CURRENT RM assignment (that could be a different person than whoever approved
@@ -158,6 +179,7 @@ namespace SPIC.Core.DTOs
         public int HeadquarterId { get; set; }
         public string? Remarks { get; set; }
         public bool Submit { get; set; }
+        public bool IsGiftArticle { get; set; }
     }
 
     /// <summary>One parsed, not-yet-saved row from a "Specific Product" Excel import - the client
@@ -177,8 +199,8 @@ namespace SPIC.Core.DTOs
         public int Quantity { get; set; }
     }
 
-    /// <summary>"Specific Product" bulk create - one PublicityRequest per Item, sharing every other
-    /// field; no schema change, just the single-item Create path looped per item server-side.</summary>
+    /// <summary>"Specific Product" bulk create - ONE parent PublicityRequest plus one PublicityRequestItem
+    /// child per Item (see PublicityController.CreateBulk).</summary>
     public sealed class PubBulkUpsertDto
     {
         public int MaterialTypeId { get; set; }
@@ -191,11 +213,36 @@ namespace SPIC.Core.DTOs
         public List<PubBulkItemDto> Items { get; set; } = new();
     }
 
+    public sealed class PubBulkCreatedItemDto
+    {
+        public int Id { get; set; }
+        public int ProductId { get; set; }
+        public int Quantity { get; set; }
+    }
+
     public sealed class PubBulkCreatedDto
     {
         public int Id { get; set; }
         public string IndentNo { get; set; } = "";
+        public int TotalQuantity { get; set; }
+        public List<PubBulkCreatedItemDto> Items { get; set; } = new();
+    }
+
+    /// <summary>One row of a Specific Product (multi-item) request's edit payload - PUT
+    /// requests/{id}/items (PublicityController.UpdateItems). Id null = a new item to add; Id set
+    /// but missing from the submitted list = that item is deleted. Reuses PubBulkCreatedDto/
+    /// PubBulkCreatedItemDto as the response shape (same {Id, ProductId, Quantity} per item needed
+    /// to attach a freshly-picked design file to the right - possibly newly created - item id).</summary>
+    public sealed class PubItemUpdateDto
+    {
+        public int? Id { get; set; }
         public int ProductId { get; set; }
+        public int Quantity { get; set; }
+    }
+
+    public sealed class PubItemsUpdateDto
+    {
+        public List<PubItemUpdateDto> Items { get; set; } = new();
     }
 
     /// <summary>One node of a stepper. State: 0 pending, 1 current, 2 done, 3 warning.</summary>
@@ -228,6 +275,7 @@ namespace SPIC.Core.DTOs
     {
         public int Id { get; set; }
         public int? DispatchId { get; set; }
+        public int? RequestItemId { get; set; }
         public PublicityFileKind Kind { get; set; }
         public string FileName { get; set; } = "";
         public string Path { get; set; } = "";
@@ -250,6 +298,18 @@ namespace SPIC.Core.DTOs
         public bool IsDraft { get; set; }
         public DateTime? SubmittedAt { get; set; }
         public string ExceptionType { get; set; } = "None";
+    }
+
+    public sealed class PubDispatchItemDto
+    {
+        public int Id { get; set; }
+        public int? RequestItemId { get; set; }
+        public int ProductId { get; set; }
+        public string ProductName { get; set; } = "";
+        public int DispatchedQty { get; set; }
+        public int ReceivedQty { get; set; }
+        public int DamagedQty { get; set; }
+        public int ShortageQty => Math.Max(0, DispatchedQty - ReceivedQty - DamagedQty);
     }
 
     public sealed class PubDispatchDto
@@ -288,6 +348,7 @@ namespace SPIC.Core.DTOs
         public PubAckDto? Ack { get; set; }
         public List<PubStepDto> Steps { get; set; } = new();
         public List<PubFileDto> Files { get; set; } = new();
+        public List<PubDispatchItemDto> Items { get; set; } = new();
         public bool CanAcknowledge { get; set; }
         public bool CanSubmitProof { get; set; }
     }
@@ -319,6 +380,8 @@ namespace SPIC.Core.DTOs
         public PublicityStage Stage { get; set; }
         public PublicityStatus Status { get; set; }
         public DateTime CreatedAt { get; set; }
+        public PublicityMaterialCategory MaterialCategory { get; set; }
+        public bool IsGiftArticle { get; set; }
         public int MaterialTypeId { get; set; }
         public string Material { get; set; } = "";
         public int ProductId { get; set; }
@@ -354,6 +417,7 @@ namespace SPIC.Core.DTOs
         public List<PubStepDto> Timeline { get; set; } = new();
         public List<PubHistoryDto> History { get; set; } = new();
         public List<PubFileDto> Files { get; set; } = new();
+        public List<PubRequestItemDto> Items { get; set; } = new();
         public List<PubDispatchDto> Dispatches { get; set; } = new();
         public List<PubDispatchDto> OutgoingTransfers { get; set; } = new();
         public PubSummaryDto Summary { get; set; } = new();
@@ -507,6 +571,10 @@ namespace SPIC.Core.DTOs
         public string? DistrictName { get; set; }
         public string City { get; set; } = "";
         public string PinCode { get; set; } = "";
+        // Only populated/meaningful on the admin management list (GET delivery-addresses/admin) -
+        // the dispatch-dropdown endpoint (GET delivery-addresses) still only ever returns active rows,
+        // so this is always true there and safely ignored by PublicityDispatch.razor.
+        public bool IsActive { get; set; } = true;
     }
 
     public sealed class PubDeliveryAddressCreateDto
@@ -522,6 +590,25 @@ namespace SPIC.Core.DTOs
         public int? DistrictId { get; set; }
         public string City { get; set; } = "";
         public string PinCode { get; set; } = "";
+    }
+
+    // Edit form for Delivery Address Management (ADMIN-MD CS only) - same fields as create, plus
+    // IsActive so an address can be deactivated (never hard-deleted while referenced by dispatches)
+    // without a separate toggle endpoint, mirroring PubMaterialUpsertDto's IsActive-on-upsert pattern.
+    public sealed class PubDeliveryAddressUpdateDto
+    {
+        public string AddressLabel { get; set; } = "";
+        public string RecipientName { get; set; } = "";
+        public string? ContactPerson { get; set; }
+        public string MobileNumber { get; set; } = "";
+        public string AddressLine1 { get; set; } = "";
+        public string? AddressLine2 { get; set; }
+        public string? Landmark { get; set; }
+        public int StateId { get; set; }
+        public int? DistrictId { get; set; }
+        public string City { get; set; } = "";
+        public string PinCode { get; set; } = "";
+        public bool IsActive { get; set; } = true;
     }
 
     public sealed class PubDispatchStatusDto
@@ -563,6 +650,12 @@ namespace SPIC.Core.DTOs
         public string? AcknowledgedByUserId { get; set; }
         public string? Remarks { get; set; }
         public bool Submit { get; set; }
+        public bool IsGiftArticle { get; set; }
+    }
+
+    public sealed class PubUnreadCountDto
+    {
+        public int Count { get; set; }
     }
 
     public sealed class PubNotificationDto
@@ -578,7 +671,7 @@ namespace SPIC.Core.DTOs
         public bool IsRead { get; set; }
     }
 
-    /// <summary>The notification drawer: notice + the transfer order it points at.</summary>
+    /// <summary>The notification drawer: notice + the dispatch / transfer order it points at.</summary>
     public sealed class PubNotificationDetailDto
     {
         public PubNotificationDto Notice { get; set; } = new();
@@ -588,6 +681,21 @@ namespace SPIC.Core.DTOs
         // exists (or anyone else already acted) this goes false on its own and the notice just stays
         // as history, never an active action for a completed operation.
         public bool CanDispatch { get; set; }
+        public bool IsTransfer { get; set; }
+        public string? DispatchNo { get; set; }
+        public string? RequestIndentNo { get; set; }
+        public int DispatchQty { get; set; }
+        public DateTime? DispatchDate { get; set; }
+        public string? VendorName { get; set; }
+        public string? DestinationAddress { get; set; }
+        public string? Transporter { get; set; }
+        public string? TrackingNo { get; set; }
+        public int? ReceivedQty { get; set; }
+        public int? ExcessQty { get; set; }
+        public int? ShortageQty { get; set; }
+        public int? DamagedQty { get; set; }
+        public string? ReportedByName { get; set; }
+        public DateTime? ReportedDate { get; set; }
         public string? DestinationIndentNo { get; set; }
         public string? SourceIndentNo { get; set; }
         public string? SourceHq { get; set; }

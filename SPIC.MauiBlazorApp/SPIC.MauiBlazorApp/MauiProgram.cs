@@ -74,6 +74,7 @@ namespace SPIC.MauiBlazorApp
 			builder.Services.AddScoped<CommunityApi>();
 			builder.Services.AddScoped<SasApi>();
 			builder.Services.AddScoped<PublicityApi>();
+			builder.Services.AddScoped<PublicityNotificationState>();
 			builder.Services.AddScoped<SasPaymentApi>();
 			builder.Services.AddScoped<LabApi>();
 			builder.Services.AddScoped<MetricsApi>();
