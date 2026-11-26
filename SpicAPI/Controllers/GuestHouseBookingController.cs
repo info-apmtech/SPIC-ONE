@@ -554,13 +554,18 @@ namespace SpicAPI.Controllers
             if (string.IsNullOrWhiteSpace(request.PhoneNumber))
                 return BadRequest(new { Success = false, Message = "Phone Number is required." });
 
-            // Employee ID / Dealer Code: for a Dealer and for the Complimentary employee roles it is the
-            // signed-in user's OWN code from the masters, and whatever the client sent is ignored - so a
-            // user cannot book under someone else's code. Other roles keep the guest-form value as before.
+            // Employee ID / Dealer Code: for a Dealer and for the Complimentary employee roles the signed-in
+            // user's OWN code must still exist in the masters (otherwise the booking is refused, as before).
+            // The Guest Details page pre-fills that code and lets the booker edit it for THIS booking's guest
+            // only, so the guest row stores the submitted value (falling back to the own code when blank).
+            // It is a guest detail only: identity, ownership (CreatedBy), free-booking eligibility and
+            // authorization all come from the authenticated user, never from this value, and the invoice
+            // never resolves a Dealer-master GSTIN from an edited code (GuestHouseBillPdfHelper).
             var booker = await GuestHouseBookerIdentity.ResolveAsync(_db, User);
             if (booker.IsBound && booker.Code is null)
                 return BadRequest(new { Success = false, Message = booker.Error });
-            var employeeOrDealerCode = booker.IsBound ? booker.Code : request.EmployeeOrDealerCode;
+            var submittedCode = string.IsNullOrWhiteSpace(request.EmployeeOrDealerCode) ? null : request.EmployeeOrDealerCode.Trim();
+            var employeeOrDealerCode = booker.IsBound ? (submittedCode ?? booker.Code) : request.EmployeeOrDealerCode;
 
             // Pricing (5% GST per the Guest House requirement).
             var roomPrice = room.PricePerNight;

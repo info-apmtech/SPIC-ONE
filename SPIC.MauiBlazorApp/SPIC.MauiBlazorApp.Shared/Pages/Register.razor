@@ -362,7 +362,10 @@
     <div class="col-12 col-md-3">
         <label class="form-label-custom">
             Date of Appointment for SPIC
-            <span class="text-danger">*</span>
+            @if (ShowAppointmentDateRequiredMarks)
+            {
+                <span class="text-danger">*</span>
+            }
         </label>
 
         <input type="date"
@@ -384,7 +387,10 @@
     <div class="col-12 col-md-3">
         <label class="form-label-custom">
             Date of Appointment for Greenstar
-            <span class="text-danger">*</span>
+            @if (ShowAppointmentDateRequiredMarks)
+            {
+                <span class="text-danger">*</span>
+            }
         </label>
 
         <input type="date"
@@ -429,7 +435,7 @@
                             </div>
                         </div>
                         <div class="col-12 col-sm-6 col-md-3">
-                            <label class="form-label-custom">Final Approval Date <span class="text-danger">*</span></label>
+                            <label class="form-label-custom">Final Approval Date @if (ShowTerminatedDatesRequiredMarks) { <span class="text-danger">*</span> }</label>
                             <input type="date" class="form-control-custom w-100 @(_errors.ContainsKey("FinalApprovalDate") ? "is-invalid" : "")"
                                    value="@_finalApprovalDateText"
                                    @onchange="OnFinalApprovalDateChanged">
@@ -439,7 +445,7 @@
                             }
                         </div>
                         <div class="col-12 col-sm-6 col-md-3">
-                            <label class="form-label-custom">Settlement Date <span class="text-danger">*</span></label>
+                            <label class="form-label-custom">Settlement Date @if (ShowTerminatedDatesRequiredMarks) { <span class="text-danger">*</span> }</label>
                             <input type="date" class="form-control-custom w-100 @(_errors.ContainsKey("SettlementDate") ? "is-invalid" : "")"
                                    value="@_settlementDateText"
                                    @onchange="OnSettlementDateChanged">
@@ -474,7 +480,7 @@
                     </div>
                     <div class="row g-3">
                         <div class="col-12 col-sm-6 col-md-4">
-                            <label class="form-label-custom">Last Transaction Date @if (!IsRestrictedNavFlow) { <span class="text-danger">*</span> }</label>
+                            <label class="form-label-custom">Last Transaction Date @if (ShowLastTransactionDateRequiredMarks) { <span class="text-danger">*</span> }</label>
                             <input type="date" class="form-control-custom w-100 @(_errors.ContainsKey("LastTransactionDate") ? "is-invalid" : "")"
                                    value="@_lastTransactionDateText"
                                    @onchange="OnLastTransactionDateChanged">
@@ -501,7 +507,8 @@
                         <div class="col-12 col-sm-6 col-md-4">
                             <label class="form-label-custom">Future Business Proposal</label>
                             <select class="form-select-custom w-100"
-                                    @bind="_inactiveProposal">
+                                    @bind="_inactiveProposal"
+                                    @bind:after="OnInactiveProposalChanged">
                                 <option value="@FutureBusinessProposal.FutureBusiness">Future Business</option>
                                 <option value="@FutureBusinessProposal.Terminated">To Be Terminated</option>
                                 <option value="@FutureBusinessProposal.NotTraceable">Not Traceable</option>
@@ -545,7 +552,7 @@
                         <div class="col-12 col-md-8">
                             <div class="row g-3">
                                 <div class="col-12 col-sm-6">
-                                    <label class="form-label-custom">Google Map URL @if (ShowFullSectionRequiredMarks) { <span class="text-danger">*</span> }</label>
+                                    <label class="form-label-custom">Google Map URL @if (ShowPrimaryLocationRequiredMarks) { <span class="text-danger">*</span> }</label>
                                     <input type="text" class="form-control-custom w-100 @(_errors.ContainsKey("GoogleMapURL") ? "is-invalid" : "")" @bind="_model.GoogleMapURL" @bind:after="OnGoogleMapUrlChanged" placeholder="Click map or Paste Google Maps link">
                                     @if (_errors.ContainsKey("GoogleMapURL"))
                                     {
@@ -568,7 +575,7 @@
                                     }
                                 </div>
                                 <div class="col-12 col-sm-6">
-                                    <label class="form-label-custom">Shop No / Room No / Block No @if (ShowFullSectionRequiredMarks) { <span class="text-danger">*</span> }</label>
+                                    <label class="form-label-custom">Shop No / Room No / Block No @if (ShowPrimaryLocationRequiredMarks) { <span class="text-danger">*</span> }</label>
                                     <input type="text" class="form-control-custom w-100 @(_errors.ContainsKey("ShopNo") ? "is-invalid" : "")" @bind="_model.ShopNoORRoomNoOrBlockNo" @bind:after='() => ValidateFieldOnChange("ShopNo", !string.IsNullOrWhiteSpace(_model.ShopNoORRoomNoOrBlockNo))' placeholder="">
                                     @if (_errors.ContainsKey("ShopNo"))
                                     {
@@ -576,7 +583,7 @@
                                     }
                                 </div>
                                 <div class="col-12 col-sm-6">
-                                    <label class="form-label-custom">Street / Area / Locality @if (ShowFullSectionRequiredMarks) { <span class="text-danger">*</span> }</label>
+                                    <label class="form-label-custom">Street / Area / Locality @if (ShowPrimaryLocationRequiredMarks) { <span class="text-danger">*</span> }</label>
                                     <input type="text" class="form-control-custom w-100 @(_errors.ContainsKey("Street") ? "is-invalid" : "")" @bind="_model.Street" @bind:after='() => ValidateFieldOnChange("Street", !string.IsNullOrWhiteSpace(_model.Street))' placeholder="">
                                     @if (_errors.ContainsKey("Street"))
                                     {
@@ -584,7 +591,7 @@
                                     }
                                 </div>
                                 <div class="col-12 col-sm-6">
-                                    <label class="form-label-custom">Sub Village @if (ShowFullSectionRequiredMarks) { <span class="text-danger">*</span> }</label>
+                                    <label class="form-label-custom">Sub Village @if (ShowPrimaryLocationRequiredMarks) { <span class="text-danger">*</span> }</label>
                                     <input type="text" class="form-control-custom w-100 @(_errors.ContainsKey("SubVillage") ? "is-invalid" : "")" @bind="_model.SubVillage" @bind:after='() => ValidateFieldOnChange("SubVillage", !string.IsNullOrWhiteSpace(_model.SubVillage))' placeholder="Enter Sub Village">
                                     @if (_errors.ContainsKey("SubVillage"))
                                     {
@@ -593,7 +600,7 @@
                                 </div>
 
                                 <div class="col-12 col-sm-6">
-                                    <label class="form-label-custom">Pincode @if (ShowFullSectionRequiredMarks) { <span class="text-danger">*</span> }</label>
+                                    <label class="form-label-custom">Pincode @if (ShowPrimaryLocationRequiredMarks) { <span class="text-danger">*</span> }</label>
                                     <input type="text"
                                            class="form-control-custom w-100 @(_errors.ContainsKey("PinCode") ? "is-invalid" : "")"
                                            @bind="_model.PinCode"
@@ -616,7 +623,7 @@
                                     }
                                 </div>
                                 <div class="col-12 col-sm-6">
-                                    <label class="form-label-custom">Village @if (ShowFullSectionRequiredMarks) { <span class="text-danger">*</span> }</label>
+                                    <label class="form-label-custom">Village @if (ShowPrimaryLocationRequiredMarks) { <span class="text-danger">*</span> }</label>
                                     <input type="text" class="form-control-custom w-100 @(_errors.ContainsKey("Village") ? "is-invalid" : "")" @bind="_model.Village" @bind:after='() => ValidateFieldOnChange("Village", !string.IsNullOrWhiteSpace(_model.Village))' placeholder="Village">
                                     @if (_errors.ContainsKey("Village"))
                                     {
@@ -627,7 +634,7 @@
                         </div>
 
                         <div class="col-6 col-sm-6 col-md-3">
-                            <label class="form-label-custom">Block @if (ShowFullSectionRequiredMarks) { <span class="text-danger">*</span> }</label>
+                            <label class="form-label-custom">Block @if (ShowPrimaryLocationRequiredMarks) { <span class="text-danger">*</span> }</label>
                             <input type="text" class="form-control-custom w-100 @(_errors.ContainsKey("Block") ? "is-invalid" : "")" @bind="_model.Block" @bind:after='() => ValidateFieldOnChange("Block", !string.IsNullOrWhiteSpace(_model.Block))' placeholder="Enter Block">
                             @if (_errors.ContainsKey("Block"))
                             {
@@ -635,7 +642,7 @@
                             }
                         </div>
                         <div class="col-6 col-sm-6 col-md-3">
-                            <label class="form-label-custom">Taluk @if (ShowFullSectionRequiredMarks) { <span class="text-danger">*</span> }</label>
+                            <label class="form-label-custom">Taluk @if (ShowPrimaryLocationRequiredMarks) { <span class="text-danger">*</span> }</label>
                             <input type="text" class="form-control-custom w-100 @(_errors.ContainsKey("Taluk") ? "is-invalid" : "")" @bind="_model.Taluk" @bind:after='() => ValidateFieldOnChange("Taluk", !string.IsNullOrWhiteSpace(_model.Taluk))' placeholder="Enter Taluk">
                             @if (_errors.ContainsKey("Taluk"))
                             {
@@ -643,7 +650,7 @@
                             }
                         </div>
                         <div class="col-12 col-sm-6 col-md-3">
-                            <label class="form-label-custom">District @if (ShowFullSectionRequiredMarks) { <span class="text-danger">*</span> }</label>
+                            <label class="form-label-custom">District @if (ShowPrimaryLocationRequiredMarks) { <span class="text-danger">*</span> }</label>
                             <div class="position-relative">
                                 <input type="text" class="form-select-custom searchable-select-input w-100 @(_errors.ContainsKey("DistrictId") ? "is-invalid" : "")"
                                        placeholder="-- Select District --"
@@ -675,7 +682,7 @@
                         </div>
 
                         <div class="col-12 col-sm-6 col-md-3">
-                            <label class="form-label-custom">State @if (ShowFullSectionRequiredMarks) { <span class="text-danger">*</span> }</label>
+                            <label class="form-label-custom">State @if (ShowPrimaryLocationRequiredMarks) { <span class="text-danger">*</span> }</label>
                             <div class="position-relative">
                                 <input type="text" class="form-select-custom searchable-select-input w-100 @(_errors.ContainsKey("DealerStateId") ? "is-invalid" : "")"
                                        placeholder="-- Select State --"
@@ -706,7 +713,7 @@
                         </div>
 
                         <div class="col-12 col-md-4">
-                            <label class="form-label-custom">Official Contact Number @if (ShowFullSectionRequiredMarks) { <span class="text-danger">*</span> }</label>
+                            <label class="form-label-custom">Official Contact Number @if (ShowPrimaryLocationRequiredMarks) { <span class="text-danger">*</span> }</label>
                             <input type="tel"
                                    inputmode="numeric"
                                    pattern="[0-9]*"
@@ -1473,8 +1480,6 @@
     // GreenstarDateOfAppointment intentionally blank - user must select it
 
     LastTransactionDate = DateTime.Today,
-    FinalApprovalDate = DateTime.Today,
-    SettlementDate = DateTime.Today,
     TradeDepositDate = DateTime.Today,
     GreenstarTradeDepositDateReg = DateTime.Today,
     WholesaleLicenseExpiryDate = DateTime.Today,
@@ -1498,15 +1503,27 @@
 
     // Mirrors the mandatory-field conditions used in Validate(): full sections shown for
     // Dealer/Institution/Department-active, but location/bank/tax fields are only required
-    // for Dealer and Institution (Department skips them, as does Inactive Not Traceable).
-    private bool ShowFullSectionRequiredMarks => !IsDepartmentSelected && !IsInactiveNotTraceable;
+    // for Dealer and Institution (Department skips them, as do Inactive Not Traceable and Inactive To Be Terminated).
+    private bool ShowFullSectionRequiredMarks => !IsDepartmentSelected && !IsInactiveNotTraceable && !IsInactiveToBeTerminated;
+
+    // Primary Location fields share the same requirement as full sections.
+    private bool ShowPrimaryLocationRequiredMarks => ShowFullSectionRequiredMarks;
 
     // Latitude & Longitude are additionally required only for the New Dealer flow or an
     // existing Dealer selected from Dealer Code & Name (same rule as Validate()).
-    private bool ShowLocationRequiredMarks => ShowFullSectionRequiredMarks && (IsNewDealerFlow || IsDealerSelected);
+    private bool ShowLocationRequiredMarks => ShowPrimaryLocationRequiredMarks && (IsNewDealerFlow || IsDealerSelected);
+
+    // Appointment dates are optional for Terminated, Inactive Not Traceable, and Inactive To Be Terminated.
+    private bool ShowAppointmentDateRequiredMarks => !IsNewDealerFlow && status != "Terminated" && !IsInactiveNotTraceable && !IsInactiveToBeTerminated;
+
+    // Final Approval and Settlement Dates are optional for Terminated status.
+    private bool ShowTerminatedDatesRequiredMarks => false;
 
     // Trade Deposit Details (SPIC/Greenstar) are mandatory only when registration type = Dealer.
-    private bool ShowTradeDepositRequiredMarks => IsDealerSelected && ShowFullRegistrationSections && !IsInactiveNotTraceable;
+    private bool ShowTradeDepositRequiredMarks => IsDealerSelected && ShowFullRegistrationSections && !IsInactiveNotTraceable && !IsInactiveToBeTerminated;
+
+    // Last Transaction Date is required for Inactive dealers, except for Not Traceable and To Be Terminated.
+    private bool ShowLastTransactionDateRequiredMarks => !IsRestrictedNavFlow && !IsInactiveToBeTerminated;
 
     private bool ShowInactiveStatus => status == "Inactive";
     private bool ShowTerminatedStatus => status == "Terminated";
@@ -1689,10 +1706,10 @@
         //     _model.GreenstarDateOfAppointment = DateTime.Today;
         if (!_model.LastTransactionDate.HasValue || _model.LastTransactionDate.Value == DateTime.MinValue)
             _model.LastTransactionDate = DateTime.Today;
-        if (!_model.FinalApprovalDate.HasValue || _model.FinalApprovalDate.Value == DateTime.MinValue)
-            _model.FinalApprovalDate = DateTime.Today;
-        if (!_model.SettlementDate.HasValue || _model.SettlementDate.Value == DateTime.MinValue)
-            _model.SettlementDate = DateTime.Today;
+        // if (!_model.FinalApprovalDate.HasValue || _model.FinalApprovalDate.Value == DateTime.MinValue)
+        //     _model.FinalApprovalDate = DateTime.Today;
+        // if (!_model.SettlementDate.HasValue || _model.SettlementDate.Value == DateTime.MinValue)
+        //     _model.SettlementDate = DateTime.Today;
         if (!_model.TradeDepositDate.HasValue || _model.TradeDepositDate.Value == DateTime.MinValue)
             _model.TradeDepositDate = DateTime.Today;
         if (!_model.GreenstarTradeDepositDateReg.HasValue || _model.GreenstarTradeDepositDateReg.Value == DateTime.MinValue)
@@ -1813,6 +1830,76 @@
         _statusManuallySet = true;
         if (value != "Inactive")
             _inactiveProposal = FutureBusinessProposal.FutureBusiness;
+        ClearStaleErrorsForCurrentStatus();
+    }
+
+    private void OnInactiveProposalChanged()
+    {
+        ClearStaleErrorsForCurrentStatus();
+    }
+
+    private void ClearStaleErrorsForCurrentStatus()
+    {
+        if (!ShowAppointmentDateRequiredMarks)
+        {
+            _errors.Remove("DateOfAppointment");
+            _errors.Remove("GreenstarDateOfAppointment");
+        }
+
+        if (!ShowLastTransactionDateRequiredMarks)
+        {
+            _errors.Remove("LastTransactionDate");
+        }
+
+        if (status == "Terminated")
+        {
+            _errors.Remove("FinalApprovalDate");
+            _errors.Remove("SettlementDate");
+        }
+
+        if (!ShowFullSectionRequiredMarks)
+        {
+            _errors.Remove("GoogleMapURL");
+            _errors.Remove("Latitude");
+            _errors.Remove("Longitude");
+            _errors.Remove("ShopNo");
+            _errors.Remove("Street");
+            _errors.Remove("SubVillage");
+            _errors.Remove("PinCode");
+            _errors.Remove("Village");
+            _errors.Remove("Block");
+            _errors.Remove("Taluk");
+            _errors.Remove("DistrictId");
+            _errors.Remove("DealerStateId");
+            _errors.Remove("OfficialContactNumber");
+            _errors.Remove("WhatsAppNumber");
+            _errors.Remove("AlternativeNumber");
+            _errors.Remove("AccountHolderName");
+            _errors.Remove("AccountNumber");
+            _errors.Remove("BankId");
+            _errors.Remove("Branch");
+            _errors.Remove("IFSC");
+            _errors.Remove("GSTNumber");
+            _errors.Remove("GSTFile");
+            _errors.Remove("PANNumber");
+            _errors.Remove("PANFile");
+            _errors.Remove("AadhaarNumber");
+            _errors.Remove("AadhaarFile");
+            _errors.Remove("TANNumber");
+            _errors.Remove("FertilizerLicense");
+            _errors.Remove("WholesaleFile");
+            _errors.Remove("RetailFile");
+        }
+
+        if (!ShowTradeDepositRequiredMarks)
+        {
+            _errors.Remove("TradeDepositAmount");
+            _errors.Remove("TradeDepositReceiptNo");
+            _errors.Remove("TradeDepositDate");
+            _errors.Remove("GreenstarTradeDepositAmountReg");
+            _errors.Remove("GreenstarTradeDepositReceiptNoReg");
+            _errors.Remove("GreenstarTradeDepositDateReg");
+        }
     }
 
     private void ApplyEmployeeLocationDefaults()
@@ -2099,8 +2186,6 @@ void ToggleGreenStar()
           _model = new()
 {
     LastTransactionDate = DateTime.Today,
-    FinalApprovalDate = DateTime.Today,
-    SettlementDate = DateTime.Today,
     TradeDepositDate = DateTime.Today,
     GreenstarTradeDepositDateReg = DateTime.Today,
     WholesaleLicenseExpiryDate = DateTime.Today,
@@ -2230,8 +2315,6 @@ void ToggleGreenStar()
        _model = new()
 {
     LastTransactionDate = DateTime.Today,
-    FinalApprovalDate = DateTime.Today,
-    SettlementDate = DateTime.Today,
     TradeDepositDate = DateTime.Today,
     GreenstarTradeDepositDateReg = DateTime.Today,
     WholesaleLicenseExpiryDate = DateTime.Today,
@@ -2300,31 +2383,32 @@ void ToggleGreenStar()
         if (string.IsNullOrWhiteSpace(_model.FirmName)) _errors["FirmName"] = "Firm Name is required";
 
         // Date of Appointment is mandatory based on selected company.
-// These fields are currently available only in Existing Dealer flow.
-if (!IsNewDealerFlow)
-{
-    if (isSpic &&
-        (!_model.DateOfAppointment.HasValue ||
-         _model.DateOfAppointment.Value == DateTime.MinValue))
-    {
-        _errors["DateOfAppointment"] =
-            "Date of Appointment for SPIC is required";
-    }
+        // These fields are currently available only in Existing Dealer flow,
+        // and are optional for Terminated status, Inactive Not Traceable, and Inactive To Be Terminated.
+        if (ShowAppointmentDateRequiredMarks)
+        {
+            if (isSpic &&
+                (!_model.DateOfAppointment.HasValue ||
+                 _model.DateOfAppointment.Value == DateTime.MinValue))
+            {
+                _errors["DateOfAppointment"] =
+                    "Date of Appointment for SPIC is required";
+            }
 
-    if (isGreenStar &&
-        (!_model.GreenstarDateOfAppointment.HasValue ||
-         _model.GreenstarDateOfAppointment.Value == DateTime.MinValue))
-    {
-        _errors["GreenstarDateOfAppointment"] =
-            "Date of Appointment for Greenstar is required";
-    }
-}
+            if (isGreenStar &&
+                (!_model.GreenstarDateOfAppointment.HasValue ||
+                 _model.GreenstarDateOfAppointment.Value == DateTime.MinValue))
+            {
+                _errors["GreenstarDateOfAppointment"] =
+                    "Date of Appointment for Greenstar is required";
+            }
+        }
 
-       if (status == "Inactive" && !IsRestrictedNavFlow)
+       if (status == "Inactive" && ShowLastTransactionDateRequiredMarks)
         {
             if (_model.LastTransactionDate == null) _errors["LastTransactionDate"] = "Last Transaction Date is required";
         }
-     if (ShowTerminatedStatus)
+        if (ShowTerminatedStatus && ShowTerminatedDatesRequiredMarks)
         {
             if (_model.FinalApprovalDate == null)
                 _errors["FinalApprovalDate"] = "Final Approval Date is required";
@@ -2334,7 +2418,7 @@ if (!IsNewDealerFlow)
         }
         bool isDept = IsDepartmentSelected;
 
-        if (ShowFullRegistrationSections && !isDept && !IsInactiveNotTraceable)
+        if (ShowFullRegistrationSections && !isDept && !IsInactiveNotTraceable && !IsInactiveToBeTerminated)
         {
             if (string.IsNullOrWhiteSpace(_model.GoogleMapURL)) _errors["GoogleMapURL"] = "Google Map URL is required";
             if (string.IsNullOrWhiteSpace(_model.ShopNoORRoomNoOrBlockNo)) _errors["ShopNo"] = "Shop No / Room No / Block No is required";
@@ -2358,10 +2442,11 @@ if (!IsNewDealerFlow)
             }
             if (string.IsNullOrWhiteSpace(_model.PinCode)) _errors["PinCode"] = "Pincode is required";
             else if (_model.PinCode.Length != 6) _errors["PinCode"] = "Pincode must be 6 digits";
-           if ((_model.DistrictId ?? 0) == 0) _errors["DistrictId"] = "District is required in Primary Location";
+            if ((_model.DistrictId ?? 0) == 0) _errors["DistrictId"] = "District is required in Primary Location";
             if ((_model.DealerStateId ?? 0) == 0) _errors["DealerStateId"] = "State is required in Primary Location";
             if (string.IsNullOrWhiteSpace(_model.OfficialContactNumber)) _errors["OfficialContactNumber"] = "Official Contact Number is required";
             else if (_model.OfficialContactNumber.Length != 10) _errors["OfficialContactNumber"] = "Official Contact Number must be 10 digits";
+
             if (string.IsNullOrWhiteSpace(_model.WhatsAppNumber)) _errors["WhatsAppNumber"] = "WhatsApp Number is required";
             else if (_model.WhatsAppNumber.Length != 10) _errors["WhatsAppNumber"] = "WhatsApp Number must be 10 digits";
             if (string.IsNullOrWhiteSpace(_model.AlternativeNumber)) _errors["AlternativeNumber"] = "Alternative Number is required";
@@ -3345,8 +3430,11 @@ if (!string.IsNullOrEmpty(result?.GSTConstitutionofBusiness))
 
         if (!lat.HasValue || !lng.HasValue)
         {
-            _errors["Latitude"] = "Enter Latitude & Longitude as e.g. 10.7905, 78.7047";
-            _errors["Longitude"] = "Enter Latitude & Longitude as e.g. 10.7905, 78.7047";
+            if (!string.IsNullOrWhiteSpace(text) || ShowLocationRequiredMarks)
+            {
+                _errors["Latitude"] = "Enter Latitude & Longitude as e.g. 10.7905, 78.7047";
+                _errors["Longitude"] = "Enter Latitude & Longitude as e.g. 10.7905, 78.7047";
+            }
         }
         else
         {
