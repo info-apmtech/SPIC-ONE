@@ -480,7 +480,7 @@
                     </div>
                     <div class="row g-3">
                         <div class="col-12 col-sm-6 col-md-4">
-                            <label class="form-label-custom">Last Transaction Date @if (!IsRestrictedNavFlow) { <span class="text-danger">*</span> }</label>
+                            <label class="form-label-custom">Last Transaction Date @if (ShowLastTransactionDateRequiredMarks) { <span class="text-danger">*</span> }</label>
                             <input type="date" class="form-control-custom w-100 @(_errors.ContainsKey("LastTransactionDate") ? "is-invalid" : "")"
                                    value="@_lastTransactionDateText"
                                    @onchange="OnLastTransactionDateChanged">
@@ -1503,11 +1503,11 @@
 
     // Mirrors the mandatory-field conditions used in Validate(): full sections shown for
     // Dealer/Institution/Department-active, but location/bank/tax fields are only required
-    // for Dealer and Institution (Department skips them, as does Inactive Not Traceable).
-    private bool ShowFullSectionRequiredMarks => !IsDepartmentSelected && !IsInactiveNotTraceable;
+    // for Dealer and Institution (Department skips them, as do Inactive Not Traceable and Inactive To Be Terminated).
+    private bool ShowFullSectionRequiredMarks => !IsDepartmentSelected && !IsInactiveNotTraceable && !IsInactiveToBeTerminated;
 
-    // Primary Location fields are optional for Inactive To Be Terminated.
-    private bool ShowPrimaryLocationRequiredMarks => ShowFullSectionRequiredMarks && !IsInactiveToBeTerminated;
+    // Primary Location fields share the same requirement as full sections.
+    private bool ShowPrimaryLocationRequiredMarks => ShowFullSectionRequiredMarks;
 
     // Latitude & Longitude are additionally required only for the New Dealer flow or an
     // existing Dealer selected from Dealer Code & Name (same rule as Validate()).
@@ -1520,7 +1520,10 @@
     private bool ShowTerminatedDatesRequiredMarks => false;
 
     // Trade Deposit Details (SPIC/Greenstar) are mandatory only when registration type = Dealer.
-    private bool ShowTradeDepositRequiredMarks => IsDealerSelected && ShowFullRegistrationSections && !IsInactiveNotTraceable;
+    private bool ShowTradeDepositRequiredMarks => IsDealerSelected && ShowFullRegistrationSections && !IsInactiveNotTraceable && !IsInactiveToBeTerminated;
+
+    // Last Transaction Date is required for Inactive dealers, except for Not Traceable and To Be Terminated.
+    private bool ShowLastTransactionDateRequiredMarks => !IsRestrictedNavFlow && !IsInactiveToBeTerminated;
 
     private bool ShowInactiveStatus => status == "Inactive";
     private bool ShowTerminatedStatus => status == "Terminated";
@@ -1843,34 +1846,59 @@
             _errors.Remove("GreenstarDateOfAppointment");
         }
 
+        if (!ShowLastTransactionDateRequiredMarks)
+        {
+            _errors.Remove("LastTransactionDate");
+        }
+
         if (status == "Terminated")
         {
             _errors.Remove("FinalApprovalDate");
             _errors.Remove("SettlementDate");
         }
 
-        if (IsInactiveToBeTerminated)
+        if (!ShowFullSectionRequiredMarks)
         {
             _errors.Remove("GoogleMapURL");
-            if (string.IsNullOrWhiteSpace(_latitudeLongitudeText))
-            {
-                _errors.Remove("Latitude");
-                _errors.Remove("Longitude");
-            }
+            _errors.Remove("Latitude");
+            _errors.Remove("Longitude");
             _errors.Remove("ShopNo");
             _errors.Remove("Street");
             _errors.Remove("SubVillage");
-            if (string.IsNullOrWhiteSpace(_model.PinCode))
-                _errors.Remove("PinCode");
+            _errors.Remove("PinCode");
             _errors.Remove("Village");
             _errors.Remove("Block");
             _errors.Remove("Taluk");
-            if ((_model.DistrictId ?? 0) == 0)
-                _errors.Remove("DistrictId");
-            if ((_model.DealerStateId ?? 0) == 0)
-                _errors.Remove("DealerStateId");
-            if (string.IsNullOrWhiteSpace(_model.OfficialContactNumber))
-                _errors.Remove("OfficialContactNumber");
+            _errors.Remove("DistrictId");
+            _errors.Remove("DealerStateId");
+            _errors.Remove("OfficialContactNumber");
+            _errors.Remove("WhatsAppNumber");
+            _errors.Remove("AlternativeNumber");
+            _errors.Remove("AccountHolderName");
+            _errors.Remove("AccountNumber");
+            _errors.Remove("BankId");
+            _errors.Remove("Branch");
+            _errors.Remove("IFSC");
+            _errors.Remove("GSTNumber");
+            _errors.Remove("GSTFile");
+            _errors.Remove("PANNumber");
+            _errors.Remove("PANFile");
+            _errors.Remove("AadhaarNumber");
+            _errors.Remove("AadhaarFile");
+            _errors.Remove("TANNumber");
+            _errors.Remove("FertilizerLicense");
+            _errors.Remove("WholesaleFile");
+            _errors.Remove("RetailFile");
+        }
+
+        if (!ShowTradeDepositRequiredMarks)
+        {
+            _errors.Remove("TradeDepositAmount");
+            _errors.Remove("TradeDepositReceiptNo");
+            _errors.Remove("TradeDepositDate");
+            _errors.Remove("GreenstarTradeDepositAmountReg");
+            _errors.Remove("GreenstarTradeDepositReceiptNoReg");
+            _errors.Remove("GreenstarTradeDepositDateReg");
         }
     }
 
@@ -2376,7 +2404,7 @@ void ToggleGreenStar()
             }
         }
 
-       if (status == "Inactive" && !IsRestrictedNavFlow)
+       if (status == "Inactive" && ShowLastTransactionDateRequiredMarks)
         {
             if (_model.LastTransactionDate == null) _errors["LastTransactionDate"] = "Last Transaction Date is required";
         }
@@ -2390,55 +2418,34 @@ void ToggleGreenStar()
         }
         bool isDept = IsDepartmentSelected;
 
-        if (ShowFullRegistrationSections && !isDept && !IsInactiveNotTraceable)
+        if (ShowFullRegistrationSections && !isDept && !IsInactiveNotTraceable && !IsInactiveToBeTerminated)
         {
-            if (!IsInactiveToBeTerminated)
+            if (string.IsNullOrWhiteSpace(_model.GoogleMapURL)) _errors["GoogleMapURL"] = "Google Map URL is required";
+            if (string.IsNullOrWhiteSpace(_model.ShopNoORRoomNoOrBlockNo)) _errors["ShopNo"] = "Shop No / Room No / Block No is required";
+            if (string.IsNullOrWhiteSpace(_model.Street)) _errors["Street"] = "Street / Area / Locality is required";
+            if (string.IsNullOrWhiteSpace(_model.SubVillage)) _errors["SubVillage"] = "Sub Village is required";
+            if (string.IsNullOrWhiteSpace(_model.Village)) _errors["Village"] = "Village is required";
+            if (string.IsNullOrWhiteSpace(_model.Block)) _errors["Block"] = "Block is required";
+            if (string.IsNullOrWhiteSpace(_model.Taluk)) _errors["Taluk"] = "Taluk is required";
+            // Location is mandatory for both:
+            // 1) the existing New Dealer flow, and
+            // 2) an Existing Dealer selected/edited from Dealer Code & Name.
+            // Keep Institution/Department legacy behaviour unchanged unless it is already
+            // part of the New Dealer flow.
+            if (IsNewDealerFlow || IsDealerSelected)
             {
-                if (string.IsNullOrWhiteSpace(_model.GoogleMapURL)) _errors["GoogleMapURL"] = "Google Map URL is required";
-                if (string.IsNullOrWhiteSpace(_model.ShopNoORRoomNoOrBlockNo)) _errors["ShopNo"] = "Shop No / Room No / Block No is required";
-                if (string.IsNullOrWhiteSpace(_model.Street)) _errors["Street"] = "Street / Area / Locality is required";
-                if (string.IsNullOrWhiteSpace(_model.SubVillage)) _errors["SubVillage"] = "Sub Village is required";
-                if (string.IsNullOrWhiteSpace(_model.Village)) _errors["Village"] = "Village is required";
-                if (string.IsNullOrWhiteSpace(_model.Block)) _errors["Block"] = "Block is required";
-                if (string.IsNullOrWhiteSpace(_model.Taluk)) _errors["Taluk"] = "Taluk is required";
-                // Location is mandatory for both:
-                // 1) the existing New Dealer flow, and
-                // 2) an Existing Dealer selected/edited from Dealer Code & Name.
-                // Keep Institution/Department legacy behaviour unchanged unless it is already
-                // part of the New Dealer flow.
-                if (IsNewDealerFlow || IsDealerSelected)
-                {
-                    if (!_model.Latitude.HasValue)
-                        _errors["Latitude"] = "Latitude is required (click the map or use current location)";
+                if (!_model.Latitude.HasValue)
+                    _errors["Latitude"] = "Latitude is required (click the map or use current location)";
 
-                    if (!_model.Longitude.HasValue)
-                        _errors["Longitude"] = "Longitude is required (click the map or use current location)";
-                }
-                if (string.IsNullOrWhiteSpace(_model.PinCode)) _errors["PinCode"] = "Pincode is required";
-                else if (_model.PinCode.Length != 6) _errors["PinCode"] = "Pincode must be 6 digits";
-                if ((_model.DistrictId ?? 0) == 0) _errors["DistrictId"] = "District is required in Primary Location";
-                if ((_model.DealerStateId ?? 0) == 0) _errors["DealerStateId"] = "State is required in Primary Location";
-                if (string.IsNullOrWhiteSpace(_model.OfficialContactNumber)) _errors["OfficialContactNumber"] = "Official Contact Number is required";
-                else if (_model.OfficialContactNumber.Length != 10) _errors["OfficialContactNumber"] = "Official Contact Number must be 10 digits";
+                if (!_model.Longitude.HasValue)
+                    _errors["Longitude"] = "Longitude is required (click the map or use current location)";
             }
-            else
-            {
-                // Inactive – To Be Terminated: Primary location fields are optional,
-                // but format validation still applies when values are populated.
-                if (!string.IsNullOrWhiteSpace(_model.PinCode) && _model.PinCode.Length != 6)
-                    _errors["PinCode"] = "Pincode must be 6 digits";
-
-                if (!string.IsNullOrWhiteSpace(_model.OfficialContactNumber) && _model.OfficialContactNumber.Length != 10)
-                    _errors["OfficialContactNumber"] = "Official Contact Number must be 10 digits";
-
-                if (_model.Latitude.HasValue != _model.Longitude.HasValue)
-                {
-                    if (!_model.Latitude.HasValue)
-                        _errors["Latitude"] = "Latitude is required (click the map or use current location)";
-                    if (!_model.Longitude.HasValue)
-                        _errors["Longitude"] = "Longitude is required (click the map or use current location)";
-                }
-            }
+            if (string.IsNullOrWhiteSpace(_model.PinCode)) _errors["PinCode"] = "Pincode is required";
+            else if (_model.PinCode.Length != 6) _errors["PinCode"] = "Pincode must be 6 digits";
+            if ((_model.DistrictId ?? 0) == 0) _errors["DistrictId"] = "District is required in Primary Location";
+            if ((_model.DealerStateId ?? 0) == 0) _errors["DealerStateId"] = "State is required in Primary Location";
+            if (string.IsNullOrWhiteSpace(_model.OfficialContactNumber)) _errors["OfficialContactNumber"] = "Official Contact Number is required";
+            else if (_model.OfficialContactNumber.Length != 10) _errors["OfficialContactNumber"] = "Official Contact Number must be 10 digits";
 
             if (string.IsNullOrWhiteSpace(_model.WhatsAppNumber)) _errors["WhatsAppNumber"] = "WhatsApp Number is required";
             else if (_model.WhatsAppNumber.Length != 10) _errors["WhatsAppNumber"] = "WhatsApp Number must be 10 digits";

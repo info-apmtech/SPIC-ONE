@@ -177,7 +177,10 @@ namespace SpicAPI.Controllers
             if (persisted == null)
                 return NotFound(new { message = "Dealer registration was not found." });
 
-            if (entity.Status == DealerStatus.Terminated || persisted.Status == DealerStatus.Terminated)
+            if (!IsOfficialContactNumberOptional(entity) && string.IsNullOrWhiteSpace(entity.OfficialContactNumber))
+                return BadRequest("Dealer login cannot be created because the Official Contact Number is missing.");
+
+            if (string.IsNullOrEmpty(entity.UserTableId) && !string.IsNullOrEmpty(persisted.UserTableId))
                 entity.UserTableId = persisted.UserTableId;
 
             ClearTerminatedContactNumbers(entity);
@@ -810,14 +813,17 @@ namespace SpicAPI.Controllers
             // A Terminated registration must never provision or activate a login. It has no
             // usable contact-number credential (the Terminated form does not require one), and
             // dealer accounts are otherwise created only at the approved Dealer Code stages.
-            var isTerminated = dealer.Status == DealerStatus.Terminated
-                || persisted.Status == DealerStatus.Terminated;
+            // Similarly, Inactive dealers with proposals "Not Traceable" or "To Be Terminated"
+            // do not require contact numbers and must not provision logins with blank credentials.
+            // Official Contact Number is mandatory for Active and Inactive -> Future Business,
+            // regardless of whether UserTableId already exists.
+            if (!IsOfficialContactNumberOptional(dealer) && string.IsNullOrWhiteSpace(dealer.OfficialContactNumber))
+                return BadRequest("Dealer login cannot be created because the Official Contact Number is missing.");
 
-            if (isTerminated)
+            if (string.IsNullOrEmpty(dealer.UserTableId) && !string.IsNullOrEmpty(persisted.UserTableId))
                 dealer.UserTableId = persisted.UserTableId;
 
-            if (!isTerminated
-                && string.IsNullOrEmpty(dealer.UserTableId)
+            if (string.IsNullOrEmpty(dealer.UserTableId)
                 && !string.IsNullOrEmpty(dealer.DealerCode))
             {
                 var userError = await EnsureDealerUserAsync(dealer);
@@ -833,6 +839,13 @@ namespace SpicAPI.Controllers
             return Ok(dealer);
         }
 
+        private static bool IsOfficialContactNumberOptional(DealerRegistration dealer)
+        {
+            return dealer.Status == DealerStatus.Terminated
+                || (dealer.Status == DealerStatus.InActive && dealer.InactiveProposal == FutureBusinessProposal.NotTraceable)
+                || (dealer.Status == DealerStatus.InActive && dealer.InactiveProposal == FutureBusinessProposal.Terminated);
+        }
+
         /// <summary>
         /// Creates (or links) the login account for a dealer identified by its DealerCode.
         /// Returns an error message on failure, or null on success.
@@ -840,7 +853,27 @@ namespace SpicAPI.Controllers
         private async Task<string?> EnsureDealerUserAsync(DealerRegistration dealer)
         {
             if (dealer.Status == DealerStatus.Terminated)
-                return "Dealer login cannot be created for a terminated dealer.";
+            {
+                var existingTermUser = await _userInfoRepo.GetAll()
+                    .FirstOrDefaultAsync(u => u.NormalizedUserName == dealer.DealerCode.ToUpper());
+                if (existingTermUser != null)
+                {
+                    dealer.UserTableId = existingTermUser.Id;
+                }
+                return null;
+            }
+
+            var phonePass = dealer.OfficialContactNumber?.Trim();
+
+            // Official Contact Number is mandatory for Active and Inactive -> Future Business,
+            // regardless of whether the user already exists in the database.
+            if (string.IsNullOrWhiteSpace(phonePass))
+            {
+                if (IsOfficialContactNumberOptional(dealer))
+                    return null;
+
+                return "Dealer login cannot be created because the Official Contact Number is missing.";
+            }
 
             // 1. Check if the user ALREADY EXISTS in the database by their DealerCode
             var existingAppUser = await _userInfoRepo.GetAll()
@@ -868,13 +901,6 @@ namespace SpicAPI.Controllers
 
             // 3. The account truly doesn't exist. Create it safely.
             var newUserId = Guid.NewGuid().ToString();
-            var phonePass = dealer.OfficialContactNumber?.Trim();
-
-            // Never hand an empty credential to Identity. Dealer accounts use the official
-            // contact number as their initial password; without it there is nothing valid to
-            // provision, so report that instead of surfacing raw password-policy errors.
-            if (string.IsNullOrWhiteSpace(phonePass))
-                return "Dealer login cannot be created because the Official Contact Number is missing.";
 
             var dealerDesignationId = await ResolveDealerDesignationIdAsync();
 
