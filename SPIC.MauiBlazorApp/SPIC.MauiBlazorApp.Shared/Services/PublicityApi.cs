@@ -110,6 +110,9 @@ public sealed class PublicityApi : ApiClientBase, IDisposable
     public Task<bool> ConfirmZeroRegionAsync(int stateId, int regionId, string? remarks) =>
         SendAsync(HttpMethod.Post, $"regions/{stateId}/{regionId}/confirm-zero", new PubRegionActionDto { Remarks = remarks }, "confirm zero requirement");
     public Task<PubSaved?> CreateDispatchAsync(int id, PubDispatchCreateDto dto) => SendAsync<PubSaved>(HttpMethod.Post, $"requests/{id}/dispatches", dto, "create the dispatch");
+    public Task<List<PubBulkImportRowDto>?> ImportExcelAsync(IBrowserFile file) =>
+        UploadAsync<List<PubBulkImportRowDto>>("requests/import-excel", "file", new[] { file }, MaxFileBytes, "import the Excel file");
+    public Task<List<PubBulkCreatedDto>?> CreateBulkAsync(PubBulkUpsertDto dto) => SendAsync<List<PubBulkCreatedDto>>(HttpMethod.Post, "requests/bulk", dto, "save the requests");
     // Deliberately NOT cached like LookupsAsync() - the dropdown must reflect a just-added address
     // immediately, and the list is small/cheap enough that a fresh fetch every time is simplest.
     public Task<List<PubDeliveryAddressDto>?> DeliveryAddressesAsync() => GetAsync<List<PubDeliveryAddressDto>>("delivery-addresses", "the saved addresses");
