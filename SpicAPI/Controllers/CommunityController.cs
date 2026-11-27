@@ -24,11 +24,13 @@ namespace SpicAPI.Controllers
 	{
 		private readonly AppDbContext _db;
 		private readonly IWebHostEnvironment _env;
+		private readonly SpicAPI.Services.CommunityNearResolver _near;
 
-		public CommunityController(AppDbContext db, IWebHostEnvironment env)
+		public CommunityController(AppDbContext db, IWebHostEnvironment env, SpicAPI.Services.CommunityNearResolver near)
 		{
 			_db = db;
 			_env = env;
+			_near = near;
 		}
 
 		// ---------------------------------------------------------------- constants
@@ -214,6 +216,11 @@ namespace SpicAPI.Controllers
 				case "expert":
 					query = query.Where(p => p.Status == CommunityDiscussionStatus.ExpertAnswer);
 					break;
+				case "near":
+					// Farmer portal Task 3: authors near the caller (district, else state; CommunityNearRules).
+					var (_, nearIds) = await NearAuthorIdsAsync(HttpContext.RequestAborted);
+					query = query.Where(p => nearIds.Contains(p.AuthorUserId));
+					break;
 			}
 
 			query = (sort ?? "latest").ToLowerInvariant() switch
@@ -235,6 +242,37 @@ namespace SpicAPI.Controllers
 				PageSize = pageSize
 			};
 
+			return Ok(result);
+		}
+
+		// GET /api/Community/near?page=&pageSize=
+		// Farmer portal Task 3 ("Community near me"): discussions whose authors are near the caller
+		// (a farmer's profile district, else the state; staff: their state). Latest activity first.
+		[HttpGet("near")]
+		public async Task<IActionResult> GetNear([FromQuery] int page = 1, [FromQuery] int pageSize = 10)
+		{
+			if (page < 1) page = 1;
+			if (pageSize < 1) pageSize = 10;
+			if (pageSize > 50) pageSize = 50;
+
+			var ct = HttpContext.RequestAborted;
+			var (area, scope, ids) = await NearAsync(ct);
+			var result = new CommunityNearPageDto
+			{
+				Scope = scope,
+				AreaName = SPIC.Core.FarmerPortal.FarmerTrendRules.AreaName(scope, area.DistrictName, area.StateName),
+				Page = page,
+				PageSize = pageSize
+			};
+			if (ids.Count == 0) return Ok(result);
+
+			var query = _db.CommunityPosts.AsNoTracking()
+				.Where(p => !p.IsDeleted && ids.Contains(p.AuthorUserId))
+				.OrderByDescending(p => p.LastActivityAt).ThenByDescending(p => p.Id);
+
+			result.Total = await query.CountAsync(ct);
+			var posts = await query.Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(ct);
+			result.Items = await BuildSummariesAsync(posts);
 			return Ok(result);
 		}
 
@@ -1245,7 +1283,20 @@ namespace SpicAPI.Controllers
 			if (string.IsNullOrWhiteSpace(name)) name = profile?.UserName;
 			if (string.IsNullOrWhiteSpace(name)) name = userName;
 
-			return new AuthorInfo(userId, name ?? "", DisplayRole(), await ResolveLocationAsync());
+			// Farmer portal Task 3: an OTP farmer shows their profile name (Task 1 copies it to the
+			// Identity user) and "Village, District" from the farmer profile; staff keep "HQ, State".
+			string? location;
+			if (CurrentRole() == AppRole.Farmer && await FarmerAuthorAsync() is { } farmer)
+			{
+				if (!string.IsNullOrWhiteSpace(farmer.Name)) name = farmer.Name.Trim();
+				location = farmer.Location ?? await ResolveLocationAsync();
+			}
+			else
+			{
+				location = await ResolveLocationAsync();
+			}
+
+			return new AuthorInfo(userId, name ?? "", DisplayRole(), location);
 		}
 
 		// "Headquarter, State" from the location claims the JWT carries; empty when the
@@ -1279,6 +1330,44 @@ namespace SpicAPI.Controllers
 				.ToList();
 
 			return parts.Count == 0 ? null : string.Join(", ", parts);
+		}
+
+		// ---------------------------------------------------------------- near me (farmer portal Task 3)
+
+		private async Task<(SpicAPI.Services.CommunityArea Area, SPIC.Core.DTOs.FarmerAreaScope Scope, List<string> Ids)> NearAsync(CancellationToken ct)
+		{
+			var area = await _near.CallerAreaAsync(CurrentUserId(), CurrentRole(), ClaimInt("spic:state_id"), ct);
+			var authors = await _near.AuthorsAsync(area, ct);
+			var scope = SPIC.Core.FarmerPortal.CommunityNearRules.ChooseScope(authors);
+			return (area, scope, SPIC.Core.FarmerPortal.CommunityNearRules.For(authors, scope).ToList());
+		}
+
+		private async Task<(SPIC.Core.DTOs.FarmerAreaScope Scope, List<string> Ids)> NearAuthorIdsAsync(CancellationToken ct)
+		{
+			var (_, scope, ids) = await NearAsync(ct);
+			return (scope, ids);
+		}
+
+		/// <summary>An OTP farmer's profile name and "Village, District" (null when they have no farmer profile).</summary>
+		private async Task<(string Name, string? Location)?> FarmerAuthorAsync()
+		{
+			var userId = CurrentUserId();
+			if (string.IsNullOrWhiteSpace(userId)) return null;
+
+			var place = await (
+				from p in _db.FarmerProfiles.AsNoTracking()
+				join d in _db.Districts.AsNoTracking() on p.DistrictId equals d.Id into dj
+				from d in dj.DefaultIfEmpty()
+				where p.UserId == userId
+				select new { p.Name, p.Village, District = d != null ? d.DistrictName : null })
+				.FirstOrDefaultAsync();
+			if (place is null) return null;
+
+			var parts = new[] { place.Village?.Trim(), place.District?.Trim() }
+				.Where(x => !string.IsNullOrWhiteSpace(x))
+				.Distinct(StringComparer.OrdinalIgnoreCase)
+				.ToList();
+			return (place.Name, parts.Count == 0 ? null : string.Join(", ", parts));
 		}
 
 		private int ClaimInt(string type)

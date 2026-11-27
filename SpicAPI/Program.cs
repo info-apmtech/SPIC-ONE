@@ -94,6 +94,12 @@ builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<ITokenIssuer, TokenIssuer>();
 // Farmer portal OTP SMS (docs/farmer-portal.md): Sms:Provider = Log (default) | Msg91.
 builder.Services.AddSpicSms(builder.Configuration);
+// Farmer portal Task 3 (docs/farmer-portal.md): Open-Meteo forecast (8 s timeout, cached 1 h per
+// 0.1-degree point), area trends cache (1 h per district) and the Community "near me" author lookup.
+builder.Services.AddMemoryCache();
+builder.Services.AddHttpClient(FarmerWeatherService.HttpClientName, c => c.Timeout = FarmerWeatherService.Timeout);
+builder.Services.AddSingleton<IFarmerWeatherService, FarmerWeatherService>();
+builder.Services.AddScoped<CommunityNearResolver>();
 builder.Services.AddScoped<IExcelBulkUploadService, ExcelBulkUploadService>();
 builder.Services.AddScoped<IIfmsAccountStore, IfmsAccountStore>();
 builder.Services.AddScoped<IIfmsRelayDeviceStore, IfmsRelayDeviceStore>();
