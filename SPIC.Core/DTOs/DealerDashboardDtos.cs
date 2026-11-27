@@ -67,6 +67,8 @@ namespace SPIC.Core.DTOs
 		/// <summary>True once AVP Office has manually saved the company Dealer IDs for an
 		/// initial New Dealer. A separate Final AVP approval follows this step.</summary>
 		public bool IsAvpOfficeSubmitted { get; set; }
+		/// <summary>True when an initial New Dealer was returned by AVP Office back to SMD/SMM for review.</summary>
+		public bool IsAvpOfficeReturned { get; set; }
 		/// <summary>True once the separate Final AVP history row exists, or for legacy
 		/// New Dealers completed before that step was introduced.</summary>
 		public bool IsFinalAvpApproved { get; set; }

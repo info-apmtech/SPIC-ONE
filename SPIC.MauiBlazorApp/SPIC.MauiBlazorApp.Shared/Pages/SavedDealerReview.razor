@@ -54,14 +54,19 @@
     private bool _showEnclosures =>
         !_isTerminatedRestricted && !_isNotTraceableRestricted && !_isInactiveTerminatedRestricted && !_isDepartmentDealer;
 
-    // Only the INITIAL New Dealer approval (before DealerCode allocation) uses the
-    // trade-deposit/no-credit-limit review path. After first AVP approval the permanent
-    // IsNewDealerRegistration flag remains true, but a record with DealerCode is handled
-    // like an Existing Dealer for future maintenance/re-approval so Credit Limit values
-    // are reviewed and the DealerCode is never generated again.
+    // Only the INITIAL New Dealer approval (before final AVP approval) uses the
+    // trade-deposit/no-credit-limit review path. After final AVP approval the permanent
+    // IsNewDealerRegistration flag remains true, but a record is handled like an Existing
+    // Dealer for future maintenance/re-approval so Credit Limit values are reviewed.
+    private bool HasFinalAvpApproval =>
+        _dealer != null &&
+        ((_dealer.AVPApproved == true && !string.IsNullOrWhiteSpace(_dealer.DealerCode))
+         || _dealer.FinalApprovalDate.HasValue
+         || (_approvalHistory != null && _approvalHistory.Any(h => h.IsApproved == true && MatchesAvpRole(h.Role))));
+
     private bool _isNewDealer =>
         _dealer?.IsNewDealerRegistration == true &&
-        string.IsNullOrWhiteSpace(_dealer?.DealerCode);
+        !HasFinalAvpApproval;
 
     // Display-only identity for every registration that originated from the New Dealer flow.
     // Keep this separate from _isNewDealer because _isNewDealer intentionally means only the
@@ -683,44 +688,92 @@
     private string? _avpOfficeError;
     private bool _isSubmittingAvpOffice;
 
+    private static bool MatchesAvpRole(string? role) =>
+        !string.IsNullOrWhiteSpace(role) &&
+        (string.Equals(role, "AVP", StringComparison.OrdinalIgnoreCase)
+         || string.Equals(role, "Director", StringComparison.OrdinalIgnoreCase)
+         || string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase)
+         || string.Equals(role, "CorporateAdmin", StringComparison.OrdinalIgnoreCase)
+         || string.Equals(role, "Final AVP", StringComparison.OrdinalIgnoreCase));
+
     private bool HasAvpOfficeHistory =>
         _approvalHistory.Any(h => h.IsApproved == true &&
             string.Equals(h.Role, "AVP Office", StringComparison.OrdinalIgnoreCase));
 
-    private bool IsAvpOfficeSubmitted =>
-        _dealer != null &&
-        (HasAvpOfficeHistory || !string.IsNullOrWhiteSpace(_dealer.DealerCode));
+    private bool IsAvpOfficeSubmitted
+    {
+        get
+        {
+            if (_dealer == null || !_isNewDealer) return false;
+
+            var lastSmApproval = _approvalHistory
+                .Where(h => (string.Equals(h.Role, "SMD", StringComparison.OrdinalIgnoreCase)
+                          || string.Equals(h.Role, "SMM", StringComparison.OrdinalIgnoreCase)
+                          || string.Equals(h.Role, "SM", StringComparison.OrdinalIgnoreCase))
+                          && h.IsApproved)
+                .OrderByDescending(h => h.ApprovedAt)
+                .ThenByDescending(h => h.Id)
+                .FirstOrDefault();
+
+            var latestAvpStage = _approvalHistory
+                .Where(h => (lastSmApproval == null || h.ApprovedAt >= lastSmApproval.ApprovedAt)
+                         && (string.Equals(h.Role, "AVP Office", StringComparison.OrdinalIgnoreCase)
+                             || (MatchesAvpRole(h.Role) && !h.IsApproved)))
+                .OrderByDescending(h => h.ApprovedAt)
+                .ThenByDescending(h => h.Id)
+                .FirstOrDefault();
+
+            if (latestAvpStage != null)
+            {
+                return string.Equals(latestAvpStage.Role, "AVP Office", StringComparison.OrdinalIgnoreCase) && latestAvpStage.IsApproved;
+            }
+
+            return _dealer.AVPApproved == true && !string.IsNullOrWhiteSpace(_dealer.DealerCode);
+        }
+    }
 
     private bool IsFinalAvpApproved =>
-        _approvalHistory.Any(h => h.IsApproved == true &&
-            string.Equals(h.Role, "Final AVP", StringComparison.OrdinalIgnoreCase))
-        || (_dealer != null
-            && _dealer.IsNewDealerRegistration
-            && _dealer.AVPApproved == true
-            && !string.IsNullOrWhiteSpace(_dealer.DealerCode)
-            && !HasAvpOfficeHistory);
+        _dealer != null && _dealer.AVPApproved == true;
+
+    private bool IsAvpOfficeReturned
+    {
+        get
+        {
+            if (_dealer == null || !_isNewDealer) return false;
+            if (_dealer.SMApproved != false || _dealer.RMApproved != true) return false;
+
+            var latestAction = _approvalHistory
+                .Where(h => string.Equals(h.Role, "AVP Office", StringComparison.OrdinalIgnoreCase)
+                         || string.Equals(h.Role, "SMD", StringComparison.OrdinalIgnoreCase)
+                         || string.Equals(h.Role, "SMM", StringComparison.OrdinalIgnoreCase)
+                         || string.Equals(h.Role, "SM", StringComparison.OrdinalIgnoreCase))
+                .OrderByDescending(h => h.ApprovedAt)
+                .ThenByDescending(h => h.Id)
+                .FirstOrDefault();
+
+            return latestAction != null
+                && string.Equals(latestAction.Role, "AVP Office", StringComparison.OrdinalIgnoreCase)
+                && !latestAction.IsApproved;
+        }
+    }
 
     private bool IsAwaitingAvpOffice =>
         _dealer != null
-        && _dealer.IsNewDealerRegistration
+        && _isNewDealer
         && _dealer.RMApproved == true
         && _dealer.SMApproved == true
-        && _dealer.AVPApproved != false
-        && !IsAvpOfficeSubmitted
-        && !IsFinalAvpApproved;
+        && _dealer.AVPApproved == null
+        && !IsAvpOfficeSubmitted;
 
     private bool IsAwaitingFinalAvp =>
-        _showNewDealerSavedDetails && IsAvpOfficeSubmitted && !IsFinalAvpApproved;
+        _isNewDealer
+        && _dealer?.RMApproved == true
+        && _dealer?.SMApproved == true
+        && _dealer?.AVPApproved == null
+        && IsAvpOfficeSubmitted;
 
     private bool CanShowAvpOfficeSubmit =>
-        LoginState.IsAvpOffice
-        && _dealer != null
-        && _showNewDealerSavedDetails
-        && _dealer.RMApproved == true
-        && _dealer.SMApproved == true
-        && _dealer.AVPApproved != false
-        && !IsAvpOfficeSubmitted
-        && !IsFinalAvpApproved;
+        LoginState.IsAvpOffice && IsAwaitingAvpOffice;
 
     private bool CanShowFinalAvpApproval =>
         (LoginState.IsDirectorOrAVP || LoginState.IsAdmin) && IsAwaitingFinalAvp;
@@ -914,7 +967,6 @@ private async Task SubmitAvpOfficeIds()
         if (CanShowFinalAvpApproval) return "Final AVP Approval";
         if (LoginState.IsRMGroup) return "RM Review";
         if (LoginState.IsSMGroup) return "SM Review";
-        if (IsNewDealerFinalApproval) return "AVP Review";
         if (LoginState.IsDirectorOrAVP || LoginState.IsAdmin) return "AVP Review";
         return "Review";
     }
@@ -922,11 +974,10 @@ private async Task SubmitAvpOfficeIds()
     private string GetNextStageTarget()
     {
         if (LoginState == null) return "Next Stage";
-        if (CanShowAvpOfficeSubmit) return "Final AVP Approval";
+        if (CanShowAvpOfficeSubmit) return "AVP Review";
         if (CanShowFinalAvpApproval) return "Approved";
         if (LoginState.IsRMGroup) return "State Manager (SM) Review";
-        if (LoginState.IsSMGroup) return "AVP Review";
-        if (IsNewDealerFinalApproval) return "AVP Office";
+        if (LoginState.IsSMGroup) return _isNewDealer ? "AVP Office" : "AVP Review";
         if (LoginState.IsDirectorOrAVP || LoginState.IsAdmin) return "Final Approval";
         return "Next Stage";
     }
@@ -963,7 +1014,7 @@ private async Task ApproveDealer()
 
             var finalResp = await Http.PostAsJsonAsync(
                 $"api/DealerRegistration/{_dealer.Id}/final-approve",
-                new { Remarks = ConfirmRemarks, FinalAfterAvpOffice = true });
+                new { Remarks = ConfirmRemarks });
 
             if (!finalResp.IsSuccessStatusCode)
             {
@@ -979,34 +1030,6 @@ private async Task ApproveDealer()
             IsConfirmProceedPopupVisible = false;
             _successTitle = "New Dealer Finally Approved!";
             _successSubtitle = "Final AVP approval recorded after AVP Office submission.";
-            _showSuccessNotification = true;
-            StateHasChanged();
-            await Task.Delay(3000);
-            _showSuccessNotification = false;
-            Nav.NavigateTo("/Dashboard");
-            return;
-        }
-
-        // New Dealer initial AVP approval records the AVP decision only. The
-        // company Dealer IDs and internal Dealer Code are entered later by AVP
-        // Office, so nothing is generated or previewed here.
-        if (IsNewDealerFinalApproval)
-        {
-            var approveResp = await Http.PostAsJsonAsync(
-                $"api/DealerRegistration/{_dealer.Id}/final-approve",
-                new { Remarks = ConfirmRemarks });
-
-            if (!approveResp.IsSuccessStatusCode)
-            {
-                _approvalError = await ReadErrorAsync(approveResp);
-                return;
-            }
-
-            _dealer = await Http.GetFromJsonAsync<DR.DealerRegistration>($"api/DealerRegistration/{_dealer.Id}");
-            MarkDataChanged();
-            IsConfirmProceedPopupVisible = false;
-            _successTitle = "Forwarded to AVP Office!";
-            _successSubtitle = "AVP approval recorded. AVP Office will enter the Dealer IDs.";
             _showSuccessNotification = true;
             StateHasChanged();
             await Task.Delay(3000);
@@ -1157,16 +1180,19 @@ private async Task ApproveDealer()
             return CanShowAvpOfficeSubmit;
 
         if (LoginState.IsRMGroup)
-            return _dealer.RMApproved == null || (_dealer.RMApproved == true && _dealer.SMApproved == false);
+            return _dealer.RMApproved == null || (_dealer.RMApproved == true && _dealer.SMApproved == false && !IsAvpOfficeReturned);
 
         if (LoginState.IsSMGroup)
-            return (_dealer.RMApproved == true && _dealer.SMApproved == null) || (_dealer.RMApproved == true && _dealer.SMApproved == true && _dealer.AVPApproved == false);
+            return (_dealer.RMApproved == true && _dealer.SMApproved == null)
+                || (_dealer.RMApproved == true && _dealer.SMApproved == true && _dealer.AVPApproved == false)
+                || (_dealer.RMApproved == true && IsAvpOfficeReturned);
 
-        if (LoginState.IsDirectorOrAVP)
-            return (_dealer.RMApproved == true && _dealer.SMApproved == true && _dealer.AVPApproved == null) || CanShowFinalAvpApproval;
-
-        if (LoginState.IsAdmin)
-            return (_dealer.RMApproved == true && _dealer.SMApproved == true && _dealer.AVPApproved == null) || CanShowFinalAvpApproval;
+        if (LoginState.IsDirectorOrAVP || LoginState.IsAdmin)
+        {
+            if (_isNewDealer)
+                return CanShowFinalAvpApproval;
+            return (_dealer.RMApproved == true && _dealer.SMApproved == true && _dealer.AVPApproved == null);
+        }
 
         return false;
     }
@@ -1209,7 +1235,7 @@ private async Task ApproveDealer()
         if (CanShowAvpOfficeSubmit) return "Submit Dealer IDs";
         if (CanShowFinalAvpApproval) return "Final Approve";
         if (LoginState.IsRMGroup) return "Proceed to SM";
-        if (LoginState.IsSMGroup) return "Proceed to AVP";
+        if (LoginState.IsSMGroup) return _isNewDealer ? "Proceed to AVP Office" : "Proceed to AVP";
         if (LoginState.IsDirectorOrAVP || LoginState.IsAdmin) return "Approve";
         return "Approve";
     }
@@ -1598,6 +1624,7 @@ private async Task ApproveDealer()
     {
         <SendBackPopup
             Dealer="@_dealer"
+            ApprovalHistory="@_approvalHistory"
             LoginState="@LoginState"
             OnClose="@HideSendBackPopup"
             OnRejected="@HandleDealerRejected" />
@@ -1644,12 +1671,14 @@ private async Task ApproveDealer()
                      SubmittedByName="@_submittedByName"
                      IsAwaitingFinalAvp="IsAwaitingFinalAvp"
                      IsFinalAvpApproved="IsFinalAvpApproved"
+                     IsAvpOfficeReturned="IsAvpOfficeReturned"
                      DataVersion="_dataVersion" />
 
     <ApprovalProgress Dealer="_dealer"
                       IsNewDealer="_showNewDealerSavedDetails"
                       IsAvpOfficeSubmitted="IsAvpOfficeSubmitted"
                       IsFinalAvpApproved="IsFinalAvpApproved"
+                      IsAvpOfficeReturned="IsAvpOfficeReturned"
                       DataVersion="_dataVersion" />
 
     <ReviewTimeline Items="TimelineItems" />

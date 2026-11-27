@@ -1,4 +1,4 @@
-﻿@using System.Net.Http.Json
+@using System.Net.Http.Json
 @using DR = SPIC.Core.Entities
 @inject HttpClient Http
 
@@ -703,6 +703,7 @@
 
 @code {
     [Parameter] public DR.DealerRegistration? Dealer { get; set; } = default!;
+    [Parameter] public List<DR.DealerApprovalHistory>? ApprovalHistory { get; set; }
     [Parameter] public LoginState LoginState { get; set; } = default!;
     [Parameter] public EventCallback OnClose { get; set; }
     [Parameter] public EventCallback OnRejected { get; set; }
@@ -818,36 +819,41 @@
                 return;
             }
 
-            // Local state update, same style as approve process
-            if (LoginState.IsRegionRole)
+            // Sync local Dealer with the actual persisted API state returned by the server
+            try
             {
-                Dealer.RMApproved = false;
+                var sendBackResult = await sendBackResponse.Content.ReadFromJsonAsync<DealerSendBackResponse>();
+                if (sendBackResult?.Dealer != null)
+                {
+                    Dealer.RMApproved = sendBackResult.Dealer.RMApproved;
+                    Dealer.SMApproved = sendBackResult.Dealer.SMApproved;
+                    Dealer.AVPApproved = sendBackResult.Dealer.AVPApproved;
+                    Dealer.Status = sendBackResult.Dealer.Status;
+                    Dealer.UpdatedAt = sendBackResult.Dealer.UpdatedAt;
+                    Dealer.UpdatedBy = sendBackResult.Dealer.UpdatedBy;
+                }
+                else
+                {
+                    if (LoginState.IsRegionRole)
+                        Dealer.RMApproved = false;
+                    else if (LoginState.IsStateRole || LoginState.IsAvpOffice)
+                        Dealer.SMApproved = false;
+                    else if (LoginState.IsDirectorOrAVP || LoginState.IsAdmin)
+                        Dealer.AVPApproved = IsInitialNewDealer ? null : false;
+                }
             }
-            else if (LoginState.IsStateRole)
+            catch
             {
-                Dealer.SMApproved = false;
-            }
-            else if (LoginState.IsAdmin)
-            {
-                Dealer.AVPApproved = false;
+                if (LoginState.IsRegionRole)
+                    Dealer.RMApproved = false;
+                else if (LoginState.IsStateRole || LoginState.IsAvpOffice)
+                    Dealer.SMApproved = false;
+                else if (LoginState.IsDirectorOrAVP || LoginState.IsAdmin)
+                    Dealer.AVPApproved = IsInitialNewDealer ? null : false;
             }
 
-            // Change this status name according to your enum
-            // Dealer.Status = DR.DealerStatus.SentBack;
-
-            var updateResponse = await Http.PutAsJsonAsync(
-                $"api/DealerRegistration/{Dealer.Id}",
-                Dealer
-            );
-
-            if (updateResponse.IsSuccessStatusCode)
-            {
-                await OnRejected.InvokeAsync();
-            }
-            else
-            {
-                ErrorMessage = "Send back saved, but dealer status update failed.";
-            }
+            // Explicitly do not perform any subsequent client-side PUT; server patch is already persisted.
+            await OnRejected.InvokeAsync();
         }
         finally
         {
@@ -860,6 +866,13 @@
         await OnClose.InvokeAsync();
     }
 
+    private bool IsInitialNewDealer =>
+        Dealer != null
+        && Dealer.IsNewDealerRegistration
+        && !Dealer.FinalApprovalDate.HasValue
+        && (ApprovalHistory == null || !ApprovalHistory.Any(h => h.IsApproved == true &&
+                string.Equals(h.Role, "Final AVP", StringComparison.OrdinalIgnoreCase)));
+
     private string GetRoleTargetText()
     {
         if (LoginState == null) return "the previous role";
@@ -870,8 +883,11 @@
         if (LoginState.IsStateRole)
             return "Regional Manager (RM)";
 
-        if (LoginState.IsAdmin)
+        if (LoginState.IsAvpOffice)
             return "State Manager (SM)";
+
+        if (LoginState.IsDirectorOrAVP || LoginState.IsAdmin)
+            return IsInitialNewDealer ? "AVP Office" : "State Manager (SM)";
 
         return "the previous role";
     }
@@ -886,8 +902,11 @@
         if (LoginState.IsStateRole)
             return "RM";
 
-        if (LoginState.IsAdmin)
+        if (LoginState.IsAvpOffice)
             return "SM";
+
+        if (LoginState.IsDirectorOrAVP || LoginState.IsAdmin)
+            return IsInitialNewDealer ? "AVP Office" : "SM";
 
         return null;
     }
@@ -907,5 +926,11 @@
         public string Priority { get; set; } = "High";
         public List<string> Sections { get; set; } = new();
         public string? TargetRole { get; set; }
+    }
+
+    public class DealerSendBackResponse
+    {
+        public string? Message { get; set; }
+        public DR.DealerRegistration? Dealer { get; set; }
     }
 }
