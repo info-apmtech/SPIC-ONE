@@ -290,7 +290,7 @@ public sealed class DealerSalesController : ControllerBase
 
     [HttpPost("upload")]
     [RequestSizeLimit(6 * 1024 * 1024)]
-    public async Task<IActionResult> Upload([FromForm] IFormFile? file, CancellationToken ct = default)
+    public async Task<IActionResult> Upload(IFormFile? file, CancellationToken ct = default)
     {
         if (file is null || file.Length == 0 || file.Length > MaxFileBytes)
             return BadRequest(new { message = "Upload a nonempty Excel file up to 5 MB." });

@@ -575,7 +575,7 @@ public sealed class SalesAuditWorkflowController : ControllerBase
     [RequestSizeLimit(6 * 1024 * 1024)]
     public async Task<IActionResult> UploadDealerMapping(
         [FromQuery] int csr2Id,
-        [FromForm] IFormFile? file)
+        IFormFile? file)
     {
         var ct = HttpContext.RequestAborted;
 
@@ -932,7 +932,7 @@ public sealed class SalesAuditWorkflowController : ControllerBase
     // Each accepted invoice item is checked against the confirmed scheme and Product master.
     [HttpPost("tracking/import-achievements")]
     [RequestSizeLimit(6 * 1024 * 1024)]
-    public async Task<IActionResult> ImportTrackingAchievements([FromQuery] int csr2Id, [FromForm] IFormFile? file)
+    public async Task<IActionResult> ImportTrackingAchievements([FromQuery] int csr2Id, IFormFile? file)
     {
         if (csr2Id <= 0) return BadRequest("Valid csr2Id is required.");
         if (!await CanEditAsync(csr2Id)) return Forbid();
