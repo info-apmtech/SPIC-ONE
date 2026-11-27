@@ -534,11 +534,15 @@ Contracts: `SPIC.Core/DTOs/FertilizerDtos.cs`. Client: `Services/FarmerFertilize
 
 ### Rules (`SPIC.Core/FarmerPortal/FertilizerAdvisor.cs`, pinned by the harness)
 
-- **Rating = the soil report's.** Thresholds come from the lab parameter master (`S-N`, `S-P`, `S-K` via
-  `Sas:Lab:NutrientParameters`, and `S-PH`) and are applied exactly like `LabAutoResultEngine`: below RangeMin Low
-  (Deficient), above RangeMax High (Excess), RangeMin..ModerateFrom Medium (Moderate) when set, else Medium (Normal).
-  Seeded master: N 280-560, **P 22-56, K 110-280** kg/ha, pH 6.5-7.5. The brief's numbers (N 280/560, P 11/22,
-  K 118/280) are only the fallback when a master row is missing.
+- **Rating (fix round 1, coordinator ruling): the owner's sketch basis, elemental P and K.** N Low < 280, Medium
+  280-560, High > 560; P (kg P/ha) Low < 11, Medium 11-22, High > 22; K (kg K/ha) Low < 118, Medium 118-280,
+  High > 280; pH 6.5 / 7.5. Boundaries as `LabAutoResultEngine` (below Low, above High). The lab parameter master is
+  **not** used for the sliders: its S-P band 22-56 is the all-India P2O5 band, so typed Tamil Nadu soil-card values
+  (P as P) were rated one band too low.
+- **Unit toggles:** P can be entered as kg P/ha or kg P2O5/ha (x 2.29), K as kg K/ha or kg K2O/ha (x 1.2). The toggle
+  converts the shown value and the slider zones (P2O5 25.2 / 50.4, K2O 141.6 / 336); the request carries `pBasis` /
+  `kBasis` and the API converts to P / K before rating (`FertilizerAdvisor.ToElemental`). The result shows both
+  ("Soil test 18 kg P2O5/ha (7.9 kg P/ha)"); runs store the elemental values.
 - **Adjustment = the soil report's dose factors** (`LabFertilizerSchedule.FactorFor`, `Sas:Lab:DoseFactors`):
   Deficient 1.25, Moderate 1.10, Normal 1.00, Excess 0.75 by default (the soil-test rating approach: low +25 %,
   high -25 %, ICAR Indian Farming 70(3) 2020). Every split is scaled by its nutrient's factor.
@@ -549,7 +553,15 @@ Contracts: `SPIC.Core/DTOs/FertilizerDtos.cs`. Client: `Services/FarmerFertilize
   acidic, up to the lab maximum (7.5) neutral, up to 8.5 slightly alkaline (organic matter; gypsum only for a sodic
   soil, as per the gypsum requirement test), > 8.5 strongly alkaline / sodic (TNAU reclamation). No lime or gypsum
   dose is computed: TNAU ties both to a soil test.
-- **Units:** report values in kg/acre x 2.47105, ppm / mg/kg x 2.24 (0-15 cm plough layer); other units are not used.
+- **Soil report values** (`FertilizerAdvisor.ReportToElemental`): the SPIC lab's S-P in kg/ha is read as **P2O5** (its
+  22-56 band) and divided by 2.29 (the screen switches P to P2O5 so the farmer sees the report's own number); S-P in
+  kg/acre x 2.47105 / 2.29; S-P in ppm (Olsen P, as P) x 2.24 = kg P/ha. S-K (band 110-280, elemental) and N in kg/ha
+  as they are, kg/acre x 2.47105, ppm x 2.24. **The P2O5 reading of the lab's S-P must be confirmed by SPIC's lab.**
+- **Partial report:** only the values the report gives are filled; a missing one keeps its slider value with the
+  caution "Not in your report, enter it from your soil card", the strip names it, and the run is saved without the
+  report id (it counts as the farmer's own numbers). The report id is also dropped when a filled value is changed.
+- **Tips follow the pH** (`CropSoilTips.PhMin` / `PhMax`, migration `V38_FertilizerTipPh`): every tip that names lime
+  shows only below pH 6.5 (pulses' lime tip below 6.0); red soil's crust tip has a gypsum-only twin for pH >= 6.5.
 - **Area:** 1 ha = 2.47105 acres. Per-plant crops: plants = acres / 2.47105 x the source's plants per hectare
   (banana 3,080 at 1.8 x 1.8 m, coconut 175 at 7.5 x 7.5 m) unless the farmer enters a count.
 - Validation: area 0.1-1000 acres, plants 1-500,000, N 0-2000, P 0-500, K 0-2000 kg/ha, pH 3-11, a known soil type,
@@ -588,7 +600,13 @@ sugarcane, irrigated groundnut, hybrid rice, hybrid tomato.
 
 ### Left / for the owner
 
-- Prod migration `V36_FertilizerAdvice` (owner runs prod). No config keys: thresholds and factors are the lab's.
+- Prod migrations `V36_FertilizerAdvice` and `V38_FertilizerTipPh` (owner runs prod). No config keys: factors are the
+  lab's (`Sas:Lab:DoseFactors`); thresholds are the sketch's elemental ones.
+- **Confirm with SPIC's lab** which basis analysts enter for S-P (P2O5 as assumed, or P). If it is P, the lab master's
+  S-P band (22-56) is wrong for its own reports and `ReportToElemental` must stop dividing by 2.29.
+- **Needs an agronomist:** banana potash (TNAU Robusta 330 g K2O/plant = about 411 kg K2O/acre at 1,247 plants/acre,
+  while the SPIC lab schedule for banana totals about 225 kg K2O/acre); maize hybrids 150:75:75 (TNAU nutrient and
+  fertigation pages) vs 250:75:75 (TNAU hybrid seed-production page and a TNAU-CPG-2012 citing paper).
 - An agronomist (SPIC agri services) should sign off the seeded norms and tips before go-live; the doses are TNAU's
   blanket recommendations, read from the TNAU Agritech pages named on every row.
 - Sugarcane, irrigated groundnut, hybrid rice and hybrid tomato need a confirmed source before they are added.
