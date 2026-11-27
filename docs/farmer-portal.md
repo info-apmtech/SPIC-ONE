@@ -132,3 +132,99 @@ timeout); the code never appears in a URL or a log line.
   change which `X-Forwarded-For` entry is the client.
 - Prod migration `V34_FarmerPortalAuth` (owner runs prod).
 - Task 1b restyles these screens with the shared `Fp*` components (six-box OTP input, steps).
+
+## Design system (Task 1b, 2026-11-28)
+
+Every farmer screen composes these pieces instead of ad-hoc markup. Spec:
+`docs/superpowers/specs/2026-11-27-farmer-portal-visual-design.md`. Live gallery of every component
+and state: **`/dev/farmer-portal`** (Admin / SuperAdmin only; sample data).
+
+### Rules
+
+- Page root: `<div class="fp fp-page my-page">`. `.fp` carries the tokens; `.fp-page` is the centred
+  column (max 1120 px, 20 px gaps). Narrow it in your page's `.razor.css` (`.my-page { max-width: 760px; }`).
+- Global styles live in `SPIC.MauiBlazorApp.Shared/wwwroot/css/farmer-portal.css` (loaded after
+  `tokens.css` in both hosts). **Every selector starts with `.fp`**, so staff pages never change.
+  Page-specific layout goes in the page's own `.razor.css` (use `::deep` for classes you pass into
+  `Fp*` components through `CssClass`).
+- Start every page with `FpHero` (it is the h1 and sets the tab title). Do not use `PageHeader` on farmer pages.
+- Every screen designs its loading (`FpSkeleton`), empty (`FpEmpty`) and error (`FpError`) states.
+- Estimates and AI answers end with `FpDisclaimer`.
+- Plain words; 44 px tap targets (the classes already do this); never a danger button for farmers.
+- `Layout.css` forces every placeholder to the text colour with `!important`; inside `.fp` placeholders
+  are a lighter grey (`#6b7a72`, 4.6:1) so an example like "98765 43210" does not look typed.
+
+### Tokens (CSS custom properties on `.fp`)
+
+`--fp-green-900/800/700/600/500/100/50`, `--fp-gold-700/500/50`, `--fp-soil-600/50`, `--fp-sky-600/50`,
+`--fp-violet-600/50`, `--fp-teal-600/50`, `--fp-rose-600/50`, `--fp-ink-900/600/400`, `--fp-line`,
+`--fp-line-strong`, `--fp-bg`, `--fp-surface`, `--fp-low/-50` (red), `--fp-medium/-50` (green),
+`--fp-high/-50` (violet), `--fp-warn`, `--fp-radius` (16), `--fp-radius-input` (12), `--fp-radius-pill`,
+`--fp-shadow`, `--fp-shadow-lift`, `--fp-focus`, `--fp-hero-gradient`, `--fp-hero-pattern`.
+Hues for icons, tiles and chips: add `fp-hue-{green|gold|soil|sky|violet|teal|rose|neutral}`, which sets
+`--fp-hue` and `--fp-hue-bg`.
+
+### CSS classes
+
+| Class | Use |
+|---|---|
+| `fp-btn` + `fp-btn--primary` / `--secondary` / `--ghost` / `--gold` / `--light` (on green) | buttons; `--block` full width, `--sm` small. Primary is 52 px tall and full width on phone |
+| `fp-actionbar` | the row holding a form's main buttons; sticky above the tab bar on phone |
+| `fp-action-pills` > `fp-action-pill` (`--whatsapp`) | icon + label actions on list cards (Call, WhatsApp, Directions, Request call back) |
+| `fp-field`, `fp-label`, `fp-input` (input / select), `fp-input--short`, `is-invalid`, `fp-req`, `fp-optional`, `fp-hint`, `fp-hint--ok` | form fields; errors through `<FpFieldError Text="..." />` |
+| `fp-input-group` > `fp-input-addon` + `fp-input` | fixed prefix ("+91") |
+| `fp-check` | checkbox row |
+| `fp-alert` + `--error` / `--info` / `--success` / `--dev` | inline message strips |
+| `fp-form-row`, `fp-grid-2` | two columns (one on phone) |
+| `fp-section`, `fp-section-head`, `fp-section-title`, `fp-section-sub`, `fp-section-link` | a titled block of a page |
+| `fp-tile-grid` | 2 / 3 / 4 column grid (phone / tablet / desktop) for `FpTile` |
+| `fp-chips`, `fp-row`, `fp-stack` | wrapping rows and stacks |
+| `fp-h1`, `fp-h2`, `fp-text`, `fp-caption`, `fp-muted`, `fp-num` (tabular digits), `fp-sr-only` | type |
+| `fp-icon-circle` (`--sm`), `fp-avatar`, `fp-spinner`, `fp-link-btn` | small pieces |
+| `fp-fade-up`, `fp-fade-up-2`, `fp-fade-up-3` | 8 px fade-up on first render (staggered); off with reduced motion |
+
+### Components (`Components/FarmerPortal/`, prefix `Fp`)
+
+| Component | Key parameters | Usage |
+|---|---|---|
+| `FpHero` | `Title`, `Subtitle`, `Eyebrow`, `BackHref`, `BackLabel`, `DocumentTitle`, `Compact`, `Aside`, `ChildContent` (chips / steps / weather strip) | `<FpHero Title="Dealers near you" BackHref="/farmer" Compact="true"><FpChip Icon="bi-geo-alt-fill" Text="@place" /></FpHero>` |
+| `FpCard` | `Title`, `Subtitle`, `Icon`, `Hue`, `Variant` (default / highlight / tinted / flush), `HeaderActions`, `ChildContent`, `Footer`, `Animate`; method `FocusTitleAsync()` | `<FpCard Title="Soil test values" Icon="bi-sliders" Hue="soil">...</FpCard>` |
+| `FpTile` | `Title`, `Description`, `Icon`, `Hue`, `Href` or `OnClick`, `Badge`, `Soon` | inside `<div class="fp-tile-grid">` |
+| `FpChip` | `Text` / `ChildContent`, `Icon`, `Emoji`, `Hue`, `Small`; with `OnClick` it is a toggle (`Selected`, `aria-pressed`) | `<FpChip Text="Paddy" Emoji="@FpUi.CropEmoji("Paddy")" Selected="@on" OnClick="Toggle" />` |
+| `FpStatus` | `Level` (`FpLevel.Low/Medium/High/Unknown`), `Text`, `Large` | `<FpStatus Level="FpLevel.Low" />` |
+| `FpZoneSlider` | `Id`, `Label`, `Unit`, `@bind-Value` (double?), `Min`, `Max`, `Step`, `LowBelow`, `HighAbove`, `Decimals`, `Hint`, `Disabled` | `<FpZoneSlider Id="n" Label="Nitrogen (N)" Unit="kg/ha" Max="700" LowBelow="280" HighAbove="560" @bind-Value="_n" />` |
+| `FpBigNumber` | `Label`, `Value` (formatted string), `Unit`, `Caption`, `Level` / `LevelText`, `Low` / `Expected` / `High` / `RangeUnit` / `RangeFormat` (range bar), `Confidence` 0-100 / `ConfidenceLabel` (ring) | `<FpBigNumber Label="Expected harvest" Value="4.2" Unit="t / acre" Low="3.6" Expected="4.2" High="4.8" Confidence="72" />` |
+| `FpSteps` | `Steps`, `Current` (0-based), `OnSelect` (back to a done step), `AriaLabel` | `<FpSteps Steps="@names" Current="@_step" OnSelect="GoTo" />` (white on green inside `FpHero`) |
+| `FpEmpty` | `Art` (`FpArtKind.Sprout/Field/Offline/Search/Team`), `Title`, `Message`, `ChildContent` (buttons), `Card`, `Compact` | `<FpEmpty Art="FpArtKind.Search" Title="No dealers within 25 km" Message="...">buttons</FpEmpty>` |
+| `FpError` | `Title`, `Message`, `OnRetry`, `RetryLabel`, `Art`, `Compact` | `<FpError Message="@_error" OnRetry="LoadAsync" />` |
+| `FpArt` | `Kind` | inline SVG illustrations (no image files) |
+| `FpSkeleton` | `Variant` (home / hero / tiles / cards / form), `Count`, `LoadingText` | `<FpSkeleton Variant="cards" Count="3" />` |
+| `FpDisclaimer` | `Text` / `ChildContent`, `Icon` | `<FpDisclaimer Text="This is an estimate..." />` |
+| `FpOtpInput` | `Id`, `@bind-Value`, `OnComplete`, `Length`, `Invalid`, `Disabled`, `AriaDescribedBy`; method `FocusAsync()` | six boxes drawn over one real input (`one-time-code`, numeric); pasting "482 913" or a whole SMS fills it (`FpOtpInput.razor.js`) |
+| `FpFieldError` | `Text` | inline field error (renders nothing when empty) |
+
+Pure helpers in `FpUi` (`FpUi.cs`, checked by `SPIC.RegressionHarness/FarmerPortalUiTests.cs`):
+`Greeting(utcNow)` (IST: 05:00-11:59 morning, 12:00-16:59 afternoon, otherwise evening), `IstDateLine`,
+`ToIst`, `ShortName`, `Initials`, `NormaliseOtp`, `ZoneLevel`, `Fraction`, `Pct`, `LevelLabel`,
+`Countdown`, `CropEmoji`.
+
+### Home tiles (`Services/FarmerFeatureTiles.cs`)
+
+The home grid is `FarmerFeatureTiles.For(login)`: ready tiles first, then the rest with a "Soon" badge.
+Entries already exist for fertilizer (Task 4), dealers and team (Task 2), assistant (Task 5),
+leaf-check (Task 6), yield (Task 7) and community (Task 3), with their planned `/farmer/...` routes.
+**When your page ships, set `Ready: true` on your entry** (adjust the text if needed). A new feature
+appends `new FarmerFeatureTile(id, title, description, "bi-icon", hue, route, Ready, visiblePredicate)`.
+The harness checks that ids are unique, hues exist and every Ready route opens for a farmer.
+The "Your SPIC team" block on the home is a placeholder (`FpEmpty`) for Task 2; the weather strip
+(Task 3) goes in the home `FpHero`'s ChildContent.
+
+### Screenshots
+
+`python tools/farmer-portal-check/shoot.py --out .superpowers/sdd/<plan>/shots/task-<N> --set farmer|onboarding|gallery|staff|all`
+signs in to the LOCAL web host (refuses other hosts) as the local test farmer through the devCode and
+saves 375x812 and 1280x800 pictures (plus `-full` pictures of long pages) with the installed Edge.
+Each sign-in uses one of the number's 5 codes per hour; the onboarding set creates two new local test
+farmers per run; the gallery and staff sets sign in as the local `qa.admin` (password from
+`tools/help-demo/shots.json`; that local user is normally inactive, activate it in `spicone_dev` first).
+Add your own screens to the script or reuse its sign-in helper.
