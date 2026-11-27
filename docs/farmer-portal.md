@@ -351,3 +351,130 @@ Contracts: `SPIC.Core/DTOs/FarmerConnectDtos.cs`. Enums travel as numbers like t
   number). Bulk-loaded dealers have no address or GPS, so they show only in district / state lists.
 - No notification to the officer when a request arrives (they see it on Farmer Call-backs); a push / SMS
   could follow.
+
+## 3. Trends in my area, the home weather strip and Community near me (Task 3, 2026-11-28)
+
+### What it does
+
+- **Home weather strip** (`/farmer`, inside the `FpHero`): the 7-day forecast as day pills (Today, Tmrw, Mon
+  ...: icon, max / min, rain), the most important farm advisory under it and a "Farm advice" link to
+  `/farmer/trends`. It loads after the page (like the SPIC team block). No GPS on the profile: "Add your
+  location to see weather" with a **Use my location** button that opens `/farmer/profile?focus=location`
+  (the profile page scrolls to "Farm location"). Forecast unavailable: the strip is left out.
+  Component: `Components/FarmerPortal/FarmerWeatherStrip.razor`.
+- **Trends in my area** `/farmer/trends` (home tile, More sheet, desktop sidebar): the weather strip in the
+  hero, **Farm advice for this week** (the advisories + disclaimer), then four cards from SPIC ONE data of
+  the last 90 days in the farmer's district (the state when the district has too little):
+  **What farmers near you grow** (crop share bars), **Soil problems near you** (share of soil samples the
+  lab marked Low per nutrient), **Talked about near you** (top 5 discussions, linking to the discussion)
+  and **SPIC dealers** (count, "Dealers near me"). Each card says when it fell back to the state and has a
+  designed empty state; a footer states the privacy rule.
+- **Community near me** `/farmer/community` (home tile, More sheet, desktop sidebar): Knowledge Community
+  discussions whose authors are near the farmer, newest activity first, "Show more" paging, "Ask a
+  question" (`/Community/new`) and "All discussions" (`/Community/discussions`). Cards
+  (`FarmerDiscussionCard`) open the existing discussion page. Farmers also get a **Near Me** tab on
+  `/Community/discussions` (`?tab=near`).
+- **Farmers can open the Knowledge Community**: `RouteAccess` now allows every `/Community/*` route for the
+  Farmer role (it is open to every signed-in user anyway, `OpenAccessPages`); before, a farmer without a
+  designation was sent home.
+- **Farmer authors**: a discussion or reply by an OTP farmer carries the farmer profile's name and
+  "Village, District" (`CommunityController.ResolveAuthorAsync`); staff keep "HQ, State".
+
+### What "near" means (no migration)
+
+Discussions have no location column and none was added. A discussion is near when its **author** is
+(`SPIC.Core/FarmerPortal/CommunityNearRules.cs`, fed by `SpicAPI/Services/CommunityNearResolver.cs`):
+
+- a farmer whose farmer profile (else linked `SasFarmers` record) is in the district;
+- an active SPIC staff login (`Employeelogins`) whose headquarter (`HeadquartersId` or `HeadquartersIds`) is
+  one of the headquarters of the listable SPIC dealers registered in the district (the "My SPIC team"
+  mapping); a login without any headquarter matches by region;
+- fallback: when no author of the district wrote anything, every farmer and staff login of the state.
+
+The caller's area is the farmer profile (district + state); for staff it is the `spic:state_id` claim (state
+only). Only the authors of live discussions are looked up, so the cost grows with the number of authors, not
+posts. Old discussions count too (matched by their author's current place). Dealer accounts are not linked to
+a dealer registration, so dealers' posts never count as near.
+
+### Endpoints
+
+| Method | Route | Who | Notes |
+|---|---|---|---|
+| GET | `api/Farmer/trends` | Farmer | `FarmerTrendsDto`: `districtName`, `stateName`, `windowDays` (90), `areaComputedAtUtc`, `weather`, `crops`, `soil`, `talked`, `dealers`; each card has `scope` District (0) / State (1) / None (2) and `areaName`. 404 without a profile; staff 403 |
+| GET | `api/Farmer/weather` | Farmer | `FarmerWeatherDto`: `status` Ok (0) / NoLocation (1) / Unavailable (2), `days` (date, weatherCode, max / min deg C, rain mm, rain chance %, wind km/h), `advisories` (code, level Info 0 / Caution 1 / Good 2, icon, title, text), `fetchedAtUtc` |
+| GET | `api/Community/near?page&pageSize` | any signed-in user | `CommunityNearPageDto`: `scope`, `areaName`, `items` (`DiscussionSummaryDto`), paging (default 10, max 50) |
+| GET | `api/Community/discussions?tab=near&...` | any signed-in user | the existing list with the same "near" rule |
+
+Contracts: `SPIC.Core/DTOs/FarmerTrendsDtos.cs`. Client: `Services/FarmerAreaApi.cs` (no toasts).
+
+### Data sources and rules (`SPIC.Core/FarmerPortal/FarmerTrendRules.cs`, pinned by the harness)
+
+| Card | Source | Rule |
+|---|---|---|
+| What farmers near you grow | `FarmerProfiles.PrimaryCrops` (all profiles of the area) + `SampleItems.Crop1/Crop2` of SAS samples collected in the last 90 days (not Draft) | one count per farmer (account user id, else SAS farmer id); district if it has >= 5 farmers with crops, else state, else hidden; a crop is listed only when >= 2 farmers grow it; top 6 |
+| Soil problems near you | `LabReports` (Soil, generated in the last 90 days) -> `SampleItems` -> `SasFarmers` (district / state) -> `SampleLabResults` for N, P, K, Zn, Organic Carbon, S, Fe, B, Mn, Cu with a value | the lab's own `Status` (`Deficient` = Low); one result per sample and nutrient; district if it has >= 5 samples, else state, else hidden; a nutrient tested on < 5 samples is hidden (counted in `hiddenForFewSamples`); nutrients with no Low sample are not listed; top 6 by Low share |
+| Talked about near you | `CommunityPosts` active in the last 90 days by "near" authors + their `CommunityPostReplies` of the window | score = recent replies x 3 + likes + views / 10; discussions with no activity left out; top 5; district authors first, else state |
+| SPIC dealers | `DealerRegistrations` with `FarmerDealerRules.ListableForFarmers` | count in the district, else in the state (`DealerStateId ?? StateId`), else none |
+
+Only these totals leave the API: never a farmer's name, phone, village, GPS or user id.
+
+### Weather (`SpicAPI/Services/FarmerWeatherService.cs`, `SPIC.Core/FarmerPortal/FarmerWeatherRules.cs`)
+
+- Open-Meteo `https://api.open-meteo.com/v1/forecast` (free, no key; overridable with
+  `FarmerPortal:WeatherUrl`), daily `weather_code, temperature_2m_max/min, precipitation_sum,
+  precipitation_probability_max, wind_speed_10m_max`, `timezone=Asia/Kolkata`, 7 days. The only thing sent
+  is the profile GPS **rounded to 0.1 deg** (about 11 km). Named HttpClient `OpenMeteo`, **8 s timeout**.
+  Coordinates are never logged.
+- No GPS on the profile: no call, `NoLocation` (the codebase has no district coordinates, so no guessing).
+- Caches (`IMemoryCache`, per API replica): a forecast **1 h per rounded point** (a failure 5 min); the trends
+  area numbers **1 h per district + state**.
+- Advisories (at most 3, in this order):
+
+| Code | When | Advice |
+|---|---|---|
+| `heavy-rain` | rain over the next 3 days > 50 mm | avoid fertilizer top-dressing and spraying before the rain; keep drains open |
+| `rain-soon` | not heavy, and today or tomorrow >= 10 mm or >= 70 % | spray only with ~6 dry hours ahead; top-dress after the rain |
+| `heat` | max >= 38 deg C in the next 3 days | water early morning / evening; no afternoon spraying |
+| `wind` | wind >= 30 km/h today or tomorrow | do not spray in strong wind |
+| `dry-week` | 7-day rain < 5 mm and no day >= 40 % | plan irrigation; fertilizer on moist soil |
+| `spray-window` | none of heavy / soon / wind, and today and tomorrow each < 1 mm, < 30 %, wind < 20 km/h | good days for spraying and top-dressing |
+
+### Config keys
+
+| Key | Meaning |
+|---|---|
+| `FarmerPortal:WeatherUrl` | optional forecast endpoint (default Open-Meteo); not in appsettings because the default is right |
+
+### Shell
+
+- Home tiles (registry order): Dealers near me, My SPIC team, **Trends in my area**, **Community near me**,
+  (soil tiles), My profile.
+- More sheet: `ShellNavigation.FarmerTrendsKey` / `FarmerCommunityKey` (farmer only; never a phone tab or rail
+  slot, the farmer tab bar is unchanged). Desktop sidebar: "Trends in my area" and "Community near me" under
+  My Profile.
+
+### Tests and tools
+
+- Harness: `FarmerPortalTrendsTests` (0.1 deg rounding, weather codes, every advisory threshold, order and cap,
+  Open-Meteo parsing incl. nulls and error bodies, the soil minimum-sample privacy rule, crop minimums and
+  de-duplication, talked-about ordering, the "near" author rule, routes / menu / tiles, text); updated tile
+  and More-sheet expectations in `FarmerPortalUiTests` / `FarmerPortalRouteTests`.
+- Local data: `tools/farmer-portal-check/seed_task3_local.sql` (after `seed_task2_local.sql`; refuses any
+  database but `spicone_dev`) adds five discussions tagged `demo-task3` by the local test farmers and
+  qa.mdo / qa.jmdo, with eight replies; `cleanup_task3_local.sql` removes them (and any `[smoke]` post).
+- Smoke: `python tools/farmer-portal-check/smoke_task3.py [--phone <no-GPS farmer>] [--gps-phone <GPS farmer>]`
+  (local API only: 401 / 403s, NoLocation, each card's scope and minimums, no personal fields, the 1 h
+  caches, near paging / tab / staff state, the farmer author's name and place, the live forecast).
+- Screenshots: `python tools/farmer-portal-check/shoot_task3.py --out .superpowers/sdd/<plan>/shots/task-3`
+  (two sign-ins: a farmer without and one with a farm location).
+
+### Left / for the owner
+
+- No migration. The API now calls `api.open-meteo.com` over HTTPS; check that prod egress allows it
+  (otherwise the weather is simply left out).
+- Open-Meteo's free API is meant for non-commercial use (attribution given in the disclaimer). The owner
+  should confirm that SPIC's use qualifies, or take their commercial plan (then set `FarmerPortal:WeatherUrl`
+  to the customer endpoint; an API key would need a small change).
+- The caches are per replica, so two replicas mean up to two forecast calls per point per hour.
+- Prod data decides how full the cards are: farmer profiles start near zero, so "What farmers near you grow"
+  leans on SAS sample crops at first; staff logins need the right HQ for "near" to find staff posts.
