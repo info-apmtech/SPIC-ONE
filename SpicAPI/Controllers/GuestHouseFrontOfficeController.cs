@@ -298,6 +298,7 @@ namespace SpicAPI.Controllers
 				.Include(b => b.GuestHouseRoom)
 				.Include(b => b.Guests)
 				.Include(b => b.RoomAllocations)
+				.Include(b => b.Payments)
 				.ToListAsync();
 
 			var rows = bookings
@@ -324,6 +325,9 @@ namespace SpicAPI.Controllers
 						BookingStatus = b.BookingStatus,
 						StatusText = b.BookingStatus == GuestHouseBookingStatus.CheckedIn ? "Checked-In" : "Confirmed",
 						PaymentStatus = b.PaymentStatus,
+						// The booking's original payment method (display only: lets the list show an Employee Stay
+						// as "Booked"). Never the signed-in user's role.
+						PaymentMethod = MainPayment(b)?.PaymentMethod,
 						Period = isUpcoming ? FrontOfficeBookingPeriod.Upcoming : FrontOfficeBookingPeriod.Today
 					};
 				})
@@ -1862,6 +1866,7 @@ namespace SpicAPI.Controllers
 		public GuestHouseBookingStatus BookingStatus { get; set; }
 		public string StatusText { get; set; } = "";
 		public GuestHousePaymentStatus PaymentStatus { get; set; }
+		public GuestHousePaymentMethod? PaymentMethod { get; set; }   // Original payment's method (display only)
 		public FrontOfficeBookingPeriod Period { get; set; }
 	}
 
