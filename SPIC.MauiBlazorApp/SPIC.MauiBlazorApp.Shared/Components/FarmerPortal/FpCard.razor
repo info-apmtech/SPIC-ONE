@@ -1,0 +1,93 @@
+@namespace SPIC.MauiBlazorApp.Shared.Components.FarmerPortal
+
+@*
+    FpCard - white rounded card with an optional header (tinted icon circle, title, subtitle,
+    actions) and footer.
+
+        <FpCard Title="Your soil tests" Icon="bi-moisture" Hue="soil">
+            <p class="fp-text">...</p>
+        </FpCard>
+
+    Variant: "default" | "highlight" (warm gold, for the one thing to do next) | "tinted" (green
+    tint, no shadow) | "flush" (no padding: lists and maps).
+*@
+
+<section class="fp-card @VariantCss @(Animate ? "fp-fade-up" : null) @CssClass" aria-labelledby="@(HasTitle ? _titleId : null)">
+    @if (HasTitle || HeaderActions is not null)
+    {
+        <header class="fp-card__head">
+            @if (!string.IsNullOrWhiteSpace(Icon))
+            {
+                <span class="fp-icon-circle fp-hue-@Hue" aria-hidden="true"><i class="bi @Icon"></i></span>
+            }
+            <div class="fp-card__titles">
+                @if (HasTitle)
+                {
+                    <h2 id="@_titleId" class="fp-card__title" tabindex="-1" @ref="_titleRef">@Title</h2>
+                }
+                @if (!string.IsNullOrWhiteSpace(Subtitle))
+                {
+                    <p class="fp-card__subtitle">@Subtitle</p>
+                }
+            </div>
+            @if (HeaderActions is not null)
+            {
+                <div class="fp-card__actions">@HeaderActions</div>
+            }
+        </header>
+    }
+    @if (ChildContent is not null)
+    {
+        <div class="fp-card__body">@ChildContent</div>
+    }
+    @if (Footer is not null)
+    {
+        <footer class="fp-card__footer">@Footer</footer>
+    }
+</section>
+
+@code {
+    private readonly string _titleId = "fp-card-" + Guid.NewGuid().ToString("N")[..8];
+    private ElementReference _titleRef;
+
+    [Parameter] public string? Title { get; set; }
+
+    [Parameter] public string? Subtitle { get; set; }
+
+    /// <summary>Bootstrap icon for the header circle, e.g. "bi-moisture".</summary>
+    [Parameter] public string? Icon { get; set; }
+
+    /// <summary>green | gold | soil | sky | violet | teal | rose | neutral.</summary>
+    [Parameter] public string Hue { get; set; } = "green";
+
+    /// <summary>default | highlight | tinted | flush.</summary>
+    [Parameter] public string Variant { get; set; } = "default";
+
+    /// <summary>Fade up 8 px on first render (on by default).</summary>
+    [Parameter] public bool Animate { get; set; } = true;
+
+    [Parameter] public RenderFragment? HeaderActions { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter] public RenderFragment? Footer { get; set; }
+
+    [Parameter] public string? CssClass { get; set; }
+
+    private bool HasTitle => !string.IsNullOrWhiteSpace(Title);
+
+    private string? VariantCss => Variant switch
+    {
+        "highlight" => "fp-card--highlight",
+        "tinted" => "fp-card--tinted",
+        "flush" => "fp-card--flush",
+        _ => null
+    };
+
+    /// <summary>Moves focus (and the screen) to the card title, e.g. when a step changes. Never throws.</summary>
+    public async Task FocusTitleAsync()
+    {
+        if (!HasTitle) return;
+        try { await _titleRef.FocusAsync(); } catch { /* not rendered yet or circuit gone */ }
+    }
+}

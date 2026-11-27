@@ -1,0 +1,289 @@
+@page "/dev/farmer-portal"
+@namespace SPIC.MauiBlazorApp.Shared.Components.FarmerPortal
+@using SPIC.Core.Entities
+@using SPIC.MauiBlazorApp.Shared.Services
+@inject LoginState LoginState
+
+@*
+    ============================================================================
+    DEV PAGE - NOT FOR END USERS.  /dev/farmer-portal
+    Every farmer portal component (docs/farmer-portal.md, "Design system") in every state, with
+    sample data only. Admin / SuperAdmin only: RouteAccess already sends other signed-in roles away
+    (farmers to /farmer); this page also refuses anyone else. Not linked from any menu.
+    ============================================================================
+*@
+
+<div class="fp fp-page fpg">
+    @if (LoginState.UserRole is not (AppRole.Admin or AppRole.SuperAdmin))
+    {
+        <FpHero Title="Design system" Subtitle="Developer page." />
+        <FpEmpty Art="FpArtKind.Search" Title="For developers only" Message="Sign in as an administrator to see the farmer portal components." />
+    }
+    else
+    {
+        <FpHero Eyebrow="Developer page · sample data" Title="Farmer portal design system"
+                Subtitle="Every Fp component and state. Resize to 375 px (phone), 768-1199 px (tablet) and 1280 px (desktop)."
+                BackHref="/farmer" BackLabel="Back to the farmer home">
+            <FpChip Icon="bi-palette" Text="farmer-portal.css" />
+            <FpChip Icon="bi-box" Text="Components/FarmerPortal" />
+            <FpChip Icon="bi-journal-text" Text="docs/farmer-portal.md" />
+        </FpHero>
+
+        @* ------------------------------------------------------------ tokens *@
+        <FpCard Title="Colour tokens" Subtitle="CSS custom properties on .fp" Icon="bi-palette" Hue="green">
+            <div class="fpg-swatches">
+                @foreach (var (name, hex) in Swatches)
+                {
+                    <div class="fpg-swatch">
+                        <span class="fpg-swatch__chip" style="background: var(@name)"></span>
+                        <code>@name</code>
+                        <span class="fp-caption">@hex</span>
+                    </div>
+                }
+            </div>
+        </FpCard>
+
+        @* ------------------------------------------------------------ type + buttons *@
+        <div class="fp-grid-2">
+            <FpCard Title="Type" Icon="bi-fonts" Hue="sky">
+                <p class="fp-h1">Page title 28/34</p>
+                <p class="fp-h2">Section title 18/24</p>
+                <p class="fp-text">Body 15/22. Plain words for farmers, one strong action per screen.</p>
+                <p class="fp-caption">Caption 13/18, secondary text.</p>
+                <p class="fp-big__number fp-num" style="margin: 0; color: var(--fp-green-900);">1,284</p>
+            </FpCard>
+
+            <FpCard Title="Buttons" Icon="bi-hand-index" Hue="gold">
+                <div class="fp-row">
+                    <button type="button" class="fp-btn fp-btn--primary">Primary</button>
+                    <button type="button" class="fp-btn fp-btn--secondary">Secondary</button>
+                    <button type="button" class="fp-btn fp-btn--ghost">Ghost</button>
+                </div>
+                <div class="fp-row">
+                    <button type="button" class="fp-btn fp-btn--primary" disabled><span class="fp-spinner" aria-hidden="true"></span> Saving...</button>
+                    <button type="button" class="fp-btn fp-btn--secondary" disabled>Disabled</button>
+                    <button type="button" class="fp-btn fp-btn--gold"><i class="bi bi-stars" aria-hidden="true"></i> Highlight</button>
+                </div>
+                <div class="fp-action-pills">
+                    <a class="fp-action-pill" href="tel:0000000000"><i class="bi bi-telephone-fill" aria-hidden="true"></i> Call</a>
+                    <button type="button" class="fp-action-pill fp-action-pill--whatsapp"><i class="bi bi-whatsapp" aria-hidden="true"></i> WhatsApp</button>
+                    <button type="button" class="fp-action-pill"><i class="bi bi-sign-turn-right-fill" aria-hidden="true"></i> Directions</button>
+                    <button type="button" class="fp-action-pill"><i class="bi bi-telephone-inbound" aria-hidden="true"></i> Request call back</button>
+                </div>
+            </FpCard>
+        </div>
+
+        @* ------------------------------------------------------------ heroes *@
+        <section class="fp-section">
+            <h2 class="fp-section-title">FpHero</h2>
+            <FpHero Title="Fertilizer advice" Subtitle="Compact, with a back button and a chip row." BackHref="/dev/farmer-portal" Compact="true" DocumentTitle="Design system">
+                <FpChip Icon="bi-geo-alt-fill" Text="Kovilpatti, Thoothukudi" />
+                <FpChip Emoji="@FpUi.CropEmoji("Paddy")" Text="Paddy" />
+            </FpHero>
+            <FpHero Title="Welcome to SPIC ONE" Eyebrow="With steps" DocumentTitle="Design system">
+                <FpSteps Steps="@StepNames" Current="1" CssClass="fpg-hero-steps" />
+            </FpHero>
+        </section>
+
+        @* ------------------------------------------------------------ cards *@
+        <section class="fp-section">
+            <h2 class="fp-section-title">FpCard</h2>
+            <div class="fp-grid-2">
+                <FpCard Title="Default card" Subtitle="Header with a tinted icon circle" Icon="bi-moisture" Hue="soil">
+                    <ChildContent><p class="fp-text fp-muted">White, 16 px radius, soft green shadow, 1 px line border.</p></ChildContent>
+                    <Footer>
+                        <button type="button" class="fp-btn fp-btn--secondary fp-btn--sm">Footer action</button>
+                    </Footer>
+                </FpCard>
+                <FpCard Variant="highlight" Title="Highlight card" Subtitle="The one thing to do next" Icon="bi-stars" Hue="gold">
+                    <div class="fp-row"><a class="fp-btn fp-btn--primary" href="/dev/farmer-portal">Get fertilizer advice</a></div>
+                </FpCard>
+                <FpCard Variant="tinted" Title="Tinted card" Icon="bi-info-lg" Hue="green">
+                    <p class="fp-text">Green tint and no shadow, for quiet notes inside a page.</p>
+                </FpCard>
+                <FpCard Title="Card with header actions" Icon="bi-person-badge" Hue="sky">
+                    <HeaderActions><FpStatus Level="FpLevel.Medium" Text="Active" /></HeaderActions>
+                    <ChildContent>
+                        <div class="fp-action-pills">
+                            <a class="fp-action-pill" href="tel:0000000000"><i class="bi bi-telephone-fill" aria-hidden="true"></i> Call</a>
+                            <button type="button" class="fp-action-pill fp-action-pill--whatsapp"><i class="bi bi-whatsapp" aria-hidden="true"></i> WhatsApp</button>
+                        </div>
+                    </ChildContent>
+                </FpCard>
+            </div>
+        </section>
+
+        @* ------------------------------------------------------------ tiles *@
+        <section class="fp-section">
+            <h2 class="fp-section-title">FpTile (from FarmerFeatureTiles)</h2>
+            <div class="fp-tile-grid">
+                @foreach (var tile in FarmerFeatureTiles.All.Take(4))
+                {
+                    <FpTile Title="@tile.Title" Description="@tile.Description" Icon="@tile.Icon" Hue="@tile.Hue" Href="/dev/farmer-portal" />
+                }
+                <FpTile Title="With a badge" Description="Badge=&quot;New&quot;" Icon="bi-stars" Hue="gold" Href="/dev/farmer-portal" Badge="New" />
+                <FpTile Title="Coming soon" Description="Soon=&quot;true&quot;, not clickable" Icon="bi-hourglass-split" Hue="violet" Soon="true" />
+                <FpTile Title="Button tile" Description="OnClick instead of Href" Icon="bi-hand-index" Hue="rose" OnClick="() => _tileClicks++" />
+                <FpTile Title="@($"Clicked {_tileClicks} times")" Description="Teal hue" Icon="bi-123" Hue="teal" Href="/dev/farmer-portal" />
+            </div>
+        </section>
+
+        @* ------------------------------------------------------------ chips + status *@
+        <FpCard Title="FpChip and FpStatus" Icon="bi-tags" Hue="violet">
+            <div class="fp-chips">
+                @foreach (var hue in Hues)
+                {
+                    <FpChip Hue="@hue" Icon="bi-circle-fill" Text="@hue" />
+                }
+                <FpChip Small="true" Text="Small" Hue="green" />
+            </div>
+            <div class="fp-chips">
+                @foreach (var crop in GalleryCrops)
+                {
+                    var c = crop;
+                    <FpChip Text="@c" Emoji="@FpUi.CropEmoji(c)" Selected="@_crops.Contains(c)" OnClick="() => Toggle(c)" />
+                }
+            </div>
+            <div class="fp-chips">
+                <FpStatus Level="FpLevel.Low" />
+                <FpStatus Level="FpLevel.Medium" />
+                <FpStatus Level="FpLevel.High" />
+                <FpStatus Level="FpLevel.Unknown" />
+                <FpStatus Level="FpLevel.Low" Text="Deficient" Large="true" />
+            </div>
+        </FpCard>
+
+        @* ------------------------------------------------------------ zone sliders + big number *@
+        <div class="fp-grid-2">
+            <FpCard Title="FpZoneSlider" Subtitle="Soil test values (sample thresholds)" Icon="bi-sliders" Hue="soil">
+                <FpZoneSlider Id="fpg-n" Label="Nitrogen (N)" Unit="kg/ha" Min="0" Max="700" Step="1" LowBelow="280" HighAbove="560" @bind-Value="_n" />
+                <FpZoneSlider Id="fpg-p" Label="Phosphorus (P)" Unit="kg/ha" Min="0" Max="60" Step="1" LowBelow="11" HighAbove="22" @bind-Value="_p" />
+                <FpZoneSlider Id="fpg-k" Label="Potassium (K)" Unit="kg/ha" Min="0" Max="500" Step="1" LowBelow="110" HighAbove="280" @bind-Value="_k" />
+                <FpZoneSlider Id="fpg-ph" Label="Soil pH" Min="4" Max="10" Step="0.1" LowBelow="6.5" HighAbove="7.5" @bind-Value="_ph"
+                              Hint="Not set yet: the bubble says so and the status is grey." />
+            </FpCard>
+
+            <FpCard Title="FpBigNumber" Subtitle="Summary band of a result" Icon="bi-graph-up-arrow" Hue="gold">
+                <FpBigNumber Label="Expected harvest" Value="4.2" Unit="t / acre" Caption="Paddy, 2.5 acres, kharif season"
+                             Low="3.6" Expected="4.2" High="4.8" RangeUnit="t" Confidence="72" />
+                <FpBigNumber Label="Urea to apply" Value="54" Unit="kg / acre" Level="FpLevel.Low" LevelText="Nitrogen is low" />
+                <FpDisclaimer Text="This is an estimate from your inputs and local averages. Check with your SPIC field officer before you buy." />
+            </FpCard>
+        </div>
+
+        @* ------------------------------------------------------------ steps + OTP + inputs *@
+        <div class="fp-grid-2">
+            <FpCard Title="FpSteps" Icon="bi-list-ol" Hue="green">
+                <FpSteps Steps="@StepNames" Current="@_step" OnSelect="i => _step = i" />
+                <div class="fp-row">
+                    <button type="button" class="fp-btn fp-btn--secondary fp-btn--sm" @onclick="() => _step = Math.Max(0, _step - 1)">Back</button>
+                    <button type="button" class="fp-btn fp-btn--primary fp-btn--sm" @onclick="() => _step = Math.Min(StepNames.Length, _step + 1)">Next</button>
+                    <span class="fp-caption">Current = @_step (done steps are clickable)</span>
+                </div>
+            </FpCard>
+
+            <FpCard Title="FpOtpInput" Subtitle="Type, paste &quot;482 913&quot; or a whole SMS" Icon="bi-123" Hue="sky">
+                <label class="fp-label" for="fpg-otp">6-digit code</label>
+                <FpOtpInput Id="fpg-otp" @bind-Value="_otp" OnComplete="c => _otpDone = c" Invalid="@_otpInvalid" />
+                <div class="fp-row">
+                    <span class="fp-caption">Value: <strong class="fp-num">@(_otp == "" ? "(empty)" : _otp)</strong> · Completed: @(_otpDone ?? "-")</span>
+                    <button type="button" class="fp-link-btn" @onclick="() => _otpInvalid = !_otpInvalid">Toggle invalid</button>
+                    <button type="button" class="fp-link-btn" @onclick="() => { _otp = string.Empty; _otpDone = null; }">Clear</button>
+                </div>
+                <label class="fp-label" for="fpg-otp2">Disabled, filled</label>
+                <FpOtpInput Id="fpg-otp2" Value="123456" Disabled="true" />
+            </FpCard>
+        </div>
+
+        <FpCard Title="Form controls" Icon="bi-input-cursor-text" Hue="teal">
+            <div class="fp-form-row">
+                <div class="fp-field">
+                    <label class="fp-label" for="fpg-name">Your name <span class="fp-req">*</span></label>
+                    <input id="fpg-name" class="fp-input" placeholder="For example: Murugan K" />
+                    <p class="fp-hint">A hint in plain words.</p>
+                </div>
+                <div class="fp-field">
+                    <label class="fp-label" for="fpg-pin">Pincode <span class="fp-req">*</span></label>
+                    <input id="fpg-pin" class="fp-input is-invalid" value="62870" aria-invalid="true" />
+                    <FpFieldError Text="Please enter the 6-digit pincode." />
+                </div>
+                <div class="fp-field">
+                    <label class="fp-label" for="fpg-phone">Mobile number</label>
+                    <div class="fp-input-group">
+                        <span class="fp-input-addon" aria-hidden="true">+91</span>
+                        <input id="fpg-phone" class="fp-input fp-num" inputmode="numeric" placeholder="98765 43210" />
+                    </div>
+                </div>
+                <div class="fp-field">
+                    <label class="fp-label" for="fpg-water">Water source <span class="fp-optional">(optional)</span></label>
+                    <select id="fpg-water" class="fp-input"><option>Choose</option><option>Borewell / well</option></select>
+                </div>
+            </div>
+            <label class="fp-check"><input type="checkbox" checked /> Keep me signed in on this device</label>
+            <p class="fp-alert fp-alert--error" role="note"><i class="bi bi-exclamation-circle-fill" aria-hidden="true"></i> Error alert: please check the fields marked in red.</p>
+            <p class="fp-alert fp-alert--info" role="note"><i class="bi bi-info-circle-fill" aria-hidden="true"></i> Info alert: a new code is on its way.</p>
+            <p class="fp-alert fp-alert--success" role="note"><i class="bi bi-check-circle-fill" aria-hidden="true"></i> Success alert: your profile is saved.</p>
+            <p class="fp-alert fp-alert--dev" role="note"><i class="bi bi-wrench-adjustable" aria-hidden="true"></i> Dev alert: development only messages.</p>
+        </FpCard>
+
+        @* ------------------------------------------------------------ empty / error / skeleton *@
+        <section class="fp-section">
+            <h2 class="fp-section-title">FpEmpty, FpError and FpArt</h2>
+            <div class="fpg-arts">
+                @foreach (var kind in Enum.GetValues<FpArtKind>())
+                {
+                    <figure class="fpg-art"><FpArt Kind="@kind" /><figcaption class="fp-caption">@kind</figcaption></figure>
+                }
+            </div>
+            <div class="fp-grid-2">
+                <FpEmpty Art="FpArtKind.Search" Title="No dealers within 25 km" Message="Try a wider distance, or call your SPIC field officer.">
+                    <button type="button" class="fp-btn fp-btn--secondary">Show 50 km</button>
+                </FpEmpty>
+                <FpError Message="Please check your internet connection and try again." OnRetry="FakeRetryAsync" />
+            </div>
+            <FpEmpty Art="FpArtKind.Team" Compact="true" Title="Compact empty state" Message="Picture beside the text on tablet and desktop; stacked on phone." />
+        </section>
+
+        <section class="fp-section">
+            <h2 class="fp-section-title">FpSkeleton</h2>
+            <div class="fp-grid-2">
+                <FpSkeleton Variant="tiles" Count="2" />
+                <FpSkeleton Variant="cards" Count="1" />
+            </div>
+        </section>
+
+        <FpDisclaimer Text="FpDisclaimer: used on every estimate and AI answer." />
+    }
+</div>
+
+@code {
+    private static readonly string[] StepNames = { "About you", "Your farm", "Your village" };
+    private static readonly string[] Hues = { "neutral", "green", "gold", "soil", "sky", "violet", "teal", "rose" };
+    private static readonly string[] GalleryCrops = { "Paddy", "Banana", "Coconut", "Cotton", "Groundnut", "Chilli", "Turmeric" };
+
+    private static readonly (string Name, string Hex)[] Swatches =
+    {
+        ("--fp-green-900", "#063d22"), ("--fp-green-700", "#0b6b3a"), ("--fp-green-500", "#14935a"), ("--fp-green-50", "#e8f5ee"),
+        ("--fp-gold-500", "#e8a317"), ("--fp-gold-50", "#fdf4e1"), ("--fp-soil-600", "#8a5a2b"), ("--fp-sky-600", "#1f7ae0"),
+        ("--fp-ink-900", "#0f1f17"), ("--fp-ink-600", "#4b5b52"), ("--fp-line", "#e3ece6"), ("--fp-bg", "#f5f8f6"),
+        ("--fp-low", "#d64545"), ("--fp-medium", "#1e9e5a"), ("--fp-high", "#6c4ed9"), ("--fp-warn", "#e08a00")
+    };
+
+    private readonly HashSet<string> _crops = new() { "Paddy", "Banana" };
+    private double? _n = 210;
+    private double? _p = 16;
+    private double? _k = 320;
+    private double? _ph;
+    private int _step = 1;
+    private string _otp = "482";
+    private string? _otpDone;
+    private bool _otpInvalid;
+    private int _tileClicks;
+
+    private void Toggle(string crop)
+    {
+        if (!_crops.Remove(crop)) _crops.Add(crop);
+    }
+
+    private static Task FakeRetryAsync() => Task.Delay(800);
+}

@@ -99,6 +99,7 @@ internal static class Program
 		// Farmer portal (docs/farmer-portal.md): OTP sign-in rules and the farmer profile.
 		FarmerPortalAuthTests.Run();
 		FarmerPortalRouteTests.Run();
+		FarmerPortalUiTests.Run();
 
 		return Check.Report("Total");
 	}

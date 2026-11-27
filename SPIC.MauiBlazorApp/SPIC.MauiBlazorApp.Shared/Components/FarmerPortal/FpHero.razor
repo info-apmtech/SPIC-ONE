@@ -1,0 +1,75 @@
+@namespace SPIC.MauiBlazorApp.Shared.Components.FarmerPortal
+
+@*
+    FpHero - green gradient top band of every farmer page (with the field-rows pattern). It is the
+    page's h1 and also sets the browser tab title.
+
+        <FpHero Title="My profile" Subtitle="Your farm and village" BackHref="/farmer">
+            <FpChip Icon="bi-geo-alt-fill" Text="Kovilpatti" />
+        </FpHero>
+
+    ChildContent renders below the title (chip row, steps, weather strip). Aside renders on the
+    right (avatar, illustration). Phone: bleeds to the screen edges with rounded bottom corners.
+*@
+
+<PageTitle>@(string.IsNullOrWhiteSpace(DocumentTitle) ? Title : DocumentTitle) · SPIC ONE</PageTitle>
+
+<section class="fp-hero fp-fade-up @(Compact ? "fp-hero--compact" : null) @CssClass" aria-labelledby="@_titleId">
+    <div class="fp-hero__inner">
+        @if (!string.IsNullOrWhiteSpace(BackHref))
+        {
+            <a class="fp-hero__back" href="@BackHref" aria-label="@BackLabel" title="@BackLabel">
+                <i class="bi bi-arrow-left" aria-hidden="true"></i>
+            </a>
+        }
+        <div class="fp-hero__text">
+            @if (!string.IsNullOrWhiteSpace(Eyebrow))
+            {
+                <p class="fp-hero__eyebrow">@Eyebrow</p>
+            }
+            <h1 id="@_titleId" class="fp-hero__title" tabindex="-1">@Title</h1>
+            @if (!string.IsNullOrWhiteSpace(Subtitle))
+            {
+                <p class="fp-hero__subtitle">@Subtitle</p>
+            }
+        </div>
+        @if (Aside is not null)
+        {
+            <div class="fp-hero__aside">@Aside</div>
+        }
+    </div>
+    @if (ChildContent is not null)
+    {
+        <div class="fp-hero__slot">@ChildContent</div>
+    }
+</section>
+
+@code {
+    private readonly string _titleId = "fp-hero-" + Guid.NewGuid().ToString("N")[..8];
+
+    /// <summary>The page title (h1).</summary>
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+
+    /// <summary>One line under the title.</summary>
+    [Parameter] public string? Subtitle { get; set; }
+
+    /// <summary>Small upper-case line above the title (e.g. today's date).</summary>
+    [Parameter] public string? Eyebrow { get; set; }
+
+    /// <summary>Shows a round back button linking here.</summary>
+    [Parameter] public string? BackHref { get; set; }
+
+    [Parameter] public string BackLabel { get; set; } = "Back";
+
+    /// <summary>Browser tab title when it should differ from Title (a greeting, say).</summary>
+    [Parameter] public string? DocumentTitle { get; set; }
+
+    /// <summary>Less padding and a smaller title (tool pages).</summary>
+    [Parameter] public bool Compact { get; set; }
+
+    [Parameter] public RenderFragment? Aside { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter] public string? CssClass { get; set; }
+}

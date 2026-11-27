@@ -1,0 +1,78 @@
+@namespace SPIC.MauiBlazorApp.Shared.Components.FarmerPortal
+
+@*
+    FpChip - pill chip. Static (a label) or, with OnClick, a toggle button (aria-pressed).
+
+        <FpChip Icon="bi-geo-alt-fill" Text="Kovilpatti" />
+        <FpChip Text="Paddy" Emoji="@FpUi.CropEmoji("Paddy")" Selected="@on" OnClick="Toggle" />
+
+    Static chips take a Hue (neutral | green | gold | soil | sky | violet | teal | rose).
+    Toggle chips show the emoji (or a leaf / check icon) in a small circle.
+*@
+
+@if (OnClick.HasDelegate)
+{
+    <button type="button" class="fp-chip @(Selected ? "is-on" : null) @CssClass" aria-pressed="@(Selected ? "true" : "false")"
+            disabled="@Disabled" @onclick="OnClick">
+        <span class="fp-chip__icon" aria-hidden="true">
+            @if (!string.IsNullOrEmpty(Emoji))
+            {
+                <span class="fp-chip__emoji">@Emoji</span>
+            }
+            else if (Selected)
+            {
+                <i class="bi bi-check-lg"></i>
+            }
+            else
+            {
+                <i class="bi @(Icon ?? "bi-flower1")"></i>
+            }
+        </span>
+        <span>@Label</span>
+        @if (Selected && !string.IsNullOrEmpty(Emoji))
+        {
+            <i class="bi bi-check-lg" aria-hidden="true"></i>
+        }
+    </button>
+}
+else
+{
+    <span class="fp-chip fp-hue-@Hue @(Small ? "fp-chip--sm" : null) @CssClass">
+        @if (!string.IsNullOrEmpty(Emoji))
+        {
+            <span class="fp-chip__emoji" aria-hidden="true">@Emoji</span>
+        }
+        else if (!string.IsNullOrWhiteSpace(Icon))
+        {
+            <i class="bi @Icon" aria-hidden="true"></i>
+        }
+        @Label
+    </span>
+}
+
+@code {
+    [Parameter] public string? Text { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter] public string? Icon { get; set; }
+
+    /// <summary>An emoji shown instead of the icon (crop chips: FpUi.CropEmoji).</summary>
+    [Parameter] public string? Emoji { get; set; }
+
+    [Parameter] public string Hue { get; set; } = "neutral";
+
+    /// <summary>Toggle chips: on / off.</summary>
+    [Parameter] public bool Selected { get; set; }
+
+    /// <summary>Makes the chip a toggle button.</summary>
+    [Parameter] public EventCallback OnClick { get; set; }
+
+    [Parameter] public bool Disabled { get; set; }
+
+    [Parameter] public bool Small { get; set; }
+
+    [Parameter] public string? CssClass { get; set; }
+
+    private RenderFragment Label => ChildContent ?? (b => b.AddContent(0, Text));
+}

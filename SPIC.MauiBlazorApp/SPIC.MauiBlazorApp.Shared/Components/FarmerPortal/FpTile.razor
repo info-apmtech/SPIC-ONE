@@ -1,0 +1,71 @@
+@namespace SPIC.MauiBlazorApp.Shared.Components.FarmerPortal
+
+@*
+    FpTile - home feature tile: tinted icon circle, title, one-line description, chevron.
+    Put tiles in <div class="fp-tile-grid"> (2 columns phone, 3 tablet, 4 desktop).
+
+        <FpTile Title="Dealers near you" Description="..." Icon="bi-shop" Hue="soil" Href="/farmer/dealers" />
+
+    Soon="true" shows a "Soon" badge and no link. Usually rendered from FarmerFeatureTiles.
+*@
+
+@if (Soon)
+{
+    <div class="fp-tile is-soon fp-hue-@Hue @CssClass" aria-disabled="true">
+        @Content("Soon")
+    </div>
+}
+else if (!string.IsNullOrWhiteSpace(Href))
+{
+    <a class="fp-tile fp-hue-@Hue @CssClass" href="@Href">
+        @Content(Badge)
+        <i class="bi bi-chevron-right fp-tile__chevron" aria-hidden="true"></i>
+    </a>
+}
+else
+{
+    <button type="button" class="fp-tile fp-hue-@Hue @CssClass" @onclick="OnClick">
+        @Content(Badge)
+        <i class="bi bi-chevron-right fp-tile__chevron" aria-hidden="true"></i>
+    </button>
+}
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+
+    [Parameter] public string? Description { get; set; }
+
+    [Parameter] public string Icon { get; set; } = "bi-grid";
+
+    /// <summary>green | gold | soil | sky | violet | teal | rose.</summary>
+    [Parameter] public string Hue { get; set; } = "green";
+
+    [Parameter] public string? Href { get; set; }
+
+    /// <summary>Used when there is no Href.</summary>
+    [Parameter] public EventCallback OnClick { get; set; }
+
+    /// <summary>Small gold badge in the corner, e.g. "New".</summary>
+    [Parameter] public string? Badge { get; set; }
+
+    /// <summary>Not available yet: "Soon" badge, not clickable.</summary>
+    [Parameter] public bool Soon { get; set; }
+
+    [Parameter] public string? CssClass { get; set; }
+
+    private RenderFragment Content(string? badge) => __builder =>
+    {
+        <span class="fp-icon-circle" aria-hidden="true"><i class="bi @Icon"></i></span>
+        <span class="fp-tile__body">
+            <span class="fp-tile__title">@Title</span>
+            @if (!string.IsNullOrWhiteSpace(Description))
+            {
+                <span class="fp-tile__desc">@Description</span>
+            }
+        </span>
+        @if (!string.IsNullOrWhiteSpace(badge))
+        {
+            <span class="fp-tile__badge">@badge</span>
+        }
+    };
+}

@@ -1,0 +1,75 @@
+@namespace SPIC.MauiBlazorApp.Shared.Components.FarmerPortal
+
+@*
+    FpSkeleton - shimmer placeholders shaped like the farmer layouts (the shell Skeleton is
+    table / text shaped, so this one matches the hero, tiles and cards).
+
+        <FpSkeleton Variant="home" />            hero + 4 tiles
+        <FpSkeleton Variant="cards" Count="3" />  hero-less list of cards
+        Variants: home | hero | tiles | cards | form.
+    Respects prefers-reduced-motion (farmer-portal.css).
+*@
+
+<div class="fp-skel @CssClass" role="status" aria-busy="true" aria-live="polite">
+    <span class="fp-sr-only">@LoadingText</span>
+
+    @if (Variant is "home" or "hero" or "form")
+    {
+        <span class="fp-skel__bone fp-skel__hero" aria-hidden="true"></span>
+    }
+
+    @if (Variant is "home" or "tiles")
+    {
+        <div class="fp-skel__tiles" aria-hidden="true">
+            @for (var i = 0; i < (Variant == "home" ? 4 : Math.Max(1, Count)); i++)
+            {
+                <div class="fp-skel__tile">
+                    <span class="fp-skel__bone fp-skel__circle"></span>
+                    <span class="fp-skel__bone" style="width: 70%; height: 16px;"></span>
+                    <span class="fp-skel__bone" style="width: 90%; height: 12px;"></span>
+                </div>
+            }
+        </div>
+    }
+
+    @if (Variant is "cards" or "home")
+    {
+        @for (var i = 0; i < (Variant == "home" ? 1 : Math.Max(1, Count)); i++)
+        {
+            <div class="fp-skel__card" aria-hidden="true">
+                <div class="fp-skel__row">
+                    <span class="fp-skel__bone fp-skel__circle"></span>
+                    <div style="flex: 1; display: flex; flex-direction: column; gap: 8px;">
+                        <span class="fp-skel__bone" style="width: 45%; height: 16px;"></span>
+                        <span class="fp-skel__bone" style="width: 30%; height: 12px;"></span>
+                    </div>
+                </div>
+                <span class="fp-skel__bone" style="width: 92%; height: 12px;"></span>
+                <span class="fp-skel__bone" style="width: 75%; height: 12px;"></span>
+            </div>
+        }
+    }
+
+    @if (Variant == "form")
+    {
+        <div class="fp-skel__card" aria-hidden="true">
+            @for (var i = 0; i < Math.Max(1, Count); i++)
+            {
+                <span class="fp-skel__bone" style="width: 30%; height: 14px;"></span>
+                <span class="fp-skel__bone" style="width: 100%; height: 48px; border-radius: 12px;"></span>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    /// <summary>home | hero | tiles | cards | form.</summary>
+    [Parameter] public string Variant { get; set; } = "cards";
+
+    /// <summary>Tiles / cards / form fields to draw.</summary>
+    [Parameter] public int Count { get; set; } = 3;
+
+    [Parameter] public string LoadingText { get; set; } = "Loading...";
+
+    [Parameter] public string? CssClass { get; set; }
+}

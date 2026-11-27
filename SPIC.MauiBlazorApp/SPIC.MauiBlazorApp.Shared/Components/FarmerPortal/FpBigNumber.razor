@@ -1,0 +1,116 @@
+@namespace SPIC.MauiBlazorApp.Shared.Components.FarmerPortal
+@using System.Globalization
+
+@*
+    FpBigNumber - the headline result of a tool: big number with unit and caption, an optional
+    status pill, an optional range bar (low - expected - high) and an optional confidence ring.
+
+        <FpBigNumber Label="Expected harvest" Value="4.2" Unit="t/acre" Caption="Paddy, 2.5 acres"
+                     Low="3.6" Expected="4.2" High="4.8" RangeUnit="t" Confidence="72" />
+
+    Confidence is 0-100; ConfidenceLabel defaults to Low / Medium / High confidence (<40 / <70 / else).
+*@
+
+<div class="fp-big @CssClass">
+    <div class="fp-big__top">
+        <div>
+            @if (!string.IsNullOrWhiteSpace(Label))
+            {
+                <p class="fp-big__label">@Label</p>
+            }
+            <p class="fp-big__value">
+                <span class="fp-big__number">@Value</span>
+                @if (!string.IsNullOrWhiteSpace(Unit))
+                {
+                    <span class="fp-big__unit">@Unit</span>
+                }
+            </p>
+            @if (Level is { } level)
+            {
+                <FpStatus Level="@level" Text="@LevelText" Large="true" />
+            }
+        </div>
+        @if (Confidence is { } c)
+        {
+            var pct = Math.Clamp(c, 0, 100);
+            var dash = (pct / 100.0 * Circumference).ToString("0.##", CultureInfo.InvariantCulture);
+            var circ = Circumference.ToString("0.##", CultureInfo.InvariantCulture);
+            <div class="fp-ring" role="img" aria-label="@($"{ConfidenceText}: {pct} percent")">
+                <svg width="72" height="72" viewBox="0 0 72 72" aria-hidden="true">
+                    <circle class="fp-ring__track" cx="36" cy="36" r="30" />
+                    <circle class="fp-ring__value" cx="36" cy="36" r="30" stroke-dasharray="@dash @circ" />
+                </svg>
+                <span class="fp-ring__pct" aria-hidden="true">@pct%</span>
+                <span class="fp-ring__label" aria-hidden="true">@ConfidenceText</span>
+            </div>
+        }
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(Caption))
+    {
+        <p class="fp-big__caption">@Caption</p>
+    }
+
+    @if (Low is { } lo && High is { } hi && hi > lo)
+    {
+        var p = FpUi.Pct(FpUi.Fraction(Expected ?? (lo + hi) / 2, lo, hi));
+        <div class="fp-range" role="img" aria-label="@($"Range {Num(lo)} to {Num(hi)} {RangeUnit}".Trim())">
+            <div class="fp-range__bar" style="--fp-range-p: @p">
+                <span class="fp-range__marker"></span>
+            </div>
+            <div class="fp-range__labels" aria-hidden="true">
+                <span>Low <strong>@Num(lo) @RangeUnit</strong></span>
+                @if (Expected is { } ex)
+                {
+                    <span>Expected <strong>@Num(ex) @RangeUnit</strong></span>
+                }
+                <span>High <strong>@Num(hi) @RangeUnit</strong></span>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private const double Circumference = 2 * Math.PI * 30;
+
+    [Parameter] public string? Label { get; set; }
+
+    /// <summary>Already formatted ("4.2", "1,250").</summary>
+    [Parameter, EditorRequired] public string Value { get; set; } = "";
+
+    [Parameter] public string? Unit { get; set; }
+
+    [Parameter] public string? Caption { get; set; }
+
+    /// <summary>Optional status pill under the number.</summary>
+    [Parameter] public FpLevel? Level { get; set; }
+
+    [Parameter] public string? LevelText { get; set; }
+
+    [Parameter] public double? Low { get; set; }
+
+    [Parameter] public double? Expected { get; set; }
+
+    [Parameter] public double? High { get; set; }
+
+    [Parameter] public string? RangeUnit { get; set; }
+
+    /// <summary>Format for the range numbers.</summary>
+    [Parameter] public string RangeFormat { get; set; } = "0.#";
+
+    /// <summary>0-100.</summary>
+    [Parameter] public int? Confidence { get; set; }
+
+    [Parameter] public string? ConfidenceLabel { get; set; }
+
+    [Parameter] public string? CssClass { get; set; }
+
+    private string Num(double v) => v.ToString(RangeFormat, CultureInfo.InvariantCulture);
+
+    private string ConfidenceText => ConfidenceLabel ?? (Confidence switch
+    {
+        < 40 => "Low confidence",
+        < 70 => "Medium confidence",
+        _ => "High confidence"
+    });
+}

@@ -1,0 +1,58 @@
+@namespace SPIC.MauiBlazorApp.Shared.Components.FarmerPortal
+
+@*
+    FpSteps - numbered step indicator for multi-step flows (sign in, onboarding, fertilizer).
+
+        <FpSteps Steps="@(new[] { "About you", "Your farm", "Your village" })" Current="@_step" OnSelect="GoTo" />
+
+    Current is 0-based. Done steps show a tick; with OnSelect they are buttons, so the farmer can
+    go back to them (never forward). White on green when placed inside an FpHero.
+*@
+
+<ol class="fp-steps @CssClass" aria-label="@AriaLabel">
+    @for (var i = 0; i < Steps.Count; i++)
+    {
+        var index = i;
+        var state = index < Current ? "is-done" : index == Current ? "is-current" : "is-todo";
+        <li class="fp-steps__item @state" aria-current="@(index == Current ? "step" : null)">
+            @if (index < Current && OnSelect.HasDelegate)
+            {
+                <button type="button" class="fp-steps__btn" @onclick="() => OnSelect.InvokeAsync(index)"
+                        aria-label="@($"Step {index + 1}: {Steps[index]}, done. Go back to this step.")">
+                    <span class="fp-steps__dot" aria-hidden="true"><i class="bi bi-check-lg"></i></span>
+                    <span class="fp-steps__label" aria-hidden="true">@Steps[index]</span>
+                </button>
+            }
+            else
+            {
+                <span class="fp-steps__dot" aria-hidden="true">
+                    @if (index < Current)
+                    {
+                        <i class="bi bi-check-lg"></i>
+                    }
+                    else
+                    {
+                        @(index + 1)
+                    }
+                </span>
+                <span class="fp-steps__label">
+                    <span class="fp-sr-only">@($"Step {index + 1} of {Steps.Count}: ")</span>@Steps[index]@if (index < Current) {<span class="fp-sr-only">, done</span>}
+                </span>
+            }
+        </li>
+    }
+</ol>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<string> Steps { get; set; } = Array.Empty<string>();
+
+    /// <summary>0-based index of the step on screen.</summary>
+    [Parameter] public int Current { get; set; }
+
+    /// <summary>Lets the farmer jump back to a done step.</summary>
+    [Parameter] public EventCallback<int> OnSelect { get; set; }
+
+    [Parameter] public string AriaLabel { get; set; } = "Progress";
+
+    [Parameter] public string? CssClass { get; set; }
+}

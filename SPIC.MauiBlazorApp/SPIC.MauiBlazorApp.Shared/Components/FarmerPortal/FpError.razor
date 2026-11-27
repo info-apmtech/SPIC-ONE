@@ -1,0 +1,53 @@
+@namespace SPIC.MauiBlazorApp.Shared.Components.FarmerPortal
+
+@*
+    FpError - load / network failure state in plain words with a "Try again" button.
+        <FpError Message="@_error" OnRetry="LoadAsync" />
+*@
+
+<FpEmpty Art="@Art" Title="@Title" Message="@Message" Tone="error" Compact="@Compact" CssClass="@CssClass">
+    @if (OnRetry.HasDelegate)
+    {
+        <button type="button" class="fp-btn fp-btn--primary" @onclick="RetryAsync" disabled="@_retrying">
+            @if (_retrying)
+            {
+                <span class="fp-spinner" aria-hidden="true"></span>
+            }
+            else
+            {
+                <i class="bi bi-arrow-clockwise" aria-hidden="true"></i>
+            }
+            @RetryLabel
+        </button>
+    }
+    @ChildContent
+</FpEmpty>
+
+@code {
+    [Parameter] public string Title { get; set; } = "We could not load this";
+
+    [Parameter] public string? Message { get; set; } = "Please check your internet connection and try again.";
+
+    [Parameter] public EventCallback OnRetry { get; set; }
+
+    [Parameter] public string RetryLabel { get; set; } = "Try again";
+
+    [Parameter] public FpArtKind Art { get; set; } = FpArtKind.Offline;
+
+    [Parameter] public bool Compact { get; set; }
+
+    /// <summary>Extra actions after "Try again".</summary>
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter] public string? CssClass { get; set; }
+
+    private bool _retrying;
+
+    private async Task RetryAsync()
+    {
+        if (_retrying) return;
+        _retrying = true;
+        try { await OnRetry.InvokeAsync(); }
+        finally { _retrying = false; }
+    }
+}

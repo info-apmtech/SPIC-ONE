@@ -1,0 +1,108 @@
+@namespace SPIC.MauiBlazorApp.Shared.Components.FarmerPortal
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+@*
+    FpOtpInput - six code boxes for the SMS code.
+
+        <label for="fpl-code">6-digit code</label>
+        <FpOtpInput Id="fpl-code" @bind-Value="_code" OnComplete="VerifyAsync" Invalid="@(_error is not null)" />
+
+    One real <input> (autocomplete="one-time-code", inputmode="numeric") lies over six drawn boxes,
+    so phone SMS autofill, paste and backspace all work natively and screen readers hear one field.
+    Typing moves to the next box; pasting "482 913" or a whole SMS fills every box
+    (FpUi.NormaliseOtp, mirrored in FpOtpInput.razor.js so the field never shows other characters).
+    OnComplete fires once the last box is filled.
+*@
+
+<div class="fp-otp @(Invalid ? "is-invalid" : null) @(Disabled ? "is-disabled" : null) @CssClass" style="--fp-otp-len: @Length">
+    <input @ref="_input" id="@Id" class="fp-otp__input" type="text" inputmode="numeric" pattern="[0-9]*"
+           autocomplete="one-time-code" maxlength="@Length" spellcheck="false" autocorrect="off" autocapitalize="off"
+           value="@Value" disabled="@Disabled" aria-invalid="@(Invalid ? "true" : "false")"
+           aria-describedby="@AriaDescribedBy" @oninput="OnInputAsync" />
+    <div class="fp-otp__boxes" aria-hidden="true">
+        @for (var i = 0; i < Length; i++)
+        {
+            var filled = i < Value.Length;
+            var active = i == Math.Min(Value.Length, Length - 1);
+            <span class="fp-otp__box @(filled ? "is-filled" : null) @(active ? "is-active" : null)">@(filled ? Value[i].ToString() : "")</span>
+        }
+    </div>
+</div>
+
+@code {
+    private ElementReference _input;
+    private IJSObjectReference? _module;
+    private string? _lastCompleted;
+
+    [Parameter, EditorRequired] public string Id { get; set; } = "";
+
+    [Parameter] public string Value { get; set; } = "";
+
+    [Parameter] public EventCallback<string> ValueChanged { get; set; }
+
+    /// <summary>Raised with the full code when the last box is filled.</summary>
+    [Parameter] public EventCallback<string> OnComplete { get; set; }
+
+    [Parameter] public int Length { get; set; } = 6;
+
+    [Parameter] public bool Invalid { get; set; }
+
+    [Parameter] public bool Disabled { get; set; }
+
+    [Parameter] public string? AriaDescribedBy { get; set; }
+
+    [Parameter] public string? CssClass { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        Value = FpUi.NormaliseOtp(Value, Length);
+        if (Value.Length < Length) _lastCompleted = null;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        try
+        {
+            _module = await JS.InvokeAsync<IJSObjectReference>(
+                "import", "./_content/SPIC.MauiBlazorApp.Shared/Components/FarmerPortal/FpOtpInput.razor.js");
+            await _module.InvokeVoidAsync("attach", _input, Length);
+        }
+        catch
+        {
+            // Without the script the field still works (typing, autofill); only messy pastes lose digits.
+        }
+    }
+
+    private async Task OnInputAsync(ChangeEventArgs e)
+    {
+        var next = FpUi.NormaliseOtp(e.Value?.ToString(), Length);
+        Value = next;
+        if (next.Length < Length) _lastCompleted = null;
+        await ValueChanged.InvokeAsync(next);
+        if (next.Length == Length && next != _lastCompleted)
+        {
+            _lastCompleted = next;
+            await OnComplete.InvokeAsync(next);
+        }
+    }
+
+    /// <summary>Puts the cursor in the boxes. Never throws.</summary>
+    public async Task FocusAsync()
+    {
+        try { await _input.FocusAsync(); } catch { /* not rendered or circuit gone */ }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            if (_module is not null) await _module.DisposeAsync();
+        }
+        catch
+        {
+            // circuit may already be gone
+        }
+    }
+}

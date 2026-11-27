@@ -1,0 +1,133 @@
+@namespace SPIC.MauiBlazorApp.Shared.Components.FarmerPortal
+@using System.Globalization
+
+@*
+    FpZoneSlider - a soil value with a coloured zone track (Low red / Medium green / High violet,
+    drawn from the real thresholds), a value bubble, min / max labels, a live FpStatus and a number
+    box for exact entry. Thumb 28 px.
+
+        <FpZoneSlider Id="soil-n" Label="Nitrogen (N)" Unit="kg/ha" Min="0" Max="600" Step="1"
+                      LowBelow="280" HighAbove="560" @bind-Value="_n" />
+
+    Value is null until the farmer sets it ("Not set"). Below LowBelow is Low, above HighAbove is
+    High, otherwise Medium (FpUi.ZoneLevel).
+*@
+
+<div class="fp-zone @(Value is null ? "is-empty" : null) @CssClass" style="@StyleVars">
+    <div class="fp-zone__head">
+        <label class="fp-zone__label" for="@Id">@Label</label>
+        <FpStatus Level="@Level" />
+    </div>
+    <div class="fp-zone__body">
+        <div class="fp-zone__slider">
+            <output class="fp-zone__bubble" for="@Id" aria-hidden="true">@(Value is null ? "Not set" : $"{Format(Value.Value)} {Unit}".Trim())</output>
+            <input id="@Id" type="range" class="fp-zone__range"
+                   min="@Inv(Min)" max="@Inv(Max)" step="@Inv(Step)" value="@Inv(Value ?? Min)"
+                   disabled="@Disabled"
+                   aria-valuetext="@ValueText" aria-describedby="@(Hint is null ? null : Id + "-hint")"
+                   @oninput="OnRangeInput" />
+            <div class="fp-zone__scale" aria-hidden="true">
+                <span class="fp-zone__scale-min">@Format(Min)</span>
+                @if (LowBelow > Min && LowBelow < Max)
+                {
+                    <span class="fp-zone__scale-mark" style="left: @FpUi.Pct(Fraction(LowBelow))">@Format(LowBelow)</span>
+                }
+                @if (HighAbove > Min && HighAbove < Max)
+                {
+                    <span class="fp-zone__scale-mark" style="left: @FpUi.Pct(Fraction(HighAbove))">@Format(HighAbove)</span>
+                }
+                <span class="fp-zone__scale-max">@Format(Max)</span>
+            </div>
+        </div>
+        <div class="fp-zone__entry">
+            <input type="number" class="fp-input" inputmode="decimal" aria-label="@($"{Label}, exact value")"
+                   min="@Inv(Min)" max="@Inv(Max)" step="@Inv(Step)" value="@(Value is null ? "" : Inv(Value.Value))"
+                   disabled="@Disabled" @onchange="OnNumberChange" />
+            @if (!string.IsNullOrWhiteSpace(Unit))
+            {
+                <span class="fp-zone__unit">@Unit</span>
+            }
+        </div>
+    </div>
+    @if (Hint is not null)
+    {
+        <p id="@(Id + "-hint")" class="fp-hint">@Hint</p>
+    }
+</div>
+
+@code {
+    /// <summary>Unique element id (the label points at the range input).</summary>
+    [Parameter, EditorRequired] public string Id { get; set; } = "";
+
+    [Parameter, EditorRequired] public string Label { get; set; } = "";
+
+    [Parameter] public string? Unit { get; set; }
+
+    [Parameter] public double? Value { get; set; }
+
+    [Parameter] public EventCallback<double?> ValueChanged { get; set; }
+
+    [Parameter] public double Min { get; set; }
+
+    [Parameter] public double Max { get; set; } = 100;
+
+    [Parameter] public double Step { get; set; } = 1;
+
+    /// <summary>Values below this are Low.</summary>
+    [Parameter] public double LowBelow { get; set; }
+
+    /// <summary>Values above this are High.</summary>
+    [Parameter] public double HighAbove { get; set; }
+
+    /// <summary>Decimals shown in the bubble and labels (default: from Step).</summary>
+    [Parameter] public int? Decimals { get; set; }
+
+    [Parameter] public string? Hint { get; set; }
+
+    [Parameter] public bool Disabled { get; set; }
+
+    [Parameter] public string? CssClass { get; set; }
+
+    private FpLevel Level => FpUi.ZoneLevel(Value, LowBelow, HighAbove);
+
+    private double Fraction(double v) => FpUi.Fraction(v, Min, Max);
+
+    private int Digits => Decimals ?? (Step >= 1 ? 0 : Step >= 0.1 ? 1 : 2);
+
+    private string Format(double v) => v.ToString("N" + Digits, CultureInfo.InvariantCulture);
+
+    private static string Inv(double v) => v.ToString(CultureInfo.InvariantCulture);
+
+    private string ValueText => Value is null
+        ? "Not set"
+        : $"{Format(Value.Value)} {Unit}, {FpUi.LevelLabel(Level)}";
+
+    // Track colours: soft red to the Low threshold, green to the High threshold, violet after.
+    private string StyleVars
+    {
+        get
+        {
+            var low = FpUi.Pct(Fraction(LowBelow));
+            var high = FpUi.Pct(Fraction(HighAbove));
+            var p = Fraction(Value ?? Min).ToString("0.####", CultureInfo.InvariantCulture);
+            return $"--fp-zone-p: {p}; --fp-zone-track: linear-gradient(90deg, #f3b4b4 0 {low}, #9fdcba {low} {high}, #c9bcf3 {high} 100%);";
+        }
+    }
+
+    private Task OnRangeInput(ChangeEventArgs e) => SetAsync(e.Value?.ToString());
+
+    private Task OnNumberChange(ChangeEventArgs e) => SetAsync(e.Value?.ToString());
+
+    private async Task SetAsync(string? raw)
+    {
+        double? next = null;
+        if (!string.IsNullOrWhiteSpace(raw)
+            && double.TryParse(raw.Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out var v)
+            && !double.IsNaN(v))
+        {
+            next = Math.Clamp(v, Min, Max);
+        }
+        Value = next;
+        await ValueChanged.InvokeAsync(next);
+    }
+}
