@@ -98,6 +98,224 @@
             </div>
         </section>
 
+        @if (IsSpecificProductWithItems)
+        {
+            <section class="pub-card">
+                <div class="pub-card__head">
+                    <div>
+                        <h2 class="pub-h2">Product-Wise Request, Receipt, Issue &amp; Replacement Details</h2>
+                        <span class="pub-muted">
+                            @(Kind == PublicityDispatchKind.ReInitiation 
+                                ? $"Review quantity history across all {_itemRows.Count} product items and specify re-dispatch quantities" 
+                                : $"{_itemRows.Count} product items")
+                        </span>
+                    </div>
+                </div>
+
+                @if (_itemRows.Count == 0)
+                {
+                    <div class="pub-banner pub-banner--amber">
+                        <span class="pub-banner__icon"><i class="bi bi-info-circle"></i></span>
+                        <div>
+                            <h3>No Items Available</h3>
+                            <p>@(Kind == PublicityDispatchKind.ReInitiation ? "There are no outstanding replacement quantities to dispatch." : "All approved items have already been dispatched.")</p>
+                        </div>
+                    </div>
+                }
+                else if (Kind == PublicityDispatchKind.ReInitiation)
+                {
+                    <div class="pub-table-wrap">
+                        <table class="pub-table pub-table--items pub-table--redispatch">
+                            <thead>
+                                <tr>
+                                    <th style="width: 50px;">S.No</th>
+                                    <th style="text-align: left; min-width: 170px;">Product Name</th>
+                                    <th class="pub-th-num" title="Originally requested / approved quantity">Asked</th>
+                                    <th class="pub-th-num" title="Quantity originally sent">Sent</th>
+                                    <th class="pub-th-num" title="Quantity actually received">Received</th>
+                                    <th class="pub-th-num" title="Missing units from dispatch">Shortage</th>
+                                    <th class="pub-th-num" title="Received units reported damaged">Damaged</th>
+                                    <th class="pub-th-num" title="Extra units received">Excess</th>
+                                    <th style="text-align: center; min-width: 130px;" title="Exception issue type">Issue</th>
+                                    <th class="pub-th-num" title="Outstanding replacement quantity still requiring resolution">Pending</th>
+                                    <th class="pub-th-num" style="min-width: 140px;" title="Quantity being re-dispatched in this shipment">Send Now</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @for (var i = 0; i < _itemRows.Count; i++)
+                                {
+                                    var idx = i;
+                                    var row = _itemRows[idx];
+                                    var isIssue = row.HasIssue;
+                                    <tr class="@(isIssue ? "pub-row--issue" : "")">
+                                        <td data-label="S.No">@(idx + 1)</td>
+                                        <td data-label="Product Name" style="text-align: left;">
+                                            <b>@row.ProductName</b>
+                                            @if (isIssue)
+                                            {
+                                                <span class="pub-badge-alert" title="Exception reported for this product"><i class="bi bi-exclamation-triangle-fill"></i></span>
+                                            }
+                                        </td>
+                                        <td data-label="Asked" class="pub-td-num">@row.AskedQty Nos</td>
+                                        <td data-label="Sent" class="pub-td-num">@row.SentQty Nos</td>
+                                        <td data-label="Received" class="pub-td-num">@row.ReceivedQty Nos</td>
+                                        <td data-label="Shortage" class="pub-td-num @(row.ShortageQty > 0 ? "pub-text-red" : "")">
+                                            @(row.ShortageQty > 0 ? $"{row.ShortageQty} Nos" : "-")
+                                        </td>
+                                        <td data-label="Damaged" class="pub-td-num @(row.DamagedQty > 0 ? "pub-text-amber" : "")">
+                                            @(row.DamagedQty > 0 ? $"{row.DamagedQty} Nos" : "-")
+                                        </td>
+                                        <td data-label="Excess" class="pub-td-num @(row.ExcessQty > 0 ? "pub-text-blue" : "")">
+                                            @(row.ExcessQty > 0 ? $"{row.ExcessQty} Nos" : "-")
+                                        </td>
+                                        <td data-label="Issue" style="text-align: center;">
+                                            @if (row.ShortageQty > 0 && row.DamagedQty > 0)
+                                            {
+                                                <PubPill Text="Shortage + Damage" Tone="red" />
+                                            }
+                                            else if (row.ShortageQty > 0)
+                                            {
+                                                <PubPill Text="Shortage" Tone="red" />
+                                            }
+                                            else if (row.DamagedQty > 0)
+                                            {
+                                                <PubPill Text="Damage" Tone="amber" />
+                                            }
+                                            else if (row.ExcessQty > 0)
+                                            {
+                                                <PubPill Text="Excess" Tone="blue" />
+                                            }
+                                            else
+                                            {
+                                                <span class="pub-muted">-</span>
+                                            }
+                                        </td>
+                                        <td data-label="Pending" class="pub-td-num @(row.OutstandingReplacementQty > 0 ? "pub-text-violet" : "")">
+                                            <b>@row.OutstandingReplacementQty Nos</b>
+                                        </td>
+                                        <td data-label="Send Now" class="pub-td-num">
+                                            @if (row.OutstandingReplacementQty > 0)
+                                            {
+                                                <input type="number"
+                                                       class="pub-input pub-input--qty pub-input--send-now"
+                                                       min="0"
+                                                       max="@row.OutstandingReplacementQty"
+                                                       value="@row.DispatchQty"
+                                                       @oninput="(e) => OnItemQtyChanged(row, e)" />
+                                            }
+                                            else
+                                            {
+                                                <span class="pub-muted" title="No outstanding quantity to replace">0 Nos</span>
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                            <tfoot>
+                                <tr class="pub-tfoot-total">
+                                    <td colspan="2" style="text-align: left;"><b>Total</b></td>
+                                    <td class="pub-td-num"><b>@TotalAsked Nos</b></td>
+                                    <td class="pub-td-num"><b>@TotalSent Nos</b></td>
+                                    <td class="pub-td-num"><b>@TotalReceived Nos</b></td>
+                                    <td class="pub-td-num pub-text-red"><b>@TotalShortage Nos</b></td>
+                                    <td class="pub-td-num pub-text-amber"><b>@TotalDamaged Nos</b></td>
+                                    <td class="pub-td-num pub-text-blue"><b>@TotalExcess Nos</b></td>
+                                    <td></td>
+                                    <td class="pub-td-num pub-text-violet"><b>@TotalOutstandingReplacement Nos</b></td>
+                                    <td class="pub-td-num pub-text-green"><b>@TotalSendingNow Nos</b></td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+
+                    <div class="pub-re-dispatch-summary">
+                        <div class="pub-summary-card">
+                            <span class="pub-summary-card__label">Total Requested</span>
+                            <span class="pub-summary-card__val">@TotalAsked Nos</span>
+                        </div>
+                        <div class="pub-summary-card">
+                            <span class="pub-summary-card__label">Total Dispatched</span>
+                            <span class="pub-summary-card__val">@TotalSent Nos</span>
+                        </div>
+                        <div class="pub-summary-card">
+                            <span class="pub-summary-card__label">Total Received</span>
+                            <span class="pub-summary-card__val">@TotalReceived Nos</span>
+                        </div>
+                        <div class="pub-summary-card pub-summary-card--red">
+                            <span class="pub-summary-card__label">Total Shortage</span>
+                            <span class="pub-summary-card__val">@TotalShortage Nos</span>
+                        </div>
+                        <div class="pub-summary-card pub-summary-card--amber">
+                            <span class="pub-summary-card__label">Total Damaged</span>
+                            <span class="pub-summary-card__val">@TotalDamaged Nos</span>
+                        </div>
+                        <div class="pub-summary-card pub-summary-card--violet">
+                            <span class="pub-summary-card__label">Total Outstanding Replacement</span>
+                            <span class="pub-summary-card__val">@TotalOutstandingReplacement Nos</span>
+                        </div>
+                        <div class="pub-summary-card pub-summary-card--green">
+                            <span class="pub-summary-card__label">Total Sending Now</span>
+                            <span class="pub-summary-card__val">@TotalSendingNow Nos</span>
+                        </div>
+                        <div class="pub-summary-card pub-summary-card--blue">
+                            <span class="pub-summary-card__label">Balance Remaining After Re-Dispatch</span>
+                            <span class="pub-summary-card__val">@TotalBalanceRemaining Nos</span>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <div class="pub-table-wrap">
+                        <table class="pub-table pub-table--items">
+                            <thead>
+                                <tr>
+                                    <th style="width: 60px;">S.No</th>
+                                    <th style="text-align: left;">Product</th>
+                                    <th class="pub-th-num" style="width: 150px;">Approved Qty</th>
+                                    <th class="pub-th-num" style="width: 190px;">Previously Dispatched</th>
+                                    <th class="pub-th-num" style="width: 150px;">Remaining Qty</th>
+                                    <th class="pub-th-num" style="width: 180px;">Dispatch Qty</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @for (var i = 0; i < _itemRows.Count; i++)
+                                {
+                                    var idx = i;
+                                    var row = _itemRows[idx];
+                                    var maxQty = row.RemainingQty;
+                                    <tr>
+                                        <td data-label="S.No">@(idx + 1)</td>
+                                        <td data-label="Product" style="text-align: left;"><b>@row.ProductName</b></td>
+                                        <td data-label="Approved Qty" class="pub-td-num">@row.AskedQty Nos</td>
+                                        <td data-label="Previously Dispatched" class="pub-td-num">@row.PreviouslyDispatched Nos</td>
+                                        <td data-label="Remaining Qty" class="pub-td-num">@row.RemainingQty Nos</td>
+                                        <td data-label="Dispatch Qty" class="pub-td-num">
+                                            <input type="number"
+                                                   class="pub-input pub-input--qty"
+                                                   min="0"
+                                                   max="@maxQty"
+                                                   value="@row.DispatchQty"
+                                                   disabled="@(maxQty <= 0)"
+                                                   @oninput="(e) => OnItemQtyChanged(row, e)" />
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                            <tfoot>
+                                <tr class="pub-tfoot-total">
+                                    <td colspan="2" style="text-align: left;"><b>Total</b></td>
+                                    <td class="pub-td-num"><b>@_itemRows.Sum(r => r.AskedQty) Nos</b></td>
+                                    <td class="pub-td-num"><b>@_itemRows.Sum(r => r.PreviouslyDispatched) Nos</b></td>
+                                    <td class="pub-td-num"><b>@_itemRows.Sum(r => r.RemainingQty) Nos</b></td>
+                                    <td class="pub-td-num"><b>@_dto.Quantity Nos</b></td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                }
+            </section>
+        }
+
         <section class="pub-card">
             <h2 class="pub-h2">Dispatch / Note Approval Document @if (Kind == PublicityDispatchKind.Original) { <span class="pub-text-red">(Required)</span> }</h2>
             <p class="pub-muted">Upload the note approval / dispatch document for this dispatch</p>
@@ -179,8 +397,58 @@
     [Parameter] public int? DispatchId { get; set; }
 
     private bool Proof => DispatchId is > 0;
-    private PublicityDispatchKind Kind => Nav.ToAbsoluteUri(Nav.Uri).Query.Contains("kind=1") ? PublicityDispatchKind.ReInitiation : PublicityDispatchKind.Original;
+    private PublicityDispatchKind Kind
+    {
+        get
+        {
+            var uri = Nav.ToAbsoluteUri(Nav.Uri);
+            var q = uri.Query;
+            if (q.IndexOf("kind=1", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                q.IndexOf("kind=reinitiation", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                q.IndexOf("kind=replacement", StringComparison.OrdinalIgnoreCase) >= 0)
+                return PublicityDispatchKind.ReInitiation;
+            if (_d is not null && (_d.Status == PublicityStatus.ExceptionRaised || _d.Stage is PublicityStage.ExceptionHandling or PublicityStage.ReInitiation))
+                return PublicityDispatchKind.ReInitiation;
+            return PublicityDispatchKind.Original;
+        }
+    }
     private string Back => Proof ? $"/PublicityRequest/{Id}?tab=tracking" : $"/PublicityReview/{Id}";
+
+    private bool IsSpecificProductWithItems => _d?.Items is { Count: > 0 } && (_d.MaterialCategory == PublicityMaterialCategory.Specific || _d.Items.Count > 1);
+
+    private sealed class DispatchItemRow
+    {
+        public int RequestItemId { get; set; }
+        public int ProductId { get; set; }
+        public string ProductName { get; set; } = "";
+        public int AskedQty { get; set; }
+        public int SentQty { get; set; }
+        public int ReceivedQty { get; set; }
+        public int ShortageQty { get; set; }
+        public int DamagedQty { get; set; }
+        public int ExcessQty { get; set; }
+        public string Issue => DamagedQty > 0 && ShortageQty > 0 ? "Shortage + Damage" :
+            DamagedQty > 0 && ExcessQty > 0 ? "Excess + Damage" :
+            DamagedQty > 0 ? "Damage" :
+            ShortageQty > 0 ? "Shortage" :
+            ExcessQty > 0 ? "Excess" : "-";
+        public bool HasIssue => ShortageQty > 0 || DamagedQty > 0;
+        public int OutstandingReplacementQty { get; set; }
+        public int PreviouslyDispatched { get; set; }
+        public int RemainingQty { get; set; }
+        public int DispatchQty { get; set; }
+    }
+    private List<DispatchItemRow> _itemRows = new();
+
+    private int TotalAsked => _itemRows.Sum(r => r.AskedQty);
+    private int TotalSent => _itemRows.Sum(r => r.SentQty);
+    private int TotalReceived => _itemRows.Sum(r => r.ReceivedQty);
+    private int TotalShortage => _itemRows.Sum(r => r.ShortageQty);
+    private int TotalDamaged => _itemRows.Sum(r => r.DamagedQty);
+    private int TotalExcess => _itemRows.Sum(r => r.ExcessQty);
+    private int TotalOutstandingReplacement => _itemRows.Sum(r => r.OutstandingReplacementQty);
+    private int TotalSendingNow => _itemRows.Sum(r => r.DispatchQty);
+    private int TotalBalanceRemaining => Math.Max(0, TotalOutstandingReplacement - TotalSendingNow);
 
     private PubDetailDto? _d;
     private PubLookupsDto? _lookups;
@@ -212,11 +480,139 @@
         }
         _people = (await Api.LookupsAsync(_d.RegionId))?.People ?? new();
         _dto.Kind = Kind;
-        _dto.Quantity = Kind == PublicityDispatchKind.ReInitiation ? _d.Summary.Outstanding : _d.Quantity;
         _dto.DispatchDate = PubText.Today;
         _dto.ResponsibleUserId = _d.RequestedByUserId;
         _addresses = await Api.DeliveryAddressesAsync() ?? new();
         _states = await Api.StatesAsync() ?? new();
+
+        PopulateItemRows();
+    }
+
+    private void PopulateItemRows()
+    {
+        if (_d is null || !IsSpecificProductWithItems)
+        {
+            _dto.Quantity = Kind == PublicityDispatchKind.ReInitiation ? _d?.Summary.Outstanding ?? 0 : _d?.Quantity ?? 0;
+            return;
+        }
+
+        var productNames = _lookups?.Products?.ToDictionary(p => p.Id, p => p.Name) ?? new();
+        _itemRows.Clear();
+
+        if (Kind == PublicityDispatchKind.ReInitiation)
+        {
+            // Full quantity history of every product in the request
+            foreach (var item in _d.Items)
+            {
+                var prodName = !string.IsNullOrEmpty(item.ProductName)
+                    ? item.ProductName
+                    : productNames.GetValueOrDefault(item.ProductId, $"Product #{item.ProductId}");
+
+                var sent = _d.Dispatches
+                    .Where(disp => disp.Kind == PublicityDispatchKind.Original)
+                    .SelectMany(disp => disp.Items)
+                    .Where(di => di.RequestItemId == item.Id)
+                    .Sum(di => di.DispatchedQty);
+                if (sent == 0) sent = item.Quantity; // fallback to asked if item-level original was not recorded
+
+                var received = _d.Dispatches
+                    .Where(disp => disp.Ack is { IsDraft: false })
+                    .SelectMany(disp => disp.Items)
+                    .Where(di => di.RequestItemId == item.Id)
+                    .Sum(di => di.ReceivedQty);
+
+                var damaged = _d.Dispatches
+                    .Where(disp => disp.Ack is { IsDraft: false })
+                    .SelectMany(disp => disp.Items)
+                    .Where(di => di.RequestItemId == item.Id)
+                    .Sum(di => di.DamagedQty);
+
+                var shortage = Math.Max(0, sent - received);
+                var excess = Math.Max(0, received - sent);
+
+                var usable = Math.Max(0, received - damaged);
+                var deficit = Math.Max(0, item.Quantity - usable);
+
+                // Already covered by active replacement dispatches (not yet acknowledged)
+                var activeReplacement = _d.Dispatches
+                    .Where(disp => disp.Kind != PublicityDispatchKind.Original && (disp.Ack == null || disp.Ack.IsDraft))
+                    .SelectMany(disp => disp.Items)
+                    .Where(di => di.RequestItemId == item.Id)
+                    .Sum(di => di.DispatchedQty);
+
+                var outstanding = Math.Max(0, deficit - activeReplacement);
+
+                _itemRows.Add(new DispatchItemRow
+                {
+                    RequestItemId = item.Id,
+                    ProductId = item.ProductId,
+                    ProductName = prodName,
+                    AskedQty = item.Quantity,
+                    SentQty = sent,
+                    ReceivedQty = received,
+                    ShortageQty = shortage,
+                    DamagedQty = damaged,
+                    ExcessQty = excess,
+                    OutstandingReplacementQty = outstanding,
+                    DispatchQty = outstanding
+                });
+            }
+        }
+        else
+        {
+            // Original dispatch: all approved items
+            foreach (var item in _d.Items)
+            {
+                var prodName = !string.IsNullOrEmpty(item.ProductName)
+                    ? item.ProductName
+                    : productNames.GetValueOrDefault(item.ProductId, $"Product #{item.ProductId}");
+
+                var prevDispatched = _d.Dispatches
+                    .Where(disp => disp.Kind == PublicityDispatchKind.Original)
+                    .SelectMany(disp => disp.Items)
+                    .Where(di => di.RequestItemId == item.Id)
+                    .Sum(di => di.DispatchedQty);
+
+                var remaining = Math.Max(0, item.Quantity - prevDispatched);
+
+                _itemRows.Add(new DispatchItemRow
+                {
+                    RequestItemId = item.Id,
+                    ProductId = item.ProductId,
+                    ProductName = prodName,
+                    AskedQty = item.Quantity,
+                    PreviouslyDispatched = prevDispatched,
+                    RemainingQty = remaining,
+                    DispatchQty = remaining
+                });
+            }
+        }
+
+        RecalculateTotalQty();
+    }
+
+    private void OnItemQtyChanged(DispatchItemRow row, ChangeEventArgs e)
+    {
+        var max = Kind == PublicityDispatchKind.ReInitiation ? row.OutstandingReplacementQty : row.RemainingQty;
+        if (int.TryParse(e.Value?.ToString(), out var val))
+        {
+            if (val < 0) val = 0;
+            if (val > max) val = max;
+            row.DispatchQty = val;
+        }
+        else
+        {
+            row.DispatchQty = 0;
+        }
+        RecalculateTotalQty();
+    }
+
+    private void RecalculateTotalQty()
+    {
+        if (IsSpecificProductWithItems)
+        {
+            _dto.Quantity = _itemRows.Sum(r => Math.Max(0, r.DispatchQty));
+        }
     }
 
     // Responsible Officer becomes searchable (Select2), same wiring as every other list/filter page
@@ -300,6 +696,29 @@
 
     private async Task CreateAsync()
     {
+        if (IsSpecificProductWithItems)
+        {
+            if (_itemRows.Count == 0)
+            {
+                Toast.Error(Kind == PublicityDispatchKind.ReInitiation ? "There are no outstanding replacement items to dispatch." : "All approved items have already been dispatched.");
+                return;
+            }
+            if (_dto.Quantity <= 0)
+            {
+                Toast.Error("Enter at least one product dispatch quantity greater than zero.");
+                return;
+            }
+            _dto.Items = _itemRows
+                .Where(r => r.DispatchQty > 0)
+                .Select(r => new PubDispatchItemCreateDto
+                {
+                    RequestItemId = r.RequestItemId,
+                    ProductId = r.ProductId,
+                    DispatchQty = r.DispatchQty
+                })
+                .ToList();
+        }
+
         string? error = _dto.DispatchDate is null ? "Select the dispatch date."
             : _dto.Quantity <= 0 ? "Enter the dispatch quantity."
             : string.IsNullOrWhiteSpace(_dto.VendorName) ? "Select the vendor."

@@ -57,7 +57,8 @@ public abstract class ApiClientBase
             }
             return await response.Content.ReadFromJsonAsync<T>(Json, ct);
         }
-        catch (OperationCanceledException) { return null; }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { return null; }
+        catch (OperationCanceledException) { ToastOffline($"load {what}"); return null; }
         catch (Exception) { ToastOffline($"load {what}"); return null; }
     }
 
@@ -75,7 +76,8 @@ public abstract class ApiClientBase
             }
             return await response.Content.ReadFromJsonAsync<T>(Json, ct);
         }
-        catch (OperationCanceledException) { return null; }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { return null; }
+        catch (OperationCanceledException) { ToastOffline(what); return null; }
         catch (Exception) { ToastOffline(what); return null; }
     }
 
@@ -125,6 +127,7 @@ public abstract class ApiClientBase
             HttpStatusCode.Unauthorized => "Your session has expired. Please sign in again.",
             HttpStatusCode.Forbidden => $"You are not allowed to {what}.",
             HttpStatusCode.NotFound => "That record is no longer available.",
+            HttpStatusCode.ServiceUnavailable => "API server is currently unavailable. Please ensure the backend is running.",
             _ => $"We could not {what}. Please try again."
         });
     }

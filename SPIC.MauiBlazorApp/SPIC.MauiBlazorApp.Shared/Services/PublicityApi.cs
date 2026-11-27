@@ -42,10 +42,16 @@ public sealed class PublicityApi : ApiClientBase, IDisposable
     public bool IsDgmMdCs => Role == AppRole.MDHOD ||
         (Role == AppRole.CommonRole && Login.DesignationName is "DGM MD CS" or "DGM-MD CS");
     public bool IsDispatcher => IsAdminMdCs || IsDgmMdCs || Role is AppRole.Admin or AppRole.SuperAdmin or AppRole.CorporateAdmin;
-    /// <summary>Publicity Material Master (ADMIN-MD CS only, deliberately excluding IsDgmMdCs unlike
-    /// IsDispatcher above - matches PublicityController's IsAdminMdCsAsync()/IsSuper() gate on the
-    /// materials endpoints exactly, so the menu/page never show a button the API would 403.</summary>
-    public bool CanManageMaterials => IsAdminMdCs || Role is AppRole.Admin or AppRole.SuperAdmin;
+    /// <summary>Publicity Material Master (2026-11-27 authorization fix): a normal Designation-grid
+    /// permission (PagePermission.PublicityMaterialMaster) - deliberately NOT IsAdminMdCs (that's a
+    /// hardcoded CommonRole + Designation-NAME match, invisible to and unmanageable from Designation
+    /// Management). Login.CanAccess already covers the Admin/SuperAdmin bypass (PageAccessModel
+    /// .RoleBypass) and the CommonRole -> Designation.RoleAccess grant (PageAccessModel.DesignationOnly)
+    /// on its own; AppRole.MDAdmin is added explicitly here because that's a dedicated ROLE bypass
+    /// (not a designation-name string match) that must keep working even before anyone grants its own
+    /// Designation the new permission via Designation Management - matches
+    /// PublicityController.CanManageMaterialMasterAsync()'s exact two bypasses + grid check.</summary>
+    public bool CanManageMaterials => Role == AppRole.MDAdmin || Login.CanAccess(PagePermission.PublicityMaterialMaster);
     /// <summary>Delivery Address Management (ADMIN-MD CS only, same gate/exclusions as
     /// CanManageMaterials) - matches PublicityController's delivery-addresses/admin + PUT/DELETE
     /// endpoints' IsAdminMdCsAsync()/IsSuper() check exactly.</summary>
@@ -104,6 +110,8 @@ public sealed class PublicityApi : ApiClientBase, IDisposable
     public Task<PubStatsDto?> StatsAsync(int? category = null) => GetAsync<PubStatsDto>(category.HasValue ? $"requests/stats?category={category.Value}" : "requests/stats", "the summary");
     public Task<PubPageDto?> ListAsync(string query, CancellationToken ct = default) => GetAsync<PubPageDto>("requests?" + query, "the requests", ct);
     public Task<PubDetailDto?> GetAsync(int id) => GetAsync<PubDetailDto>($"requests/{id}", "the request");
+    public Task<List<PubExcessDto>?> ExcessSourcesForProductAsync(int id, int productId) =>
+        GetAsync<List<PubExcessDto>>($"requests/{id}/excess-sources?productId={productId}", "the available stock");
     public Task<PubConsolidationDto?> ConsolidationAsync() => GetAsync<PubConsolidationDto>("consolidation", "the consolidation");
 
     public Task<PubSaved?> SaveAsync(int? id, PubUpsertDto dto) => id is > 0
@@ -126,6 +134,7 @@ public sealed class PublicityApi : ApiClientBase, IDisposable
     public Task<bool> ConfirmZeroRegionAsync(int stateId, int regionId, string? remarks) =>
         SendAsync(HttpMethod.Post, $"regions/{stateId}/{regionId}/confirm-zero", new PubRegionActionDto { Remarks = remarks }, "confirm zero requirement");
     public Task<PubSaved?> CreateDispatchAsync(int id, PubDispatchCreateDto dto) => SendAsync<PubSaved>(HttpMethod.Post, $"requests/{id}/dispatches", dto, "create the dispatch");
+    public Task<bool> VerifyExcessAsync(int id) => SendAsync(HttpMethod.Post, $"requests/{id}/verify-excess", null, "verify excess stock");
     public Task<List<PubBulkImportRowDto>?> ImportExcelAsync(IBrowserFile file) =>
         UploadAsync<List<PubBulkImportRowDto>>("requests/import-excel", "file", new[] { file }, MaxFileBytes, "import the Excel file");
     public Task<PubBulkCreatedDto?> CreateBulkAsync(PubBulkUpsertDto dto) => SendAsync<PubBulkCreatedDto>(HttpMethod.Post, "requests/bulk", dto, "save the requests");
@@ -154,6 +163,10 @@ public sealed class PublicityApi : ApiClientBase, IDisposable
         GetAsync<List<PubNotificationDto>>("notifications" + (type is null ? "" : $"?type={type}"), "the notifications");
     public Task<PubNotificationDetailDto?> NotificationAsync(int id) => GetAsync<PubNotificationDetailDto>($"notifications/{id}", "the notification");
     public Task<PubUnreadCountDto?> MarkReadAsync(int id) => SendAsync<PubUnreadCountDto>(HttpMethod.Post, $"notifications/{id}/read", null, "mark as read");
+    // Marks every notification about a given request as read for the signed-in user, WITHOUT the user
+    // ever opening Notifications - called once a request's details page has confirmed it loaded
+    // successfully (PublicityDetails.razor).
+    public Task<PubUnreadCountDto?> MarkReadByRequestAsync(int requestId) => SendAsync<PubUnreadCountDto>(HttpMethod.Post, $"notifications/by-request/{requestId}/read", null, "mark as read");
     public Task<PubUnreadCountDto?> UnreadCountAsync() => GetAsync<PubUnreadCountDto>("notifications/unread-count", "the unread count");
 
     public sealed class PubSaved

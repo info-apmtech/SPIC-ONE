@@ -1947,13 +1947,26 @@
 
     // Publicity group: pure union of its children's CanSeeMenu, same shape as DemoDocumentation.
     private bool AnyPublicityAccessible =>
-        loginState.CanSeeMenu(PagePermission.PublicityRequest) || loginState.CanSeeMenu(PagePermission.PublicityReview) || CanManagePublicityMaterials;
+        loginState.CanSeeMenu(PagePermission.PublicityRequest) || loginState.CanSeeMenu(PagePermission.PublicityReview)
+        || CanManagePublicityMaterials || CanManageDeliveryAddresses;
 
-    // Publicity Material Master (2026-11-26): ADMIN-MD CS only, deliberately hardcoded rather than a
-    // Designation-grid PagePermission - the spec requires this locked to exactly ADMIN-MD CS, never
-    // configurable onto DGM-MD CS/SMM/SMD/RM/RMDO via the grid. Mirrors PublicityApi.CanManageMaterials
-    // and PublicityController.IsAdminMdCsAsync()/IsSuper() exactly, so menu/page/API never disagree.
+    // Publicity Material Master (2026-11-27 authorization fix): a normal Designation-grid permission
+    // (PagePermission.PublicityMaterialMaster), replacing the previous hardcoded CommonRole +
+    // Designation-NAME check that Designation Management could neither see nor control. CanSeeMenu
+    // already covers the Admin/SuperAdmin role-bypass and the CommonRole -> Designation grant on its
+    // own; AppRole.MDAdmin is kept as an explicit bypass (a dedicated role, not a designation-name
+    // string match) so its existing access isn't lost before its own Designation is granted the new
+    // permission. Mirrors PublicityApi.CanManageMaterials and
+    // PublicityController.CanManageMaterialMasterAsync() exactly, so menu/page/API never disagree.
     private bool CanManagePublicityMaterials =>
+        loginState.UserRole == AppRole.MDAdmin || loginState.CanSeeMenu(PagePermission.PublicityMaterialMaster);
+
+    // Delivery Address Management (2026-11-26): UNCHANGED by the 2026-11-27 Material Master
+    // authorization fix above - split into its own property (previously shared CanManagePublicityMaterials)
+    // specifically so that fix could not silently change this menu's visibility too. Still the same
+    // hardcoded CommonRole + Designation-name check as before; its own inconsistency with Designation
+    // Management is tracked as a separate follow-up, not addressed here.
+    private bool CanManageDeliveryAddresses =>
         loginState.UserRole is AppRole.Admin or AppRole.SuperAdmin ||
         loginState.UserRole == AppRole.MDAdmin ||
         (loginState.UserRole == AppRole.CommonRole && loginState.DesignationName is "ADMIN MD CS" or "ADMIN-MD CS");
@@ -1987,7 +2000,7 @@
                 </NavLink>
             </li>
         }
-        @if (CanManagePublicityMaterials)
+        @if (CanManageDeliveryAddresses)
         {
             <li class="submenu-item">
                 <NavLink href="/PublicityDeliveryAddresses" class="@SubmenuLinkClass("Delivery Address Management")" Match="NavLinkMatch.All">

@@ -8770,6 +8770,9 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<int>("ReceivedQty")
                         .HasColumnType("integer");
 
+                    b.Property<string>("Remarks")
+                        .HasColumnType("text");
+
                     b.Property<int?>("RequestItemId")
                         .HasColumnType("integer");
 

@@ -144,8 +144,7 @@ namespace SPIC.Core.Entities
         // mutually-exclusive permissions (RMDO gets Request only; RM/SMD/SMM/ADMIN-MD CS/DGM-MD CS
         // get Review only - never both), so they must NOT be grouped as a Designation.razor
         // parent+child pair, where the child never gets its own row and only toggles via the parent.
-        PublicityRequest,
-        PublicityReview,
+        PublicityRequest, PublicityReview, PublicityDeliveryAddresses, PublicityMaterialMaster,
         ProductRateApprovals, FarmProductMaster, SalesTracking, InventorySummary, IncomeSummary, ExpenseSummary,
         // Help Desk (2026-11-16): native speakers who check machine-translated guides at /Help/Review.
         // Appended at the END.

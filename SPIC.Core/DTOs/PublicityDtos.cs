@@ -309,7 +309,18 @@ namespace SPIC.Core.DTOs
         public int DispatchedQty { get; set; }
         public int ReceivedQty { get; set; }
         public int DamagedQty { get; set; }
-        public int ShortageQty => Math.Max(0, DispatchedQty - ReceivedQty - DamagedQty);
+        public string? Remarks { get; set; }
+        // Shortage and damage are kept separate (2026-11-27 product-wise acknowledgement spec) - a
+        // damaged unit was still RECEIVED, so it must never reduce Shortage; the previous
+        // "- DamagedQty" term here was dead code (this DTO was never populated before this feature),
+        // so correcting it now carries no behavioral regression.
+        public int ShortageQty => Math.Max(0, DispatchedQty - ReceivedQty);
+        public int ExcessQty => Math.Max(0, ReceivedQty - DispatchedQty);
+        // A real settable property (not computed from DamagedQty) so the client's Good/Damaged radio
+        // can @bind directly to it, same pattern as PubAckUpsertDto.IsDamaged - the server always
+        // populates it as DamagedQty > 0 when building this DTO, so it never actually disagrees with
+        // DamagedQty for data that came from the server.
+        public bool IsDamaged { get; set; }
     }
 
     public sealed class PubDispatchDto
@@ -371,6 +382,9 @@ namespace SPIC.Core.DTOs
         public string ExceptionType { get; set; } = "None";
         public string ExceptionStatus { get; set; } = "None";
         public string MaterialCondition { get; set; } = "-";
+        public bool ExcessVerified { get; set; }
+        public DateTime? ExcessVerifiedAt { get; set; }
+        public string? ExcessVerifiedByName { get; set; }
     }
 
     public sealed class PubDetailDto
@@ -442,6 +456,7 @@ namespace SPIC.Core.DTOs
         // Transfer Quantity against, never Remaining/ReportedExcess alone.
         public int Remaining { get; set; }
         public DateTime? LastUpdated { get; set; }
+        public string? SourceEmployeeName { get; set; }
     }
 
     /// <summary>Approver consolidation: requests waiting at my stage, grouped by region. At the SMD
@@ -523,6 +538,7 @@ namespace SPIC.Core.DTOs
     {
         public bool Success { get; set; }
         public int Approved { get; set; }
+        public int? UnreadNotificationsCount { get; set; }
     }
 
     public sealed class PubReviewDto
@@ -533,12 +549,23 @@ namespace SPIC.Core.DTOs
         public string? Remarks { get; set; }
     }
 
+    public sealed class PubDispatchItemCreateDto
+    {
+        public int RequestItemId { get; set; }
+        public int ProductId { get; set; }
+        public int DispatchQty { get; set; }
+    }
+
     public sealed class PubDispatchCreateDto
     {
         public PublicityDispatchKind Kind { get; set; }
         public string? VendorName { get; set; }
         public int? SourceRequestId { get; set; }
         public int Quantity { get; set; }
+        /// <summary>Stock transfer only: which of the destination's own line items this transfer
+        /// resolves, for a Specific Product request with multiple products. Null for General
+        /// Product/Gift Articles/single-item requests, matching every other product-wise field.</summary>
+        public int? RequestItemId { get; set; }
         public string? Transporter { get; set; }
         public string? TrackingNo { get; set; }
         public string? VehicleNo { get; set; }
@@ -553,6 +580,8 @@ namespace SPIC.Core.DTOs
         public int? DeliveryAddressId { get; set; }
         public string? DestinationAddress { get; set; }
         public string? Remarks { get; set; }
+        /// <summary>Product-wise dispatch details for Specific Product requests.</summary>
+        public List<PubDispatchItemCreateDto>? Items { get; set; }
     }
 
     public sealed class PubDeliveryAddressDto
@@ -651,6 +680,22 @@ namespace SPIC.Core.DTOs
         public string? Remarks { get; set; }
         public bool Submit { get; set; }
         public bool IsGiftArticle { get; set; }
+        // Product-wise acknowledgement (Specific Product, multi-item requests only - 2026-11-27).
+        // Null/empty for every General Product, Gift Articles, or single-item request - those keep
+        // using ReceivedQty/IsDamaged/DamagedQty above exactly as before. When present, the server
+        // computes ReceivedQty/IsDamaged/DamagedQty above as the SUM across these items instead of
+        // trusting the client-sent aggregate, so every existing Summary/exception/notification
+        // computation (which only ever reads the aggregate fields) keeps working unmodified.
+        public List<PubAckItemUpsertDto>? Items { get; set; }
+    }
+
+    public sealed class PubAckItemUpsertDto
+    {
+        public int RequestItemId { get; set; }
+        public int ReceivedQty { get; set; }
+        public bool IsDamaged { get; set; }
+        public int DamagedQty { get; set; }
+        public string? Remarks { get; set; }
     }
 
     public sealed class PubUnreadCountDto
