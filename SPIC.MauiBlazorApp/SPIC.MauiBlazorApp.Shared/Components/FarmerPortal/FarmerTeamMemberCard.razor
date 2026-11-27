@@ -1,0 +1,67 @@
+@namespace SPIC.MauiBlazorApp.Shared.Components.FarmerPortal
+@using SPIC.Core.DTOs
+@using SPIC.Core.FarmerPortal
+
+@*
+    One person on the farmer's SPIC team (farmer portal Task 2): initials avatar in the role's hue,
+    name, role in plain words, headquarter / region, open requests, and the actions: Request call back
+    always, Call / WhatsApp only when the API returned a phone (FarmerPortal:ShowStaffPhoneNumbers).
+    Used on /farmer/team and in the "Your SPIC team" block of /farmer.
+*@
+
+<article class="fptm @FpUi.HueCss(FarmerConnectUi.RoleHue(Member.Role)) @CssClass">
+    <div class="fptm__head">
+        <span class="fptm__avatar" aria-hidden="true">@FpUi.Initials(Member.Name)</span>
+        <div class="fptm__who">
+            <h3 class="fptm__name">@Member.Name</h3>
+            <p class="fptm__role">@Member.RoleLabel</p>
+        </div>
+        <span class="fptm__tag" title="@Member.RoleLabel">@FarmerConnectUi.RoleShort(Member.Role)</span>
+    </div>
+
+    <div class="fptm__facts">
+        @if (!string.IsNullOrWhiteSpace(Member.AreaName))
+        {
+            <span class="fptm__fact"><i class="bi @(Member.AreaKind == "Region" ? "bi-map" : "bi-building")" aria-hidden="true"></i>
+                @AreaText</span>
+        }
+        @if (Member.OpenRequests > 0)
+        {
+            <span class="fptm__fact fptm__fact--open"><i class="bi bi-hourglass-split" aria-hidden="true"></i>
+                @(Member.OpenRequests == 1 ? "1 request waiting" : $"{Member.OpenRequests} requests waiting")</span>
+        }
+    </div>
+
+    <div class="fp-action-pills fptm__actions">
+        <button type="button" class="fp-action-pill fptm__ask" @onclick="() => OnRequest.InvokeAsync(Member)"
+                disabled="@(Member.OpenRequests >= MaxOpen)" aria-label="@($"Request a call back from {Member.Name}")">
+            <i class="bi bi-telephone-inbound-fill" aria-hidden="true"></i>
+            @(Member.OpenRequests >= MaxOpen ? "Requests sent" : "Request call back")
+        </button>
+        @if (FarmerContactLinks.TelHref(Member.Phone) is { } tel)
+        {
+            <a class="fp-action-pill" href="@tel" aria-label="@($"Call {Member.Name}")"><i class="bi bi-telephone-fill" aria-hidden="true"></i> Call</a>
+        }
+        @if (FarmerContactLinks.WhatsAppHref(Member.WhatsApp) is { } wa)
+        {
+            <a class="fp-action-pill fp-action-pill--whatsapp" href="@wa" target="_blank" rel="noopener noreferrer"
+               aria-label="@($"WhatsApp {Member.Name}")"><i class="bi bi-whatsapp" aria-hidden="true"></i> WhatsApp</a>
+        }
+    </div>
+</article>
+
+@code {
+    [Parameter, EditorRequired] public FarmerContactDto Member { get; set; } = default!;
+
+    [Parameter] public EventCallback<FarmerContactDto> OnRequest { get; set; }
+
+    /// <summary>At this many open requests the button is disabled (the API refuses more).</summary>
+    [Parameter] public int MaxOpen { get; set; } = FarmerContactRequestRules.MaxOpenPerStaff;
+
+    [Parameter] public string? CssClass { get; set; }
+
+    /// <summary>"Madurai HQ"; a region gets " region" unless its name already says so.</summary>
+    private string AreaText => Member.AreaKind == "Region" && !(Member.AreaName ?? "").EndsWith("region", StringComparison.OrdinalIgnoreCase)
+        ? Member.AreaName + " region"
+        : Member.AreaName ?? "";
+}

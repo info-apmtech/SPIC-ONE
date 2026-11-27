@@ -1,0 +1,248 @@
+@namespace SPIC.MauiBlazorApp.Shared.Components.FarmerPortal
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
+@using SPIC.Core.FarmerPortal
+@using SPIC.MauiBlazorApp.Shared.Services
+@inject FarmerConnectApi Api
+
+@*
+    "Request a call back" sheet (farmer portal Task 2): topic chips, an optional message (required for
+    Other), a preferred time, and Send. Bottom sheet on phone, right drawer on tablet / desktop
+    (shell BottomSheet). Used by /farmer (team preview) and /farmer/team.
+
+        <FarmerCallBackSheet Contact="@_asking" @bind-IsOpen="_sheetOpen" OnSent="OnSentAsync" />
+
+    Rules (topics, limits, preferred times) come from SPIC.Core.FarmerPortal.FarmerContactRequestRules;
+    the API checks them again and also enforces the 3-open-requests cap.
+*@
+
+<BottomSheet @ref="_sheet" IsOpen="IsOpen" IsOpenChanged="OnOpenChanged" Title="Request a call back"
+             Subtitle="Your officer will phone you on your registered mobile." CssClass="fp fpcb" OnClosed="OnClosed">
+    <ChildContent>
+        @if (Contact is { } c)
+        {
+            <div class="fpcb-person">
+                <span class="fp-avatar @FpUi.HueCss(FarmerConnectUi.RoleHue(c.Role)) fpcb-avatar" aria-hidden="true">@FpUi.Initials(c.Name)</span>
+                <div class="fpcb-person__text">
+                    <strong>@c.Name</strong>
+                    <span class="fp-caption">@c.RoleLabel@(string.IsNullOrWhiteSpace(c.AreaName) ? "" : " · " + c.AreaName)</span>
+                </div>
+            </div>
+
+            @if (_sent is not null)
+            {
+                <div class="fpcb-done" role="status">
+                    <span class="fp-icon-circle fp-hue-green fpcb-done__icon" aria-hidden="true"><i class="bi bi-check-lg"></i></span>
+                    <h3 class="fpcb-done__title">Request sent</h3>
+                    <p class="fp-text fp-muted">@c.Name will call you @(PreferredWhen(_sent.PreferredTime)). You can follow it under My requests.</p>
+                </div>
+            }
+            else
+            {
+                <fieldset class="fpcb-group">
+                    <legend class="fp-label">What do you need help with? <span class="fp-req">*</span></legend>
+                    <div class="fp-chips">
+                        @foreach (var (topic, label, icon) in FarmerContactRequestRules.Topics)
+                        {
+                            var t = topic;
+                            <FpChip Text="@label" Icon="@icon" Selected="@(_topic == t)" OnClick="() => PickTopic(t)" />
+                        }
+                    </div>
+                    <FpFieldError Text="@Error("topic")" />
+                </fieldset>
+
+                <div class="fp-field">
+                    <label class="fp-label" for="fpcb-message">
+                        Tell us more
+                        @if (_topic == FarmerContactTopic.Other)
+                        {
+                            <span class="fp-req">*</span>
+                        }
+                        else
+                        {
+                            <span class="fp-optional">(optional)</span>
+                        }
+                    </label>
+                    <textarea id="fpcb-message" class="fp-input fpcb-message @(Error("message") is null ? null : "is-invalid")" rows="4"
+                              maxlength="@FarmerContactRequestRules.MessageMax" placeholder="For example: leaves of my paddy are turning yellow"
+                              @bind="_message" @bind:event="oninput" aria-describedby="fpcb-count"></textarea>
+                    <div class="fpcb-count-row">
+                        <FpFieldError Text="@Error("message")" />
+                        <span id="fpcb-count" class="fp-caption fp-num fpcb-count">@(_message?.Length ?? 0) / @FarmerContactRequestRules.MessageMax</span>
+                    </div>
+                </div>
+
+                <fieldset class="fpcb-group">
+                    <legend class="fp-label">When should they call? <span class="fp-optional">(optional)</span></legend>
+                    <div class="fpcb-times">
+                        @foreach (var (key, label) in FarmerContactRequestRules.PreferredTimes)
+                        {
+                            var k = key;
+                            var (name, hours) = SplitTime(label);
+                            <button type="button" class="fpcb-time @(_time == k ? "is-on" : null)" aria-pressed="@(_time == k ? "true" : "false")" @onclick="() => PickTime(k)">
+                                <i class="bi @(TimeIcon(k))" aria-hidden="true"></i>
+                                <span class="fpcb-time__text">
+                                    <strong>@name</strong>
+                                    @if (hours is not null)
+                                    {
+                                        <span>@hours</span>
+                                    }
+                                </span>
+                            </button>
+                        }
+                    </div>
+                    <FpFieldError Text="@Error("preferredTime")" />
+                </fieldset>
+
+                @if (_error is not null)
+                {
+                    <p class="fp-alert fp-alert--error" role="alert"><i class="bi bi-exclamation-circle-fill" aria-hidden="true"></i> @_error</p>
+                }
+
+                <p class="fpcb-privacy fp-caption"><i class="bi bi-shield-check" aria-hidden="true"></i> We share your name, mobile number and village only with @c.Name, so they can call you.</p>
+            }
+        }
+    </ChildContent>
+    <Footer>
+        <div class="fp fpcb-footer">
+            @if (_sent is not null)
+            {
+                <button type="button" class="fp-btn fp-btn--primary fp-btn--block" @onclick="CloseAsync">Done</button>
+            }
+            else
+            {
+                <button type="button" class="fp-btn fp-btn--ghost" @onclick="CloseAsync" disabled="@_sending">Cancel</button>
+                <button type="button" class="fp-btn fp-btn--primary fpcb-send" @onclick="SendAsync" disabled="@(_sending || Contact is null)">
+                    @if (_sending)
+                    {
+                        <span class="fp-spinner" aria-hidden="true"></span>
+                        <span>Sending...</span>
+                    }
+                    else
+                    {
+                        <i class="bi bi-telephone-inbound-fill" aria-hidden="true"></i>
+                        <span>Send request</span>
+                    }
+                </button>
+            }
+        </div>
+    </Footer>
+</BottomSheet>
+
+@code {
+    /// <summary>The person to ask; the form resets whenever a different person is set.</summary>
+    [Parameter] public FarmerContactDto? Contact { get; set; }
+
+    [Parameter] public bool IsOpen { get; set; }
+
+    [Parameter] public EventCallback<bool> IsOpenChanged { get; set; }
+
+    /// <summary>Raised after the API accepted the request.</summary>
+    [Parameter] public EventCallback<FarmerContactRequestDto> OnSent { get; set; }
+
+    private string? _forContact;
+    private FarmerContactTopic? _topic;
+    private string? _message;
+    private string? _time;
+    private bool _sending;
+    private string? _error;
+    private IReadOnlyDictionary<string, string> _errors = new Dictionary<string, string>();
+    private FarmerContactRequestDto? _sent;
+
+    private BottomSheet? _sheet;
+
+    protected override void OnParametersSet()
+    {
+        // A different person: start with an empty form.
+        if (Contact?.ContactId != _forContact) Reset();
+        _forContact = Contact?.ContactId;
+    }
+
+    private void Reset()
+    {
+        _topic = null;
+        _message = null;
+        _time = null;
+        _error = null;
+        _errors = new Dictionary<string, string>();
+        _sent = null;
+    }
+
+    private string? Error(string field) => _errors.TryGetValue(field, out var e) ? e : null;
+
+    private void PickTopic(FarmerContactTopic topic)
+    {
+        _topic = topic;
+        _errors = _errors.Where(e => e.Key is not ("topic" or "message")).ToDictionary(e => e.Key, e => e.Value);
+    }
+
+    private void PickTime(string key) => _time = _time == key ? null : key;
+
+    private async Task SendAsync()
+    {
+        if (Contact is not { } contact || _sending) return;
+
+        var local = FarmerContactRequestRules.Validate(_topic, _message, _time);
+        if (local.Count > 0)
+        {
+            _errors = local;
+            _error = null;
+            return;
+        }
+
+        _sending = true;
+        _error = null;
+        _errors = new Dictionary<string, string>();
+        var result = await Api.RequestCallBackAsync(contact.ContactId,
+            new FarmerContactRequestCreateDto { Topic = _topic, Message = _message, PreferredTime = _time });
+        _sending = false;
+
+        // The sheet may have been closed (or another person picked) while the request was on its way.
+        if (Contact?.ContactId != contact.ContactId) return;
+
+        if (result.Value is { } sent)
+        {
+            _sent = sent;
+            await OnSent.InvokeAsync(sent);
+        }
+        else
+        {
+            _errors = result.Errors ?? new Dictionary<string, string>();
+            _error = result.Message;
+        }
+    }
+
+    /// <summary>"Morning (9 am - 12 pm)" -> ("Morning", "9 am - 12 pm").</summary>
+    private static (string Name, string? Hours) SplitTime(string label)
+    {
+        var open = label.IndexOf(" (", StringComparison.Ordinal);
+        return open > 0 && label.EndsWith(')') ? (label[..open], label[(open + 2)..^1]) : (label, null);
+    }
+
+    private static string TimeIcon(string key) => key switch
+    {
+        "Morning" => "bi-sunrise",
+        "Afternoon" => "bi-sun",
+        "Evening" => "bi-sunset",
+        _ => "bi-clock"
+    };
+
+    private static string PreferredWhen(string? key) => key switch
+    {
+        "Morning" => "in the morning",
+        "Afternoon" => "in the afternoon",
+        "Evening" => "in the evening",
+        _ => "soon"
+    };
+
+    private Task OnOpenChanged(bool open) => IsOpenChanged.InvokeAsync(open);
+
+    /// <summary>Slides the sheet out (BottomSheet raises IsOpenChanged and OnClosed).</summary>
+    private Task CloseAsync() => _sheet is not null ? _sheet.CloseAsync() : IsOpenChanged.InvokeAsync(false);
+
+    /// <summary>After a sent request the next opening starts empty; an unsent draft is kept.</summary>
+    private void OnClosed(BottomSheet.CloseReason _)
+    {
+        if (_sent is not null) Reset();
+    }
+}

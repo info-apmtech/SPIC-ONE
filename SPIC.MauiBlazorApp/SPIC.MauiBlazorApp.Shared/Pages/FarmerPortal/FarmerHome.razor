@@ -3,11 +3,14 @@
 @inject FarmerSession Farmer
 @inject LoginState LoginState
 @inject NavigationManager Nav
+@inject FarmerConnectApi Api
 
 @*
     Farmer home. Task 1b: greeting hero (IST time of day), highlight card and the tile grid from
-    Services/FarmerFeatureTiles (only features that exist; each later task adds its own tile and,
-    for Task 2, its "Your SPIC team" block). Sends a farmer whose profile is not complete to /farmer/onboarding.
+    Services/FarmerFeatureTiles (only features that exist; each later task adds its own tile).
+    Task 2: the "Your SPIC team" block (up to 3 people from api/Farmer/contacts, loaded after the
+    page so the home never waits for it) with Request call back. Sends a farmer whose profile is not
+    complete to /farmer/onboarding.
     Admin / SuperAdmin may open it for support (RouteAccess) but have no farmer profile of their own.
 *@
 
@@ -83,6 +86,46 @@
                 }
             </div>
         </section>
+
+        <section class="fp-section fp-fade-up-3 fph-team" aria-labelledby="fph-team-title">
+            <div class="fp-section-head">
+                <div>
+                    <h2 id="fph-team-title" class="fp-section-title">Your SPIC team</h2>
+                    <p class="fp-section-sub">Officers who look after farmers in @(profile.DistrictName ?? "your area")</p>
+                </div>
+                @if (_team is { Members.Count: > 0 })
+                {
+                    <a class="fp-section-link" href="/farmer/team">See all <i class="bi bi-chevron-right" aria-hidden="true"></i></a>
+                }
+            </div>
+
+            @if (_teamLoading)
+            {
+                <FpSkeleton Variant="FpSkeletonVariant.Cards" Count="1" LoadingText="Finding your SPIC team..." />
+            }
+            else if (_teamError is not null)
+            {
+                <FpError Compact="true" Title="We could not load your SPIC team" Message="@_teamError" OnRetry="LoadTeamAsync" />
+            }
+            else if (_team is null || _team.Members.Count == 0)
+            {
+                <FpEmpty Art="FpArtKind.Team" Compact="true" Title="No SPIC officer is listed for your area yet"
+                         Message="A SPIC dealer near you can help meanwhile.">
+                    <a class="fp-btn fp-btn--secondary fp-btn--sm" href="/farmer/dealers"><i class="bi bi-shop" aria-hidden="true"></i> Dealers near me</a>
+                </FpEmpty>
+            }
+            else
+            {
+                <div class="fph-team-grid">
+                    @foreach (var member in FarmerConnectUi.Preview(_team.Members))
+                    {
+                        <FarmerTeamMemberCard @key="member.ContactId" Member="@member" MaxOpen="@_team.MaxOpenPerStaff" OnRequest="Ask" />
+                    }
+                </div>
+            }
+        </section>
+
+        <FarmerCallBackSheet Contact="@_asking" @bind-IsOpen="_sheetOpen" OnSent="OnSent" />
     }
 </div>
 
@@ -91,6 +134,11 @@
     private string? _error;
     private bool _soilTests;
     private IReadOnlyList<FarmerFeatureTile> _tiles = Array.Empty<FarmerFeatureTile>();
+    private bool _teamLoading = true;
+    private string? _teamError;
+    private SPIC.Core.DTOs.FarmerTeamDto? _team;
+    private SPIC.Core.DTOs.FarmerContactDto? _asking;
+    private bool _sheetOpen;
 
     protected override Task OnInitializedAsync() => LoadAsync(force: false);
 
@@ -121,6 +169,29 @@
 
         _soilTests = FarmerFeatureTiles.HasSoilTests(LoginState);
         _tiles = FarmerFeatureTiles.For(LoginState);
+        await LoadTeamAsync();
+    }
+
+    private async Task LoadTeamAsync()
+    {
+        _teamLoading = true;
+        _teamError = null;
+        StateHasChanged();
+        var result = await Api.TeamAsync();
+        _teamLoading = false;
+        if (result.Value is { } team) _team = team;
+        else _teamError = result.Message ?? "Please try again.";
+    }
+
+    private void Ask(SPIC.Core.DTOs.FarmerContactDto member)
+    {
+        _asking = member;
+        _sheetOpen = true;
+    }
+
+    private void OnSent(SPIC.Core.DTOs.FarmerContactRequestDto sent)
+    {
+        if (_team?.Members.FirstOrDefault(m => m.ContactId == sent.ContactId) is { } m) m.OpenRequests++;
     }
 
     private static string Place(SPIC.Core.DTOs.FarmerProfileDto p) =>

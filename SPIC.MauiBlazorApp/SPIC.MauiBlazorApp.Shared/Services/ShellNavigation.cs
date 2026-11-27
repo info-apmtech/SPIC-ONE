@@ -118,6 +118,15 @@ public static class ShellNavigation
             Rule = s => s.CanSeeMenu(PagePermission.Community)
         },
 
+        // ---- Farmer call-back requests (farmer portal Task 2): ROLE-gated staff page for JMDO / MDO /
+        //      RM / RMD (their own requests) and Admin (view all), like its RouteAccess rule. More sheet
+        //      only, so it never takes a phone tab or rail slot from a role's own destinations. ----
+        new(FarmerRequestsKey, "Farmer Call-backs", "bi-telephone-inbound", "/" + FarmerRequestsKey, FarmerRequestsKey)
+        {
+            ShortLabel = "Call-backs", MoreOnly = true,
+            Rule = ShowFarmerRequests
+        },
+
         // ---- SAS portal (page-permission gated; write actions are checked inside the pages) ----
         new("SampleCollection", "Sample Collection", "bi-droplet-half", "/SampleCollection", nameof(PagePermission.SampleCollection))
         {
@@ -540,6 +549,12 @@ public static class ShellNavigation
     private static readonly string[] DefaultPriority = FieldStaffPriority;
 
     public const string FarmerHomeKey = "farmer";
+    public const string FarmerRequestsKey = RouteAccess.FarmerRequestsSegment;
+
+    /// <summary>Menu entry for /farmer-requests: the staff roles farmers can ask, and Admin / SuperAdmin.</summary>
+    public static bool ShowFarmerRequests(LoginState s) =>
+        SPIC.Core.FarmerPortal.FarmerContactRequestRules.CanUseStaffPage(s.UserRole)
+        && RouteAccess.CanOpen(s, "/" + FarmerRequestsKey, null);
     public const string FarmerProfileKey = "FarmerProfile";
 
     public static IReadOnlyList<string> GetRolePriority(AppRole? role) => role switch

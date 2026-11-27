@@ -145,4 +145,27 @@ public static class FarmerDealerRules
     /// <summary>Non-empty parts joined with ", " (address lines).</summary>
     public static string JoinParts(params string?[] parts) =>
         string.Join(", ", parts.Where(p => !string.IsNullOrWhiteSpace(p)).Select(p => p!.Trim()));
+
+    /// <summary>
+    /// Like <see cref="JoinParts"/> but each part only once, ignoring case ("Kovilpatti, Kovilpatti" when the
+    /// village and the taluk are the same place).
+    /// </summary>
+    public static string JoinDistinct(params string?[] parts) =>
+        string.Join(", ", parts.Where(p => !string.IsNullOrWhiteSpace(p)).Select(p => p!.Trim()).Distinct(StringComparer.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// The street address for a dealer card: the address lines and pincode without the parts the card
+    /// already shows in its place line (village, district) and without repeats.
+    /// </summary>
+    public static string CardAddress(string? line1, string? line2, string? pinCode, params string?[] alreadyShown)
+    {
+        var shown = new HashSet<string>(alreadyShown.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x!.Trim()), StringComparer.OrdinalIgnoreCase);
+        var parts = new[] { line1, line2 }
+            .Where(l => !string.IsNullOrWhiteSpace(l))
+            .SelectMany(l => l!.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            .Where(part => !shown.Contains(part))
+            .Append(pinCode)
+            .ToArray();
+        return JoinDistinct(parts);
+    }
 }

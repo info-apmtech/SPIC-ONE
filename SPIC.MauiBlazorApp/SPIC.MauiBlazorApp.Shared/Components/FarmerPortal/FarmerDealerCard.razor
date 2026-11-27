@@ -1,0 +1,73 @@
+@namespace SPIC.MauiBlazorApp.Shared.Components.FarmerPortal
+@using SPIC.Core.DTOs
+@using SPIC.Core.FarmerPortal
+
+@*
+    One SPIC dealer on /farmer/dealers (farmer portal Task 2): shop icon, firm name, address,
+    distance, and Call / WhatsApp / Directions pills (each only when the dealer has that detail).
+    Selected = highlighted because its map pin was tapped.
+*@
+
+<article class="fpdc @(Selected ? "is-selected" : null) @CssClass" id="@($"fpdc-{Dealer.Id}")">
+    <div class="fpdc__head">
+        <span class="fp-icon-circle fp-hue-gold fpdc__icon" aria-hidden="true"><i class="bi bi-shop"></i></span>
+        <div class="fpdc__titles">
+            <h3 class="fpdc__name">@Dealer.FirmName</h3>
+            <p class="fpdc__place">
+                <i class="bi bi-geo-alt" aria-hidden="true"></i>
+                @Place
+            </p>
+        </div>
+        @if (Dealer.DistanceKm is { } km)
+        {
+            <span class="fpdc__distance fp-num" title="Straight-line distance">
+                <i class="bi bi-signpost-2-fill" aria-hidden="true"></i>
+                @FarmerDealerRules.DistanceText(km)
+            </span>
+        }
+    </div>
+
+    @if (Address is { Length: > 0 } address)
+    {
+        <p class="fpdc__address">@address</p>
+    }
+
+    <div class="fp-action-pills fpdc__actions">
+        @if (FarmerContactLinks.TelHref(Dealer.Phone) is { } tel)
+        {
+            <a class="fp-action-pill fpdc__call" href="@tel" aria-label="@($"Call {Dealer.FirmName}")">
+                <i class="bi bi-telephone-fill" aria-hidden="true"></i> Call
+            </a>
+        }
+        @if (FarmerContactLinks.WhatsAppHref(Dealer.WhatsApp) is { } wa)
+        {
+            <a class="fp-action-pill fp-action-pill--whatsapp" href="@wa" target="_blank" rel="noopener noreferrer"
+               aria-label="@($"WhatsApp {Dealer.FirmName}")">
+                <i class="bi bi-whatsapp" aria-hidden="true"></i> WhatsApp
+            </a>
+        }
+        @if (!string.IsNullOrWhiteSpace(Dealer.DirectionsUrl))
+        {
+            <a class="fp-action-pill" href="@Dealer.DirectionsUrl" target="_blank" rel="noopener noreferrer"
+               aria-label="@($"Directions to {Dealer.FirmName}")">
+                <i class="bi bi-sign-turn-right-fill" aria-hidden="true"></i> Directions
+            </a>
+        }
+        @if (FarmerContactLinks.TelHref(Dealer.Phone) is null && FarmerContactLinks.WhatsAppHref(Dealer.WhatsApp) is null)
+        {
+            <span class="fpdc__nophone fp-caption"><i class="bi bi-info-circle" aria-hidden="true"></i> No phone number listed</span>
+        }
+    </div>
+</article>
+
+@code {
+    [Parameter, EditorRequired] public FarmerDealerDto Dealer { get; set; } = default!;
+
+    [Parameter] public bool Selected { get; set; }
+
+    [Parameter] public string? CssClass { get; set; }
+
+    private string Place => FarmerDealerRules.JoinDistinct(Dealer.Village, Dealer.DistrictName) is { Length: > 0 } p ? p : "Address not listed";
+
+    private string Address => FarmerDealerRules.CardAddress(Dealer.AddressLine1, Dealer.AddressLine2, Dealer.PinCode, Dealer.Village, Dealer.DistrictName);
+}

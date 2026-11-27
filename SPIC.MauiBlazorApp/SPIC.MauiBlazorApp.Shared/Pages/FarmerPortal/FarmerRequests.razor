@@ -1,0 +1,122 @@
+@page "/farmer/requests"
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
+@using SPIC.Core.FarmerPortal
+@inject FarmerSession Farmer
+@inject FarmerConnectApi Api
+@inject LoginState LoginState
+@inject NavigationManager Nav
+
+@*
+    My call-back requests (farmer portal Task 2): every request the farmer sent from My SPIC team,
+    newest first, with its status (Open / Contacted / Closed). The staff note stays with the staff.
+*@
+
+<div class="fp fp-page fpr">
+    <FpHero Title="My requests" Compact="true" BackHref="/farmer/team" BackLabel="Back to my SPIC team"
+            Subtitle="Call backs you asked for and what happened." DocumentTitle="My call-back requests">
+        @if (_items is { Count: > 0 } items)
+        {
+            var open = items.Count(i => i.Status == FarmerContactRequestStatus.Open);
+            <FpChip Icon="bi-hourglass-split" Text="@($"{open} open")" />
+            <FpChip Icon="bi-list-check" Text="@FarmerConnectUi.Count(items.Count, "request")" />
+        }
+    </FpHero>
+
+    @if (LoginState.UserRole != AppRole.Farmer)
+    {
+        <FpEmpty Art="FpArtKind.Team" Title="You are viewing as support staff"
+                 Message="Farmers see their own call-back requests here." />
+    }
+    else if (_loading)
+    {
+        <FpSkeleton Variant="FpSkeletonVariant.Cards" Count="3" LoadingText="Loading your requests..." />
+    }
+    else if (_error is not null)
+    {
+        <FpError Title="We could not load your requests" Message="@_error" OnRetry="LoadAsync" />
+    }
+    else if (_items is null || _items.Count == 0)
+    {
+        <FpEmpty Art="FpArtKind.Team" Title="No requests yet"
+                 Message="Ask a SPIC officer to call you about fertilizer, a crop problem or a soil test.">
+            <a class="fp-btn fp-btn--primary" href="/farmer/team"><i class="bi bi-people-fill" aria-hidden="true"></i> See my SPIC team</a>
+        </FpEmpty>
+    }
+    else
+    {
+        <ol class="fpr-list" aria-label="My requests">
+            @foreach (var r in _items)
+            {
+                <li class="fpr-item fpr-item--@r.Status.ToString().ToLowerInvariant()" @key="r.Id">
+                    <span class="fp-icon-circle @FpUi.HueCss(FarmerConnectUi.StatusHue(r.Status)) fpr-item__icon" aria-hidden="true">
+                        <i class="bi @FarmerContactRequestRules.TopicIcon(r.Topic)"></i>
+                    </span>
+                    <div class="fpr-item__body">
+                        <div class="fpr-item__top">
+                            <h2 class="fpr-item__topic">@FarmerContactRequestRules.TopicLabel(r.Topic)</h2>
+                            <FpChip Small="true" Hue="@FarmerConnectUi.StatusHue(r.Status)" Icon="@FarmerConnectUi.StatusIcon(r.Status)"
+                                    Text="@FarmerContactRequestRules.StatusLabel(r.Status)" />
+                        </div>
+                        <p class="fpr-item__who">To <strong>@r.StaffName</strong>, @r.StaffRoleLabel</p>
+                        @if (!string.IsNullOrWhiteSpace(r.Message))
+                        {
+                            <p class="fpr-item__msg">@r.Message</p>
+                        }
+                        <p class="fpr-item__meta fp-caption">
+                            <span><i class="bi bi-calendar3" aria-hidden="true"></i> Sent @FarmerConnectUi.IstWhen(r.CreatedAtUtc, _now)</span>
+                            @if (FarmerContactRequestRules.PreferredTimeLabel(r.PreferredTime) is { } when)
+                            {
+                                <span><i class="bi bi-clock" aria-hidden="true"></i> @when</span>
+                            }
+                            <span class="fpr-item__help">@FarmerConnectUi.StatusHelp(r.Status)@(r.Status != FarmerContactRequestStatus.Open ? " · " + FarmerConnectUi.IstWhen(r.UpdatedAtUtc, _now) : "")</span>
+                        </p>
+                    </div>
+                </li>
+            }
+        </ol>
+    }
+</div>
+
+@code {
+    private bool _loading = true;
+    private string? _error;
+    private List<FarmerContactRequestDto>? _items;
+    private DateTime _now = DateTime.UtcNow;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        if (LoginState.UserRole != AppRole.Farmer)
+        {
+            _loading = false;
+            return;
+        }
+
+        _loading = true;
+        _error = null;
+        var ok = await Farmer.EnsureLoadedAsync();
+        if (!ok)
+        {
+            _loading = false;
+            _error = Farmer.LoadError ?? "Please check your internet connection and try again.";
+            return;
+        }
+        if (!Farmer.ProfileComplete)
+        {
+            Nav.NavigateTo("/farmer/onboarding", replace: true);
+            return;
+        }
+
+        var result = await Api.MyRequestsAsync();
+        _loading = false;
+        _now = DateTime.UtcNow;
+        if (result.Value is null)
+        {
+            _error = result.Message ?? "Something went wrong. Please try again.";
+            return;
+        }
+        _items = result.Value;
+    }
+}

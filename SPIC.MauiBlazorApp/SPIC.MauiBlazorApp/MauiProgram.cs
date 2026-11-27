@@ -92,6 +92,7 @@ namespace SPIC.MauiBlazorApp
 			// Farmer portal (docs/farmer-portal.md): OTP sign-in + profile calls and the farmer's profile state.
 			builder.Services.AddScoped<FarmerApi>();
 			builder.Services.AddScoped<FarmerSession>();
+			builder.Services.AddScoped<FarmerConnectApi>();
 
 			// Usage + error telemetry (docs/metrics-telemetry-plan.md): the app / version header on
 			// every API call, page views and client errors, and anything the app logs at Error+.

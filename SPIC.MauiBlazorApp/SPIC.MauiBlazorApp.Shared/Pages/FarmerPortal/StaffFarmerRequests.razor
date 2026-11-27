@@ -1,0 +1,286 @@
+@page "/farmer-requests"
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
+@using SPIC.Core.FarmerPortal
+@using SPIC.MauiBlazorApp.Shared.Components.FarmerPortal
+@inject FarmerConnectApi Api
+@inject LoginState LoginState
+@inject ToastService Toast
+
+@*
+    Farmer Call-back Requests (farmer portal Task 2, staff side). JMDO / MDO / RM / RMD see the
+    requests farmers sent to them and mark them Contacted / Closed with a note; Admin / SuperAdmin see
+    every request, read-only (api/FarmerRequests; RouteAccess opens the route to those roles only).
+    The farmer asked to be called, so their name, phone, village and district are shown.
+*@
+
+<PageHeader Title="Farmer Call-back Requests"
+            Subtitle="@(_list?.AdminView == true ? "Every farmer call-back request (view only)" : "Farmers who asked you to call them back")" />
+
+<div class="frq">
+    @if (!FarmerContactRequestRules.CanUseStaffPage(LoginState.UserRole))
+    {
+        <EmptyState Icon="bi-lock" Title="Not available" Message="This page is for JMDO, MDO, RM and RMD staff." />
+    }
+    else
+    {
+        <div class="frq-stats">
+            <StatCard Label="Waiting for a call" Value="@Count(_list?.Open)" Icon="bi-hourglass-split" />
+            <StatCard Label="Contacted" Value="@Count(_list?.Contacted)" Icon="bi-telephone-outbound" />
+            <StatCard Label="Closed" Value="@Count(_list?.Closed)" Icon="bi-check2-circle" />
+        </div>
+
+        <div class="frq-tabs" role="tablist" aria-label="Filter by status">
+            @foreach (var (status, label) in Filters)
+            {
+                var s = status;
+                <button type="button" role="tab" class="frq-tab @(_status == s ? "is-on" : null)" aria-selected="@(_status == s ? "true" : "false")"
+                        @onclick="() => FilterAsync(s)" disabled="@_loading">
+                    @label
+                    <span class="frq-tab__count">@TabCount(s)</span>
+                </button>
+            }
+        </div>
+
+        @if (_loading)
+        {
+            <Skeleton Variant="card" Rows="3" LoadingText="Loading requests..." />
+        }
+        else if (_error is not null)
+        {
+            <EmptyState Icon="bi-wifi-off" Title="Could not load the requests" Message="@_error">
+                <button type="button" class="btn btn-success btn-sm" @onclick="() => LoadAsync(_page)">Try again</button>
+            </EmptyState>
+        }
+        else if (_list is null || _list.Items.Count == 0)
+        {
+            <EmptyState Icon="bi-telephone-inbound" Title="@EmptyTitle"
+                        Message="When a farmer in your area asks for a call back from the SPIC ONE farmer app, it appears here." />
+        }
+        else
+        {
+            <ul class="frq-list">
+                @foreach (var r in _list.Items)
+                {
+                    <li class="frq-card frq-card--@r.Status.ToString().ToLowerInvariant()" @key="r.Id">
+                        <div class="frq-card__main">
+                            <span class="frq-avatar" aria-hidden="true">@FpUi.Initials(r.FarmerName)</span>
+                            <div class="frq-card__who">
+                                <div class="frq-card__name-row">
+                                    <h2 class="frq-card__name">@r.FarmerName</h2>
+                                    <span class="frq-status frq-status--@r.Status.ToString().ToLowerInvariant()">@FarmerContactRequestRules.StatusLabel(r.Status)</span>
+                                </div>
+                                <p class="frq-card__place">
+                                    <i class="bi bi-geo-alt" aria-hidden="true"></i>
+                                    @FarmerDealerRules.JoinParts(r.Village, r.DistrictName, r.StateName)
+                                </p>
+                            </div>
+                            @if (FarmerContactLinks.TelHref(r.FarmerPhone) is { } tel)
+                            {
+                                <a class="frq-call" href="@tel"><i class="bi bi-telephone-fill" aria-hidden="true"></i>
+                                    <span>@FarmerContactLinks.Display(r.FarmerPhone)</span></a>
+                            }
+                        </div>
+
+                        <div class="frq-card__ask">
+                            <span class="frq-topic"><i class="bi @FarmerContactRequestRules.TopicIcon(r.Topic)" aria-hidden="true"></i> @FarmerContactRequestRules.TopicLabel(r.Topic)</span>
+                            @if (FarmerContactRequestRules.PreferredTimeLabel(r.PreferredTime) is { } when)
+                            {
+                                <span class="frq-when"><i class="bi bi-clock" aria-hidden="true"></i> Call: @when</span>
+                            }
+                            <span class="frq-when"><i class="bi bi-calendar3" aria-hidden="true"></i> Asked @FarmerConnectUi.IstWhen(r.CreatedAtUtc, _now)</span>
+                        </div>
+                        @if (!string.IsNullOrWhiteSpace(r.Message))
+                        {
+                            <p class="frq-msg">“@r.Message”</p>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(r.StaffNote))
+                        {
+                            <p class="frq-note"><i class="bi bi-journal-text" aria-hidden="true"></i> <strong>Note:</strong> @r.StaffNote
+                                <span class="frq-note__when">· @FarmerConnectUi.IstWhen(r.UpdatedAtUtc, _now)</span></p>
+                        }
+
+                        <div class="frq-card__foot">
+                            @if (_list.AdminView)
+                            {
+                                <span class="frq-to"><i class="bi bi-person-badge" aria-hidden="true"></i> To @r.StaffName (@r.StaffRoleLabel)</span>
+                            }
+                            @if (r.CanUpdate)
+                            {
+                                <div class="frq-actions">
+                                    @if (r.Status == FarmerContactRequestStatus.Open)
+                                    {
+                                        <button type="button" class="btn btn-success btn-sm frq-btn" @onclick="() => Edit(r, FarmerContactRequestStatus.Contacted)">
+                                            <i class="bi bi-telephone-outbound" aria-hidden="true"></i> Mark contacted
+                                        </button>
+                                    }
+                                    @if (r.Status != FarmerContactRequestStatus.Closed)
+                                    {
+                                        <button type="button" class="btn btn-outline-secondary btn-sm frq-btn" @onclick="() => Edit(r, FarmerContactRequestStatus.Closed)">
+                                            <i class="bi bi-check2-circle" aria-hidden="true"></i> Close
+                                        </button>
+                                    }
+                                    else
+                                    {
+                                        <button type="button" class="btn btn-outline-secondary btn-sm frq-btn" @onclick="() => Edit(r, FarmerContactRequestStatus.Open)">
+                                            <i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i> Reopen
+                                        </button>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    </li>
+                }
+            </ul>
+
+            @if (_list.Total > _list.PageSize)
+            {
+                var pages = (int)Math.Ceiling(_list.Total / (double)_list.PageSize);
+                <nav class="frq-pager" aria-label="Pages">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" disabled="@(_page <= 1)" @onclick="() => LoadAsync(_page - 1)">Previous</button>
+                    <span>Page @_page of @pages</span>
+                    <button type="button" class="btn btn-outline-secondary btn-sm" disabled="@(_page >= pages)" @onclick="() => LoadAsync(_page + 1)">Next</button>
+                </nav>
+            }
+        }
+    }
+</div>
+
+<BottomSheet @ref="_sheet" @bind-IsOpen="_sheetOpen" Title="Update request" Subtitle="@_editing?.FarmerName">
+    <ChildContent>
+        @if (_editing is { } e)
+        {
+            <fieldset class="frq-form__group">
+                <legend class="frq-form__label">Status</legend>
+                <div class="frq-form__choices">
+                    @foreach (var st in Enum.GetValues<FarmerContactRequestStatus>())
+                    {
+                        var s = st;
+                        <label class="frq-choice @(_newStatus == s ? "is-on" : null)">
+                            <input type="radio" name="frq-status" checked="@(_newStatus == s)" @onchange="() => _newStatus = s" />
+                            <span>@FarmerContactRequestRules.StatusLabel(s)</span>
+                        </label>
+                    }
+                </div>
+            </fieldset>
+            <label class="frq-form__label" for="frq-note">Note <span class="frq-form__opt">(optional, only staff see it)</span></label>
+            <textarea id="frq-note" class="form-control frq-form__note" rows="4" maxlength="@FarmerContactRequestRules.NoteMax"
+                      placeholder="For example: Called, will visit the field on Monday" @bind="_note" @bind:event="oninput"></textarea>
+            <div class="frq-form__count">@(_note?.Length ?? 0) / @FarmerContactRequestRules.NoteMax</div>
+            @if (_saveError is not null)
+            {
+                <p class="frq-form__error" role="alert"><i class="bi bi-exclamation-circle" aria-hidden="true"></i> @_saveError</p>
+            }
+        }
+    </ChildContent>
+    <Footer>
+        <div class="frq-form__footer">
+            <button type="button" class="btn btn-outline-secondary" @onclick="CloseSheetAsync" disabled="@_saving">Cancel</button>
+            <button type="button" class="btn btn-success" @onclick="SaveAsync" disabled="@_saving">
+                @if (_saving)
+                {
+                    <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+                }
+                Save
+            </button>
+        </div>
+    </Footer>
+</BottomSheet>
+
+@code {
+    private static readonly (FarmerContactRequestStatus? Status, string Label)[] Filters =
+    {
+        (FarmerContactRequestStatus.Open, "Open"),
+        (FarmerContactRequestStatus.Contacted, "Contacted"),
+        (FarmerContactRequestStatus.Closed, "Closed"),
+        (null, "All")
+    };
+
+    private FarmerContactRequestStatus? _status = FarmerContactRequestStatus.Open;
+    private int _page = 1;
+    private bool _loading = true;
+    private string? _error;
+    private StaffFarmerRequestListDto? _list;
+    private DateTime _now = DateTime.UtcNow;
+
+    private BottomSheet? _sheet;
+    private bool _sheetOpen;
+    private StaffFarmerRequestDto? _editing;
+    private FarmerContactRequestStatus _newStatus;
+    private string? _note;
+    private bool _saving;
+    private string? _saveError;
+
+    private string EmptyTitle => _status switch
+    {
+        FarmerContactRequestStatus.Open => "No farmer is waiting for a call",
+        FarmerContactRequestStatus.Contacted => "No contacted requests",
+        FarmerContactRequestStatus.Closed => "No closed requests",
+        _ => "No requests yet"
+    };
+
+    protected override Task OnInitializedAsync() =>
+        FarmerContactRequestRules.CanUseStaffPage(LoginState.UserRole) ? LoadAsync(1) : Task.CompletedTask;
+
+    private static string Count(int? n) => n?.ToString("N0") ?? "–";
+
+    private int TabCount(FarmerContactRequestStatus? s) => _list is null ? 0 : s switch
+    {
+        FarmerContactRequestStatus.Open => _list.Open,
+        FarmerContactRequestStatus.Contacted => _list.Contacted,
+        FarmerContactRequestStatus.Closed => _list.Closed,
+        _ => _list.Open + _list.Contacted + _list.Closed
+    };
+
+    private Task FilterAsync(FarmerContactRequestStatus? status)
+    {
+        _status = status;
+        return LoadAsync(1);
+    }
+
+    private async Task LoadAsync(int page)
+    {
+        _loading = true;
+        _error = null;
+        var status = _status;
+        var result = await Api.StaffRequestsAsync(status, page);
+        if (status != _status) return;   // another filter was chosen meanwhile
+        _loading = false;
+        _now = DateTime.UtcNow;
+        if (result.Value is null)
+        {
+            _error = result.Message ?? "Please try again.";
+            return;
+        }
+        _list = result.Value;
+        _page = result.Value.Page;
+    }
+
+    private void Edit(StaffFarmerRequestDto request, FarmerContactRequestStatus next)
+    {
+        _editing = request;
+        _newStatus = next;
+        _note = request.StaffNote;
+        _saveError = null;
+        _sheetOpen = true;
+    }
+
+    private Task CloseSheetAsync() => _sheet?.CloseAsync() ?? Task.CompletedTask;
+
+    private async Task SaveAsync()
+    {
+        if (_editing is not { } editing || _saving) return;
+        _saving = true;
+        _saveError = null;
+        var result = await Api.UpdateRequestAsync(editing.Id, new FarmerRequestUpdateDto { Status = _newStatus, Note = _note });
+        _saving = false;
+        if (result.Value is null)
+        {
+            _saveError = result.Errors?.Values.FirstOrDefault() ?? result.Message ?? "Could not save. Please try again.";
+            return;
+        }
+        Toast.Success($"{editing.FarmerName}: {FarmerContactRequestRules.StatusLabel(result.Value.Status)}", "Request updated");
+        await CloseSheetAsync();
+        await LoadAsync(_page);
+    }
+}

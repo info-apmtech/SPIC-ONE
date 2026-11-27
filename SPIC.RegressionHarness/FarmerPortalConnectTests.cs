@@ -1,5 +1,8 @@
+using SPIC.Core.DTOs;
 using SPIC.Core.Entities;
 using SPIC.Core.FarmerPortal;
+using SPIC.MauiBlazorApp.Shared.Components.FarmerPortal;
+using SPIC.MauiBlazorApp.Shared.Services;
 
 namespace SPIC.RegressionHarness;
 
@@ -19,6 +22,77 @@ internal static class FarmerPortalConnectTests
 		Links();
 		Team();
 		Requests();
+		RoutesAndMenu();
+		UiText();
+	}
+
+	private static void RoutesAndMenu()
+	{
+		var farmer = TestLogin.As(AppRole.Farmer, "");
+		foreach (var url in new[] { "/farmer/dealers", "/farmer/team", "/farmer/requests" })
+			Check.That($"route: farmer opens {url}", RouteAccess.CanOpen(farmer, url, null));
+		Check.That("route: MDO is sent back from /farmer/team", !RouteAccess.CanOpen(TestLogin.As(AppRole.MDO, "Dashboard.View"), "/farmer/team", null));
+
+		foreach (var role in new[] { AppRole.JMDO, AppRole.MDO, AppRole.RM, AppRole.RMD })
+		{
+			var staff = TestLogin.As(role, "Dashboard.View");
+			Check.That($"route: {role} opens /farmer-requests without a PagePermission", RouteAccess.CanOpen(staff, "/farmer-requests", null));
+			Check.That($"menu: {role} sees Farmer Call-backs", ShellNavigation.ShowFarmerRequests(staff));
+		}
+		Check.That("route: Admin opens /farmer-requests", RouteAccess.CanOpen(TestLogin.As(AppRole.Admin, ""), "/farmer-requests", null));
+		Check.That("route: SuperAdmin opens /farmer-requests", RouteAccess.CanOpen(TestLogin.As(AppRole.SuperAdmin, ""), "/farmer-requests", null));
+		Check.That("menu: Admin sees Farmer Call-backs", ShellNavigation.ShowFarmerRequests(TestLogin.As(AppRole.Admin, "")));
+		Check.Equal("route: MO is sent to its landing page", LoginState.DefaultLandingPath,
+			RouteAccess.Decide(TestLogin.As(AppRole.MO, "Dashboard.View"), "/farmer-requests", null).RedirectTo);
+		Check.That("route: CorporateAdmin cannot open /farmer-requests", !RouteAccess.CanOpen(TestLogin.As(AppRole.CorporateAdmin, "Dashboard.View"), "/farmer-requests", null));
+		Check.Equal("route: a farmer is sent home from /farmer-requests", LoginState.FarmerLandingPath,
+			RouteAccess.Decide(farmer, "/farmer-requests", null).RedirectTo);
+		Check.Equal("route: a farmer with a designation is sent home too", LoginState.FarmerLandingPath,
+			RouteAccess.Decide(TestLogin.As(AppRole.Farmer, "SampleCollection.View"), "/farmer-requests", null).RedirectTo);
+		Check.Equal("route: a JMDO without a designation still sees only Welcome", "/Welcome",
+			RouteAccess.Decide(TestLogin.As(AppRole.JMDO, ""), "/farmer-requests", null).RedirectTo);
+		Check.That("menu: MO and Farmer do not see Farmer Call-backs",
+			!ShellNavigation.ShowFarmerRequests(TestLogin.As(AppRole.MO, "Dashboard.View")) && !ShellNavigation.ShowFarmerRequests(farmer));
+		var rm = TestLogin.As(AppRole.RM, "Dashboard.View");
+		Check.That("menu: Farmer Call-backs is More-sheet only (never a phone tab or rail slot)",
+			ShellNavigation.GetPhoneTabs(rm).All(t => t.Key != ShellNavigation.FarmerRequestsKey)
+			&& ShellNavigation.GetRailItems(rm).All(t => t.Key != ShellNavigation.FarmerRequestsKey)
+			&& ShellNavigation.MoreItems(rm).Any(t => t.Key == ShellNavigation.FarmerRequestsKey));
+		Check.That("menu: JMDO's scoped More sheet still lists Farmer Call-backs",
+			ShellNavigation.MoreItems(TestLogin.As(AppRole.JMDO, "Dashboard.View")).Any(t => t.Key == ShellNavigation.FarmerRequestsKey));
+		Check.Equal("menu: /farmer-requests highlights its own entry", ShellNavigation.FarmerRequestsKey, ShellNavigation.ActiveKey("/farmer-requests"));
+	}
+
+	private static void UiText()
+	{
+		var now = new DateTime(2026, 11, 28, 6, 0, 0, DateTimeKind.Utc);           // 11:30 IST
+		Check.Equal("when: today in IST", "Today, 10:15 am", FarmerConnectUi.IstWhen(new DateTime(2026, 11, 28, 4, 45, 0, DateTimeKind.Utc), now));
+		Check.Equal("when: 18:45 UTC is the next IST day", "Today, 12:15 am", FarmerConnectUi.IstWhen(new DateTime(2026, 11, 27, 18, 45, 0, DateTimeKind.Utc), now));
+		Check.Equal("when: yesterday", "Yesterday, 5:30 pm", FarmerConnectUi.IstWhen(new DateTime(2026, 11, 27, 12, 0, 0, DateTimeKind.Utc), now));
+		Check.Equal("when: this year", "3 Nov, 2:00 pm", FarmerConnectUi.IstWhen(new DateTime(2026, 11, 3, 8, 30, 0, DateTimeKind.Utc), now));
+		Check.Equal("when: another year", "3 Nov 2025, 2:00 pm", FarmerConnectUi.IstWhen(new DateTime(2025, 11, 3, 8, 30, 0, DateTimeKind.Utc), now));
+
+		var nearby = new FarmerDealerListDto { Scope = FarmerDealerScope.Nearby, RadiusKm = 25, Total = 3, UsedLocation = true, DistrictName = "Thoothukudi" };
+		Check.Equal("scope title: nearby", "3 dealers within 25 km", FarmerConnectUi.ScopeTitle(nearby));
+		Check.Equal("scope note: none when nearby", (string?)null, FarmerConnectUi.ScopeNote(nearby));
+		var district = new FarmerDealerListDto { Scope = FarmerDealerScope.District, RadiusKm = 25, Total = 1, UsedLocation = true, DistrictName = "Thoothukudi" };
+		Check.Equal("scope title: district, one dealer", "1 dealer in Thoothukudi", FarmerConnectUi.ScopeTitle(district));
+		Check.Equal("scope note: GPS fell back to the district", "No SPIC dealer within 25 km of you, so we show the dealers in Thoothukudi.", FarmerConnectUi.ScopeNote(district));
+		district.UsedLocation = false;
+		Check.Equal("scope note: no note for a plain district list", (string?)null, FarmerConnectUi.ScopeNote(district));
+		var state = new FarmerDealerListDto { Scope = FarmerDealerScope.State, Total = 12, DistrictName = "Ariyalur", StateName = "Tamil Nadu" };
+		Check.Equal("scope note: state fallback", "No SPIC dealer in Ariyalur yet, so we show the dealers in Tamil Nadu.", FarmerConnectUi.ScopeNote(state));
+
+		Check.Equal("basis note: district has none", (string?)null, FarmerConnectUi.BasisNote(new FarmerTeamDto { Basis = FarmerTeamBasis.District }));
+		Check.That("basis note: nearest dealer mentions the distance",
+			FarmerConnectUi.BasisNote(new FarmerTeamDto { Basis = FarmerTeamBasis.NearestDealer, DistrictName = "Ariyalur", NearestDealerKm = 14.2 })!.Contains("14 km away"));
+		FarmerContactDto P(string id, AppRole role) => new() { ContactId = id, Role = role, Name = id };
+		var members = new[] { P("j1", AppRole.JMDO), P("j2", AppRole.JMDO), P("m1", AppRole.MDO), P("m2", AppRole.MDO), P("r1", AppRole.RM) };
+		Check.Equal("home preview: one of each role first, in team order", "j1,m1,r1", string.Join(",", FarmerConnectUi.Preview(members).Select(m => m.ContactId)));
+		Check.Equal("home preview: fills with the next people", "j1,j2,m1", string.Join(",", FarmerConnectUi.Preview(members.Take(3).ToList()).Select(m => m.ContactId)));
+		Check.Equal("home preview: fewer than three", "j1", string.Join(",", FarmerConnectUi.Preview(members.Take(1).ToList()).Select(m => m.ContactId)));
+		Check.Equal("status hue: open is gold", FpHue.Gold, FarmerConnectUi.StatusHue(FarmerContactRequestStatus.Open));
+		Check.Equal("role hue: RM is gold", FpHue.Gold, FarmerConnectUi.RoleHue(AppRole.RM));
 	}
 
 	private static void Geo()
@@ -142,6 +216,10 @@ internal static class FarmerPortalConnectTests
 		Check.Equal("distance text: one decimal under 10 km", "4.2 km", FarmerDealerRules.DistanceText(4.24));
 		Check.Equal("distance text: whole km above", "27 km", FarmerDealerRules.DistanceText(26.6));
 		Check.Equal("address join skips blanks", "12, Main Road", FarmerDealerRules.JoinParts("12", " ", null, "Main Road"));
+		Check.Equal("address: village = taluk only once", "North Colony, Kovilpatti", FarmerDealerRules.JoinDistinct("North Colony", "Kovilpatti", "kovilpatti"));
+		Check.Equal("card address drops the village / district shown above it and repeats", "12, Main Bazaar Road, 628501",
+			FarmerDealerRules.CardAddress("12, Main Bazaar Road", "Kovilpatti, Kovilpatti", "628501", "Kovilpatti", "Thoothukudi"));
+		Check.Equal("card address: nothing but the pincode", "628952", FarmerDealerRules.CardAddress(null, "Kayathar", "628952", "Kayathar", "Thoothukudi"));
 	}
 
 	private static void Links()

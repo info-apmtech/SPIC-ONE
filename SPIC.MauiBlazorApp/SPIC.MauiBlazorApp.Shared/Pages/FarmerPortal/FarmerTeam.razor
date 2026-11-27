@@ -1,0 +1,164 @@
+@page "/farmer/team"
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
+@using SPIC.Core.FarmerPortal
+@inject FarmerSession Farmer
+@inject FarmerConnectApi Api
+@inject LoginState LoginState
+@inject NavigationManager Nav
+
+@*
+    My SPIC team (farmer portal Task 2): the JMDO / MDO / RM / RMD who look after the farmer's area
+    (api/Farmer/contacts; resolution in SPIC.Core.FarmerPortal.FarmerTeamRules), each with "Request a
+    call back" (FarmerCallBackSheet) and Call / WhatsApp only when phone numbers are switched on
+    (FarmerPortal:ShowStaffPhoneNumbers). Links to My requests (/farmer/requests).
+*@
+
+<div class="fp fp-page fpt">
+    <FpHero Title="My SPIC team" Compact="true" BackHref="@LoginState.FarmerLandingPath" BackLabel="Back to home"
+            Subtitle="SPIC officers who look after farmers in your area. Ask them anything about your crop.">
+        @if (Farmer.Profile is { } p)
+        {
+            <FpChip Icon="bi-geo-alt-fill" Text="@FarmerDealerRules.JoinParts(p.DistrictName, p.StateName)" />
+        }
+    </FpHero>
+
+    @if (LoginState.UserRole != AppRole.Farmer)
+    {
+        <FpEmpty Art="FpArtKind.Team" Title="You are viewing as support staff"
+                 Message="Farmers see the SPIC officers for their area here. Support staff have no farmer profile." />
+    }
+    else if (_loading)
+    {
+        <FpSkeleton Variant="FpSkeletonVariant.Cards" Count="3" LoadingText="Finding your SPIC team..." />
+    }
+    else if (_error is not null)
+    {
+        <FpError Title="We could not load your SPIC team" Message="@_error" OnRetry="LoadAsync" />
+    }
+    else if (_team is { } team)
+    {
+        <a class="fpt-requests fp-fade-up" href="/farmer/requests">
+            <span class="fp-icon-circle fp-hue-gold" aria-hidden="true"><i class="bi bi-clock-history"></i></span>
+            <span class="fpt-requests__text">
+                <strong>My requests</strong>
+                <span class="fp-caption">@RequestsLine</span>
+            </span>
+            @if (_openTotal > 0)
+            {
+                <span class="fpt-requests__badge fp-num">@_openTotal open</span>
+            }
+            <i class="bi bi-chevron-right fpt-requests__chevron" aria-hidden="true"></i>
+        </a>
+
+        @if (team.Members.Count == 0)
+        {
+            <FpEmpty Art="FpArtKind.Team" Title="No SPIC officer is listed for your area yet"
+                     Message="We are still mapping officers to every district. Meanwhile a SPIC dealer near you can help.">
+                <a class="fp-btn fp-btn--primary" href="/farmer/dealers"><i class="bi bi-shop" aria-hidden="true"></i> Dealers near me</a>
+                <a class="fp-btn fp-btn--secondary" href="/farmer/profile">Check my district</a>
+            </FpEmpty>
+        }
+        else
+        {
+            <section class="fp-section" aria-labelledby="fpt-title">
+                <div class="fp-section-head">
+                    <div>
+                        <h2 id="fpt-title" class="fp-section-title">@FarmerConnectUi.Count(team.Members.Count, "officer") for @(team.DistrictName ?? "your area")</h2>
+                        <p class="fp-section-sub">Tap "Request call back" and they will phone you.</p>
+                    </div>
+                </div>
+
+                @if (FarmerConnectUi.BasisNote(team) is { } note)
+                {
+                    <p class="fp-alert fp-alert--info" role="note"><i class="bi bi-info-circle-fill" aria-hidden="true"></i> @note</p>
+                }
+
+                <div class="fpt-grid">
+                    @foreach (var member in team.Members)
+                    {
+                        <FarmerTeamMemberCard @key="member.ContactId" Member="@member" MaxOpen="@team.MaxOpenPerStaff" OnRequest="Ask" />
+                    }
+                </div>
+
+                @if (!team.PhonesShown)
+                {
+                    <p class="fpt-privacy fp-caption">
+                        <i class="bi bi-shield-lock" aria-hidden="true"></i>
+                        Officers' phone numbers are kept private. Send a call-back request and they will call you on your registered mobile.
+                    </p>
+                }
+            </section>
+        }
+
+        <FarmerCallBackSheet Contact="@_asking" @bind-IsOpen="_sheetOpen" OnSent="OnSentAsync" />
+    }
+</div>
+
+@code {
+    private bool _loading = true;
+    private string? _error;
+    private FarmerTeamDto? _team;
+    private FarmerContactDto? _asking;
+    private bool _sheetOpen;
+    private int _openTotal;
+
+    private string RequestsLine => _openTotal switch
+    {
+        0 => "See the call-backs you asked for",
+        1 => "1 request is waiting for a call back",
+        _ => $"{_openTotal} requests are waiting for a call back"
+    };
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        if (LoginState.UserRole != AppRole.Farmer)
+        {
+            _loading = false;
+            return;
+        }
+
+        _loading = true;
+        _error = null;
+        var ok = await Farmer.EnsureLoadedAsync();
+        if (!ok)
+        {
+            _loading = false;
+            _error = Farmer.LoadError ?? "Please check your internet connection and try again.";
+            return;
+        }
+        if (!Farmer.ProfileComplete)
+        {
+            Nav.NavigateTo("/farmer/onboarding", replace: true);
+            return;
+        }
+
+        var result = await Api.TeamAsync();
+        _loading = false;
+        if (result.Value is not { } team)
+        {
+            _error = result.Message ?? "Something went wrong. Please try again.";
+            return;
+        }
+        _team = team;
+        _openTotal = team.Members.Sum(m => m.OpenRequests);
+    }
+
+    private void Ask(FarmerContactDto member)
+    {
+        _asking = member;
+        _sheetOpen = true;
+    }
+
+    private Task OnSentAsync(FarmerContactRequestDto sent)
+    {
+        if (_team?.Members.FirstOrDefault(m => m.ContactId == sent.ContactId) is { } m)
+        {
+            m.OpenRequests++;
+            _openTotal++;
+        }
+        return Task.CompletedTask;
+    }
+}

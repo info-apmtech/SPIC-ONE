@@ -1,0 +1,460 @@
+@page "/farmer/dealers"
+@implements IAsyncDisposable
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
+@using SPIC.Core.FarmerPortal
+@inject FarmerSession Farmer
+@inject FarmerConnectApi Api
+@inject LoginState LoginState
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+@*
+    Dealers near me (farmer portal Task 2). Starts from the farm location saved in the profile (if
+    any), "Use my location" asks the device; without GPS the farmer's district is used. The API
+    answers Nearby (radius) -> District -> State and says which (Scope); the page explains a fallback
+    in plain words. List or map (Leaflet, as on ContactUs / Logistics; FarmerDealers.razor.js).
+*@
+
+<div class="fp fp-page fpd">
+    <FpHero Title="Dealers near you" Subtitle="SPIC fertilizer dealers you can call or visit." Compact="true"
+            BackHref="@LoginState.FarmerLandingPath" BackLabel="Back to home" DocumentTitle="Dealers near me">
+        @if (Farmer.Profile is { } p)
+        {
+            <FpChip Icon="bi-geo-alt-fill" Text="@FarmerDealerRules.JoinParts(p.Village, p.DistrictName)" />
+        }
+    </FpHero>
+
+    @if (LoginState.UserRole != AppRole.Farmer)
+    {
+        <FpEmpty Art="FpArtKind.Team" Title="You are viewing as support staff"
+                 Message="Farmers see the SPIC dealers near their village here. Support staff have no farmer profile." />
+    }
+    else if (_booting)
+    {
+        <FpSkeleton Variant="FpSkeletonVariant.Cards" Count="3" LoadingText="Finding dealers near you..." />
+    }
+    else if (_profileError is not null)
+    {
+        <FpError Title="We could not load your details" Message="@_profileError" OnRetry="BootAsync" />
+    }
+    else
+    {
+        <section class="fp-card fpd-controls fp-fade-up" aria-label="Search options">
+            <div class="fpd-where">
+                <span class="fp-icon-circle @(HasPoint ? "fp-hue-sky" : "fp-hue-neutral") fpd-where__icon" aria-hidden="true">
+                    <i class="bi @(_source == LocationSource.Device ? "bi-crosshair" : HasPoint ? "bi-house-door-fill" : "bi-map")"></i>
+                </span>
+                <div class="fpd-where__text" aria-live="polite">
+                    <strong>@WhereTitle</strong>
+                    <span class="fp-caption">@WhereHint</span>
+                </div>
+                <button type="button" class="fp-btn fp-btn--secondary fp-btn--sm fpd-where__btn" @onclick="UseMyLocationAsync" disabled="@_locating">
+                    @if (_locating)
+                    {
+                        <span class="fp-spinner" aria-hidden="true"></span>
+                        <span>Finding you...</span>
+                    }
+                    else
+                    {
+                        <i class="bi bi-crosshair" aria-hidden="true"></i>
+                        <span>@(_source == LocationSource.Device ? "Update my location" : "Use my location")</span>
+                    }
+                </button>
+            </div>
+            @if (_locationMessage is not null)
+            {
+                <p class="fp-alert fp-alert--info fpd-where__msg" role="status"><i class="bi bi-info-circle-fill" aria-hidden="true"></i> @_locationMessage</p>
+            }
+
+            <div class="fpd-filters">
+                <form class="fpd-search" role="search" @onsubmit="SearchAsync" @onsubmit:preventDefault>
+                    <label class="fp-sr-only" for="fpd-q">Search by shop name or village</label>
+                    <i class="bi bi-search fpd-search__icon" aria-hidden="true"></i>
+                    <input id="fpd-q" class="fp-input fpd-search__input" type="search" placeholder="Shop name or village"
+                           maxlength="@FarmerDealerRules.SearchMax" @bind="_searchText" @bind:event="oninput" autocomplete="off" enterkeyhint="search" />
+                    @if (!string.IsNullOrEmpty(_searchText))
+                    {
+                        <button type="button" class="fpd-search__clear" aria-label="Clear search" @onclick="ClearSearchAsync"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
+                    }
+                    <button type="submit" class="fp-btn fp-btn--primary fp-btn--sm fpd-search__go">Search</button>
+                </form>
+
+                @if (HasPoint)
+                {
+                    <div class="fpd-radius" role="group" aria-label="How far to look">
+                        <span class="fpd-radius__label" aria-hidden="true"><i class="bi bi-bullseye"></i> Within</span>
+                        @foreach (var km in RadiusChoices)
+                        {
+                            var k = km;
+                            <button type="button" class="fpd-seg__btn @(_radius == k ? "is-on" : null)" aria-pressed="@(_radius == k ? "true" : "false")"
+                                    @onclick="() => SetRadiusAsync(k)" disabled="@_loading">@k km</button>
+                        }
+                    </div>
+                }
+            </div>
+        </section>
+
+        @if (_loading)
+        {
+            <FpSkeleton Variant="FpSkeletonVariant.Cards" Count="3" LoadingText="Finding dealers near you..." />
+        }
+        else if (_error is not null)
+        {
+            <FpError Title="We could not load the dealers" Message="@_error" OnRetry="() => LoadAsync(1)" />
+        }
+        else if (_list is { } list)
+        {
+            @if (list.Scope == FarmerDealerScope.None || _items.Count == 0)
+            {
+                @if (!string.IsNullOrWhiteSpace(list.Search))
+                {
+                    <FpEmpty Art="FpArtKind.Search" Title="@($"No dealer matches “{list.Search}”")"
+                             Message="Check the spelling, or clear the search to see every dealer near you.">
+                        <button type="button" class="fp-btn fp-btn--secondary" @onclick="ClearSearchAsync">Clear search</button>
+                    </FpEmpty>
+                }
+                else
+                {
+                    <FpEmpty Art="FpArtKind.Search" Title="No SPIC dealer found yet"
+                             Message="We could not find a SPIC dealer in your area. Your SPIC officer can tell you the nearest one.">
+                        <a class="fp-btn fp-btn--primary" href="/farmer/team"><i class="bi bi-people-fill" aria-hidden="true"></i> Ask my SPIC team</a>
+                    </FpEmpty>
+                }
+            }
+            else
+            {
+                <section class="fp-section fpd-results" aria-labelledby="fpd-results-title">
+                    <div class="fpd-results__head">
+                        <div>
+                            <h2 id="fpd-results-title" class="fp-section-title">@FarmerConnectUi.ScopeTitle(list)</h2>
+                            @if (list.UsedLocation)
+                            {
+                                <p class="fp-section-sub">Nearest first. Distances are straight-line, the road may be longer.</p>
+                            }
+                        </div>
+                        <div class="fpd-view" role="tablist" aria-label="Show as">
+                            <button type="button" role="tab" class="fpd-seg__btn @(_view == View.List ? "is-on" : null)" aria-selected="@(_view == View.List ? "true" : "false")"
+                                    @onclick="() => SetView(View.List)"><i class="bi bi-list-ul" aria-hidden="true"></i> List</button>
+                            <button type="button" role="tab" class="fpd-seg__btn @(_view == View.Map ? "is-on" : null)" aria-selected="@(_view == View.Map ? "true" : "false")"
+                                    @onclick="() => SetView(View.Map)"><i class="bi bi-map" aria-hidden="true"></i> Map</button>
+                        </div>
+                    </div>
+
+                    @if (FarmerConnectUi.ScopeNote(list) is { } note)
+                    {
+                        <p class="fp-alert fp-alert--info" role="note"><i class="bi bi-info-circle-fill" aria-hidden="true"></i> @note</p>
+                    }
+
+                    @if (_view == View.Map)
+                    {
+                        <div class="fp-card fp-card--flush fpd-map-card">
+                            <div class="fpd-map" @ref="_mapEl" role="region" aria-label="Map of dealers"></div>
+                            @if (_mapUnavailable)
+                            {
+                                <p class="fp-alert fp-alert--info fpd-map__msg"><i class="bi bi-info-circle-fill" aria-hidden="true"></i> The map could not load. Please use the list.</p>
+                            }
+                            else if (_items.All(d => d.Latitude is null))
+                            {
+                                <p class="fp-alert fp-alert--info fpd-map__msg"><i class="bi bi-info-circle-fill" aria-hidden="true"></i> These dealers have no map location yet. Use the list to call them.</p>
+                            }
+                        </div>
+                        @if (_selected is { } sel && _items.FirstOrDefault(d => d.Id == sel) is { } chosen)
+                        {
+                            <FarmerDealerCard Dealer="@chosen" Selected="true" />
+                        }
+                    }
+                    else
+                    {
+                        <div class="fpd-list">
+                            @foreach (var dealer in _items)
+                            {
+                                <FarmerDealerCard @key="dealer.Id" Dealer="@dealer" />
+                            }
+                        </div>
+                    }
+
+                    @if (_items.Count < list.Total)
+                    {
+                        <div class="fpd-more">
+                            <button type="button" class="fp-btn fp-btn--secondary" @onclick="MoreAsync" disabled="@_loadingMore">
+                                @if (_loadingMore)
+                                {
+                                    <span class="fp-spinner" aria-hidden="true"></span>
+                                    <span>Loading...</span>
+                                }
+                                else
+                                {
+                                    <span>Show more dealers</span>
+                                }
+                            </button>
+                            <span class="fp-caption">Showing @_items.Count of @list.Total</span>
+                        </div>
+                    }
+                    @if (_moreError is not null)
+                    {
+                        <p class="fp-alert fp-alert--error" role="alert"><i class="bi bi-exclamation-circle-fill" aria-hidden="true"></i> @_moreError</p>
+                    }
+                </section>
+            }
+        }
+    }
+</div>
+
+@code {
+    private enum LocationSource { None, Farm, Device }
+
+    private enum View { List, Map }
+
+    private static readonly int[] RadiusChoices = { 10, 25, 50, 100 };
+
+    private bool _booting = true;
+    private string? _profileError;
+    private bool _loading;
+    private bool _loadingMore;
+    private string? _error;
+    private string? _moreError;
+    private FarmerDealerListDto? _list;
+    private readonly List<FarmerDealerDto> _items = new();
+    private int _page = 1;
+    private int _radius = FarmerDealerRules.DefaultRadiusKm;
+    private string? _searchText;
+    private string? _search;
+    private double? _lat;
+    private double? _lng;
+    private LocationSource _source;
+    private bool _locating;
+    private string? _locationMessage;
+    private View _view = View.List;
+    private int? _selected;
+
+    private ElementReference _mapEl;
+    private IJSObjectReference? _module;
+    private DotNetObjectReference<FarmerDealers>? _self;
+    private bool _mapDirty;
+    private bool _mapUnavailable;
+    private bool _disposed;
+    private int _loadVersion;
+
+    private bool HasPoint => FarmerGeo.IsValid(_lat, _lng);
+
+    private string WhereTitle => _source switch
+    {
+        LocationSource.Device => "Near you now",
+        LocationSource.Farm => "Near your farm",
+        _ => $"In {Farmer.Profile?.DistrictName ?? "your district"}"
+    };
+
+    private string WhereHint => _source switch
+    {
+        LocationSource.Device => "Using this phone's location.",
+        LocationSource.Farm => "Using the farm location in your profile.",
+        _ => "Use your location to see the nearest dealers first."
+    };
+
+    protected override Task OnInitializedAsync() => BootAsync();
+
+    private async Task BootAsync()
+    {
+        if (LoginState.UserRole != AppRole.Farmer)
+        {
+            _booting = false;
+            return;
+        }
+
+        _booting = true;
+        _profileError = null;
+        var ok = await Farmer.EnsureLoadedAsync();
+        if (_disposed) return;
+        if (!ok)
+        {
+            _booting = false;
+            _profileError = Farmer.LoadError ?? "Please check your internet connection and try again.";
+            return;
+        }
+        if (!Farmer.ProfileComplete)
+        {
+            Nav.NavigateTo("/farmer/onboarding", replace: true);
+            return;
+        }
+
+        var p = Farmer.Profile!;
+        if (FarmerGeo.IsValid(p.Latitude, p.Longitude))
+        {
+            _lat = p.Latitude;
+            _lng = p.Longitude;
+            _source = LocationSource.Farm;
+        }
+        _booting = false;
+        await LoadAsync(1);
+    }
+
+    private async Task LoadAsync(int page)
+    {
+        var version = ++_loadVersion;
+        if (page == 1)
+        {
+            _loading = true;
+            _error = null;
+        }
+        else
+        {
+            _loadingMore = true;
+        }
+        _moreError = null;
+
+        var result = await Api.DealersAsync(_lat, _lng, _radius, _search, page);
+        if (_disposed || version != _loadVersion) return;   // a newer search started meanwhile
+
+        _loading = false;
+        _loadingMore = false;
+        if (result.Value is not { } list)
+        {
+            if (page == 1) _error = result.Message ?? "Something went wrong. Please try again.";
+            else _moreError = result.Message ?? "Could not load more dealers.";
+            return;
+        }
+
+        if (page == 1)
+        {
+            _items.Clear();
+            _selected = null;
+        }
+        _list = list;
+        _page = list.Page;
+        foreach (var d in list.Items)
+            if (_items.All(x => x.Id != d.Id)) _items.Add(d);
+        _mapDirty = true;
+    }
+
+    private Task MoreAsync() => LoadAsync(_page + 1);
+
+    private Task SearchAsync()
+    {
+        _search = FarmerDealerRules.CleanSearch(_searchText);
+        return LoadAsync(1);
+    }
+
+    private Task ClearSearchAsync()
+    {
+        _searchText = null;
+        _search = null;
+        return LoadAsync(1);
+    }
+
+    private Task SetRadiusAsync(int km)
+    {
+        if (_radius == km) return Task.CompletedTask;
+        _radius = km;
+        return LoadAsync(1);
+    }
+
+    private void SetView(View view)
+    {
+        _view = view;
+        _mapDirty = view == View.Map;
+    }
+
+    private sealed class GeoResult
+    {
+        public double Latitude { get; set; }
+        public double Longitude { get; set; }
+        public string? Error { get; set; }
+    }
+
+    /// <summary>window.getCurrentPosition (js/location.js on the Web; the MAUI host bridges the same name).</summary>
+    private async Task UseMyLocationAsync()
+    {
+        _locating = true;
+        _locationMessage = null;
+        try
+        {
+            var position = await JS.InvokeAsync<GeoResult?>("getCurrentPosition");
+            if (_disposed) return;
+            if (position is null || !string.IsNullOrWhiteSpace(position.Error) || !FarmerGeo.IsValid(position.Latitude, position.Longitude))
+            {
+                _locationMessage = "Please allow location access to see the dealers nearest to you.";
+                return;
+            }
+            _lat = position.Latitude;
+            _lng = position.Longitude;
+            _source = LocationSource.Device;
+        }
+        catch (Exception)
+        {
+            if (_disposed) return;
+            _locationMessage = "Location is not available on this device. We show the dealers in your district.";
+            return;
+        }
+        finally
+        {
+            _locating = false;
+        }
+        await LoadAsync(1);
+    }
+
+    // ------------------------------------------------------------------ map
+
+    private sealed record MapDealer(int Id, string Name, string Place, double Lat, double Lng, string? Distance, string? Directions);
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_disposed || !_mapDirty || _view != View.Map || _list is null || _loading) return;
+        _mapDirty = false;
+        try
+        {
+            _module ??= await JS.InvokeAsync<IJSObjectReference>(
+                "import", "./_content/SPIC.MauiBlazorApp.Shared/Pages/FarmerPortal/FarmerDealers.razor.js");
+            if (_disposed) return;
+            _self ??= DotNetObjectReference.Create(this);
+            var pins = _items
+                .Where(d => FarmerGeo.IsValid(d.Latitude, d.Longitude))
+                .Select(d => new MapDealer(d.Id, d.FirmName, FarmerDealerRules.JoinParts(d.Village, d.DistrictName),
+                    d.Latitude!.Value, d.Longitude!.Value,
+                    d.DistanceKm is { } km ? FarmerDealerRules.DistanceText(km) : null, d.DirectionsUrl))
+                .ToList();
+            object? me = HasPoint ? new { lat = _lat!.Value, lng = _lng!.Value } : null;
+            var shown = await _module.InvokeAsync<bool>("show", _mapEl, me, pins, _self);
+            if (_disposed) return;
+            if (shown == _mapUnavailable)
+            {
+                _mapUnavailable = !shown;
+                StateHasChanged();
+            }
+        }
+        catch (Exception)
+        {
+            // Leaflet missing, offline tiles or the circuit went away: the list still works.
+            if (_disposed) return;
+            if (!_mapUnavailable)
+            {
+                _mapUnavailable = true;
+                StateHasChanged();
+            }
+        }
+    }
+
+    /// <summary>A map pin was tapped: show that dealer's card under the map.</summary>
+    [JSInvokable]
+    public Task PinSelected(int dealerId) => InvokeAsync(() =>
+    {
+        if (_disposed) return;
+        _selected = dealerId;
+        StateHasChanged();
+    });
+
+    public async ValueTask DisposeAsync()
+    {
+        _disposed = true;
+        if (_module is not null)
+        {
+            try
+            {
+                await _module.InvokeVoidAsync("destroy", _mapEl);
+                await _module.DisposeAsync();
+            }
+            catch (Exception) { /* circuit gone */ }
+        }
+        _self?.Dispose();
+    }
+}

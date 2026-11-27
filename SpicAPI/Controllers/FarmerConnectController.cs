@@ -194,7 +194,7 @@ namespace SpicAPI.Controllers
                     Id = r.Id,
                     FirmName = r.FirmName.Trim(),
                     AddressLine1 = NullIfEmpty(FarmerDealerRules.JoinParts(r.ShopNoORRoomNoOrBlockNo, r.Street)),
-                    AddressLine2 = NullIfEmpty(FarmerDealerRules.JoinParts(r.SubVillage, r.Village, r.Taluk)),
+                    AddressLine2 = NullIfEmpty(FarmerDealerRules.JoinDistinct(r.SubVillage, r.Village, r.Taluk)),
                     Village = NullIfEmpty(r.Village?.Trim()),
                     DistrictName = districtName,
                     PinCode = NullIfEmpty(r.PinCode?.Trim()),

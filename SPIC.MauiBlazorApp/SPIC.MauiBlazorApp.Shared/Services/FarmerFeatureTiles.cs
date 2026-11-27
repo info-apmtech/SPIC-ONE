@@ -33,6 +33,11 @@ public static class FarmerFeatureTiles
 
     public static readonly IReadOnlyList<FarmerFeatureTile> All = new List<FarmerFeatureTile>
     {
+        // Task 2
+        new("dealers", "Dealers near me", "Call or visit a SPIC dealer",
+            "bi-shop", FpHue.Gold, "/farmer/dealers", Always),
+        new("team", "My SPIC team", "Your local officers call you back",
+            "bi-people-fill", FpHue.Teal, "/farmer/team", Always),
         // SAS v1: shown only to farmers with soil tests.
         new("soil-reports", "My soil reports", "Download your soil test reports",
             "bi-file-earmark-text", FpHue.Green, "/Sas/MyReports", HasSoilTests),

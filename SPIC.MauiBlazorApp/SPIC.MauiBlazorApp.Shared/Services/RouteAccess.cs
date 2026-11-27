@@ -67,6 +67,9 @@ namespace SPIC.MauiBlazorApp.Shared.Services
 
         internal const string FarmerSegment = "farmer";
 
+        /// <summary>The staff page for farmer call-back requests (/farmer-requests).</summary>
+        public const string FarmerRequestsSegment = "farmer-requests";
+
         // Pages a farmer WITHOUT a designation may still open outside /farmer: the sign-in plumbing
         // and their own SAS samples / reports (the API scopes those to their linked farmer record).
         private static readonly HashSet<string> FarmerInfraRoutes = new(StringComparer.OrdinalIgnoreCase)
@@ -211,6 +214,14 @@ namespace SPIC.MauiBlazorApp.Shared.Services
             }
 
             if (isDataExplorerAuthorized) return Allow;
+
+            // Farmer call-back requests (farmer portal Task 2): a ROLE-gated staff page for the people
+            // farmers can ask (JMDO / MDO / RM / RMD; Admin / SuperAdmin returned Allow above). No
+            // PagePermission: the API answers by role and scopes every row to the caller.
+            if (firstSegment.Equals(FarmerRequestsSegment, StringComparison.OrdinalIgnoreCase))
+                return SPIC.Core.FarmerPortal.FarmerContactRequestRules.CanUseStaffPage(LoginState.UserRole)
+                    ? Allow
+                    : Redirect(LoginState.LandingPage);
 
             if (AlwaysOpen.Contains(firstSegment)) return Allow;
             // Shell hubs and the read-only Digital Library are open to every signed-in user for the
