@@ -90,7 +90,8 @@ public class FertilizerNormSplit
 }
 
 /// <summary>Water / soil / nutrient management advice. Crop null = every crop; SoilType null = every soil;
-/// WaterRegime Irrigated = only for watered crops (irrigation schedules).</summary>
+/// WaterRegime Irrigated = only for watered crops (irrigation schedules); PhMin / PhMax limit a tip to soils with
+/// PhMin &lt;= pH &lt; PhMax (lime tips only on acid soil).</summary>
 public class CropSoilTip
 {
     public int Id { get; set; }
@@ -104,6 +105,10 @@ public class CropSoilTip
     public string SourceUrl { get; set; } = string.Empty;
     public int SortOrder { get; set; }
     public bool IsActive { get; set; } = true;
+    /// <summary>Shown only when the soil pH is at least this (null = no lower limit).</summary>
+    public decimal? PhMin { get; set; }
+    /// <summary>Shown only when the soil pH is below this (null = no upper limit).</summary>
+    public decimal? PhMax { get; set; }
 }
 
 /// <summary>
@@ -121,7 +126,7 @@ public class FertilizerRecommendationRun
     public string Variant { get; set; } = string.Empty;
     public string SoilType { get; set; } = string.Empty;
     public decimal AreaAcres { get; set; }
-    /// <summary>Soil test values as used (kg/ha; pH).</summary>
+    /// <summary>Soil test values as used (kg/ha on the elemental basis: P as P, K as K; pH).</summary>
     public decimal SoilN { get; set; }
     public decimal SoilP { get; set; }
     public decimal SoilK { get; set; }

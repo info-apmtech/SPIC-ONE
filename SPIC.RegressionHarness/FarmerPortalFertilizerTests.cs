@@ -35,20 +35,17 @@ internal static class FarmerPortalFertilizerTests
 		UiAndMenu();
 	}
 
-	// The seeded lab parameter master rows (V5o_SasLabPortal) for S-N, S-P, S-K, S-PH.
-	private static LabParameter Lab(string code, decimal min, decimal max, string low = "Low", string normal = "Medium", string high = "High", decimal? moderate = null) =>
-		new() { Code = code, RangeMin = min, RangeMax = max, ModerateFrom = moderate, LowLabel = low, NormalLabel = normal, HighLabel = high, IsActive = true };
-
-	private static readonly A.Threshold LabN = A.FromLab(Lab("S-N", 280m, 560m), A.DefaultN);
-	private static readonly A.Threshold LabP = A.FromLab(Lab("S-P", 22m, 56m), A.DefaultP);
-	private static readonly A.Threshold LabK = A.FromLab(Lab("S-K", 110m, 280m), A.DefaultK);
-	private static readonly A.Threshold LabPh = A.FromLab(Lab("S-PH", 6.5m, 7.5m, "Acidic", "Neutral", "Alkaline"), A.DefaultPh);
+	// Fix round 1: the farmer tool rates on its own elemental thresholds (not the lab master).
+	private static readonly A.Threshold LabN = A.DefaultN;
+	private static readonly A.Threshold LabP = A.DefaultP;
+	private static readonly A.Threshold LabK = A.DefaultK;
+	private static readonly A.Threshold LabPh = A.DefaultPh;
 
 	private static string Lv(decimal v, A.Threshold t) => A.Level(A.Rate(v, t));
 
 	private static void Ratings()
 	{
-		// Brief defaults (used only when the lab master has no row).
+		// The owner's sketch basis: N 280 / 560, P 11 / 22 kg P/ha, K 118 / 280 kg K/ha.
 		Check.Equal("rating: N 279 is Low", "Low", Lv(279m, A.DefaultN));
 		Check.Equal("rating: N 280 is Medium", "Medium", Lv(280m, A.DefaultN));
 		Check.Equal("rating: N 560 is Medium", "Medium", Lv(560m, A.DefaultN));
@@ -62,22 +59,23 @@ internal static class FarmerPortalFertilizerTests
 		Check.Equal("rating: K 280 is Medium", "Medium", Lv(280m, A.DefaultK));
 		Check.Equal("rating: K 281 is High", "High", Lv(281m, A.DefaultK));
 
-		// The lab master wins (the soil report's own ranges): P 22-56, K 110-280.
-		Check.That("rating: a master row marks the threshold as the lab's", LabP.FromLabMaster && !A.DefaultP.FromLabMaster);
-		Check.Equal("rating (lab): P 21.9 is Low", "Low", Lv(21.9m, LabP));
-		Check.Equal("rating (lab): P 22 is Medium", "Medium", Lv(22m, LabP));
-		Check.Equal("rating (lab): P 56 is Medium", "Medium", Lv(56m, LabP));
-		Check.Equal("rating (lab): P 56.1 is High", "High", Lv(56.1m, LabP));
-		Check.Equal("rating (lab): K 109 is Low", "Low", Lv(109m, LabK));
-		Check.Equal("rating (lab): K 110 is Medium", "Medium", Lv(110m, LabK));
-		Check.Equal("rating (lab): N 561 is High", "High", Lv(561m, LabN));
-		Check.Equal("rating: an inactive master row falls back to the default", 11m,
-			A.FromLab(new LabParameter { Code = "S-P", RangeMin = 22m, RangeMax = 56m, IsActive = false }, A.DefaultP).LowBelow);
-		Check.Equal("rating: a master row without a range falls back", 118m,
-			A.FromLab(new LabParameter { Code = "S-K", IsActive = true }, A.DefaultK).LowBelow);
+		// P2O5 / K2O entry is converted to P / K before rating (x 2.29, x 1.2).
+		Check.Equal("basis: 25.2 kg P2O5 = 11.0 kg P", 11.00m, Math.Round(A.ToElemental(25.19m, "P2O5"), 2));
+		Check.Equal("basis: P2O5 25.1 is Low (10.96 P)", "Low", Lv(A.ToElemental(25.1m, "P2O5"), A.DefaultP));
+		Check.Equal("basis: P2O5 25.2 is Medium (11.0 P)", "Medium", Lv(A.ToElemental(25.2m, "P2O5"), A.DefaultP));
+		Check.Equal("basis: P2O5 50.4 is Medium (22.0 P)", "Medium", Lv(A.ToElemental(50.38m, "P2O5"), A.DefaultP));
+		Check.Equal("basis: P2O5 50.5 is High (22.05 P)", "High", Lv(A.ToElemental(50.5m, "P2O5"), A.DefaultP));
+		Check.Equal("basis: K2O 141.5 is Low (117.9 K)", "Low", Lv(A.ToElemental(141.5m, "K2O"), A.DefaultK));
+		Check.Equal("basis: K2O 141.6 is Medium (118 K)", "Medium", Lv(A.ToElemental(141.6m, "K2O"), A.DefaultK));
+		Check.Equal("basis: K2O 336 is Medium (280 K)", "Medium", Lv(A.ToElemental(336m, "K2O"), A.DefaultK));
+		Check.Equal("basis: K2O 337 is High (280.8 K)", "High", Lv(A.ToElemental(337m, "K2O"), A.DefaultK));
+		Check.Equal("basis: blank or P is elemental", 18m, A.ToElemental(18m, null));
+		Check.That("basis: P accepts P / P2O5, K accepts K / K2O", A.ValidBasis("P", "P2O5") && A.ValidBasis("P", "P") && A.ValidBasis("K", "K2O")
+			&& !A.ValidBasis("P", "K2O") && !A.ValidBasis("K", "P2O5") && A.ValidBasis("K", null));
+		Check.That("rating: the farmer tool does not use the lab master", !A.DefaultP.FromLabMaster && A.DefaultP.LowBelow == 11m && A.DefaultK.LowBelow == 118m);
 
 		// Moderate exactly as LabAutoResultEngine: RangeMin <= v < ModerateFrom.
-		var moderate = A.FromLab(Lab("S-N", 280m, 560m, moderate: 350m), A.DefaultN);
+		var moderate = A.DefaultN with { ModerateFrom = 350m };
 		Check.Equal("rating: with ModerateFrom, 300 is Moderate", LabResultStatus.Moderate, A.Rate(300m, moderate));
 		Check.Equal("rating: with ModerateFrom, 350 is Normal", LabResultStatus.Normal, A.Rate(350m, moderate));
 		Check.Equal("rating: Moderate reads Medium", "Medium", A.Level(LabResultStatus.Moderate));
@@ -126,6 +124,18 @@ internal static class FarmerPortalFertilizerTests
 		Check.Equal("units: 'KG / Acre' spelling", 247.1m, A.ToKgPerHa(100m, "KG / Acre", out _));
 		Check.That("units: an unknown unit gives null", A.ToKgPerHa(1m, "%", out var n4) is null && n4!.Contains('%'));
 		Check.Equal("units: 1 acre = 0.40469 ha", 0.4047m, Math.Round(A.Hectares(1m), 4));
+
+		// SPIC soil report values on the farmer tool's basis: the lab's P (kg/ha, band 22-56) is P2O5.
+		Check.Equal("report units: P 18 kg/ha (P2O5) = 7.86 kg P/ha", 7.86m, A.ReportToElemental("P", 18m, "kg/ha", out var r1));
+		Check.That("report units: the P note says read as P2O5", r1!.Contains("P2O5"));
+		Check.Equal("report units: P 22.9 kg P2O5/ha = 10.0 kg P/ha (all-India Low edge)", 10.00m, A.ReportToElemental("P", 22.9m, "kg/ha", out _));
+		Check.Equal("report units: P 10 kg/acre (P2O5) = 10.79 kg P/ha", 10.79m, A.ReportToElemental("P", 10m, "kg/acre", out _));
+		Check.Equal("report units: P 5 ppm (Olsen P) = 11.2 kg P/ha, no P2O5 step", 11.2m, A.ReportToElemental("P", 5m, "ppm", out var r2));
+		Check.That("report units: the ppm note does not mention P2O5", !r2!.Contains("P2O5"));
+		Check.Equal("report units: K 95 kg/ha stays elemental", 95m, A.ReportToElemental("K", 95m, "kg/ha", out var r3));
+		Check.That("report units: K kg/ha has no note", r3 is null);
+		Check.Equal("report units: K 50 ppm = 112 kg K/ha", 112m, A.ReportToElemental("K", 50m, "ppm", out _));
+		Check.Equal("report units: N 120 kg/acre = 296.5 kg/ha", 296.5m, A.ReportToElemental("N", 120m, "kg/acre", out _));
 	}
 
 	private static decimal Kg(List<FertilizerProductLineDto> lines, string code) => lines.FirstOrDefault(l => l.Code == code)?.Kg ?? 0m;
@@ -186,6 +196,8 @@ internal static class FarmerPortalFertilizerTests
 		Check.That("pH: sodic advice names the gypsum requirement test",
 			A.PhBandFor(9.0m, LabPh).Advice.Any(a => a.Contains("gypsum requirement test")));
 		Check.Equal("pH: neutral needs nothing", 1, A.PhBandFor(7.0m, LabPh).Advice.Count);
+		Check.That("pH: alkaline advice does not claim the farmer's report advises gypsum",
+			!A.PhBandFor(8.0m, LabPh).Advice.Any(a => a.StartsWith("Your SPIC soil report advises")));
 	}
 
 	private static void Seed()
@@ -210,6 +222,9 @@ internal static class FarmerPortalFertilizerTests
 			&& FertilizerAdviceSeed.Tips.All(t => t.SoilType is null || A.SoilTypes.Contains(t.SoilType)));
 		Check.That("seed: tip crops are seeded crops", FertilizerAdviceSeed.Tips.All(t => t.Crop is null || norms.Any(n => n.Crop == t.Crop)));
 		Check.That("seed: per-plant norms have a plant density", norms.Where(n => n.Basis == FertilizerDoseBasis.PerPlant).All(n => n.PlantsPerHectare > 0 && n.Spacing is not null));
+		Check.That("seed: every tip that names lime is limited to acid soil (PhMax <= 6.5)",
+			FertilizerAdviceSeed.Tips.Where(t => t.Text.Contains("lime", StringComparison.OrdinalIgnoreCase)).All(t => t.PhMax is { } m && m <= 6.5m));
+		Check.That("seed: tip pH limits are sane", FertilizerAdviceSeed.Tips.All(t => t.PhMin is null || t.PhMax is null || t.PhMin < t.PhMax));
 		Check.That("seed: a crop + variant + soil appears once", norms.GroupBy(n => (n.Crop, n.Variant, n.SoilType)).All(g => g.Count() == 1));
 
 		FertilizerCropNorm N(string crop, string variantStart, string? soil = null) =>
@@ -242,11 +257,11 @@ internal static class FarmerPortalFertilizerTests
 	}
 
 	private static FertilizerRecommendationDto Build(int normId, string soil, decimal acres, decimal n, decimal p, decimal k, decimal ph,
-		LabFertilizerSchedule? schedule = null, int? plants = null)
+		LabFertilizerSchedule? schedule = null, int? plants = null, string? pBasis = null, string? kBasis = null)
 	{
 		schedule ??= new LabFertilizerSchedule();
 		var norm = SeedNorm(normId);
-		var request = new FertilizerRecommendRequest { NormId = normId, SoilType = soil, AreaAcres = acres, N = n, P = p, K = k, Ph = ph, PlantCount = plants };
+		var request = new FertilizerRecommendRequest { NormId = normId, SoilType = soil, AreaAcres = acres, N = n, P = p, K = k, Ph = ph, PlantCount = plants, PBasis = pBasis, KBasis = kBasis };
 		return A.Build(new A.Inputs(norm, FertilizerAdviceSeed.Splits.Where(s => s.NormId == normId).ToList(), FertilizerAdviceSeed.Tips,
 			LabN, LabP, LabK, LabPh, (code, status) => schedule.FactorFor(code, status.ToString()), request));
 	}
@@ -282,8 +297,32 @@ internal static class FarmerPortalFertilizerTests
 		Check.That("result: summary names crop, soil, statuses and need", r.Summary.Contains("Cotton (Irrigated hybrids") && r.Summary.Contains("Black Cotton Soil")
 			&& r.Summary.Contains("N Low, P Low, K Low") && r.Summary.Contains("60.7 : 30.4 : 30.4"));
 
+		// Tips follow the pH: no lime at 8.6, no gypsum-for-alkalinity at 5.0 (red soil groundnut is the risky pair).
+		var gnAlk = Build(12, "Red Soil", 1m, 300m, 15m, 150m, 8.6m);
+		Check.That("tips: at pH 8.6 no tip mentions lime", gnAlk.SoilTips.Concat(gnAlk.NutrientTips).Concat(gnAlk.WaterTips).All(t => !t.Text.Contains("lime", StringComparison.OrdinalIgnoreCase)));
+		Check.That("tips: at pH 8.6 the red soil crust tip is the gypsum one", gnAlk.SoilTips.Any(t => t.Text.Contains("gypsum at 2 t/ha with FYM")));
+		Check.That("tips: at pH 8.6 the pH card does not say lime", gnAlk.Ph.Advice.All(a => !a.Contains("lime", StringComparison.OrdinalIgnoreCase)));
+		var gnAcid = Build(12, "Red Soil", 1m, 300m, 15m, 150m, 5.0m);
+		Check.That("tips: at pH 5.0 no gypsum-for-alkalinity tip", gnAcid.SoilTips.Concat(gnAcid.NutrientTips).Concat(gnAcid.Ph.Advice.Select(a => new FertilizerTipDto { Text = a }))
+			.All(t => !t.Text.Contains("alkal", StringComparison.OrdinalIgnoreCase) && !t.Text.Contains("gypsum requirement", StringComparison.OrdinalIgnoreCase)));
+		Check.That("tips: at pH 5.0 the lime crust tips show", gnAcid.SoilTips.Any(t => t.Text.Contains("lime or gypsum at 2 t/ha")) && gnAcid.SoilTips.Any(t => t.Text.StartsWith("If the surface crusts, lime")));
+		Check.That("tips: at pH 6.5 (neutral) no lime tip", Build(12, "Red Soil", 1m, 300m, 15m, 150m, 6.5m).SoilTips.All(t => !t.Text.Contains("lime", StringComparison.OrdinalIgnoreCase)));
+		Check.That("tips: pulses lime tip only below pH 6.0", Build(13, "Red Soil", 1m, 300m, 15m, 150m, 5.9m).SoilTips.Any(t => t.Text.StartsWith("Lime is recommended"))
+			&& Build(13, "Red Soil", 1m, 300m, 15m, 150m, 6.0m).SoilTips.All(t => !t.Text.StartsWith("Lime is recommended")));
+
+		// P entered as P2O5 / K as K2O: rated on P / K, shown as entered.
+		var asOxide = Build(6, "Black Cotton Soil", 1m, 300m, 18m, 150m, 7m, pBasis: "P2O5", kBasis: "K2O");
+		Check.Equal("basis: 18 kg P2O5 = 7.86 kg P, Low", "Low", asOxide.Nutrients[1].Level);
+		Check.Equal("basis: the rating value is elemental P", 7.86m, asOxide.Nutrients[1].SoilValue);
+		Check.Equal("basis: the entered value and basis are kept", "18 P2O5", $"{asOxide.Nutrients[1].SoilValueEntered:0} {asOxide.Nutrients[1].SoilBasis}");
+		Check.Equal("basis: 150 kg K2O = 125 kg K, Medium", "Medium", asOxide.Nutrients[2].Level);
+		var asP = Build(6, "Black Cotton Soil", 1m, 300m, 18m, 150m, 7m);
+		Check.Equal("basis: 18 kg P (TN soil card Medium) is Medium", "Medium", asP.Nutrients[1].Level);
+		Check.Equal("ui: soil line shows both bases", "Soil test 18 kg P2O5/ha (7.9 kg P/ha)", FertilizerUi.SoilLine(asOxide.Nutrients[1]));
+		Check.Equal("ui: soil line for elemental P", "Soil test 18 kg P/ha", FertilizerUi.SoilLine(asP.Nutrients[1]));
+
 		// Medium / High.
-		var mixed = Build(5, "Red Soil", 2m, 300m, 60m, 300m, 6.0m);
+		var mixed = Build(5, "Red Soil", 2m, 300m, 30m, 300m, 6.0m);
 		Check.Equal("result: Medium N, High P, High K", "Medium,High,High", string.Join(",", mixed.Nutrients.Select(x => x.Level)));
 		Check.Equal("result: High P is -25 % (40 -> 30)", 30m, mixed.Nutrients[1].AdjustedDose);
 		Check.Equal("result: Medium N unchanged (80)", 80m, mixed.Nutrients[0].AdjustedDose);
@@ -347,6 +386,10 @@ internal static class FarmerPortalFertilizerTests
 		var maizeBlack = SeedNorm(10);
 		r = Ok(); r.NormId = 10; r.SoilType = "Red Soil";
 		Check.That("validate: a soil-specific norm refuses another soil", A.Validate(r, maizeBlack).ContainsKey("soilType"));
+		r = Ok(); r.PBasis = "K2O";
+		Check.That("validate: a wrong P unit", A.Validate(r, norm).ContainsKey("pBasis"));
+		r = Ok(); r.PBasis = "P2O5"; r.KBasis = "K2O";
+		Check.Equal("validate: P2O5 and K2O are fine", 0, A.Validate(r, norm).Count);
 		var inactive = new FertilizerCropNorm { Id = 99, IsActive = false };
 		Check.That("validate: inactive norm", A.Validate(Ok(), inactive).ContainsKey("normId"));
 	}
@@ -362,23 +405,57 @@ internal static class FarmerPortalFertilizerTests
 			new("S-K", SampleType.Soil, "Potassium", "abc", "kg/ha")
 		};
 		var notes = new List<string>();
-		Check.Equal("report: soil pH, not water pH", 7.0, FarmerFertilizerController.ReadValue(rows, "S-PH", "pH", "pH", false, notes));
-		Check.Equal("report: N in kg/acre converted to kg/ha", 296.5, FarmerFertilizerController.ReadValue(rows, "S-N", "Nitrogen", "Nitrogen", true, notes));
-		Check.Equal("report: P in ppm converted to kg/ha", 22.4, FarmerFertilizerController.ReadValue(rows, "S-P", "Phosphorus", "Phosphorus", true, notes));
-		Check.That("report: an unreadable K is skipped with a note", FarmerFertilizerController.ReadValue(rows, "S-K", "Potassium", "Potassium", true, notes) is null
+		Check.Equal("report: soil pH, not water pH", 7.0, FarmerFertilizerController.ReadValue(rows, "S-PH", "pH", "pH", null, notes, out _));
+		Check.Equal("report: N in kg/acre converted to kg/ha", 296.5, FarmerFertilizerController.ReadValue(rows, "S-N", "Nitrogen", "Nitrogen", "N", notes, out _));
+		Check.Equal("report: P in ppm (Olsen P) converted to kg P/ha", 22.4, FarmerFertilizerController.ReadValue(rows, "S-P", "Phosphorus", "Phosphorus", "P", notes, out _));
+		Check.That("report: an unreadable K is skipped with a note", FarmerFertilizerController.ReadValue(rows, "S-K", "Potassium", "Potassium", "K", notes, out _) is null
 			&& notes.Any(n => n.StartsWith("Potassium")));
 		Check.That("report: conversion notes for the farmer", notes.Any(n => n.Contains("converted from kg/acre")) && notes.Any(n => n.Contains("converted from ppm")));
 
 		var v1 = new List<FarmerFertilizerController.SoilReportRow> { new(null, null, "Nitrogen", "250", "kg/ha") };
-		Check.Equal("report: v1 rows without a master link match by name", 250.0, FarmerFertilizerController.ReadValue(v1, "S-N", "Nitrogen", "Nitrogen", true, new List<string>()));
+		Check.Equal("report: v1 rows without a master link match by name", 250.0, FarmerFertilizerController.ReadValue(v1, "S-N", "Nitrogen", "Nitrogen", "N", new List<string>(), out _));
 
-		// Slider ranges: widened so the lab's High zone is visible.
-		Check.Equal("range: P slider max 90 with the lab's 56 High threshold", 90.0, FarmerFertilizerController.Range(LabP, 0, 60, 0.5, 5).Max);
-		Check.Equal("range: P slider max 60 with the default 22", 60.0, FarmerFertilizerController.Range(A.DefaultP, 0, 60, 0.5, 5).Max);
-		Check.Equal("range: N slider 0-800", 800.0, FarmerFertilizerController.Range(LabN, 0, 800, 1, 100).Max);
-		Check.Equal("range: pH slider default 7.0", 7.0, FarmerFertilizerController.Range(LabPh, 4.5, 9.5, 0.1, 7.0).Default);
-		Check.Equal("range: pH labels are the lab's", "Acidic/Neutral/Alkaline",
-			string.Join("/", new[] { FarmerFertilizerController.Range(LabPh, 4.5, 9.5, 0.1, 7.0) }.SelectMany(x => new[] { x.LowLabel, x.MediumLabel, x.HighLabel })));
+		// The SPIC lab's own report: P 18 kg/ha is P2O5 -> 7.9 kg P/ha, shown on the P2O5 basis; a missing K is listed.
+		var spic = new List<FarmerFertilizerController.SoilReportRow>
+		{
+			new("S-PH", SampleType.Soil, "pH", "8.1", "-"),
+			new("S-N", SampleType.Soil, "Nitrogen", "180", "kg/ha"),
+			new("S-P", SampleType.Soil, "Phosphorus", "18", "kg/ha")
+		};
+		var dto = new FertilizerSoilReportDto { Available = true };
+		FarmerFertilizerController.Fill(dto, spic, "S-N", "S-P", "S-K");
+		Check.Equal("report: SPIC P 18 kg/ha read as P2O5 = 7.86 kg P/ha", 7.86, dto.P);
+		Check.Equal("ui: shown back on P2O5 it is the report's 18", 18.0, FertilizerUi.Convert(dto.P, "P", "P2O5"));
+		Check.Equal("report: the P basis to show is P2O5", "P2O5", dto.ReportPBasis);
+		Check.Equal("report: N stays 180", 180.0, dto.N);
+		Check.That("report: K missing is listed, not invented", dto.K is null && dto.Missing.SequenceEqual(new[] { "K" }));
+		Check.That("report: a note tells the farmer to enter K", dto.Notes.Any(n => n.StartsWith("Potassium is not in your report")));
+		Check.That("report: no 'converted' note for the lab's own P2O5 value", !dto.Notes.Any(n => n.StartsWith("Phosphorus")));
+		Check.That("report: still available with three values", dto.Available);
+		Check.That("ui: the strip names the missing value", FertilizerUi.ReportLine(new FertilizerSoilReportDto { ReportCode = "R1", Missing = new() { "K" } }).Contains("Your report has no potassium"));
+		var empty = new FertilizerSoilReportDto { Available = true };
+		FarmerFertilizerController.Fill(empty, new List<FarmerFertilizerController.SoilReportRow>(), "S-N", "S-P", "S-K");
+		Check.That("report: nothing usable -> not available", !empty.Available && empty.Message is not null);
+
+		// Slider ranges: the owner's sketch, with P2O5 / K2O views.
+		var ranges = FarmerFertilizerController.Ranges();
+		var rp = ranges.Single(x => x.Code == "P");
+		var rk = ranges.Single(x => x.Code == "K");
+		Check.Equal("range: P 0-60 kg P/ha, Low < 11, High > 22", "0-60 11/22", $"{rp.Min}-{rp.Max} {rp.LowBelow}/{rp.HighAbove}");
+		Check.Equal("range: K 0-500 kg K/ha, Low < 118, High > 280", "0-500 118/280", $"{rk.Min}-{rk.Max} {rk.LowBelow}/{rk.HighAbove}");
+		Check.Equal("range: N 0-800 default 100", "0-800 100", $"{ranges[0].Min}-{ranges[0].Max} {ranges[0].Default}");
+		Check.Equal("range: pH default 7.0", 7.0, ranges[3].Default);
+		Check.That("range: P switches to P2O5 x 2.29, K to K2O x 1.2", rp.AltBasis == "P2O5" && rp.AltFactor == 2.29 && rk.AltBasis == "K2O" && rk.AltFactor == 1.2);
+		Check.That("range: never the lab master", ranges.All(x => !x.FromLabMaster));
+		var p2o5 = FertilizerUi.Shown(rp, "P2O5");
+		Check.Equal("ui: P2O5 view zones 25.2 / 50.4, max 140", "25.2/50.4 140", $"{p2o5.LowBelow}/{p2o5.HighAbove} {p2o5.Max}");
+		Check.Equal("ui: P2O5 view label and unit", "Available Phosphorus (P2O5) kg/ha", $"{p2o5.Label} {p2o5.Unit}");
+		var k2o = FertilizerUi.Shown(rk, "K2O");
+		Check.Equal("ui: K2O view zones 141.6 / 336, max 600", "141.6/336 600", $"{k2o.LowBelow}/{k2o.HighAbove} {k2o.Max}");
+		Check.Equal("ui: P view label", "Available Phosphorus (P) kg/ha", $"{FertilizerUi.Shown(rp, "P").Label} {FertilizerUi.Shown(rp, "P").Unit}");
+		Check.Equal("ui: switching 18 kg P2O5 to P gives 7.86", 7.86, FertilizerUi.Convert(18, "P2O5", "P"));
+		Check.Equal("ui: switching back gives 18 again", 18.0, FertilizerUi.Convert(FertilizerUi.Convert(18, "P2O5", "P"), "P", "P2O5"));
+		Check.Equal("ui: K 125 to K2O = 150", 150.0, FertilizerUi.Convert(125, "K", "K2O"));
 	}
 
 	private static void UiAndMenu()

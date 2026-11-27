@@ -23,9 +23,9 @@ namespace SpicAPI.Controllers
     ///   GET  api/Farmer/fertilizer/history/{id}   one of the caller's runs in full
     ///   GET  api/Farmer/fertilizer/latest         the caller's latest run in short (204 when none)
     ///
-    /// The rating thresholds are the lab parameter master's (S-N, S-P, S-K, S-PH) and the dose factors the soil
-    /// report's (<see cref="LabFertilizerSchedule"/>, Sas:Lab:DoseFactors), so this advice and the SPIC soil
-    /// report agree. The arithmetic is <see cref="FertilizerAdvisor"/>.
+    /// Ratings use the farmer tool's elemental thresholds (fix round 1: N 280 / 560, P 11 / 22 kg P/ha, K 118 / 280
+    /// kg K/ha, pH 6.5 / 7.5; P may be entered as P2O5 and K as K2O); the dose factors are the soil report's
+    /// (<see cref="LabFertilizerSchedule"/>, Sas:Lab:DoseFactors). The arithmetic is <see cref="FertilizerAdvisor"/>.
     /// </summary>
     [Authorize(Roles = nameof(AppRole.Farmer))]
     [ApiController]
@@ -58,18 +58,10 @@ namespace SpicAPI.Controllers
                 .Where(n => n.IsActive)
                 .OrderBy(n => n.SortOrder).ThenBy(n => n.Id)
                 .ToListAsync(ct);
-            var t = await ThresholdsAsync(ct);
-
             var dto = new FertilizerOptionsDto
             {
                 SoilTypes = FertilizerAdvisor.SoilTypes.ToList(),
-                Ranges = new List<FertilizerRangeDto>
-                {
-                    Range(t.N, 0, 800, 1, 100),
-                    Range(t.P, 0, 60, 0.5, 5),
-                    Range(t.K, 0, 500, 1, 50),
-                    Range(t.Ph, 4.5, 9.5, 0.1, 7.0)
-                },
+                Ranges = Ranges(),
                 Products = FertilizerAdvisor.Products.Select(p => new FertilizerProductDto
                 {
                     Code = p.Code, Name = p.Name, Grade = p.Grade, SpicName = p.SpicName, BagKg = p.BagKg
@@ -90,12 +82,20 @@ namespace SpicAPI.Controllers
             return Ok(dto);
         }
 
-        /// <summary>Slider range: the default range, widened (to 150 % of the High threshold) when the High zone would be
-        /// thinner than a quarter of the threshold, so it stays visible and the scale labels do not collide.</summary>
-        public static FertilizerRangeDto Range(FertilizerAdvisor.Threshold t, double min, double max, double step, double def)
+        /// <summary>The four sliders (owner's sketch): N 0-800 default 100, P 0-60 default 5 (kg P/ha; switchable to P2O5
+        /// x 2.29), K 0-500 default 50 (kg K/ha; switchable to K2O x 1.2), pH 4.5-9.5 default 7.0.</summary>
+        public static List<FertilizerRangeDto> Ranges() => new()
+        {
+            Range(FertilizerAdvisor.DefaultN, 0, 800, 1, 100, "N", null, null),
+            Range(FertilizerAdvisor.DefaultP, 0, 60, 0.5, 5, FertilizerAdvisor.BasisP, FertilizerAdvisor.BasisP2O5, FertilizerAdvisor.P2O5PerP),
+            Range(FertilizerAdvisor.DefaultK, 0, 500, 1, 50, FertilizerAdvisor.BasisK, FertilizerAdvisor.BasisK2O, FertilizerAdvisor.K2OPerK),
+            Range(FertilizerAdvisor.DefaultPh, 4.5, 9.5, 0.1, 7.0, "", null, null)
+        };
+
+        public static FertilizerRangeDto Range(FertilizerAdvisor.Threshold t, double min, double max, double step, double def,
+            string basis, string? altBasis, decimal? altFactor)
         {
             var high = (double)t.HighAbove;
-            if (t.Code != "pH" && high * 1.25 > max) max = Math.Ceiling(high * 1.5 / 10) * 10;
             return new FertilizerRangeDto
             {
                 Code = t.Code,
@@ -111,7 +111,10 @@ namespace SpicAPI.Controllers
                 LowLabel = t.LowLabel,
                 MediumLabel = t.NormalLabel,
                 HighLabel = t.HighLabel,
-                FromLabMaster = t.FromLabMaster
+                FromLabMaster = false,
+                Basis = basis,
+                AltBasis = altBasis,
+                AltFactor = altFactor is { } f ? (double)f : null
             };
         }
 
@@ -148,43 +151,73 @@ namespace SpicAPI.Controllers
                 GeneratedAt = report.GeneratedAt,
                 SampleCrop = string.IsNullOrWhiteSpace(report.Crop) ? null : report.Crop.Trim()
             };
-            dto.N = ReadValue(rows, _schedule.ParameterCodeFor("N") ?? "S-N", "Nitrogen", "Nitrogen", true, dto.Notes);
-            dto.P = ReadValue(rows, _schedule.ParameterCodeFor("P") ?? "S-P", "Phosphorus", "Phosphorus", true, dto.Notes);
-            dto.K = ReadValue(rows, _schedule.ParameterCodeFor("K") ?? "S-K", "Potassium", "Potassium", true, dto.Notes);
-            dto.Ph = ReadValue(rows, PhCode, "pH", "pH", false, dto.Notes);
-            if (dto.N is null && dto.P is null && dto.K is null && dto.Ph is null)
-            {
-                dto.Available = false;
-                dto.Message = "Your latest soil report has no N, P, K or pH values we can use.";
-            }
+            Fill(dto, rows, _schedule.ParameterCodeFor("N") ?? "S-N", _schedule.ParameterCodeFor("P") ?? "S-P", _schedule.ParameterCodeFor("K") ?? "S-K");
             return Ok(dto);
         }
 
         public sealed record SoilReportRow(string? Code, SampleType? AppliesTo, string Parameter, string? Value, string? Unit);
 
         /// <summary>
-        /// The value of one parameter in kg/ha (pH as it is): the row of the master code, else (v1 rows without a
-        /// master link) the row named like the parameter. Values in kg/acre or ppm are converted
-        /// (<see cref="FertilizerAdvisor.ToKgPerHa"/>); a value that cannot be read adds a note and gives null.
+        /// Fills N / P / K / pH of a report on the farmer tool's basis (<see cref="FertilizerAdvisor.ReportToElemental"/>:
+        /// P read as P2O5 kg/ha and converted to P, ppm x 2.24). A value the report does not give is listed in
+        /// <see cref="FertilizerSoilReportDto.Missing"/> with a note, so the screen leaves it for the farmer to set.
         /// </summary>
-        public static double? ReadValue(IReadOnlyList<SoilReportRow> rows, string code, string name, string label, bool convert, List<string> notes)
+        public static void Fill(FertilizerSoilReportDto dto, IReadOnlyList<SoilReportRow> rows, string nCode, string pCode, string kCode)
         {
+            dto.N = ReadValue(rows, nCode, "Nitrogen", "Nitrogen", "N", dto.Notes, out _);
+            dto.P = ReadValue(rows, pCode, "Phosphorus", "Phosphorus", "P", dto.Notes, out var pUnit);
+            dto.K = ReadValue(rows, kCode, "Potassium", "Potassium", "K", dto.Notes, out _);
+            dto.Ph = ReadValue(rows, PhCode, "pH", "pH", null, dto.Notes, out _);
+            if (dto.P is not null)
+            {
+                var u = (pUnit ?? "").Trim().ToLowerInvariant().Replace(" ", "");
+                dto.ReportPBasis = u is "ppm" or "mg/kg" ? FertilizerAdvisor.BasisP : FertilizerAdvisor.BasisP2O5;
+            }
+            foreach (var (code, label, value) in new[] { ("N", "Nitrogen", dto.N), ("P", "Phosphorus", dto.P), ("K", "Potassium", dto.K), ("pH", "Soil pH", dto.Ph) })
+            {
+                if (value is not null) continue;
+                dto.Missing.Add(code);
+                dto.Notes.Add($"{label} is not in your report: enter it from your soil card.");
+            }
+            if (dto.Missing.Count == 4)
+            {
+                dto.Available = false;
+                dto.Message = "Your latest soil report has no N, P, K or pH values we can use.";
+                dto.Notes.Clear();
+            }
+        }
+
+        /// <summary>
+        /// The value of one parameter: the row of the master code, else (v1 rows without a master link) the row named
+        /// like the parameter. N / P / K go through <see cref="FertilizerAdvisor.ReportToElemental"/> (kg/ha, P as P);
+        /// pH (nutrient null) as it is. A value that cannot be read adds a note and gives null.
+        /// </summary>
+        public static double? ReadValue(IReadOnlyList<SoilReportRow> rows, string code, string name, string label, string? nutrient, List<string> notes, out string? unit)
+        {
+            unit = null;
             var row = rows.FirstOrDefault(r => string.Equals(r.Code, code, StringComparison.OrdinalIgnoreCase))
                       ?? rows.FirstOrDefault(r => r.Code is null && string.Equals(r.Parameter?.Trim(), name, StringComparison.OrdinalIgnoreCase));
             if (row is null || string.IsNullOrWhiteSpace(row.Value)) return null;
+            unit = row.Unit;
             if (!decimal.TryParse(row.Value.Trim(), NumberStyles.Number, CultureInfo.InvariantCulture, out var value))
             {
                 notes.Add($"{label}: the report value \"{row.Value.Trim()}\" is not a number, so it was not used.");
                 return null;
             }
-            if (!convert) return (double)value;
-            var kg = FertilizerAdvisor.ToKgPerHa(value, row.Unit, out var note);
+            if (nutrient is null) return (double)value;
+            var kg = FertilizerAdvisor.ReportToElemental(nutrient, value, row.Unit, out var note);
             if (kg is null)
             {
                 notes.Add($"{label}: {note}, so it was not used.");
                 return null;
             }
-            if (note is not null) notes.Add($"{label}: {value.ToString("0.##", CultureInfo.InvariantCulture)} {row.Unit} {note} = {kg.Value.ToString("0.#", CultureInfo.InvariantCulture)} kg/ha.");
+            // The SPIC lab's own kg/ha P2O5 value is not a "conversion" the farmer needs to read about: the screen shows it
+            // on the P2O5 basis. Only real unit changes (kg/acre, ppm) get a note.
+            if (note is not null && (nutrient != "P" || note.Contains("kg/acre") || note.Contains("ppm")))
+            {
+                var basis = nutrient == "P" ? "kg P/ha" : "kg/ha";
+                notes.Add($"{label}: {value.ToString("0.##", CultureInfo.InvariantCulture)} {row.Unit} {note} = {kg.Value.ToString("0.#", CultureInfo.InvariantCulture)} {basis}.");
+            }
             return (double)kg.Value;
         }
 
@@ -213,9 +246,8 @@ namespace SpicAPI.Controllers
             var tips = await _db.CropSoilTips.AsNoTracking()
                 .Where(t => t.IsActive && (t.Crop == null || t.Crop == norm!.Crop))
                 .ToListAsync(ct);
-            var t = await ThresholdsAsync(ct);
-
-            var result = FertilizerAdvisor.Build(new FertilizerAdvisor.Inputs(norm!, norm!.Splits.ToList(), tips, t.N, t.P, t.K, t.Ph,
+            var result = FertilizerAdvisor.Build(new FertilizerAdvisor.Inputs(norm!, norm!.Splits.ToList(), tips,
+                FertilizerAdvisor.DefaultN, FertilizerAdvisor.DefaultP, FertilizerAdvisor.DefaultK, FertilizerAdvisor.DefaultPh,
                 (code, status) => _schedule.FactorFor(code, status.ToString()), request));
 
             var run = new FertilizerRecommendationRun
@@ -227,8 +259,8 @@ namespace SpicAPI.Controllers
                 SoilType = request.SoilType,
                 AreaAcres = request.AreaAcres,
                 SoilN = request.N,
-                SoilP = request.P,
-                SoilK = request.K,
+                SoilP = result.Nutrients[1].SoilValue,
+                SoilK = result.Nutrients[2].SoilValue,
                 SoilPh = Math.Round(request.Ph, 1, MidpointRounding.AwayFromZero),
                 NStatus = result.Nutrients[0].Level,
                 PStatus = result.Nutrients[1].Level,
@@ -325,24 +357,6 @@ namespace SpicAPI.Controllers
         };
 
         // ------------------------------------------------------------------ helpers
-
-        private sealed record Thresholds(FertilizerAdvisor.Threshold N, FertilizerAdvisor.Threshold P, FertilizerAdvisor.Threshold K, FertilizerAdvisor.Threshold Ph);
-
-        /// <summary>The lab master's ranges for N / P / K (codes from Sas:Lab:NutrientParameters) and pH; defaults when missing.</summary>
-        private async Task<Thresholds> ThresholdsAsync(CancellationToken ct)
-        {
-            var nCode = _schedule.ParameterCodeFor("N") ?? "S-N";
-            var pCode = _schedule.ParameterCodeFor("P") ?? "S-P";
-            var kCode = _schedule.ParameterCodeFor("K") ?? "S-K";
-            var codes = new[] { nCode, pCode, kCode, PhCode };
-            var master = await _db.LabParameters.AsNoTracking().Where(p => codes.Contains(p.Code) && p.IsActive).ToListAsync(ct);
-            LabParameter? Row(string code) => master.FirstOrDefault(p => p.Code == code);
-            return new Thresholds(
-                FertilizerAdvisor.FromLab(Row(nCode), FertilizerAdvisor.DefaultN),
-                FertilizerAdvisor.FromLab(Row(pCode), FertilizerAdvisor.DefaultP),
-                FertilizerAdvisor.FromLab(Row(kCode), FertilizerAdvisor.DefaultK),
-                FertilizerAdvisor.FromLab(Row(PhCode), FertilizerAdvisor.DefaultPh));
-        }
 
         /// <summary>The caller's SAS farmer records: linked by user id, or the same mobile (as LabReportsController.MyFarmerIdsAsync).</summary>
         private async Task<List<int>> MyFarmerIdsAsync(CancellationToken ct)

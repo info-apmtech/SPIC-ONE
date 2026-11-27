@@ -13,7 +13,7 @@ DELETE FROM "LabReports" WHERE "Code" LIKE 'DEMO-T4%';
 DELETE FROM "SampleItems" WHERE "Code" LIKE 'DEMO-T4%';
 DELETE FROM "SampleBatches" WHERE "Code" LIKE 'DEMO-T4%';
 DELETE FROM "SampleCollections" WHERE "Code" LIKE 'DEMO-T4%';
-DELETE FROM "SasFarmers" WHERE "Name" = 'Demo Task4 Murugan' AND "CreatedBy" = 'seed_task4_local';
+DELETE FROM "SasFarmers" WHERE "Name" IN ('Demo Task4 Murugan', 'Demo Task4 Kavitha') AND "CreatedBy" = 'seed_task4_local';
 -- Runs of the local test farmers only (FarmerProfiles phones starting 6, the local smoke numbers).
 DELETE FROM "FertilizerRecommendationRuns" r USING "FarmerProfiles" p
   WHERE r."FarmerUserId" = p."UserId" AND p."Phone" LIKE '6%';

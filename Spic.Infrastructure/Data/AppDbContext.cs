@@ -471,6 +471,8 @@ namespace Spic.Infrastructure.Data
                 entity.Property(x => x.Text).HasMaxLength(600);
                 entity.Property(x => x.Source).HasMaxLength(300);
                 entity.Property(x => x.SourceUrl).HasMaxLength(500);
+                entity.Property(x => x.PhMin).HasColumnType("numeric(4,1)");
+                entity.Property(x => x.PhMax).HasColumnType("numeric(4,1)");
                 entity.HasIndex(x => new { x.Crop, x.SoilType });
                 entity.HasData(FertilizerAdviceSeed.Tips);
             });

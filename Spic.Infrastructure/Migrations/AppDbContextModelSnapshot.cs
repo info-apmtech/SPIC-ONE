@@ -2020,6 +2020,12 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
+                    b.Property<decimal?>("PhMax")
+                        .HasColumnType("numeric(4,1)");
+
+                    b.Property<decimal?>("PhMin")
+                        .HasColumnType("numeric(4,1)");
+
                     b.Property<string>("SoilType")
                         .HasMaxLength(40)
                         .HasColumnType("character varying(40)");
@@ -2141,6 +2147,7 @@ namespace Spic.Infrastructure.Migrations
                             Id = 8,
                             Category = "Soil",
                             IsActive = true,
+                            PhMax = 6.5m,
                             SoilType = "Red Soil",
                             SortOrder = 8,
                             Source = "TNAU Agritech: Soil related constraints and their management",
@@ -2177,6 +2184,7 @@ namespace Spic.Infrastructure.Migrations
                             Id = 11,
                             Category = "Soil",
                             IsActive = true,
+                            PhMax = 6.5m,
                             SoilType = "Laterite Soil",
                             SortOrder = 11,
                             Source = "TNAU Agritech: Soil related constraints and their management",
@@ -2189,6 +2197,7 @@ namespace Spic.Infrastructure.Migrations
                             Id = 12,
                             Category = "Soil",
                             IsActive = true,
+                            PhMax = 6.5m,
                             SoilType = "Laterite Soil",
                             SortOrder = 12,
                             Source = "TNAU Agritech: Soil related constraints and their management",
@@ -2549,6 +2558,7 @@ namespace Spic.Infrastructure.Migrations
                             Category = "Soil",
                             Crop = "Groundnut",
                             IsActive = true,
+                            PhMax = 6.5m,
                             SortOrder = 41,
                             Source = "TNAU Agritech: Groundnut, rainfed (crop production advisory)",
                             SourceUrl = "https://agritech.tnau.ac.in/govt_schemes_services/aas/groundnut.html",
@@ -2561,6 +2571,7 @@ namespace Spic.Infrastructure.Migrations
                             Category = "Soil",
                             Crop = "Black gram",
                             IsActive = true,
+                            PhMax = 6.0m,
                             SortOrder = 42,
                             Source = "TNAU Agritech: Nutrient management, Blackgram (2013)",
                             SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_nutrientmgt_blackgram.html",
@@ -2609,6 +2620,7 @@ namespace Spic.Infrastructure.Migrations
                             Category = "Soil",
                             Crop = "Green gram",
                             IsActive = true,
+                            PhMax = 6.0m,
                             SortOrder = 46,
                             Source = "TNAU Agritech: Nutrient management, Blackgram (2013)",
                             SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_nutrientmgt_blackgram.html",
@@ -2853,6 +2865,19 @@ namespace Spic.Infrastructure.Migrations
                             Source = "TNAU Agritech Horticulture: Coconut manuring; spacing 7.5 x 7.5 m = 175 palms/ha (coconut spacing page)",
                             SourceUrl = "https://agritech.tnau.ac.in/horticulture/horti_pcrops_coconut_manuring.html",
                             Text = "Biofertilizers: 50 g Azospirillum, 50 g Phosphobacteria (or 100 g Azophos) and 50 g VAM per palm every 6 months, mixed with compost; never mixed with chemical fertilizer.",
+                            WaterRegime = 0
+                        },
+                        new
+                        {
+                            Id = 67,
+                            Category = "Soil",
+                            IsActive = true,
+                            PhMin = 6.5m,
+                            SoilType = "Red Soil",
+                            SortOrder = 8,
+                            Source = "TNAU Agritech: Soil related constraints and their management",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_reosurcemgt_soil_soilcontraints.html",
+                            Text = "If the surface forms a hard crust after rain, break it by harrowing; gypsum at 2 t/ha with FYM at 12.5 t/ha prevents it.",
                             WaterRegime = 0
                         });
                 });

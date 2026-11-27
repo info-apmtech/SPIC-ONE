@@ -54,6 +54,65 @@ public static class FertilizerUi
         return null;
     }
 
+    /// <summary>A slider as shown on a basis: thresholds, max and step scaled by the oxide factor (P2O5 2.29, K2O 1.2).</summary>
+    public sealed record ShownRange(string Label, string Unit, double Min, double Max, double Step, double LowBelow, double HighAbove,
+        string LowLabel, string MediumLabel, string HighLabel);
+
+    public const string MissingHint = "Not in your report, enter it from your soil card.";
+
+    /// <summary>The ending of the API's note for a value missing from the report (the slider shows <see cref="MissingHint"/> instead).</summary>
+    public const string MissingNoteEnd = "enter it from your soil card.";
+
+    public static double Factor(FertilizerRangeDto r, string? basis) =>
+        r.AltBasis is not null && string.Equals(basis, r.AltBasis, StringComparison.Ordinal) && r.AltFactor is { } f ? f : 1.0;
+
+    public static ShownRange Shown(FertilizerRangeDto r, string? basis)
+    {
+        var f = Factor(r, basis);
+        var name = f == 1.0 ? (r.Basis.Length > 0 ? r.Basis : r.Code) : r.AltBasis!;
+        var label = r.Code == "pH" ? r.Label : $"{r.Label} ({name})";
+        var unit = "kg/ha";   // the basis is in the label ("Available Phosphorus (P2O5)") and on the unit chips
+        var max = f == 1.0 ? r.Max : Math.Ceiling(r.Max * f / 10) * 10;
+        return new ShownRange(label, unit, r.Min, max, r.Step, Math.Round(r.LowBelow * f, 1), Math.Round(r.HighAbove * f, 1),
+            r.LowLabel, r.MediumLabel, r.HighLabel);
+    }
+
+    /// <summary>"Low below 25.2, Medium 25.2 - 50.4, High above 50.4".</summary>
+    public static string Thresholds(ShownRange v) =>
+        $"{v.LowLabel} below {v.LowBelow:0.#}, {v.MediumLabel} {v.LowBelow:0.#} - {v.HighAbove:0.#}, {v.HighLabel} above {v.HighAbove:0.#}";
+
+    /// <summary>A value moved between bases (P &lt;-&gt; P2O5, K &lt;-&gt; K2O), 2 decimals so a round trip keeps the number; null stays null.</summary>
+    public static double? Convert(double? value, string? from, string? to)
+    {
+        if (value is not { } v) return null;
+        var f = (double)SPIC.Core.FarmerPortal.FertilizerAdvisor.BasisFactor(from);
+        var t = (double)SPIC.Core.FarmerPortal.FertilizerAdvisor.BasisFactor(to);
+        return Math.Round(v / f * t, 2, MidpointRounding.AwayFromZero);
+    }
+
+    /// <summary>The strip after "Use my soil report": which values came from it and which the farmer must set.</summary>
+    public static string ReportLine(FertilizerSoilReportDto report)
+    {
+        var when = report.GeneratedAt is { } at ? $" of {at.ToString("d MMM yyyy", CultureInfo.InvariantCulture)}" : "";
+        if (report.Missing.Count == 0) return $"Filled from your soil report {report.ReportCode}{when}.";
+        var names = new Dictionary<string, string> { ["N"] = "nitrogen", ["P"] = "phosphorus", ["K"] = "potassium", ["pH"] = "pH" };
+        var filled = names.Keys.Where(k => !report.Missing.Contains(k)).Select(k => names[k]).ToList();
+        var missing = report.Missing.Select(k => names.TryGetValue(k, out var n) ? n : k).ToList();
+        return $"Filled {Join(filled)} from your soil report {report.ReportCode}{when}. Your report has no {Join(missing)}: set it from your soil card. This advice will count as your own numbers.";
+    }
+
+    private static string Join(List<string> items) =>
+        items.Count <= 1 ? string.Concat(items) : string.Join(", ", items.Take(items.Count - 1)) + " and " + items[^1];
+
+    /// <summary>"Soil test 18 kg P2O5/ha (7.9 kg P/ha)" / "Soil test 100 kg/ha".</summary>
+    public static string SoilLine(FertilizerNutrientResultDto n)
+    {
+        var entered = n.SoilValueEntered.ToString("0.#", CultureInfo.InvariantCulture);
+        var basis = string.IsNullOrEmpty(n.SoilBasis) ? n.Code : n.SoilBasis;
+        if (n.Code == "N" || basis == n.Code) return n.Code == "N" ? $"Soil test {entered} kg/ha" : $"Soil test {entered} kg {basis}/ha";
+        return $"Soil test {entered} kg {basis}/ha ({n.SoilValue.ToString("0.#", CultureInfo.InvariantCulture)} kg {n.Code}/ha)";
+    }
+
     public static string Kg(decimal kg) =>
         kg >= 100 ? kg.ToString("N0", CultureInfo.InvariantCulture) : kg.ToString("0.#", CultureInfo.InvariantCulture);
 

@@ -93,6 +93,15 @@ def screens(browser, base, out, storage, size):
     to_top(page)
     shoot.shot(page, out, f"fertilizer-inputs-{size}")
 
+    # 1b. P entered from a card printed in P2O5 (the unit toggle on): 40 kg P2O5 = 17.5 kg P, Medium.
+    open_page(page, base)
+    page.locator(".fpfz-basis button", has_text="kg P2O5/ha").first.click()
+    page.wait_for_timeout(300)
+    soil(page, 300, 40, 150, 6.8)
+    crop(page, "Paddy", "Medium duration", "Alluvial Soil", 2)
+    scroll_to(page, ".fp-zone:has(#fz-p)")
+    shoot.shot(page, out, f"fertilizer-inputs-p2o5-{size}", full=False)
+
     # 2. The sketch: cotton on black cotton soil, N 100, P 5, K 50.
     open_page(page, base)
     soil(page, 100, 5, 50, 7.0)

@@ -7,11 +7,13 @@ namespace SPIC.Core.FarmerPortal;
 /// <summary>
 /// Farmer portal Task 4: the fertilizer recommendation, as pure functions (pinned by the regression harness).
 ///
-///  1. Rating: each soil value is rated exactly as the SPIC lab rates it on the soil report
-///     (LabAutoResultEngine.Classify): value &lt; RangeMin = Low (Deficient); value &gt; RangeMax = High (Excess);
-///     RangeMin &lt;= value &lt; ModerateFrom (when the master sets it) = Medium (Moderate); else Medium (Normal).
-///     The thresholds come from the lab parameter master (S-N, S-P, S-K, S-PH); <see cref="DefaultN"/> ...
-///     apply only when a master row is missing.
+///  1. Rating (fix round 1, coordinator ruling): on the ELEMENTAL basis of the owner's sketch / Tamil Nadu soil
+///     cards: available N Low &lt; 280, Medium 280-560, High &gt; 560; P (kg P/ha) Low &lt; 11, Medium 11-22,
+///     High &gt; 22; K (kg K/ha) Low &lt; 118, Medium 118-280, High &gt; 280; pH 6.5 / 7.5. The farmer may enter P as
+///     P2O5 (x 2.29) and K as K2O (x 1.2); those are converted to P and K before rating (<see cref="ToElemental"/>).
+///     The SPIC lab master is NOT used for the sliders: its S-P band (22-56) is on the P2O5 basis, so a soil report
+///     P value is read as kg P2O5/ha and converted (<see cref="ReportToElemental"/>). Boundaries as
+///     LabAutoResultEngine.Classify: below LowBelow Low, above HighAbove High, else Medium.
 ///  2. Adjustment: the crop norm's N, P2O5 and K2O are multiplied by the lab's dose factor for the status
 ///     (Sas:Lab:DoseFactors, the same table that scales the soil report's fertilizer schedule; defaults
 ///     Deficient 1.25, Moderate 1.10, Normal 1.00, Excess 0.75), i.e. the soil-test rating approach: low
@@ -66,27 +68,40 @@ public static class FertilizerAdvisor
     public sealed record Threshold(string Code, string Label, string Unit, decimal LowBelow, decimal HighAbove, decimal? ModerateFrom,
         string LowLabel, string NormalLabel, string HighLabel, bool FromLabMaster);
 
-    // Defaults from the task brief, used only when the lab master has no active row (the seeded master is
-    // N 280-560, P 22-56, K 110-280 kg/ha, pH 6.5-7.5: those win, so the advice matches the soil report).
+    // The farmer tool's ratings (owner's sketch / brief; elemental P and K). Not the lab master (see the summary).
     public static readonly Threshold DefaultN = new("N", "Available Nitrogen", "kg/ha", 280m, 560m, null, "Low", "Medium", "High", false);
     public static readonly Threshold DefaultP = new("P", "Available Phosphorus", "kg/ha", 11m, 22m, null, "Low", "Medium", "High", false);
     public static readonly Threshold DefaultK = new("K", "Available Potassium", "kg/ha", 118m, 280m, null, "Low", "Medium", "High", false);
     public static readonly Threshold DefaultPh = new("pH", "Soil pH", "", 6.5m, 7.5m, null, "Acidic", "Neutral", "Alkaline", false);
 
-    /// <summary>A threshold from a lab parameter master row; the default when the row is missing, inactive or has no range.</summary>
-    public static Threshold FromLab(LabParameter? p, Threshold fallback)
+    /// <summary>kg P2O5 = kg P x 2.29 (molar mass ratio 141.94 / 61.95).</summary>
+    public const decimal P2O5PerP = 2.29m;
+
+    /// <summary>kg K2O = kg K x 1.2 (94.2 / 78.2 = 1.205).</summary>
+    public const decimal K2OPerK = 1.2m;
+
+    public const string BasisP = "P";
+    public const string BasisP2O5 = "P2O5";
+    public const string BasisK = "K";
+    public const string BasisK2O = "K2O";
+
+    /// <summary>The oxide factor of a basis ("P2O5" 2.29, "K2O" 1.2), 1 for the elemental basis or blank.</summary>
+    public static decimal BasisFactor(string? basis) => (basis ?? "").Trim().ToUpperInvariant() switch
     {
-        if (p is null || !p.IsActive || p.RangeMin is null || p.RangeMax is null || p.RangeMax < p.RangeMin) return fallback;
-        return fallback with
-        {
-            LowBelow = p.RangeMin.Value,
-            HighAbove = p.RangeMax.Value,
-            ModerateFrom = p.ModerateFrom,
-            LowLabel = Text(p.LowLabel, fallback.LowLabel),
-            NormalLabel = Text(p.NormalLabel, fallback.NormalLabel),
-            HighLabel = Text(p.HighLabel, fallback.HighLabel),
-            FromLabMaster = true
-        };
+        "P2O5" => P2O5PerP,
+        "K2O" => K2OPerK,
+        _ => 1m
+    };
+
+    /// <summary>A value as entered (P or P2O5, K or K2O) on the elemental basis the ratings use.</summary>
+    public static decimal ToElemental(decimal value, string? basis) => value / BasisFactor(basis);
+
+    /// <summary>True when the basis is one the nutrient accepts (P: P / P2O5; K: K / K2O; blank = elemental).</summary>
+    public static bool ValidBasis(string nutrient, string? basis)
+    {
+        if (string.IsNullOrWhiteSpace(basis)) return true;
+        var b = basis.Trim();
+        return nutrient == "P" ? b is BasisP or BasisP2O5 : nutrient == "K" && b is BasisK or BasisK2O;
     }
 
     /// <summary>The lab status of a value: Deficient / Moderate / Normal / Excess (LabAutoResultEngine.Classify).</summary>
@@ -164,6 +179,27 @@ public static class FertilizerAdvisor
         }
     }
 
+    /// <summary>
+    /// A SPIC soil report value on the farmer tool's basis (kg/ha; P as P, K as K). The lab enters P in kg/ha on
+    /// the P2O5 basis (its master band 22-56 is the all-India P2O5 band) and K in kg/ha on the elemental basis (its
+    /// band 110-280), so: P kg/ha / 2.29; P kg/acre x 2.47105 / 2.29; P ppm (mg P/kg, Olsen P is reported as P)
+    /// x 2.24 = kg P/ha; K and N kg/ha as they are, kg/acre x 2.47105, ppm x 2.24. The P2O5 reading of the lab's P
+    /// must be confirmed by SPIC's lab (docs/farmer-portal.md). Null for a unit that is not understood.
+    /// </summary>
+    public static decimal? ReportToElemental(string nutrient, decimal value, string? unit, out string? note)
+    {
+        var kg = ToKgPerHa(value, unit, out note);
+        if (kg is null) return null;
+        var u = (unit ?? "").Trim().ToLowerInvariant().Replace(" ", "");
+        var isPpm = u is "ppm" or "mg/kg";
+        if (nutrient == "P" && !isPpm)
+        {
+            note = (note is null ? "" : note + ", ") + "read as P2O5 and converted to P";
+            return Math.Round(kg.Value / P2O5PerP, 2, MidpointRounding.AwayFromZero);
+        }
+        return kg;
+    }
+
     public static decimal Hectares(decimal acres) => acres / AcresPerHectare;
 
     /// <summary>Plants on the area at the source's density (whole plants, at least 1).</summary>
@@ -203,7 +239,7 @@ public static class FertilizerAdvisor
             return new(Alkaline, "High", t.HighLabel, "Slightly alkaline soil", new List<string>
             {
                 "Add organic manure or grow and plough in a green manure crop.",
-                "Your SPIC soil report advises gypsum for alkaline soil. Gypsum is needed when the soil has too much sodium: check EC and sodium on your soil report and apply gypsum as per the gypsum requirement test (TNAU).",
+                "Gypsum helps when an alkaline soil has too much sodium: check EC and sodium on your soil report, and if your SPIC report lists gypsum, apply it as per the gypsum requirement test (TNAU).",
                 "Check Zinc and Iron on your soil report. If they are Low, follow the zinc advice for your crop below."
             });
         return new(StronglyAlkaline, "High", t.HighLabel, "Strongly alkaline soil: it may be sodic", new List<string>
@@ -304,6 +340,8 @@ public static class FertilizerAdvisor
         if (r.P < 0 || r.P > 500) errors["p"] = "Phosphorus must be between 0 and 500 kg/ha.";
         if (r.K < 0 || r.K > 2000) errors["k"] = "Potassium must be between 0 and 2000 kg/ha.";
         if (r.Ph < 3m || r.Ph > 11m) errors["ph"] = "Soil pH must be between 3 and 11.";
+        if (!ValidBasis("P", r.PBasis)) errors["pBasis"] = "Phosphorus unit must be P or P2O5.";
+        if (!ValidBasis("K", r.KBasis)) errors["kBasis"] = "Potassium unit must be K or K2O.";
         return errors;
     }
 
@@ -326,10 +364,12 @@ public static class FertilizerAdvisor
             }
         }
 
-        // Rating and factor per nutrient.
+        // Rating and factor per nutrient, on the elemental basis (P entered as P2O5 / K as K2O is converted).
+        var soilP = Math.Round(ToElemental(r.P, r.PBasis), 2, MidpointRounding.AwayFromZero);
+        var soilK = Math.Round(ToElemental(r.K, r.KBasis), 2, MidpointRounding.AwayFromZero);
         var nStatus = Rate(r.N, input.N);
-        var pStatus = Rate(r.P, input.P);
-        var kStatus = Rate(r.K, input.K);
+        var pStatus = Rate(soilP, input.P);
+        var kStatus = Rate(soilK, input.K);
         var nFactor = input.Factor("N", nStatus);
         var pFactor = input.Factor("P", pStatus);
         var kFactor = input.Factor("K", kStatus);
@@ -339,7 +379,8 @@ public static class FertilizerAdvisor
         // Per-hectare equivalent (for "kg per acre"): per-plant doses at the source's density, or the farmer's own count.
         var perHaFactor = perPlant ? (plantsFromSpacing ? (norm.PlantsPerHectare ?? 0) / 1000m : plants!.Value / 1000m / hectares) : 1m;
 
-        FertilizerNutrientResultDto Nutrient(string code, string label, string doseAs, decimal soil, LabResultStatus status, Threshold t, decimal factor, decimal normDose)
+        FertilizerNutrientResultDto Nutrient(string code, string label, string doseAs, decimal soil, LabResultStatus status, Threshold t, decimal factor, decimal normDose,
+            decimal entered, string basis)
         {
             var adjusted = Math.Round(normDose * factor, 2, MidpointRounding.AwayFromZero);
             return new FertilizerNutrientResultDto
@@ -348,6 +389,8 @@ public static class FertilizerAdvisor
                 Label = label,
                 DoseAs = doseAs,
                 SoilValue = soil,
+                SoilBasis = basis,
+                SoilValueEntered = entered,
                 Level = Level(status),
                 LevelLabel = LevelLabel(status, t),
                 LabStatus = status.ToString(),
@@ -382,9 +425,9 @@ public static class FertilizerAdvisor
             AdjustmentRule = AdjustmentSource,
             Disclaimer = Disclaimer
         };
-        result.Nutrients.Add(Nutrient("N", "Nitrogen (N)", "N", r.N, nStatus, input.N, nFactor, norm.N));
-        result.Nutrients.Add(Nutrient("P", "Phosphorus (P)", "P2O5", r.P, pStatus, input.P, pFactor, norm.P2O5));
-        result.Nutrients.Add(Nutrient("K", "Potassium (K)", "K2O", r.K, kStatus, input.K, kFactor, norm.K2O));
+        result.Nutrients.Add(Nutrient("N", "Nitrogen (N)", "N", r.N, nStatus, input.N, nFactor, norm.N, r.N, "N"));
+        result.Nutrients.Add(Nutrient("P", "Phosphorus (P)", "P2O5", soilP, pStatus, input.P, pFactor, norm.P2O5, r.P, BasisOr(r.PBasis, BasisP)));
+        result.Nutrients.Add(Nutrient("K", "Potassium (K)", "K2O", soilK, kStatus, input.K, kFactor, norm.K2O, r.K, BasisOr(r.KBasis, BasisK)));
 
         var band = PhBandFor(r.Ph, input.Ph);
         result.Ph = new FertilizerPhResultDto
@@ -429,7 +472,7 @@ public static class FertilizerAdvisor
         result.SspTotals = Lines(sspTotals, plants);
 
         // Tips of this crop (or every crop) and this soil (or every soil); irrigation tips only for watered crops.
-        foreach (var tip in TipsFor(input.Tips, norm, r.SoilType))
+        foreach (var tip in TipsFor(input.Tips, norm, r.SoilType, r.Ph))
         {
             var dto = new FertilizerTipDto { Category = tip.Category, Text = tip.Text, Source = tip.Source, SourceUrl = tip.SourceUrl };
             switch (tip.Category)
@@ -444,12 +487,15 @@ public static class FertilizerAdvisor
         return result;
     }
 
-    /// <summary>Tips for the crop (or every crop) and the soil (or every soil), water regime matching; crop-specific first.</summary>
-    public static List<CropSoilTip> TipsFor(IEnumerable<CropSoilTip> tips, FertilizerCropNorm norm, string soilType) =>
+    /// <summary>Tips for the crop (or every crop) and the soil (or every soil), water regime matching, and the soil pH
+    /// inside the tip's range (PhMin &lt;= pH &lt; PhMax: lime tips only on acid soil, never on alkaline soil); crop-specific first.</summary>
+    public static List<CropSoilTip> TipsFor(IEnumerable<CropSoilTip> tips, FertilizerCropNorm norm, string soilType, decimal ph) =>
         tips.Where(t => t.IsActive
                         && (t.Crop is null || string.Equals(t.Crop, norm.Crop, StringComparison.OrdinalIgnoreCase))
                         && (t.SoilType is null || string.Equals(t.SoilType, soilType, StringComparison.Ordinal))
-                        && (t.WaterRegime == FertilizerWaterRegime.Any || t.WaterRegime == norm.WaterRegime))
+                        && (t.WaterRegime == FertilizerWaterRegime.Any || t.WaterRegime == norm.WaterRegime)
+                        && (t.PhMin is null || ph >= t.PhMin.Value)
+                        && (t.PhMax is null || ph < t.PhMax.Value))
             .OrderBy(t => t.Crop is null ? 1 : 0)
             .ThenBy(t => t.SortOrder)
             .ThenBy(t => t.Id)
@@ -479,5 +525,5 @@ public static class FertilizerAdvisor
         foreach (var (k, v) in add) into[k] = (into.TryGetValue(k, out var cur) ? cur : 0m) + v;
     }
 
-    private static string Text(string? v, string fallback) => string.IsNullOrWhiteSpace(v) ? fallback : v.Trim();
+    private static string BasisOr(string? basis, string elemental) => string.IsNullOrWhiteSpace(basis) ? elemental : basis.Trim();
 }

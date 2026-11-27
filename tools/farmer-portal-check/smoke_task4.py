@@ -11,7 +11,8 @@ Needs the API in the Development environment with Sms:Provider = Log (devCode) o
     dotnet run --project SpicAPI --no-launch-profile --urls http://localhost:5120   (ASPNETCORE_ENVIRONMENT=Development)
 
 Signs in as the local test farmer 6777777703 (linked to the demo soil report of seed_task4_local.sql), the
-unlinked local test farmer 6163665844 and qa.mdo (staff). Saves a few fertilizer runs for those test farmers
+unlinked local test farmer 6163665844, 6614843176 (linked to the partial report without potassium) and qa.mdo
+(staff). Saves a few fertilizer runs for those test farmers
 (cleanup_task4_local.sql removes them). No external calls.
 """
 import argparse
@@ -41,6 +42,7 @@ def main():
     ap.add_argument("--base", default="http://localhost:5120")
     ap.add_argument("--phone", default="6777777703", help="local test farmer linked to the demo soil report")
     ap.add_argument("--other-phone", default="6163665844", help="local test farmer without a soil report")
+    ap.add_argument("--partial-phone", default="6614843176", help="local test farmer whose report has no potassium")
     args = ap.parse_args()
     host = args.base.split("//")[-1].split(":")[0].split("/")[0]
     if host not in ("localhost", "127.0.0.1"):
@@ -65,9 +67,11 @@ def main():
     check("options: no sugarcane (left out: sources disagree)", "Sugarcane" not in crops, crops)
     check("options: seven soil types", len(options["soilTypes"]) == 7, options["soilTypes"])
     ranges = {r["code"]: r for r in options["ranges"]}
-    check("options: N range from the lab master 280 / 560", ranges["N"]["lowBelow"] == 280 and ranges["N"]["highAbove"] == 560 and ranges["N"]["fromLabMaster"], ranges["N"])
-    check("options: P range from the lab master 22 / 56, slider to 90", ranges["P"]["lowBelow"] == 22 and ranges["P"]["highAbove"] == 56 and ranges["P"]["max"] == 90, ranges["P"])
-    check("options: K range from the lab master 110 / 280", ranges["K"]["lowBelow"] == 110 and ranges["K"]["highAbove"] == 280, ranges["K"])
+    check("options: N 280 / 560", ranges["N"]["lowBelow"] == 280 and ranges["N"]["highAbove"] == 560 and not ranges["N"]["fromLabMaster"], ranges["N"])
+    check("options: P 11 / 22 kg P/ha, 0-60, switchable to P2O5 x 2.29", ranges["P"]["lowBelow"] == 11 and ranges["P"]["highAbove"] == 22 and ranges["P"]["max"] == 60
+          and ranges["P"]["altBasis"] == "P2O5" and ranges["P"]["altFactor"] == 2.29, ranges["P"])
+    check("options: K 118 / 280 kg K/ha, switchable to K2O x 1.2", ranges["K"]["lowBelow"] == 118 and ranges["K"]["highAbove"] == 280
+          and ranges["K"]["altBasis"] == "K2O" and ranges["K"]["altFactor"] == 1.2, ranges["K"])
     check("options: pH 4.5-9.5, default 7.0, lab labels", ranges["pH"]["min"] == 4.5 and ranges["pH"]["max"] == 9.5 and ranges["pH"]["default"] == 7.0
           and ranges["pH"]["lowLabel"] == "Acidic" and ranges["pH"]["highLabel"] == "Alkaline", ranges["pH"])
     check("options: products with grades; SPIC names only for urea and DAP",
@@ -76,8 +80,9 @@ def main():
     # ---- soil report
     st, report, _ = call(base, "GET", "api/Farmer/fertilizer/soil-report", token=tok)
     check("soil report: linked farmer gets the demo report", st == 200 and report.get("available") and report.get("reportCode") == "DEMO-T4-RPT-1", report)
-    check("soil report: N 180 / P 18 / K 95 / pH 8.1 (kg/ha, no conversion)",
-          report.get("n") == 180 and report.get("p") == 18 and report.get("k") == 95 and report.get("ph") == 8.1 and not report.get("notes"), report)
+    check("soil report: N 180 / P 18 kg P2O5 = 7.86 kg P / K 95 / pH 8.1, P shown as P2O5, nothing missing",
+          report.get("n") == 180 and report.get("p") == 7.86 and report.get("reportPBasis") == "P2O5" and report.get("k") == 95
+          and report.get("ph") == 8.1 and not report.get("missing") and not report.get("notes"), report)
     st, none, _ = call(base, "GET", "api/Farmer/fertilizer/soil-report", token=other)
     check("soil report: an unlinked farmer gets a plain message", st == 200 and not none.get("available") and none.get("message"), none)
 
@@ -103,9 +108,36 @@ def main():
         check("recommend: saved as a run", r["runId"] > 0, r.get("runId"))
         first_run = r["runId"]
 
+    # ---- P entered as P2O5 (18) is rated on P (7.9, Low); the same 18 as P is Medium (TN soil card)
+    body = {"normId": hybrids, "soilType": "Black Cotton Soil", "areaAcres": 1, "n": 300, "p": 18, "pBasis": "P2O5", "k": 150, "kBasis": "K2O", "ph": 7.0}
+    st, ox, _ = call(base, "POST", "api/Farmer/fertilizer/recommend", body, token=tok)
+    check("basis: 18 kg P2O5 -> 7.86 kg P Low; 150 kg K2O -> 125 kg K Medium", st == 200 and ox["nutrients"][1]["level"] == "Low"
+          and ox["nutrients"][1]["soilValue"] == 7.86 and ox["nutrients"][1]["soilBasis"] == "P2O5" and ox["nutrients"][2]["level"] == "Medium", ox if st != 200 else ox["nutrients"])
+    body.update({"pBasis": "P", "kBasis": "K"})
+    st, el, _ = call(base, "POST", "api/Farmer/fertilizer/recommend", body, token=tok)
+    check("basis: 18 kg P is Medium (11-22)", st == 200 and el["nutrients"][1]["level"] == "Medium", el if st != 200 else el["nutrients"][1])
+    body["pBasis"] = "K2O"
+    st, err, _ = call(base, "POST", "api/Farmer/fertilizer/recommend", body, token=tok)
+    check("basis: a wrong unit is 400", st == 400 and "pBasis" in err.get("errors", {}), err)
+
+    # ---- tips follow the pH: groundnut on red soil
+    groundnut = norm_id(options, "Groundnut", "Rainfed")
+    st, alk, _ = call(base, "POST", "api/Farmer/fertilizer/recommend", {"normId": groundnut, "soilType": "Red Soil", "areaAcres": 1, "n": 300, "p": 15, "k": 150, "ph": 8.6}, token=tok)
+    check("tips: at pH 8.6 no lime tip", st == 200 and not any("lime" in t["text"].lower() for t in alk["soilTips"] + alk["nutrientTips"]), alk.get("soilTips") if st == 200 else alk)
+    st, acd, _ = call(base, "POST", "api/Farmer/fertilizer/recommend", {"normId": groundnut, "soilType": "Red Soil", "areaAcres": 1, "n": 300, "p": 15, "k": 150, "ph": 5.0}, token=tok)
+    check("tips: at pH 5.0 no gypsum-for-alkalinity advice", st == 200 and not any("alkal" in t["text"].lower() for t in acd["soilTips"] + acd["nutrientTips"])
+          and not any("gypsum requirement" in a for a in acd["ph"]["advice"]), acd.get("ph") if st == 200 else acd)
+
+    # ---- a report without potassium: K is missing, never filled
+    part = farmer_token(base, args.partial_phone)
+    st, pr, _ = call(base, "GET", "api/Farmer/fertilizer/soil-report", token=part)
+    check("partial report: K missing and listed, N / P / pH filled", st == 200 and pr.get("available") and pr.get("reportCode") == "DEMO-T4-RPT-2"
+          and pr.get("k") is None and pr.get("missing") == ["K"] and pr.get("n") == 310 and pr.get("p") == 17.47 and pr.get("ph") == 6.2
+          and any(n.startswith("Potassium is not in your report") for n in pr.get("notes", [])), pr)
+
     # ---- acidic laterite paddy from the soil report values
     paddy = norm_id(options, "Paddy", "Medium duration")
-    body = {"normId": paddy, "soilType": "Laterite Soil", "areaAcres": 2.5, "n": 180, "p": 18, "k": 95, "ph": 5.2, "soilReportId": report.get("reportId")}
+    body = {"normId": paddy, "soilType": "Laterite Soil", "areaAcres": 2.5, "n": 180, "p": 18, "pBasis": "P2O5", "k": 95, "ph": 5.2, "soilReportId": report.get("reportId")}
     st, r2, _ = call(base, "POST", "api/Farmer/fertilizer/recommend", body, token=tok)
     check("recommend: paddy with the report id 200", st == 200 and r2.get("fromSoilReport"), r2)
     if st == 200:

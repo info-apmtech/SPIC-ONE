@@ -58,8 +58,14 @@ public class FertilizerRangeDto
     public string LowLabel { get; set; } = "Low";
     public string MediumLabel { get; set; } = "Medium";
     public string HighLabel { get; set; } = "High";
-    /// <summary>True when the thresholds come from the SPIC lab parameter master (the soil report's own ranges).</summary>
+    /// <summary>Always false since fix round 1: the farmer tool uses its own elemental ratings, not the lab master.</summary>
     public bool FromLabMaster { get; set; }
+    /// <summary>The basis of Min / Max / thresholds: "N", "P", "K" (elemental) or "" for pH.</summary>
+    public string Basis { get; set; } = string.Empty;
+    /// <summary>The oxide basis the farmer may switch to ("P2O5", "K2O"), null when there is none.</summary>
+    public string? AltBasis { get; set; }
+    /// <summary>Oxide = elemental x AltFactor (P2O5 2.29, K2O 1.2).</summary>
+    public double? AltFactor { get; set; }
 }
 
 public class FertilizerProductDto
@@ -85,10 +91,16 @@ public class FertilizerSoilReportDto
     /// <summary>When the report was made (server time, as the lab stores it).</summary>
     public DateTime? GeneratedAt { get; set; }
     public string? SampleCrop { get; set; }
+    /// <summary>N, P (as P) and K (as K) in kg/ha, and pH; null when the report has no usable value.</summary>
     public double? N { get; set; }
     public double? P { get; set; }
     public double? K { get; set; }
     public double? Ph { get; set; }
+    /// <summary>The basis the report printed P on ("P2O5" for kg/ha values of the SPIC lab, "P" for ppm), so the screen
+    /// can show the farmer the same number as the report.</summary>
+    public string? ReportPBasis { get; set; }
+    /// <summary>"N", "P", "K", "pH" codes the report does not give (the farmer sets those).</summary>
+    public List<string> Missing { get; set; } = new();
     /// <summary>Notes on unit conversions or values that could not be read.</summary>
     public List<string> Notes { get; set; } = new();
 }
@@ -100,11 +112,15 @@ public class FertilizerRecommendRequest
     public decimal AreaAcres { get; set; }
     /// <summary>Per-plant crops: the farmer's own count; null = from the area at the source's spacing.</summary>
     public int? PlantCount { get; set; }
-    /// <summary>Available N, P and K in kg/ha, and soil pH.</summary>
+    /// <summary>Available N, P and K in kg/ha as entered (P on <see cref="PBasis"/>, K on <see cref="KBasis"/>), and soil pH.</summary>
     public decimal N { get; set; }
     public decimal P { get; set; }
     public decimal K { get; set; }
     public decimal Ph { get; set; }
+    /// <summary>"P" (default) or "P2O5": the basis <see cref="P"/> is entered on. Ratings always use P.</summary>
+    public string? PBasis { get; set; }
+    /// <summary>"K" (default) or "K2O": the basis <see cref="K"/> is entered on. Ratings always use K.</summary>
+    public string? KBasis { get; set; }
     /// <summary>The report the values came from ("Use my soil report"); checked against the caller's own reports.</summary>
     public int? SoilReportId { get; set; }
 }
@@ -158,7 +174,11 @@ public class FertilizerNutrientResultDto
     public string Label { get; set; } = string.Empty;
     /// <summary>"N", "P2O5", "K2O": what the dose is counted as.</summary>
     public string DoseAs { get; set; } = string.Empty;
+    /// <summary>The soil value the rating used, kg/ha on the elemental basis (P as P, K as K).</summary>
     public decimal SoilValue { get; set; }
+    /// <summary>The value as the farmer entered it and its basis ("N", "P", "P2O5", "K", "K2O").</summary>
+    public decimal SoilValueEntered { get; set; }
+    public string SoilBasis { get; set; } = string.Empty;
     /// <summary>"Low", "Medium" or "High".</summary>
     public string Level { get; set; } = string.Empty;
     /// <summary>The lab's label for the level (the soil report's word).</summary>

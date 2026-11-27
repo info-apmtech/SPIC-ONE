@@ -74,19 +74,39 @@
                         </div>
                     }
                     <div class="fpfz-sliders">
-                        <FpZoneSlider Id="fz-n" Label="@Label(N)" Unit="kg/ha" Min="@N.Min" Max="@SliderMax(N, _n)" Step="@N.Step"
-                                      LowBelow="@N.LowBelow" HighAbove="@N.HighAbove" @bind-Value="_n" @bind-Value:after="SoilEdited"
-                                      Hint="@Thresholds(N)" />
-                        <FpZoneSlider Id="fz-p" Label="@Label(P)" Unit="kg/ha" Min="@P.Min" Max="@SliderMax(P, _p)" Step="@P.Step" Decimals="1"
-                                      LowBelow="@P.LowBelow" HighAbove="@P.HighAbove" @bind-Value="_p" @bind-Value:after="SoilEdited"
-                                      Hint="@Thresholds(P)" />
-                        <FpZoneSlider Id="fz-k" Label="@Label(K)" Unit="kg/ha" Min="@K.Min" Max="@SliderMax(K, _k)" Step="@K.Step"
-                                      LowBelow="@K.LowBelow" HighAbove="@K.HighAbove" @bind-Value="_k" @bind-Value:after="SoilEdited"
-                                      Hint="@Thresholds(K)" />
+                        @{ var nv = FertilizerUi.Shown(N, "N"); var pv = FertilizerUi.Shown(P, _pBasis); var kv = FertilizerUi.Shown(K, _kBasis); }
+                        <FpZoneSlider Id="fz-n" Label="@nv.Label" Unit="@nv.Unit" Min="@nv.Min" Max="@SliderMax(nv.Max, _n)" Step="@nv.Step"
+                                      LowBelow="@nv.LowBelow" HighAbove="@nv.HighAbove" @bind-Value="_n" @bind-Value:after="@(() => SoilEdited("N"))"
+                                      Hint="@HintFor("N", nv)" HintWarn="@_missing.Contains("N")" />
+                        <FpZoneSlider Id="fz-p" Label="@pv.Label" Unit="@pv.Unit" Min="@pv.Min" Max="@SliderMax(pv.Max, _p)" Step="@pv.Step" Decimals="1" ScaleDecimals="0"
+                                      LowBelow="@pv.LowBelow" HighAbove="@pv.HighAbove" @bind-Value="_p" @bind-Value:after="@(() => SoilEdited("P"))"
+                                      Hint="@HintFor("P", pv)" HintWarn="@_missing.Contains("P")">
+                            <Footer>
+                                <div class="fpfz-basis" role="group" aria-label="Phosphorus unit">
+                                    <span class="fpfz-basis__label">Unit</span>
+                                    <FpChip Text="kg P/ha" Small="true" Selected="@(_pBasis == "P")" OnClick="@(() => SwitchBasis("P", "P"))" />
+                                    <FpChip Text="kg P2O5/ha" Small="true" Selected="@(_pBasis == "P2O5")" OnClick="@(() => SwitchBasis("P", "P2O5"))" />
+                                </div>
+                                <p class="fp-caption fpfz-basis__tip">Soil card shows P2O5? Switch the unit.</p>
+                            </Footer>
+                        </FpZoneSlider>
+                        <FpZoneSlider Id="fz-k" Label="@kv.Label" Unit="@kv.Unit" Min="@kv.Min" Max="@SliderMax(kv.Max, _k)" Step="@kv.Step"
+                                      LowBelow="@kv.LowBelow" HighAbove="@kv.HighAbove" @bind-Value="_k" @bind-Value:after="@(() => SoilEdited("K"))"
+                                      Hint="@HintFor("K", kv)" HintWarn="@_missing.Contains("K")">
+                            <Footer>
+                                <div class="fpfz-basis" role="group" aria-label="Potassium unit">
+                                    <span class="fpfz-basis__label">Unit</span>
+                                    <FpChip Text="kg K/ha" Small="true" Selected="@(_kBasis == "K")" OnClick="@(() => SwitchBasis("K", "K"))" />
+                                    <FpChip Text="kg K2O/ha" Small="true" Selected="@(_kBasis == "K2O")" OnClick="@(() => SwitchBasis("K", "K2O"))" />
+                                </div>
+                                <p class="fp-caption fpfz-basis__tip">Soil card shows K2O? Switch the unit.</p>
+                            </Footer>
+                        </FpZoneSlider>
                         <FpZoneSlider Id="fz-ph" Label="Soil pH" Min="@Ph.Min" Max="@Ph.Max" Step="@Ph.Step" Decimals="1"
-                                      LowBelow="@Ph.LowBelow" HighAbove="@Ph.HighAbove" @bind-Value="_ph" @bind-Value:after="SoilEdited"
+                                      LowBelow="@Ph.LowBelow" HighAbove="@Ph.HighAbove" @bind-Value="_ph" @bind-Value:after="@(() => SoilEdited("pH"))"
                                       LowText="@Ph.LowLabel" MediumText="@Ph.MediumLabel" HighText="@Ph.HighLabel"
-                                      Hint="@($"{Ph.LowLabel} below {Ph.LowBelow:0.0}, {Ph.MediumLabel} {Ph.LowBelow:0.0} - {Ph.HighAbove:0.0}, {Ph.HighLabel} above {Ph.HighAbove:0.0}")" />
+                                      Hint="@(_missing.Contains("pH") ? FertilizerUi.MissingHint : $"{Ph.LowLabel} below {Ph.LowBelow:0.0}, {Ph.MediumLabel} {Ph.LowBelow:0.0} - {Ph.HighAbove:0.0}, {Ph.HighLabel} above {Ph.HighAbove:0.0}")"
+                                      HintWarn="@_missing.Contains("pH")" />
                     </div>
                     <FpFieldError Text="@Err("n")" />
                     <FpFieldError Text="@Err("p")" />
@@ -94,7 +114,7 @@
                     <FpFieldError Text="@Err("ph")" />
                     <p class="fp-caption fpfz-ranges">
                         <i class="bi bi-info-circle" aria-hidden="true"></i>
-                        @(N.FromLabMaster ? "Low, Medium and High use the same ranges as your SPIC soil report." : "Low, Medium and High follow the usual soil test ranges.")
+                        Low, Medium and High follow the usual soil test ratings (N 280-560, P 11-22, K 118-280 kg/ha). P2O5 and K2O values are changed to P and K before rating.
                     </p>
                 </ChildContent>
             </FpCard>
@@ -210,8 +230,13 @@
     private decimal? _acres;
     private int? _plants;
 
+    private string _pBasis = "P", _kBasis = "K";
+
     private bool _reportLoading;
     private int? _reportId;
+    private bool _reportComplete;
+    private bool _reportEdited;
+    private HashSet<string> _missing = new();
     private string? _reportNote;
     private bool _reportOk;
     private List<string> _reportNotes = new();
@@ -242,13 +267,26 @@
 
     private string? Err(string key) => _errors is not null && _errors.TryGetValue(key, out var v) ? v : null;
 
-    private static string Label(FertilizerRangeDto r) => r.Label;
+    private static double SliderMax(double max, double? value) =>
+        value is { } v && v > max ? Math.Ceiling(v / 50) * 50 : max;
 
-    private static double SliderMax(FertilizerRangeDto r, double? value) =>
-        value is { } v && v > r.Max ? Math.Ceiling(v / 50) * 50 : r.Max;
+    private string HintFor(string code, FertilizerUi.ShownRange v) =>
+        _missing.Contains(code) ? FertilizerUi.MissingHint : FertilizerUi.Thresholds(v);
 
-    private static string Thresholds(FertilizerRangeDto r) =>
-        $"{r.LowLabel} below {r.LowBelow:0.#}, {r.MediumLabel} {r.LowBelow:0.#} - {r.HighAbove:0.#}, {r.HighLabel} above {r.HighAbove:0.#}";
+    /// <summary>Shows P as P or P2O5 (K as K or K2O): the value and the zones change, the soil test does not.</summary>
+    private void SwitchBasis(string nutrient, string basis)
+    {
+        if (nutrient == "P")
+        {
+            _p = FertilizerUi.Convert(_p, _pBasis, basis);
+            _pBasis = basis;
+        }
+        else
+        {
+            _k = FertilizerUi.Convert(_k, _kBasis, basis);
+            _kBasis = basis;
+        }
+    }
 
     private static string CropOptionText(FertilizerCropOptionDto c)
     {
@@ -337,14 +375,15 @@
         ClearError("plantCount");
     }
 
-    /// <summary>A value typed or slid by the farmer is no longer the report's.</summary>
-    private void SoilEdited()
+    /// <summary>The farmer set a value: a missing one is now theirs; a report value they change is no longer the report's.</summary>
+    private void SoilEdited(string code)
     {
-        if (_reportId is not null)
+        if (_missing.Remove(code)) return;
+        if (_reportId is not null && !_reportEdited)
         {
-            _reportId = null;
+            _reportEdited = true;
             _reportOk = false;
-            _reportNote = "You changed a value, so this advice uses your own numbers.";
+            _reportNote = "You changed a value from your report, so this advice uses your own numbers.";
             _reportNotes = new();
         }
     }
@@ -369,15 +408,31 @@
             return;
         }
 
+        // Only the values the report gives; a missing one keeps its current value and is marked for the farmer.
         if (report.N is { } n) _n = n;
-        if (report.P is { } p) _p = p;
-        if (report.K is { } k) _k = k;
-        if (report.Ph is { } ph) _ph = Math.Clamp(ph, Ph.Min, Ph.Max);
+        if (report.P is { } p)
+        {
+            // Show P on the basis the report printed it (SPIC lab: kg P2O5/ha) so the number matches the report.
+            _pBasis = report.ReportPBasis ?? "P";
+            _p = FertilizerUi.Convert(p, "P", _pBasis);
+        }
+        if (report.K is { } k)
+        {
+            _kBasis = "K";
+            _k = k;
+        }
+        if (report.Ph is { } ph)
+        {
+            _ph = Math.Clamp(ph, Ph.Min, Ph.Max);
+            if (ph < Ph.Min || ph > Ph.Max) report.Notes.Add($"Soil pH {ph:0.0} is outside the slider, so it shows {_ph:0.0}.");
+        }
+        _missing = report.Missing.ToHashSet();
         _reportId = report.ReportId;
+        _reportComplete = report.Missing.Count == 0;
+        _reportEdited = false;
         _reportOk = true;
-        var when = report.GeneratedAt is { } at ? $" of {at:d MMM yyyy}" : "";
-        _reportNote = $"Filled from your soil report {report.ReportCode}{when}.";
-        _reportNotes = report.Notes.ToList();
+        _reportNote = FertilizerUi.ReportLine(report);
+        _reportNotes = report.Notes.Where(x => !x.EndsWith(FertilizerUi.MissingNoteEnd, StringComparison.Ordinal)).ToList();
         if (_crop is null && report.SampleCrop is { } sampleCrop)
         {
             var match = FertilizerUi.ProfileCrop(new[] { sampleCrop }, _options!.Crops);
@@ -418,9 +473,12 @@
             PlantCount = selected.Basis == FertilizerDoseBasis.PerPlant ? _plants : null,
             N = (decimal)_n!.Value,
             P = (decimal)_p!.Value,
+            PBasis = _pBasis,
             K = (decimal)_k!.Value,
+            KBasis = _kBasis,
             Ph = Math.Round((decimal)_ph!.Value, 1),
-            SoilReportId = _reportId
+            // "From your soil report" only when all four values came from it unchanged.
+            SoilReportId = _reportComplete && !_reportEdited ? _reportId : null
         };
         var result = await Api.RecommendAsync(request);
         _submitting = false;

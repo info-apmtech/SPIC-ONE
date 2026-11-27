@@ -248,11 +248,15 @@ public static class FertilizerAdviceSeed
 
     private static int _tipId;
 
-    private static CropSoilTip T(string? crop, string? soil, FertilizerWaterRegime regime, string category, string text, string source, string url) => new()
+    private static CropSoilTip T(string? crop, string? soil, FertilizerWaterRegime regime, string category, string text, string source, string url,
+        decimal? phMin = null, decimal? phMax = null, int? sort = null) => new()
     {
         Id = ++_tipId, Crop = crop, SoilType = soil, WaterRegime = regime, Category = category, Text = text,
-        Source = source, SourceUrl = url, SortOrder = _tipId, IsActive = true
+        Source = source, SourceUrl = url, SortOrder = sort ?? _tipId, IsActive = true, PhMin = phMin, PhMax = phMax
     };
+
+    /// <summary>Lime tips are shown only on acid soil (pH below the neutral range).</summary>
+    private const decimal LimeBelowPh = 6.5m;
 
     private static CropSoilTip[] BuildTips()
     {
@@ -269,11 +273,11 @@ public static class FertilizerAdviceSeed
             T(null, clay, AnyRegime, "Water", "Do not let water stand in the field. Where it collects, cut open drains (TNAU: about 60 cm deep and 45 cm wide for waterlogged fields).", TnauIrrRice, TnauIrrRiceUrl),
             T(null, red, AnyRegime, "Soil", "Red soil loses water fast. Add tank silt or black soil at 25 t/ha (about 10 t/acre) a year, together with FYM, composted coir pith or pressmud at 25 t/ha.", TnauSoil, TnauSoilUrl),
             T(null, red, AnyRegime, "Soil", "If a hard layer below 15 cm stops the roots, chisel plough at 0.5 m spacing in both directions once in three years and add FYM or composted coir pith at 12.5 t/ha (about 5 t/acre).", TnauSoil, TnauSoilUrl),
-            T(null, red, AnyRegime, "Soil", "If the surface forms a hard crust after rain, break it by harrowing; lime or gypsum at 2 t/ha with FYM at 12.5 t/ha prevents it.", TnauSoil, TnauSoilUrl),
+            T(null, red, AnyRegime, "Soil", "If the surface forms a hard crust after rain, break it by harrowing; lime or gypsum at 2 t/ha with FYM at 12.5 t/ha prevents it.", TnauSoil, TnauSoilUrl, phMax: LimeBelowPh),
             T(null, sandy, AnyRegime, "Soil", "Sandy soil loses water and fertilizer fast. Roll it with a 400 kg stone roller (or an oil drum filled with stones) 8 times at the right moisture, once in three years.", TnauSoil, TnauSoilUrl),
             T(null, sandy, AnyRegime, "Soil", "Coastal sandy soil: add tank silt to make it more productive.", TnauSoil, TnauSoilUrl),
-            T(null, laterite, AnyRegime, "Soil", "Laterite soils (for example in Pudukkottai and Kanyakumari) are often acidic. Below pH 6, apply lime as per the lime requirement test of your soil.", TnauSoil, TnauSoilUrl),
-            T(null, laterite, AnyRegime, "Soil", "Where iron or aluminium toxicity shows up (common in these soils when flooded), lime as per the lime requirement and organic manure reduce it.", TnauSoil, TnauSoilUrl),
+            T(null, laterite, AnyRegime, "Soil", "Laterite soils (for example in Pudukkottai and Kanyakumari) are often acidic. Below pH 6, apply lime as per the lime requirement test of your soil.", TnauSoil, TnauSoilUrl, phMax: LimeBelowPh),
+            T(null, laterite, AnyRegime, "Soil", "Where iron or aluminium toxicity shows up (common in these soils when flooded), lime as per the lime requirement and organic manure reduce it.", TnauSoil, TnauSoilUrl, phMax: LimeBelowPh),
             T(null, saline, AnyRegime, "Soil", "Saline soil (EC above 4 dS/m on the soil report): make field and main drains 60 cm deep and 45 cm wide and wash the salts out with water.", TnauSoil, TnauSoilUrl),
             T(null, saline, AnyRegime, "Soil", "Apply FYM at 5 t/ha (about 2 t/acre) 10-15 days before transplanting or sowing to ease the salt problem.", TnauSoil, TnauSoilUrl),
 
@@ -310,14 +314,14 @@ public static class FertilizerAdviceSeed
             T("Groundnut", null, AnyRegime, "Nutrient", "Gypsum 400 kg/ha (about 160 kg/acre) beside the plants between the 40th and 70th day (depending on soil moisture), hoed in and earthed up: better pod filling. Do not use gypsum on calcareous soil.", TnauGroundnut, TnauGroundnutUrl),
             T("Groundnut", null, AnyRegime, "Nutrient", "Zinc sulphate 25 kg/ha (about 10 kg/acre) as basal when soil zinc is below 1.3 ppm.", TnauGroundnut, TnauGroundnutUrl),
             T("Groundnut", null, AnyRegime, "Nutrient", "Micronutrient mixture of the Department of Agriculture 12.5 kg/ha, mixed with sand to 50 kg and spread on the surface right after sowing. Do not mix it into the soil.", TnauGroundnut, TnauGroundnutUrl),
-            T("Groundnut", null, AnyRegime, "Soil", "If the surface crusts, lime at 2 t/ha with FYM or composted coir pith at 12.5 t/ha helps the seedlings come up.", TnauGroundnut, TnauGroundnutUrl),
+            T("Groundnut", null, AnyRegime, "Soil", "If the surface crusts, lime at 2 t/ha with FYM or composted coir pith at 12.5 t/ha helps the seedlings come up.", TnauGroundnut, TnauGroundnutUrl, phMax: LimeBelowPh),
 
             // ---- Pulses
-            T("Black gram", null, AnyRegime, "Soil", "Lime is recommended for pulses when the soil pH is below 6.0.", TnauBlackgram, TnauBlackgramUrl),
+            T("Black gram", null, AnyRegime, "Soil", "Lime is recommended for pulses when the soil pH is below 6.0.", TnauBlackgram, TnauBlackgramUrl, phMax: 6.0m),
             T("Black gram", null, Irr, "Nutrient", "Irrigated crop: zinc sulphate 25 kg/ha (about 10 kg/acre).", TnauBlackgram, TnauBlackgramUrl),
             T("Black gram", null, AnyRegime, "Nutrient", "Spray 1 % urea on the 30th and 45th day after sowing for a better yield; a 2 % DAP spray at flowering and 15 days later also helps.", TnauBlackgram, TnauBlackgramUrl),
             T("Black gram", null, Irr, "Water", "Irrigate right after sowing, a life irrigation on the 3rd day, then every 7-10 days. Flowering and pod formation must not lack water; never let water stand.", TnauIrrBlackgram, TnauIrrBlackgramUrl),
-            T("Green gram", null, AnyRegime, "Soil", "Lime is recommended for pulses when the soil pH is below 6.0.", TnauBlackgram, TnauBlackgramUrl),
+            T("Green gram", null, AnyRegime, "Soil", "Lime is recommended for pulses when the soil pH is below 6.0.", TnauBlackgram, TnauBlackgramUrl, phMax: 6.0m),
             T("Green gram", null, Irr, "Nutrient", "Irrigated crop: zinc sulphate 25 kg/ha (about 10 kg/acre).", TnauGreengram, TnauGreengramUrl),
             T("Green gram", null, AnyRegime, "Nutrient", "Spray 1 % urea on the 30th and 45th day after sowing for a better yield.", TnauGreengram, TnauGreengramUrl),
             T("Green gram", null, Irr, "Water", "Irrigate right after sowing, a life irrigation on the 3rd day, then every 7-10 days. Flowering and pod formation must not lack water; never let water stand.", TnauIrrBlackgram, TnauIrrBlackgramUrl),
@@ -343,7 +347,10 @@ public static class FertilizerAdviceSeed
             T("Banana", null, AnyRegime, "Water", "With drip: 5-10 litres per plant a day up to the 4th month, 10-15 litres from the 5th month to shooting, and 15 litres from shooting until 15 days before harvest.", TnauBanana, TnauBananaUrl),
             T("Banana", null, AnyRegime, "Nutrient", "Spray zinc sulphate 0.5 %, ferrous sulphate 0.2 %, copper sulphate 0.2 % and boric acid 0.1 % at 3, 5 and 7 months after planting for yield and quality.", TnauBanana, TnauBananaUrl),
             T("Coconut", null, AnyRegime, "Soil", "Give 50 kg of FYM, compost or green manure per palm a year; sunnhemp sown in the basin (50 g per palm) and ploughed in before flowering also works.", TnauCoconut, TnauCoconutUrl),
-            T("Coconut", null, AnyRegime, "Nutrient", "Biofertilizers: 50 g Azospirillum, 50 g Phosphobacteria (or 100 g Azophos) and 50 g VAM per palm every 6 months, mixed with compost; never mixed with chemical fertilizer.", TnauCoconut, TnauCoconutUrl)
+            T("Coconut", null, AnyRegime, "Nutrient", "Biofertilizers: 50 g Azospirillum, 50 g Phosphobacteria (or 100 g Azophos) and 50 g VAM per palm every 6 months, mixed with compost; never mixed with chemical fertilizer.", TnauCoconut, TnauCoconutUrl),
+
+            // ---- fix round 1 (appended so earlier ids stay): the crust tip without lime for neutral / alkaline red soil
+            T(null, red, AnyRegime, "Soil", "If the surface forms a hard crust after rain, break it by harrowing; gypsum at 2 t/ha with FYM at 12.5 t/ha prevents it.", TnauSoil, TnauSoilUrl, phMin: LimeBelowPh, sort: 8)
         };
         return list.ToArray();
     }
