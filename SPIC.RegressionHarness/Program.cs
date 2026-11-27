@@ -78,6 +78,10 @@ internal static class Program
 		HelpFeedbackTests.Run();
 		HelpCatalogV2Tests.Run();
 		HelpReviewFixTests.Run();
+		Console.WriteLine();
+
+		// Farmer portal (docs/farmer-portal.md): OTP sign-in rules and the farmer profile.
+		FarmerPortalAuthTests.Run();
 
 		return Check.Report("Total");
 	}

@@ -379,6 +379,33 @@ namespace Spic.Infrastructure.Data
             });
             builder.Entity<PublicityDeliveryAddress>(entity => entity.HasIndex(x => x.IsActive));
 
+            // Farmer Portal (docs/farmer-portal.md): OTP challenges and the farmer's own profile.
+            builder.Entity<FarmerOtpChallenge>(entity =>
+            {
+                entity.Property(x => x.Phone).HasMaxLength(10);
+                entity.Property(x => x.CodeHash).HasMaxLength(64);
+                entity.Property(x => x.RequestIp).HasMaxLength(64);
+                entity.HasIndex(x => new { x.Phone, x.CreatedAtUtc });
+                entity.HasIndex(x => new { x.RequestIp, x.CreatedAtUtc });
+                entity.HasIndex(x => x.CreatedAtUtc);
+            });
+            builder.Entity<FarmerProfile>(entity =>
+            {
+                entity.HasIndex(x => x.UserId).IsUnique();
+                entity.HasIndex(x => x.DistrictId);
+                entity.Property(x => x.UserId).HasMaxLength(450);
+                entity.Property(x => x.Name).HasMaxLength(100);
+                entity.Property(x => x.Email).HasMaxLength(256);
+                entity.Property(x => x.Phone).HasMaxLength(10);
+                entity.Property(x => x.Village).HasMaxLength(100);
+                entity.Property(x => x.Taluk).HasMaxLength(100);
+                entity.Property(x => x.PinCode).HasMaxLength(6);
+                entity.Property(x => x.PrimaryCrops).HasMaxLength(700);
+                entity.Property(x => x.LandAcres).HasColumnType("numeric(10,2)");
+                entity.Property(x => x.IrrigationType).HasConversion<string>().HasMaxLength(20);
+                entity.Property(x => x.PreferredLanguage).HasMaxLength(5);
+            });
+
             builder.Entity<SampleLabResult>(entity =>
             {
                 entity.HasKey(x => x.Id);
@@ -1096,6 +1123,10 @@ namespace Spic.Infrastructure.Data
         public DbSet<HelpReviewItem> HelpReviewItems { get; set; }
         public DbSet<HelpReviewer> HelpReviewers { get; set; }
         public DbSet<HelpFeedback> HelpFeedbacks { get; set; }
+
+        //// Farmer Portal
+        public DbSet<FarmerOtpChallenge> FarmerOtpChallenges { get; set; }
+        public DbSet<FarmerProfile> FarmerProfiles { get; set; }
 
         //// JMDO Task Allocation
         public DbSet<JmdoTaskAllocation> JmdoTaskAllocations { get; set; }

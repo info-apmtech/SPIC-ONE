@@ -12,6 +12,7 @@ using Spic.Infrastructure.Services.Help;
 using Spic.Infrastructure.Services.Lab;
 using Spic.Infrastructure.Services.LabReports;
 using Spic.Infrastructure.Services.Payments;
+using Spic.Infrastructure.Services.Sms;
 using Spic.Infrastructure.Services.Telemetry;
 using Microsoft.AspNetCore.Routing;
 using SPIC.Core.Entities;
@@ -89,6 +90,10 @@ builder.Services.AddIdentity<UserInfo, IdentityRole>(options =>
 .AddDefaultTokenProviders();
 
 builder.Services.AddScoped<IUserService, UserService>();
+// JWT + refresh token issuing, shared by the username/password login and the farmer OTP login.
+builder.Services.AddScoped<ITokenIssuer, TokenIssuer>();
+// Farmer portal OTP SMS (docs/farmer-portal.md): Sms:Provider = Log (default) | Msg91.
+builder.Services.AddSpicSms(builder.Configuration);
 builder.Services.AddScoped<IExcelBulkUploadService, ExcelBulkUploadService>();
 builder.Services.AddScoped<IIfmsAccountStore, IfmsAccountStore>();
 builder.Services.AddScoped<IIfmsRelayDeviceStore, IfmsRelayDeviceStore>();

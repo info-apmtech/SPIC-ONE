@@ -4252,6 +4252,136 @@ namespace Spic.Infrastructure.Migrations
                     b.ToTable("FarmProductRateRequests");
                 });
 
+            modelBuilder.Entity("SPIC.Core.Entities.FarmerOtpChallenge", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("CodeHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime?>("ConsumedAtUtc")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime>("ExpiresAtUtc")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("Phone")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<string>("RequestIp")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAtUtc");
+
+                    b.HasIndex("Phone", "CreatedAtUtc");
+
+                    b.HasIndex("RequestIp", "CreatedAtUtc");
+
+                    b.ToTable("FarmerOtpChallenges");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.FarmerProfile", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int>("DistrictId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Email")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("IrrigationType")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<decimal?>("LandAcres")
+                        .HasColumnType("numeric(10,2)");
+
+                    b.Property<double?>("Latitude")
+                        .HasColumnType("double precision");
+
+                    b.Property<double?>("Longitude")
+                        .HasColumnType("double precision");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Phone")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<string>("PinCode")
+                        .IsRequired()
+                        .HasMaxLength(6)
+                        .HasColumnType("character varying(6)");
+
+                    b.Property<string>("PreferredLanguage")
+                        .IsRequired()
+                        .HasMaxLength(5)
+                        .HasColumnType("character varying(5)");
+
+                    b.Property<string>("PrimaryCrops")
+                        .HasMaxLength(700)
+                        .HasColumnType("character varying(700)");
+
+                    b.Property<int>("StateId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Taluk")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
+                    b.Property<string>("Village")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DistrictId");
+
+                    b.HasIndex("UserId")
+                        .IsUnique();
+
+                    b.ToTable("FarmerProfiles");
+                });
+
             modelBuilder.Entity("SPIC.Core.Entities.FinancialYear", b =>
                 {
                     b.Property<int>("Id")
