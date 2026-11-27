@@ -100,6 +100,7 @@ builder.Services.AddMemoryCache();
 builder.Services.AddHttpClient(FarmerWeatherService.HttpClientName, c => c.Timeout = FarmerWeatherService.Timeout);
 builder.Services.AddSingleton<IFarmerWeatherService, FarmerWeatherService>();
 builder.Services.AddScoped<CommunityNearResolver>();
+builder.Services.AddScoped<FarmerAssistantContextLoader>();
 builder.Services.AddScoped<IExcelBulkUploadService, ExcelBulkUploadService>();
 builder.Services.AddScoped<IIfmsAccountStore, IfmsAccountStore>();
 builder.Services.AddScoped<IIfmsRelayDeviceStore, IfmsRelayDeviceStore>();
@@ -140,6 +141,8 @@ builder.Services.AddScoped<IStockDetailsService, StockDetailsService>();
 builder.Services.Configure<AssistantOptions>(
     builder.Configuration.GetSection(AssistantOptions.SectionName));
 builder.Services.AddScoped<LibraryRetriever>();
+// The Messages API call itself (shared by the library assistant, SPIC AI for farmers and the leaf check).
+builder.Services.AddScoped<AnthropicMessagesClient>();
 builder.Services.AddScoped<KeywordAssistantProvider>();
 builder.Services.AddScoped<AnthropicAssistantProvider>();
 builder.Services.AddScoped<IAssistantProvider>(sp =>

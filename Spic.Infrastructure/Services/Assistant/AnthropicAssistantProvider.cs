@@ -1,10 +1,6 @@
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using SPIC.Core.Interfaces;
-using System.Net.Http;
-using System.Net.Http.Headers;
 using System.Text;
-using System.Text.Json;
 
 namespace Spic.Infrastructure.Services.Assistant;
 
@@ -12,34 +8,31 @@ namespace Spic.Infrastructure.Services.Assistant;
 /// SPIC AI backed by the Anthropic Messages API. The retrieved library items are
 /// the only knowledge the model is given; it is told to answer from them, to cite
 /// the items it used by title and to end with a SUGGESTIONS line that we strip and
-/// turn into follow-up chips. Any failure (no key, network, HTTP, parse) falls back
-/// to the keyword provider, so the assistant always answers something.
+/// turn into follow-up chips. Any failure (no key, network, HTTP, refusal, parse) falls
+/// back to the keyword provider, so the assistant always answers something.
+/// Farmer portal Task 5: a context in <see cref="AssistantMode.Farmer"/> brings its own
+/// system prompt and farmer context block; the HTTP call itself is
+/// <see cref="AnthropicMessagesClient"/> (shared with the leaf-photo check).
 /// </summary>
 public class AnthropicAssistantProvider : IAssistantProvider
 {
-    private const string Endpoint = "https://api.anthropic.com/v1/messages";
-    private const string AnthropicVersion = "2023-06-01";
-
-    private readonly IHttpClientFactory _httpClientFactory;
+    private readonly AnthropicMessagesClient _client;
     private readonly AssistantOptions _options;
     private readonly KeywordAssistantProvider _fallback;
-    private readonly ILogger<AnthropicAssistantProvider> _logger;
 
     public AnthropicAssistantProvider(
-        IHttpClientFactory httpClientFactory,
+        AnthropicMessagesClient client,
         IOptions<AssistantOptions> options,
-        KeywordAssistantProvider fallback,
-        ILogger<AnthropicAssistantProvider> logger)
+        KeywordAssistantProvider fallback)
     {
-        _httpClientFactory = httpClientFactory;
+        _client = client;
         _options = options.Value;
         _fallback = fallback;
-        _logger = logger;
     }
 
     public string Name => "anthropic";
 
-    private const string SystemPrompt =
+    public const string SystemPrompt =
         "You are SPIC AI, the assistant of SPIC's Digital Library for farmers and dealers. " +
         "Answer ONLY from the provided library content. Cite the items you used by title. " +
         "Say plainly when the library does not cover something instead of inventing an answer. " +
@@ -48,99 +41,86 @@ public class AnthropicAssistantProvider : IAssistantProvider
 
     public async Task<AssistantAnswer> AnswerAsync(AssistantContext ctx, CancellationToken cancellationToken = default)
     {
-        if (!_options.HasAnthropicKey)
+        if (!_client.IsConfigured)
             return await _fallback.AnswerAsync(ctx, cancellationToken);
 
-        try
-        {
-            var payload = BuildPayload(ctx);
-
-            using var request = new HttpRequestMessage(HttpMethod.Post, Endpoint)
-            {
-                Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json")
-            };
-            request.Headers.TryAddWithoutValidation("x-api-key", _options.AnthropicApiKey);
-            request.Headers.TryAddWithoutValidation("anthropic-version", AnthropicVersion);
-            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-
-            var client = _httpClientFactory.CreateClient();
-            client.Timeout = TimeSpan.FromSeconds(60);
-
-            using var response = await client.SendAsync(request, cancellationToken);
-            var body = await response.Content.ReadAsStringAsync(cancellationToken);
-
-            if (!response.IsSuccessStatusCode)
-            {
-                _logger.LogWarning("Anthropic assistant call failed with {Status}: {Body}", (int)response.StatusCode, Trim(body, 500));
-                return await _fallback.AnswerAsync(ctx, cancellationToken);
-            }
-
-            var text = ExtractText(body);
-            if (string.IsNullOrWhiteSpace(text))
-            {
-                _logger.LogWarning("Anthropic assistant returned no text content.");
-                return await _fallback.AnswerAsync(ctx, cancellationToken);
-            }
-
-            var (answerText, suggestions) = SplitSuggestions(text!);
-
-            var cited = ctx.Items
-                .Where(i => !string.IsNullOrWhiteSpace(i.Title) &&
-                            answerText.Contains(i.Title, StringComparison.OrdinalIgnoreCase))
-                .ToList();
-
-            if (cited.Count == 0)
-                cited = ctx.Items.Take(2).ToList();
-
-            return new AssistantAnswer
-            {
-                Provider = Name,
-                Text = answerText,
-                Sources = cited.Select(i => i.ToSource()).ToList(),
-                Suggestions = suggestions
-            };
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Anthropic assistant call failed; falling back to the keyword provider.");
+        // AnthropicMessagesClient logs every failure (status, refusal, no text, exception) and never throws for
+        // them; the keyword provider answers instead, so the assistant always answers something.
+        var result = await _client.SendAsync(BuildRequest(ctx, _options), cancellationToken);
+        if (!result.Ok || string.IsNullOrWhiteSpace(result.Text))
             return await _fallback.AnswerAsync(ctx, cancellationToken);
-        }
+
+        var (answerText, suggestions) = SplitSuggestions(result.Text!);
+
+        var cited = ctx.Items
+            .Where(i => !string.IsNullOrWhiteSpace(i.Title) &&
+                        answerText.Contains(i.Title, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        if (cited.Count == 0)
+            cited = ctx.Items.Take(2).ToList();
+
+        // Farmer mode: an item the library holds twice is linked once (the library chat is unchanged).
+        if (ctx.Mode == AssistantMode.Farmer)
+            cited = SPIC.Core.FarmerPortal.FarmerAssistantRules.DistinctByTitle(cited).ToList();
+
+        return new AssistantAnswer
+        {
+            Provider = Name,
+            Text = answerText,
+            Sources = cited.Select(i => i.ToSource()).ToList(),
+            Suggestions = suggestions
+        };
     }
 
     // ---------------------------------------------------------------- request
 
-    private sealed record AnthropicMessage(string role, string content);
-
-    private object BuildPayload(AssistantContext ctx)
+    /// <summary>
+    /// The Messages API request for one question: the context's own system prompt (farmer mode) or the library
+    /// prompt, the last 10 earlier messages (starting with a question; back-to-back same-role messages joined,
+    /// which the library never produces), then the question block. Public for the harness.
+    /// </summary>
+    public static AnthropicRequest BuildRequest(AssistantContext ctx, AssistantOptions options)
     {
-        var messages = new List<AnthropicMessage>();
+        // (role, text) pairs first; back-to-back same-role messages are joined.
+        var turns = new List<(string Role, string Text)>();
+        void Add(string role, string text)
+        {
+            if (turns.Count > 0 && turns[^1].Role == role) turns[^1] = (role, turns[^1].Text + "\n\n" + text);
+            else turns.Add((role, text));
+        }
 
         foreach (var turn in ctx.History.TakeLast(10))
         {
             if (string.IsNullOrWhiteSpace(turn.Text)) continue;
-            var role = string.Equals(turn.Role, "assistant", StringComparison.OrdinalIgnoreCase) ? "assistant" : "user";
-            messages.Add(new AnthropicMessage(role, turn.Text));
+            Add(string.Equals(turn.Role, "assistant", StringComparison.OrdinalIgnoreCase) ? "assistant" : "user", turn.Text);
         }
 
         // The Messages API requires the first message to be from the user.
-        while (messages.Count > 0 && messages[0].role != "user")
-            messages.RemoveAt(0);
+        while (turns.Count > 0 && turns[0].Role != "user")
+            turns.RemoveAt(0);
 
-        messages.Add(new AnthropicMessage("user", BuildQuestionBlock(ctx)));
+        // The question block is a user message (a trailing unanswered question is joined to it).
+        Add("user", BuildQuestionBlock(ctx));
 
-        return new
-        {
-            model = string.IsNullOrWhiteSpace(_options.Model) ? "claude-sonnet-5" : _options.Model,
-            max_tokens = _options.MaxTokens <= 0 ? 800 : _options.MaxTokens,
-            system = SystemPrompt,
-            messages
-        };
+        var maxTokens = ctx.MaxTokens is > 0 ? ctx.MaxTokens.Value : (options.MaxTokens <= 0 ? 800 : options.MaxTokens);
+        return new AnthropicRequest(
+            string.IsNullOrWhiteSpace(ctx.SystemPrompt) ? SystemPrompt : ctx.SystemPrompt!,
+            turns.Select(t => AnthropicMessage.Text(t.Role, t.Text)).ToList(),
+            maxTokens);
     }
 
-    private static string BuildQuestionBlock(AssistantContext ctx)
+    public static string BuildQuestionBlock(AssistantContext ctx)
     {
         var sb = new StringBuilder();
-        sb.AppendLine("Library content available to you:");
+
+        if (!string.IsNullOrWhiteSpace(ctx.ContextBlock))
+        {
+            sb.AppendLine(ctx.ContextBlock!.Trim());
+            sb.AppendLine();
+        }
+
+        sb.AppendLine(ctx.Mode == AssistantMode.Farmer ? "SPIC library content available to you:" : "Library content available to you:");
         sb.AppendLine();
 
         if (ctx.Items.Count == 0)
@@ -171,28 +151,8 @@ public class AnthropicAssistantProvider : IAssistantProvider
 
     // --------------------------------------------------------------- response
 
-    private static string? ExtractText(string body)
-    {
-        using var doc = JsonDocument.Parse(body);
-        if (!doc.RootElement.TryGetProperty("content", out var content) || content.ValueKind != JsonValueKind.Array)
-            return null;
-
-        var sb = new StringBuilder();
-        foreach (var block in content.EnumerateArray())
-        {
-            if (block.TryGetProperty("type", out var type) &&
-                type.GetString() == "text" &&
-                block.TryGetProperty("text", out var text))
-            {
-                sb.Append(text.GetString());
-            }
-        }
-
-        return sb.Length == 0 ? null : sb.ToString().Trim();
-    }
-
     /// <summary>Pulls the trailing "SUGGESTIONS: a | b | c" line out of the reply.</summary>
-    private static (string Text, List<string> Suggestions) SplitSuggestions(string text)
+    public static (string Text, List<string> Suggestions) SplitSuggestions(string text)
     {
         var suggestions = new List<string>();
         var lines = text.Replace("\r\n", "\n").Split('\n').ToList();
@@ -215,7 +175,4 @@ public class AnthropicAssistantProvider : IAssistantProvider
 
         return (string.Join("\n", lines).Trim(), suggestions);
     }
-
-    private static string Trim(string s, int max) =>
-        string.IsNullOrEmpty(s) || s.Length <= max ? s : s.Substring(0, max);
 }

@@ -1,4 +1,5 @@
 using SPIC.Core.DTOs;
+using SPIC.Core.FarmerPortal;
 using SPIC.Core.Interfaces;
 
 namespace Spic.Infrastructure.Services.Assistant;
@@ -9,6 +10,8 @@ namespace Spic.Infrastructure.Services.Assistant;
 /// paragraph per item drawn from Overview / Usage / Features, with the items
 /// cited as sources. When nothing in the library matches, it says so and points
 /// at the three most viewed published items instead.
+/// Farmer mode (farmer portal Task 5): the answer is <see cref="FarmerAssistantRules.FallbackAnswer"/>,
+/// which always starts with "Basic answer from the SPIC library" so it never passes for a full AI answer.
 /// </summary>
 public class KeywordAssistantProvider : IAssistantProvider
 {
@@ -29,6 +32,15 @@ public class KeywordAssistantProvider : IAssistantProvider
     {
         var answer = new AssistantAnswer { Provider = Name };
         var question = (ctx.Question ?? string.Empty).Trim();
+
+        if (ctx.Mode == AssistantMode.Farmer)
+        {
+            var (text, suggestions) = FarmerAssistantRules.FallbackAnswer(question, ctx.Items, ctx.Language, ctx.Crops);
+            answer.Text = text;
+            answer.Sources = FarmerAssistantRules.DistinctByTitle(ctx.Items).Take(3).Select(i => i.ToSource()).ToList();
+            answer.Suggestions = suggestions;
+            return answer;
+        }
 
         if (ctx.Items.Count == 0)
         {

@@ -47,6 +47,33 @@ public class AssistantContext
 
     /// <summary>The library item the user opened the assistant from (?about=), when any.</summary>
     public AssistantLibraryItem? About { get; set; }
+
+    // ---- Added for farmer portal Task 5 (SPIC AI for farmers). The library assistant leaves them at their
+    //      defaults and behaves exactly as before.
+
+    /// <summary>Who is asking: the Digital Library assistant (default) or a farmer on /farmer/assistant.</summary>
+    public AssistantMode Mode { get; set; } = AssistantMode.Library;
+
+    /// <summary>Replaces the provider's library system prompt when set (farmer mode: FarmerAssistantRules.SystemPrompt).</summary>
+    public string? SystemPrompt { get; set; }
+
+    /// <summary>Extra context placed before the library content (farmer mode: the farmer's crops, district, soil ratings).</summary>
+    public string? ContextBlock { get; set; }
+
+    /// <summary>The answer language code ("en", "ta", ...).</summary>
+    public string Language { get; set; } = "en";
+
+    /// <summary>The farmer's crops (farmer mode: follow-up suggestions of the basic answer).</summary>
+    public IReadOnlyList<string> Crops { get; set; } = Array.Empty<string>();
+
+    /// <summary>Answer length override (tokens); null = Assistant:MaxTokens.</summary>
+    public int? MaxTokens { get; set; }
+}
+
+public enum AssistantMode
+{
+    Library = 0,
+    Farmer = 1
 }
 
 /// <summary>What a provider returns for one question.</summary>
@@ -61,7 +88,8 @@ public class AssistantAnswer
 }
 
 /// <summary>
-/// SPIC AI assistant back end. Two implementations exist: a no-network keyword
+/// SPIC AI assistant back end (Digital Library and, from farmer portal Task 5, farmer mode via
+/// <see cref="AssistantContext.Mode"/>). Two implementations exist: a no-network keyword
 /// provider (always available) and the Anthropic Messages API provider, used
 /// when Assistant:AnthropicApiKey is configured. Anthropic falls back to the
 /// keyword provider on any error, so AnswerAsync never throws for the caller.

@@ -496,6 +496,28 @@ namespace Spic.Infrastructure.Data
                 entity.HasIndex(x => new { x.FarmerUserId, x.CreatedAtUtc });
             });
 
+            // Farmer portal Task 5: SPIC AI for farmers (docs/farmer-portal.md). Own tables, UTC times.
+            builder.Entity<FarmerChatConversation>(entity =>
+            {
+                entity.Property(x => x.FarmerUserId).HasMaxLength(450);
+                entity.Property(x => x.Title).HasMaxLength(80);
+                entity.HasIndex(x => new { x.FarmerUserId, x.UpdatedAtUtc });
+                entity.HasMany(x => x.Messages)
+                    .WithOne(m => m.Conversation)
+                    .HasForeignKey(m => m.ConversationId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+            builder.Entity<FarmerChatMessage>(entity =>
+            {
+                entity.Property(x => x.FarmerUserId).HasMaxLength(450);
+                entity.Property(x => x.Role).HasMaxLength(16);
+                entity.Property(x => x.Provider).HasMaxLength(20);
+                entity.Property(x => x.Language).HasMaxLength(8);
+                entity.HasIndex(x => new { x.ConversationId, x.Id });
+                // The daily cap: questions of one farmer since IST midnight.
+                entity.HasIndex(x => new { x.FarmerUserId, x.Role, x.CreatedAtUtc });
+            });
+
             builder.Entity<SampleLabResult>(entity =>
             {
                 entity.HasKey(x => x.Id);
@@ -1224,6 +1246,8 @@ namespace Spic.Infrastructure.Data
         public DbSet<FertilizerNormSplit> FertilizerNormSplits { get; set; }
         public DbSet<CropSoilTip> CropSoilTips { get; set; }
         public DbSet<FertilizerRecommendationRun> FertilizerRecommendationRuns { get; set; }
+        public DbSet<FarmerChatConversation> FarmerChatConversations { get; set; }
+        public DbSet<FarmerChatMessage> FarmerChatMessages { get; set; }
 
         //// JMDO Task Allocation
         public DbSet<JmdoTaskAllocation> JmdoTaskAllocations { get; set; }

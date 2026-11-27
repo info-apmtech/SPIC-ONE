@@ -13,5 +13,13 @@ public class AssistantOptions
     public string Model { get; set; } = "claude-sonnet-5";
     public int MaxTokens { get; set; } = 800;
 
+    /// <summary>Answer length for SPIC AI for farmers (farmer portal Task 5): longer than the library's
+    /// because answers in Tamil / Hindi script take more tokens. 0 = 1500.</summary>
+    public int FarmerMaxTokens { get; set; } = 1500;
+
+    /// <summary>Optional Messages API URL (a gateway / proxy, or a local stub in development). Empty = the
+    /// Anthropic API (https://api.anthropic.com/v1/messages). The key is sent to this URL.</summary>
+    public string Endpoint { get; set; } = string.Empty;
+
     public bool HasAnthropicKey => !string.IsNullOrWhiteSpace(AnthropicApiKey);
 }

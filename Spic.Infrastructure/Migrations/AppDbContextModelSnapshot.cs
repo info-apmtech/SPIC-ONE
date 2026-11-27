@@ -5109,6 +5109,91 @@ namespace Spic.Infrastructure.Migrations
                     b.ToTable("FarmProductRateRequests");
                 });
 
+            modelBuilder.Entity("SPIC.Core.Entities.FarmerChatConversation", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("FarmerUserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FarmerUserId", "UpdatedAtUtc");
+
+                    b.ToTable("FarmerChatConversations");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.FarmerChatMessage", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<long>("ConversationId")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("FarmerUserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
+                    b.Property<string>("Language")
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)");
+
+                    b.Property<string>("Provider")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("SourcesJson")
+                        .HasColumnType("text");
+
+                    b.Property<string>("SuggestionsJson")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Text")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConversationId", "Id");
+
+                    b.HasIndex("FarmerUserId", "Role", "CreatedAtUtc");
+
+                    b.ToTable("FarmerChatMessages");
+                });
+
             modelBuilder.Entity("SPIC.Core.Entities.FarmerContactRequest", b =>
                 {
                     b.Property<int>("Id")
@@ -15723,6 +15808,17 @@ namespace Spic.Infrastructure.Migrations
                     b.Navigation("FarmProduct");
                 });
 
+            modelBuilder.Entity("SPIC.Core.Entities.FarmerChatMessage", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.FarmerChatConversation", "Conversation")
+                        .WithMany("Messages")
+                        .HasForeignKey("ConversationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Conversation");
+                });
+
             modelBuilder.Entity("SPIC.Core.Entities.FertilizerNormSplit", b =>
                 {
                     b.HasOne("SPIC.Core.Entities.FertilizerCropNorm", "Norm")
@@ -16724,6 +16820,11 @@ namespace Spic.Infrastructure.Migrations
                     b.Navigation("IncomeItems");
 
                     b.Navigation("InventoryItems");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.FarmerChatConversation", b =>
+                {
+                    b.Navigation("Messages");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.FertilizerCropNorm", b =>
