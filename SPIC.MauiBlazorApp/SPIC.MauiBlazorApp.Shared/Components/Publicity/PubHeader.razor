@@ -13,7 +13,7 @@
     </div>
     <div class="pub-strip__cell">
         <span class="pub-strip__cap">Status</span>
-        <PubPill Text="@PubText.Status(D.Status)" Tone="@PubText.StatusTone(D.Status)" CssClass="pub-pill--lg" />
+        <PubPill Text="@StatusText" Tone="@StatusTone" CssClass="pub-pill--lg" />
     </div>
     <div class="pub-strip__cell">
         <span class="pub-strip__cap">@(D.OwnerCaption == "Current Approver" && !D.CanReview ? "Pending With" : D.OwnerCaption)</span>
@@ -34,10 +34,15 @@
         PublicityStatus.PendingApproval or PublicityStatus.PendingFinalApproval => "Submitted",
         PublicityStatus.Returned => "Returned",
         PublicityStatus.Rejected => "Rejected",
+        PublicityStatus.ExceptionRaised => "Exception Raised",
         PublicityStatus.Completed => "Completed",
         _ => "Approved"
     };
     private string BadgeTone => D.Status is PublicityStatus.Draft or PublicityStatus.PendingApproval or PublicityStatus.PendingFinalApproval ? "grey"
-        : D.Status is PublicityStatus.Returned or PublicityStatus.Rejected ? "red" : "green";
+        : D.Status is PublicityStatus.Returned or PublicityStatus.Rejected or PublicityStatus.ExceptionRaised ? "red" : "green";
+    private string StatusText => D.Status == PublicityStatus.ExceptionRaised && !string.IsNullOrWhiteSpace(D.Summary.ExceptionType) && D.Summary.ExceptionType != "None"
+        ? PubText.ExceptionStatus(D.Summary.ExceptionType)
+        : PubText.Status(D.Status);
+    private string StatusTone => D.Status == PublicityStatus.ExceptionRaised ? "red" : PubText.StatusTone(D.Status);
     private static string Initial(string? name) => string.IsNullOrWhiteSpace(name) ? "?" : name.Trim()[..1].ToUpperInvariant();
 }

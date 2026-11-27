@@ -8747,6 +8747,41 @@ namespace Spic.Infrastructure.Migrations
                     b.ToTable("PublicityDispatches");
                 });
 
+            modelBuilder.Entity("SPIC.Core.Entities.PublicityDispatchItem", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("DamagedQty")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("DispatchId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("DispatchedQty")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ProductId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ReceivedQty")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("RequestItemId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DispatchId");
+
+                    b.HasIndex("RequestItemId");
+
+                    b.ToTable("PublicityDispatchItems");
+                });
+
             modelBuilder.Entity("SPIC.Core.Entities.PublicityEvent", b =>
                 {
                     b.Property<int>("Id")
@@ -8821,6 +8856,9 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<int>("RequestId")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("RequestItemId")
+                        .HasColumnType("integer");
+
                     b.Property<long>("SizeBytes")
                         .HasColumnType("bigint");
 
@@ -8835,6 +8873,8 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasIndex("RequestId");
 
+                    b.HasIndex("RequestItemId");
+
                     b.ToTable("PublicityFiles");
                 });
 
@@ -8845,6 +8885,9 @@ namespace Spic.Infrastructure.Migrations
                         .HasColumnType("integer");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("Category")
+                        .HasColumnType("integer");
 
                     b.Property<string>("Code")
                         .HasMaxLength(30)
@@ -8993,6 +9036,9 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("IsGiftArticle")
+                        .HasColumnType("boolean");
+
                     b.Property<int>("MaterialTypeId")
                         .HasColumnType("integer");
 
@@ -9055,6 +9101,35 @@ namespace Spic.Infrastructure.Migrations
                     b.HasIndex("Status");
 
                     b.ToTable("PublicityRequests");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.PublicityRequestItem", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("OriginalQuantity")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ProductId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("RequestId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProductId");
+
+                    b.HasIndex("RequestId");
+
+                    b.ToTable("PublicityRequestItems");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.RMDHQMapping", b =>
@@ -13735,6 +13810,23 @@ namespace Spic.Infrastructure.Migrations
                     b.Navigation("Request");
                 });
 
+            modelBuilder.Entity("SPIC.Core.Entities.PublicityDispatchItem", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.PublicityDispatch", "Dispatch")
+                        .WithMany("Items")
+                        .HasForeignKey("DispatchId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("SPIC.Core.Entities.PublicityRequestItem", "RequestItem")
+                        .WithMany()
+                        .HasForeignKey("RequestItemId");
+
+                    b.Navigation("Dispatch");
+
+                    b.Navigation("RequestItem");
+                });
+
             modelBuilder.Entity("SPIC.Core.Entities.PublicityEvent", b =>
                 {
                     b.HasOne("SPIC.Core.Entities.PublicityRequest", "Request")
@@ -13755,6 +13847,17 @@ namespace Spic.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("MaterialType");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.PublicityRequestItem", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.PublicityRequest", "Request")
+                        .WithMany("Items")
+                        .HasForeignKey("RequestId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Request");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.RackPoint", b =>
@@ -14222,6 +14325,8 @@ namespace Spic.Infrastructure.Migrations
             modelBuilder.Entity("SPIC.Core.Entities.PublicityDispatch", b =>
                 {
                     b.Navigation("Acknowledgement");
+
+                    b.Navigation("Items");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.PublicityRequest", b =>
@@ -14229,6 +14334,8 @@ namespace Spic.Infrastructure.Migrations
                     b.Navigation("Dispatches");
 
                     b.Navigation("Events");
+
+                    b.Navigation("Items");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.RegionBudgetSummary", b =>

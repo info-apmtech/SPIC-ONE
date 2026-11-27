@@ -15,6 +15,8 @@
 @* Unused directly here - injecting it is what forces DI to construct it (and so subscribe to
    LocationChanged) as soon as the shell renders. See the class doc comment for why this exists. *@
 @inject SPIC.MauiBlazorApp.Shared.Services.NavHistoryService NavHistory
+@inject SPIC.MauiBlazorApp.Shared.Services.PublicityApi PubApi
+@inject SPIC.MauiBlazorApp.Shared.Services.PublicityNotificationState PubNotify
 
 <PageGuard />
 
@@ -105,19 +107,31 @@
                             <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/NotificationBell.svg"
                                  alt=""
                                  class="iconimg" />
+                            @if (HasPublicityAccess && PubNotify.UnreadCount > 0)
+                            {
+                                <span class="icon-btn__badge">@UnreadBadgeText</span>
+                            }
 
                         </a>
                     }
                 }
 
-                @* Notification - existing topbar flow unchanged (desktop >= 1200px) *@
+                @* Notification - existing topbar flow unchanged (desktop >= 1200px), now also the
+                   Publicity live unread badge/click target when the signed-in user has Publicity
+                   access (RM/SMD/SMM/ADMIN-MD CS/DGM-MD CS/dispatch/creator roles) - everyone else
+                   sees exactly the same inert bell as before. *@
                 <button class="icon-btn shell-topbar-bell-desktop"
                         type="button"
-                        title="Notifications">
+                        title="Notifications"
+                        @onclick="OpenPublicityNotifications">
 
                     <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/NotificationBell.svg"
                          alt="Notification"
                          class="iconimg" />
+                    @if (HasPublicityAccess && PubNotify.UnreadCount > 0)
+                    {
+                        <span class="icon-btn__badge">@UnreadBadgeText</span>
+                    }
 
                 </button>
 
@@ -256,6 +270,42 @@ else
     // Kept so Dispose only detaches the handler if it is still ours.
     private Func<Task>? _logoutHandler;
 
+
+    /* =========================================================
+       PUBLICITY LIVE NOTIFICATION BADGE (header bell)
+       ========================================================= */
+
+    // Scoped to users who could plausibly receive a Publicity notification at all (reviewers,
+    // dispatchers, request creators) - everyone else never starts polling and the bell stays exactly
+    // as inert as it already was for them.
+    private bool HasPublicityAccess => PubApi.IsApprover || PubApi.IsDispatcher || PubApi.CanCreate;
+    private string UnreadBadgeText => PubNotify.UnreadCount > 99 ? "99+" : PubNotify.UnreadCount.ToString();
+
+    private void HandlePubNotifyChanged() => InvokeAsync(StateHasChanged);
+
+    private async void HandleNewPublicityNotification()
+    {
+        if (PubNotify.Muted) return;
+        try { await JS.InvokeVoidAsync("pubNotifySound.play"); }
+        catch (Exception) { /* autoplay blocked/unsupported - the visual badge already updated */ }
+    }
+
+    private void OpenPublicityNotifications()
+    {
+        if (HasPublicityAccess) Navigation.NavigateTo($"{PubApi.Home}/notifications");
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        PubNotify.OnChange += HandlePubNotifyChanged;
+        PubNotify.OnNewNotification += HandleNewPublicityNotification;
+        if (HasPublicityAccess)
+        {
+            try { PubNotify.SetMuted(await JS.InvokeAsync<bool>("pubNotifySound.isMuted")); }
+            catch (Exception) { /* JS interop not ready yet during prerender - defaults to unmuted */ }
+            PubNotify.EnsurePolling();
+        }
+    }
 
     /* =========================================================
        INITIALIZE
@@ -621,6 +671,8 @@ else
         _tokenExpiryTimer?.Dispose();
 
         Navigation.LocationChanged -= OnLocationChanged;
+        PubNotify.OnChange -= HandlePubNotifyChanged;
+        PubNotify.OnNewNotification -= HandleNewPublicityNotification;
 
         if (ReferenceEquals(Shell.LogoutHandler, _logoutHandler))
         {

@@ -42,6 +42,14 @@ public sealed class PublicityApi : ApiClientBase, IDisposable
     public bool IsDgmMdCs => Role == AppRole.MDHOD ||
         (Role == AppRole.CommonRole && Login.DesignationName is "DGM MD CS" or "DGM-MD CS");
     public bool IsDispatcher => IsAdminMdCs || IsDgmMdCs || Role is AppRole.Admin or AppRole.SuperAdmin or AppRole.CorporateAdmin;
+    /// <summary>Publicity Material Master (ADMIN-MD CS only, deliberately excluding IsDgmMdCs unlike
+    /// IsDispatcher above - matches PublicityController's IsAdminMdCsAsync()/IsSuper() gate on the
+    /// materials endpoints exactly, so the menu/page never show a button the API would 403.</summary>
+    public bool CanManageMaterials => IsAdminMdCs || Role is AppRole.Admin or AppRole.SuperAdmin;
+    /// <summary>Delivery Address Management (ADMIN-MD CS only, same gate/exclusions as
+    /// CanManageMaterials) - matches PublicityController's delivery-addresses/admin + PUT/DELETE
+    /// endpoints' IsAdminMdCsAsync()/IsSuper() check exactly.</summary>
+    public bool CanManageDeliveryAddresses => IsAdminMdCs || Role is AppRole.Admin or AppRole.SuperAdmin;
     public bool IsApprover => Role is AppRole.RM or AppRole.SMD or AppRole.SMM or AppRole.Admin or AppRole.SuperAdmin || IsAdminMdCs || IsDgmMdCs;
     /// <summary>Route root of the signed-in user's pages (also the PageGuard key).</summary>
     public string Home => Login.CanAccess(nameof(PagePermission.PublicityReview)) && (IsApprover || IsDispatcher) ? "/PublicityReview" : "/PublicityRequest";
@@ -75,6 +83,14 @@ public sealed class PublicityApi : ApiClientBase, IDisposable
         return result;
     }
 
+    // ---- material master (ADMIN-MD CS only - IsAdminMdCs above decides whether the menu/page show;
+    // the API independently enforces the same rule, see PublicityController's IsAdminMdCsAsync) -----
+
+    public Task<List<PubMaterialAdminDto>?> MaterialsAdminAsync() => GetAsync<List<PubMaterialAdminDto>>("materials", "the material list");
+    public Task<PubMaterialAdminDto?> CreateMaterialAsync(PubMaterialUpsertDto dto) => SendAsync<PubMaterialAdminDto>(HttpMethod.Post, "materials", dto, "save the material");
+    public Task<PubMaterialAdminDto?> UpdateMaterialAsync(int id, PubMaterialUpsertDto dto) => SendAsync<PubMaterialAdminDto>(HttpMethod.Put, $"materials/{id}", dto, "save the material");
+    public Task<bool> DeleteMaterialAsync(int id) => SendAsync(HttpMethod.Delete, $"materials/{id}", null, "delete the material");
+
     public Task<List<PubOption>?> StatesAsync() => GetRawAsync("api/RMDHQMapping/states");
     public Task<List<PubOption>?> RegionsAsync(int stateId) => GetRawAsync($"api/RMDHQMapping/regions/{stateId}");
     public Task<List<PubOption>?> HqsAsync(int regionId) => GetRawAsync($"api/RMDHQMapping/headquarters/{regionId}");
@@ -85,7 +101,7 @@ public sealed class PublicityApi : ApiClientBase, IDisposable
         catch (Exception) { return new List<PubOption>(); }
     }
 
-    public Task<PubStatsDto?> StatsAsync() => GetAsync<PubStatsDto>("requests/stats", "the summary");
+    public Task<PubStatsDto?> StatsAsync(int? category = null) => GetAsync<PubStatsDto>(category.HasValue ? $"requests/stats?category={category.Value}" : "requests/stats", "the summary");
     public Task<PubPageDto?> ListAsync(string query, CancellationToken ct = default) => GetAsync<PubPageDto>("requests?" + query, "the requests", ct);
     public Task<PubDetailDto?> GetAsync(int id) => GetAsync<PubDetailDto>($"requests/{id}", "the request");
     public Task<PubConsolidationDto?> ConsolidationAsync() => GetAsync<PubConsolidationDto>("consolidation", "the consolidation");
@@ -112,17 +128,23 @@ public sealed class PublicityApi : ApiClientBase, IDisposable
     public Task<PubSaved?> CreateDispatchAsync(int id, PubDispatchCreateDto dto) => SendAsync<PubSaved>(HttpMethod.Post, $"requests/{id}/dispatches", dto, "create the dispatch");
     public Task<List<PubBulkImportRowDto>?> ImportExcelAsync(IBrowserFile file) =>
         UploadAsync<List<PubBulkImportRowDto>>("requests/import-excel", "file", new[] { file }, MaxFileBytes, "import the Excel file");
-    public Task<List<PubBulkCreatedDto>?> CreateBulkAsync(PubBulkUpsertDto dto) => SendAsync<List<PubBulkCreatedDto>>(HttpMethod.Post, "requests/bulk", dto, "save the requests");
+    public Task<PubBulkCreatedDto?> CreateBulkAsync(PubBulkUpsertDto dto) => SendAsync<PubBulkCreatedDto>(HttpMethod.Post, "requests/bulk", dto, "save the requests");
+    public Task<PubBulkCreatedDto?> UpdateItemsAsync(int id, PubItemsUpdateDto dto) => SendAsync<PubBulkCreatedDto>(HttpMethod.Put, $"requests/{id}/items", dto, "save the request items");
     // Deliberately NOT cached like LookupsAsync() - the dropdown must reflect a just-added address
     // immediately, and the list is small/cheap enough that a fresh fetch every time is simplest.
     public Task<List<PubDeliveryAddressDto>?> DeliveryAddressesAsync() => GetAsync<List<PubDeliveryAddressDto>>("delivery-addresses", "the saved addresses");
     public Task<PubSaved?> CreateDeliveryAddressAsync(PubDeliveryAddressCreateDto dto) => SendAsync<PubSaved>(HttpMethod.Post, "delivery-addresses", dto, "save the address");
+    // Delivery Address Management (ADMIN-MD CS only) - admin list includes inactive rows too, unlike
+    // DeliveryAddressesAsync() above which the dispatch dropdown uses and which stays active-only.
+    public Task<List<PubDeliveryAddressDto>?> DeliveryAddressesAdminAsync() => GetAsync<List<PubDeliveryAddressDto>>("delivery-addresses/admin", "the address list");
+    public Task<PubSaved?> UpdateDeliveryAddressAsync(int id, PubDeliveryAddressUpdateDto dto) => SendAsync<PubSaved>(HttpMethod.Put, $"delivery-addresses/{id}", dto, "save the address");
+    public Task<bool> DeleteDeliveryAddressAsync(int id) => SendAsync(HttpMethod.Delete, $"delivery-addresses/{id}", null, "delete the address");
     public Task<bool> DispatchStatusAsync(int dispatchId, PubDispatchStatusDto dto) => SendAsync(HttpMethod.Post, $"dispatches/{dispatchId}/status", dto, "update the dispatch");
     public Task<bool> ProofAsync(int dispatchId, PubProofDto dto) => SendAsync(HttpMethod.Post, $"dispatches/{dispatchId}/proof", dto, "submit the dispatch proof");
     public Task<bool> AcknowledgeAsync(int dispatchId, PubAckUpsertDto dto) => SendAsync(HttpMethod.Put, $"dispatches/{dispatchId}/ack", dto, "save the acknowledgement");
 
-    public Task<List<PubFileDto>?> UploadAsync(int requestId, PublicityFileKind kind, IReadOnlyList<IBrowserFile> files, int? dispatchId = null) =>
-        UploadAsync<List<PubFileDto>>($"requests/{requestId}/files?kind={(int)kind}" + (dispatchId is > 0 ? $"&dispatchId={dispatchId}" : ""),
+    public Task<List<PubFileDto>?> UploadAsync(int requestId, PublicityFileKind kind, IReadOnlyList<IBrowserFile> files, int? dispatchId = null, int? requestItemId = null) =>
+        UploadAsync<List<PubFileDto>>($"requests/{requestId}/files?kind={(int)kind}" + (dispatchId is > 0 ? $"&dispatchId={dispatchId}" : "") + (requestItemId is > 0 ? $"&requestItemId={requestItemId}" : ""),
             "files", files, MaxFileBytes, "upload the file");
 
     public Task<bool> DeleteFileAsync(int fileId) => SendAsync(HttpMethod.Delete, $"files/{fileId}", null, "remove the file");
@@ -131,7 +153,8 @@ public sealed class PublicityApi : ApiClientBase, IDisposable
     public Task<List<PubNotificationDto>?> NotificationsAsync(int? type) =>
         GetAsync<List<PubNotificationDto>>("notifications" + (type is null ? "" : $"?type={type}"), "the notifications");
     public Task<PubNotificationDetailDto?> NotificationAsync(int id) => GetAsync<PubNotificationDetailDto>($"notifications/{id}", "the notification");
-    public Task<bool> MarkReadAsync(int id) => SendAsync(HttpMethod.Post, $"notifications/{id}/read", null, "mark as read");
+    public Task<PubUnreadCountDto?> MarkReadAsync(int id) => SendAsync<PubUnreadCountDto>(HttpMethod.Post, $"notifications/{id}/read", null, "mark as read");
+    public Task<PubUnreadCountDto?> UnreadCountAsync() => GetAsync<PubUnreadCountDto>("notifications/unread-count", "the unread count");
 
     public sealed class PubSaved
     {
@@ -162,6 +185,15 @@ public static class PubText
         PublicityStatus.TransferOrderReceived => "Transfer Order Received",
         PublicityStatus.Returned => "Returned",
         _ => s.ToString()
+    };
+
+    public static string ExceptionStatus(string? exceptionType) => exceptionType switch
+    {
+        "Excess" => "Excess Reported",
+        "Shortage" => "Shortage Reported",
+        "Damage" => "Damage Reported",
+        not null and not "" and not "None" => exceptionType,
+        _ => "Exception Raised"
     };
 
     public static string StatusTone(PublicityStatus s) => s switch

@@ -201,10 +201,11 @@
                         (icon, heading, tone) = ("bi-patch-check-fill", "Request Completed", "green");
                         message = "The material has been successfully received and acknowledged. No shortage or damage was reported.";
                     }
-                    else if (d.Summary.ExceptionStatus == "Raised")
+                    else if (d.Summary.ExceptionStatus is "Raised" or "Reported" || d.Status == PublicityStatus.ExceptionRaised)
                     {
-                        (icon, heading, tone) = ("bi-exclamation-octagon-fill", "Exception Raised", "red");
-                        message = "Shortage or damage was reported during acknowledgement.";
+                        var isExcess = d.Summary.ExceptionType == "Excess";
+                        (icon, heading, tone) = ("bi-exclamation-octagon-fill", isExcess ? "Excess Reported" : "Exception Raised", "red");
+                        message = isExcess ? "Excess material was reported during acknowledgement." : "Shortage or damage was reported during acknowledgement.";
                     }
                     else if (d.Summary.ExceptionStatus == "Resolved")
                     {
@@ -393,12 +394,12 @@
                     </section>
                 }
 
-                @if (d.Summary.ExceptionStatus == "Raised")
+                @if (d.Summary.ExceptionStatus is "Raised" or "Reported" || d.Status == PublicityStatus.ExceptionRaised)
                 {
                     <section class="pub-card pub-card--flush">
                         <div class="pub-card__band pub-band--red">
-                            <div><h2 class="pub-h2 pub-text-red">Exception Raised</h2><span class="pub-muted">@d.Summary.ExceptionType reported in the acknowledgement.</span></div>
-                            @if (d.CanResolve) { <a class="pub-btn pub-btn--primary" href="@($"/PublicityReview/{d.Id}/resolve-exception")">Resolve Exception <i class="bi bi-arrow-right"></i></a> }
+                            <div><h2 class="pub-h2 pub-text-red">@(d.Summary.ExceptionType == "Excess" ? "Excess Reported" : "Exception Raised")</h2><span class="pub-muted">@d.Summary.ExceptionType reported in the acknowledgement.</span></div>
+                            @if (d.CanResolve && d.Summary.Outstanding > 0) { <a class="pub-btn pub-btn--primary" href="@($"/PublicityReview/{d.Id}/resolve-exception")">Resolve Exception <i class="bi bi-arrow-right"></i></a> }
                         </div>
                         <div class="pub-grid pub-grid--3">
                             <PubInfo Label="Exception Type">
@@ -477,7 +478,7 @@
     protected override async Task OnParametersSetAsync()
     {
         var query = Nav.ToAbsoluteUri(Nav.Uri).Query;
-        _tab = query.Contains("tab=tracking") ? 1 : query.Contains("tab=ack") ? 2 : query.Contains("tab=docs") ? 3 : 0;
+        _tab = query.Contains("tab=tracking") ? 1 : (query.Contains("tab=ack") || query.Contains("tab=exception")) ? 2 : query.Contains("tab=docs") ? 3 : 0;
         _lookups = await Api.LookupsAsync();
         await LoadAsync();
     }

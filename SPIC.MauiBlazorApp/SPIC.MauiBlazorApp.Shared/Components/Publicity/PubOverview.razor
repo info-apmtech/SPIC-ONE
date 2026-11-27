@@ -2,54 +2,229 @@
 @using SPIC.Core.DTOs
 @using SPIC.Core.Entities
 @inject PublicityApi Api
-@* "Program Overview": product details | design file | required location, then the RMDO remarks. *@
+@* Request Summary: a single compact grid of icon+value blocks (Figma "Request Summary"), replacing
+   the old three-column "Program Overview" card. The multi-item Excel Upload Request table is its
+   own separate card below, not nested inside this one. *@
 <section class="pub-card">
     <div class="pub-card__head">
         <h2 class="pub-h2">@Title</h2>
-        @HeadActions
-    </div>
-    <div class="pub-overview">
-        <div class="pub-overview__col">
-            <h3 class="pub-h3">Product Details</h3>
-            <PubInfo Icon="bi-journals" Tone="pink" Label="Publicity Material" Value="@D.Material" />
-            <PubInfo Icon="bi-box-seam" Tone="green" Label="Product" Value="@D.Product" />
-            <PubInfo Icon="bi-123" Tone="blue" Label="Quantity" Value="@($"{D.Quantity} Nos")" />
+        <div class="pub-card__tools">
+            <span class="pub-muted pub-hide-sm">Material Category:</span>
+            <PubPill Text="@(D.IsGiftArticle ? "Gift Articles" : "Publicity Material")" Tone="@(D.IsGiftArticle ? "violet" : "blue")" />
+            @HeadActions
         </div>
-        <div class="pub-overview__col pub-overview__file">
-            <h3 class="pub-h3">Design File</h3>
-            @if (Design is null)
-            {
-                <p class="pub-muted">No design file attached.</p>
-            }
-            else
-            {
-                <div class="pub-filecard">
-                    <div class="pub-filecard__thumb">
-                        @if (PubText.IsImage(Design.FileName)) { <img src="@Api.FileUrl(Design.Path)" alt="@Design.FileName" /> }
-                        else { <i class="bi bi-file-earmark-pdf" aria-hidden="true"></i> }
-                    </div>
-                    <div class="pub-filecard__meta">
-                        <b>@Design.FileName</b>
-                        <span>@System.IO.Path.GetExtension(Design.FileName).TrimStart('.').ToUpperInvariant() - @PubText.Size(Design.SizeBytes)</span>
-                        <small>Uploaded on @PubText.DateTime(Design.UploadedAt)</small>
-                        <a class="pub-btn pub-btn--line pub-btn--sm" href="@Api.FileUrl(Design.Path, download: true)" target="_blank" rel="noopener"><i class="bi bi-download"></i> Export</a>
+    </div>
+    <div class="pub-grid pub-grid--3">
+        <PubInfo Icon="bi-journals" Tone="pink" Label="Material Type" Value="@D.Material" />
+        @if (HasItems)
+        {
+            <PubInfo Icon="bi-boxes" Tone="green" Label="Products" Value="@D.Items.Count.ToString()" />
+        }
+        else
+        {
+            <PubInfo Icon="bi-box-seam" Tone="green" Label="Product" Value="@D.Product" />
+        }
+        <PubInfo Icon="bi-person-check" Tone="blue" Label="Requested By" Value="@(D.RequestedByName ?? "-")" />
+        <PubInfo Icon="bi-pin-map" Tone="violet" Label="Region" Value="@D.Region" />
+        <PubInfo Icon="bi-map" Tone="green" Label="State" Value="@D.State" />
+        <PubInfo Icon="bi-buildings" Tone="blue" Label="Headquarter (HQ)" Value="@D.Hq" />
+        <PubInfo Icon="bi-chat-left-text" Tone="pink" Label="Remarks" Value="@(string.IsNullOrWhiteSpace(D.Remarks) ? "No remarks." : D.Remarks)" />
+    </div>
+
+    @if (!HasItems)
+    {
+        @* Single-item (General Product / Gift Articles) request - keeps its own existing design
+           file presentation, since there is no Excel Upload Request table for these. *@
+        <h3 class="pub-h3" style="margin-top:16px;">Design File</h3>
+        @if (Design is null)
+        {
+            <p class="pub-muted">No design file attached.</p>
+        }
+        else
+        {
+            <div class="pub-filecard">
+                <div class="pub-filecard__thumb">
+                    @if (PubText.IsImage(Design.FileName)) { <img src="@Api.FileUrl(Design.Path)" alt="@Design.FileName" /> }
+                    else { <i class="bi bi-file-earmark-pdf" aria-hidden="true"></i> }
+                </div>
+                <div class="pub-filecard__meta">
+                    <b>@Design.FileName</b>
+                    <span>@System.IO.Path.GetExtension(Design.FileName).TrimStart('.').ToUpperInvariant() - @PubText.Size(Design.SizeBytes)</span>
+                    <small>Uploaded on @PubText.DateTime(Design.UploadedAt)</small>
+                    <a class="pub-btn pub-btn--line pub-btn--sm" href="@Api.FileUrl(Design.Path, download: true)" target="_blank" rel="noopener"><i class="bi bi-download"></i> Export</a>
+                </div>
+            </div>
+        }
+    }
+</section>
+
+@if (HasItems)
+{
+    <section class="pub-card">
+        <h2 class="pub-h2">Excel Upload Request</h2>
+        <div class="pub-table-wrap">
+            <table class="pub-table">
+                <thead>
+                    <tr>
+                        <th style="width:60px;">S.No</th>
+                        <th>Product</th>
+                        <th style="width:140px;">Quantity</th>
+                        <th>Design Document</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @{
+                        var paged = PagedItems;
+                        for (var i = 0; i < paged.Count; i++)
+                        {
+                            var item = paged[i];
+                            var sNo = (CurrentPage - 1) * _pageSize + i + 1;
+                            <tr>
+                                <td data-label="S.No">@sNo</td>
+                                <td data-label="Product"><b>@item.ProductName</b></td>
+                                <td data-label="Quantity">@item.Quantity</td>
+                                <td data-label="Design Document">
+                                    @if (!string.IsNullOrEmpty(item.DesignFilePath))
+                                    {
+                                        <div style="display:flex;align-items:center;gap:8px;">
+                                            <i class="bi @(PubText.IsImage(item.DesignFileName ?? "") ? "bi-file-image" : "bi-file-earmark-pdf")" style="font-size:16px;color:#2563eb;"></i>
+                                            <span>@(item.DesignFileName ?? "Design File")</span>
+                                            <button type="button" class="pub-icon-btn" title="Preview document" aria-label="Preview document" @onclick="() => OpenPreview(item)">
+                                                <i class="bi bi-eye"></i>
+                                            </button>
+                                            <a class="pub-icon-btn pub-icon-btn--green" href="@Api.FileUrl(item.DesignFilePath, download: true)" target="_blank" rel="noopener" title="Download document" aria-label="Download document">
+                                                <i class="bi bi-download"></i>
+                                            </a>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <span class="pub-muted">None</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+        <LabPager Page="CurrentPage" PageSize="_pageSize" Total="@D.Items.Count" Sizes="_pageSizes" PageChanged="OnPageChanged" PageSizeChanged="OnSizeChanged" />
+    </section>
+}
+
+@if (_previewItem is not null)
+{
+    <div class="pub-modal" @onkeydown="OnModalKeyDown" tabindex="-1">
+        <div class="pub-modal__backdrop" @onclick="ClosePreview"></div>
+        <div class="pub-modal__dialog pub-modal__dialog--preview" role="dialog" aria-modal="true" aria-labelledby="preview-doc-title">
+            <div class="pub-modal__header">
+                <div style="display:flex;align-items:center;gap:12px;min-width:0;">
+                    <i class="bi @(IsPdf ? "bi-file-earmark-pdf" : IsImage ? "bi-file-earmark-image" : "bi-file-earmark")" style="font-size:24px;color:#2563eb;flex-shrink:0;"></i>
+                    <div style="min-width:0;">
+                        <h2 id="preview-doc-title" style="font-size:16px;font-weight:600;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">@(_previewItem.DesignFileName ?? "Design Document")</h2>
+                        <small class="pub-muted" style="display:block;margin-top:2px;">@_previewItem.ProductName &bull; @PubText.Size(_previewItem.DesignFileSizeBytes)</small>
                     </div>
                 </div>
-            }
-        </div>
-        <div class="pub-overview__col">
-            <h3 class="pub-h3">Required Location</h3>
-            <PubInfo Icon="bi-map" Tone="green" Label="State" Value="@D.State" />
-            <PubInfo Icon="bi-pin-map" Tone="violet" Label="Region" Value="@D.Region" />
-            <PubInfo Icon="bi-buildings" Tone="blue" Label="Headquarter (HQ)" Value="@D.Hq" />
+                <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+                    @if (!string.IsNullOrEmpty(_previewItem.DesignFilePath))
+                    {
+                        <a class="pub-btn pub-btn--line pub-btn--sm" href="@Api.FileUrl(_previewItem.DesignFilePath, download: true)" target="_blank" rel="noopener" title="Download">
+                            <i class="bi bi-download"></i> <span class="pub-hide-sm">Download</span>
+                        </a>
+                    }
+                    <button type="button" class="pub-icon-btn" aria-label="Close" @onclick="ClosePreview">
+                        <i class="bi bi-x-lg"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div class="pub-modal__body pub-modal__body--preview">
+                @if (IsImage && !string.IsNullOrEmpty(_previewItem.DesignFilePath))
+                {
+                    <div class="pub-preview-image-wrap">
+                        <img src="@Api.FileUrl(_previewItem.DesignFilePath)" alt="@(_previewItem.DesignFileName ?? "Design Preview")" class="pub-preview-img" />
+                    </div>
+                }
+                else if (IsPdf && !string.IsNullOrEmpty(_previewItem.DesignFilePath))
+                {
+                    <iframe src="@Api.FileUrl(_previewItem.DesignFilePath)" class="pub-preview-iframe" title="PDF Preview"></iframe>
+                }
+                else
+                {
+                    <div class="pub-preview-unsupported">
+                        <i class="bi bi-file-earmark-arrow-down pub-preview-unsupported__icon"></i>
+                        <h3 style="font-size:16px;font-weight:600;margin-bottom:6px;">Preview Not Supported</h3>
+                        <p class="pub-muted" style="max-width:400px;margin:0 auto 16px;">Direct preview is not available for @FileExtension files. You can download the file to view it on your device.</p>
+                        @if (!string.IsNullOrEmpty(_previewItem.DesignFilePath))
+                        {
+                            <a class="pub-btn pub-btn--primary" href="@Api.FileUrl(_previewItem.DesignFilePath, download: true)" target="_blank" rel="noopener">
+                                <i class="bi bi-download"></i> Download @(_previewItem.DesignFileName ?? "Document")
+                            </a>
+                        }
+                    </div>
+                }
+            </div>
         </div>
     </div>
-    <label class="pub-label">Remarks From RMDO</label>
-    <div class="pub-remarks">@(string.IsNullOrWhiteSpace(D.Remarks) ? "No remarks." : D.Remarks)</div>
-</section>
+}
+
 @code {
     [Parameter, EditorRequired] public PubDetailDto D { get; set; } = default!;
-    [Parameter] public string Title { get; set; } = "Program Overview";
+    [Parameter] public string Title { get; set; } = "Request Summary";
     [Parameter] public RenderFragment? HeadActions { get; set; }
-    private PubFileDto? Design => D.Files.LastOrDefault(f => f.Kind == PublicityFileKind.Design);
+    private bool HasItems => D.Items is { Count: > 0 };
+    private PubFileDto? Design => D.Files.LastOrDefault(f => f.Kind == PublicityFileKind.Design && f.RequestItemId == null);
+
+    private int _page = 1;
+    private int _pageSize = 16;
+    private readonly int[] _pageSizes = new[] { 5, 10, 16, 25, 50 };
+
+    private int TotalPages => Math.Max(1, (int)Math.Ceiling((D.Items?.Count ?? 0) / (double)Math.Max(1, _pageSize)));
+    private int CurrentPage => Math.Clamp(_page, 1, TotalPages);
+
+    private List<PubRequestItemDto> PagedItems =>
+        HasItems ? D.Items.Skip((CurrentPage - 1) * _pageSize).Take(_pageSize).ToList() : new();
+
+    private PubRequestItemDto? _previewItem;
+
+    private void OnPageChanged(int p)
+    {
+        _page = p;
+    }
+
+    private void OnSizeChanged(int size)
+    {
+        _pageSize = size;
+        _page = 1;
+    }
+
+    protected override void OnParametersSet()
+    {
+        if (_page > TotalPages) _page = TotalPages;
+        if (_page < 1) _page = 1;
+    }
+
+    private void OpenPreview(PubRequestItemDto item)
+    {
+        if (string.IsNullOrEmpty(item.DesignFilePath)) return;
+        _previewItem = item;
+    }
+
+    private void ClosePreview()
+    {
+        _previewItem = null;
+    }
+
+    private void OnModalKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape") ClosePreview();
+    }
+
+    private string FileExtension =>
+        string.IsNullOrEmpty(_previewItem?.DesignFileName ?? _previewItem?.DesignFilePath)
+            ? ""
+            : System.IO.Path.GetExtension(_previewItem.DesignFileName ?? _previewItem.DesignFilePath).ToLowerInvariant();
+
+    private bool IsImage => FileExtension is ".png" or ".jpg" or ".jpeg" or ".webp";
+    private bool IsPdf => FileExtension is ".pdf";
 }
