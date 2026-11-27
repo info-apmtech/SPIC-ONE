@@ -1239,6 +1239,7 @@ namespace SpicAPI.Controllers
 				.Include(b => b.GuestHouseRoom)
 				.Include(b => b.RoomAllocations)
 				.Include(b => b.Guests)
+				.Include(b => b.Payments)
 				.OrderByDescending(b => b.CreatedAt)
 				.ToListAsync();
 
@@ -1249,6 +1250,17 @@ namespace SpicAPI.Controllers
 					.Where(i => houseIds.Contains(i.GuestHouseId) && i.IsActive)
 					.ToListAsync()
 				: new List<GuestHouseImage>();
+
+			// Bookings whose bill has been generated (a GuestHouseBill exists) - same fact Booking Details reports
+			// as HasInvoice. Display only: an Employee Stay badge turns Paid once its bill exists.
+			var bookingIds = bookings.Select(b => b.Id).ToList();
+			var billedBookingIds = bookingIds.Count > 0
+				? (await _db.GuestHouseBills
+					.AsNoTracking()
+					.Where(bill => bookingIds.Contains(bill.GuestHouseBookingId))
+					.Select(bill => bill.GuestHouseBookingId)
+					.ToListAsync()).ToHashSet()
+				: new HashSet<int>();
 
 			var today = DateTime.Today;
 			var summary = new BookingSummaryDto
@@ -1288,6 +1300,10 @@ namespace SpicAPI.Controllers
 					RoomNumber = CustomerRoomNumber(b),
 					BookingStatus = BookingStatusName(b.BookingStatus),
 					PaymentStatus = PaymentStatusName(b.PaymentStatus),
+					// The booking's original payment row (same one Booking Details shows); lets the page tell an
+					// Employee Stay (Complimentary) from a paid / pay-after-stay booking. Display only.
+					PaymentMethod = b.Payments.OrderBy(p => p.Id).FirstOrDefault() is { } firstPayment ? PaymentMethodName(firstPayment.PaymentMethod) : "",
+					HasInvoice = billedBookingIds.Contains(b.Id),
 					CheckInDate = b.CheckInDate,
 					CheckInTime = b.CheckInTime,
 					CheckOutDate = b.CheckOutDate,
@@ -2283,6 +2299,8 @@ namespace SpicAPI.Controllers
 		public string? RoomNumber { get; set; }
 		public string BookingStatus { get; set; } = "";
 		public string PaymentStatus { get; set; } = "";
+		public string? PaymentMethod { get; set; }
+		public bool HasInvoice { get; set; }
 		public DateTime? CheckInDate { get; set; }
 		public TimeSpan? CheckInTime { get; set; }
 		public DateTime? CheckOutDate { get; set; }

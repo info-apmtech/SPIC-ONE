@@ -137,7 +137,7 @@
                         <span class="fo-badge @BookingBadge(bk)">@bk.StatusText</span>
                         <div class="fo-guest-muted">@PeriodText(bk.Period)</div>
                     </td>
-                    <td><span class="fo-badge @(bk.PaymentStatus == 1 ? "fo-badge-paid" : "fo-badge-pending")">@BookingPaymentText(bk.PaymentStatus)</span></td>
+                    <td><span class="fo-badge @BookingPaymentBadgeClass(bk)">@BookingPaymentBadgeText(bk)</span></td>
                     <td style="white-space:nowrap;">
                         @BookingActions(bk)
                     </td>
@@ -158,7 +158,7 @@
                         <div class="fo-kv"><span class="fo-kv-label">Check-in</span><span class="fo-kv-value">@FormatDate(bk.CheckInDate)</span></div>
                         <div class="fo-kv"><span class="fo-kv-label">Check-out</span><span class="fo-kv-value">@FormatDate(bk.CheckOutDate)</span></div>
                         <div class="fo-kv"><span class="fo-kv-label">Period</span><span class="fo-kv-value">@PeriodText(bk.Period)</span></div>
-                        <div class="fo-kv"><span class="fo-kv-label">Payment</span><span class="fo-kv-value">@BookingPaymentText(bk.PaymentStatus)</span></div>
+                        <div class="fo-kv"><span class="fo-kv-label">Payment</span><span class="fo-kv-value">@BookingPaymentBadgeText(bk)</span></div>
                     </div>
                 </CardTemplate>
 
@@ -424,7 +424,7 @@
             new() { Header = "Check-out", ValueSelector = b => FormatDate(b.CheckOutDate) },
             new() { Header = "Status", ValueSelector = b => b.StatusText },
             new() { Header = "Period", ValueSelector = b => PeriodText(b.Period) },
-            new() { Header = "Payment", ValueSelector = b => BookingPaymentText(b.PaymentStatus) },
+            new() { Header = "Payment", ValueSelector = b => BookingPaymentBadgeText(b) },
         };
     }
 
@@ -796,6 +796,26 @@
         _ => "Pending"
     };
 
+    // Payment column of the Booking Details list. An Employee Stay (the booking's original payment method,
+    // never the signed-in user's role) shows "Booked" while Confirmed / Checked-In, via the shared rule the
+    // My Bookings pages use. Everything else keeps the stored payment status text. This list holds only
+    // Confirmed / Checked-In stays, and a bill can only be generated for a Completed booking, so no row here
+    // has a bill yet (billGenerated: false).
+    private static string BookingPaymentBadgeText(FrontOfficeActiveBookingDto bk) =>
+        GuestHousePaymentBadge.Text(PaymentMethodText(bk.PaymentMethod), BookingStatusName(bk.BookingStatus), BookingPaymentText(bk.PaymentStatus), billGenerated: false);
+
+    private static string BookingPaymentBadgeClass(FrontOfficeActiveBookingDto bk) =>
+        bk.PaymentStatus == 1 || BookingPaymentBadgeText(bk) == GuestHousePaymentBadge.Booked ? "fo-badge-paid" : "fo-badge-pending";
+
+    // GuestHouseBookingStatus values as the API serialises them.
+    private static string BookingStatusName(int status) => status switch
+    {
+        2 => "Confirmed",
+        4 => "Completed",
+        5 => "CheckedIn",
+        _ => status.ToString(CultureInfo.InvariantCulture)
+    };
+
     // Existing Check-In / Check-Out modals and endpoints. Check-In is offered only
     // for today's Confirmed stays; the server still enforces eligibility.
     private RenderFragment BookingActions(FrontOfficeActiveBookingDto bk) =>
@@ -911,6 +931,7 @@
         public int BookingStatus { get; set; }
         public string StatusText { get; set; } = "";
         public int PaymentStatus { get; set; }
+        public int? PaymentMethod { get; set; }
         public int Period { get; set; }
     }
 

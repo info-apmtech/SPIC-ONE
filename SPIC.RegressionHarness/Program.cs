@@ -43,6 +43,10 @@ internal static class Program
 		GuestHouseRoomNumberDisplayTests.Run();
 		Console.WriteLine();
 
+		// Employee Stay shows "Booked"; Dealer Paid / Pending / Failed / Refunded unchanged (display only).
+		GuestHousePaymentBadgeTests.Run();
+		Console.WriteLine();
+
 		// One booking = one room = one bill: real controller actions on an InMemory database
 		// with a stubbed Razorpay service (no real payment, no real database).
 		GuestHouseSingleRoomBookingTests.Run();
