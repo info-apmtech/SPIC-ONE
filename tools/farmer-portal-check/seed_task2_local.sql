@@ -35,6 +35,22 @@ VALUES
  (true,0,true,false,'D900008',1,1,1,1,1,2,0,'Demo To Be Terminated',now(),0,'2','',NULL,'Kovilpatti','628501','Kovilpatti',1,'9000000008','9000000008',NULL,9.1770,77.8720,'DEMO HOLDER','DEMOACC0008','Demo Branch','DEMO0000008','DEMOPAN008',NULL,NULL,now(),now(),false,false,now(),'demo-seed',now(),'demo-seed',now(),0,0,0,0,0,0,0,0,false,false,NULL),
  (true,0,true,false,NULL,1,1,1,1,0,NULL,0,'Demo New Dealer Pending',now(),0,'3','',NULL,'Kovilpatti','628501','Kovilpatti',1,'9000000009','9000000009',NULL,9.1780,77.8730,'DEMO HOLDER','DEMOACC0009','Demo Branch','DEMO0000009','DEMOPAN009',NULL,NULL,now(),now(),false,false,now(),'demo-seed',now(),'demo-seed',now(),0,0,0,0,0,0,0,0,true,false,NULL);
 
+-- Fix round 1: an approved New Dealer in a credit-limit maintenance cycle (AVPApproved reset to NULL,
+-- FinalApprovalDate kept): must stay listed.
+INSERT INTO "DealerRegistrations" (
+  "IsDealer","DealerType","InSpic","InGreenStar","DealerCode","StateId","DealerStateId","Region","HQ","Status",
+  "ParentDealer","FirmName","DateOfAppointment","DebitorBalance","ShopNoORRoomNoOrBlockNo","Village","PinCode","Taluk","DistrictId",
+  "OfficialContactNumber","WhatsAppNumber","AccountHolderName","AccountNumber","Branch","IFSC","PANNumber",
+  "WholesaleLicenseExpiryDate","RetailLicenseExpiryDate","IsOfficeAutomation","IsSDWA","CreditLimitExperiance",
+  "CreatedBy","CreatedAt","UpdatedBy","UpdatedAt","YearsofExperiance","AssetValue","CapitalInvestment","CashCreditLimit",
+  "OwnGodownCapacity","RentGodownCapacity","SettlementAmount","TradeDepositAmount","IsNewDealerRegistration","IsCreditLimitConsentGiven",
+  "AVPApproved","RMApproved","SMApproved","FinalApprovalDate","IsSubmittedForReview")
+SELECT true,0,true,false,'D900010',1,1,1,1,0,0,'Demo Maintenance Agro',now(),0,'9','Kadambur','628703','Kayathar',1,
+  '9000000010','9000000010','DEMO HOLDER','DEMOACC0010','Demo Branch','DEMO0000010','DEMOPAN010',
+  now(),now(),false,false,now(),'demo-seed',now(),'demo-seed',now(),0,0,0,0,0,0,0,0,true,false,
+  NULL,NULL,NULL,now() - interval '120 days',true
+WHERE NOT EXISTS (SELECT 1 FROM "DealerRegistrations" WHERE "FirmName" = 'Demo Maintenance Agro');
+
 -- Demo staff names / official numbers for the local QA staff logins (qa.mdo, qa.rm, qa.rmd) and a new
 -- JMDO login for qa.jmdo, all at Madurai HQ (1) / South Region (1), Tamil Nadu (1).
 INSERT INTO "EmployeeInformation" ("EmployeeCode","Name","PersonalPhoneNumber","OfficialPhoneNumber","Email","CreatedBy","UpdatedBy","CreatedAt","UpdatedAt")

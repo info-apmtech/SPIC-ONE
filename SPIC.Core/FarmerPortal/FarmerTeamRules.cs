@@ -58,6 +58,16 @@ public static class FarmerTeamRules
     /// <summary>Every role that can be on a farmer's team (and handles call-back requests).</summary>
     public static readonly IReadOnlySet<AppRole> TeamRoles = new HashSet<AppRole> { AppRole.JMDO, AppRole.MDO, AppRole.RM, AppRole.RMD };
 
+    /// <summary>
+    /// Whether an Employeelogins row may put its user on a farmer's team: the login and the user account are
+    /// active, the role is a team role, and the login's role is the ACCOUNT's role (AppUsers.Role). The
+    /// account role is what the token carries and what the staff call-back page checks, so a person whose
+    /// login row says MDO but whose account is MO (or anything else) could never open the requests sent to
+    /// them; such rows are left out. The team label then comes from that single, agreed role.
+    /// </summary>
+    public static bool IsTeamLogin(AppRole loginRole, AppRole accountRole, bool loginActive, bool accountActive) =>
+        loginActive && accountActive && loginRole == accountRole && TeamRoles.Contains(loginRole);
+
     /// <summary>Plain-words role names for farmers.</summary>
     public static string RoleLabel(AppRole role) => role switch
     {

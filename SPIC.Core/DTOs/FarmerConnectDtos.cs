@@ -116,7 +116,10 @@ public class StaffFarmerRequestDto
 {
     public int Id { get; set; }
     public string FarmerName { get; set; } = string.Empty;
+    /// <summary>The full number for the addressed officer; masked ("98xxxxxx21") for anyone else.</summary>
     public string? FarmerPhone { get; set; }
+    /// <summary>True when <see cref="FarmerPhone"/> is masked (no call link).</summary>
+    public bool FarmerPhoneMasked { get; set; }
     public string? Village { get; set; }
     public string? DistrictName { get; set; }
     public string? StateName { get; set; }

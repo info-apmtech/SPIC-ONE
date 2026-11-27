@@ -11,7 +11,8 @@
     Farmer Call-back Requests (farmer portal Task 2, staff side). JMDO / MDO / RM / RMD see the
     requests farmers sent to them and mark them Contacted / Closed with a note; Admin / SuperAdmin see
     every request, read-only (api/FarmerRequests; RouteAccess opens the route to those roles only).
-    The farmer asked to be called, so their name, phone, village and district are shown.
+    The farmer asked to be called, so their name, village and district are shown; the full phone (with a
+    tel: link) only to the addressed officer, masked for Admin / SuperAdmin.
 *@
 
 <PageHeader Title="Farmer Call-back Requests"
@@ -75,7 +76,14 @@
                                     @FarmerDealerRules.JoinParts(r.Village, r.DistrictName, r.StateName)
                                 </p>
                             </div>
-                            @if (FarmerContactLinks.TelHref(r.FarmerPhone) is { } tel)
+                            @if (r.FarmerPhoneMasked)
+                            {
+                                <span class="frq-masked" title="Only the officer the farmer asked can see the full number">
+                                    <i class="bi bi-shield-lock" aria-hidden="true"></i>
+                                    <span class="frq-masked__num">@r.FarmerPhone</span>
+                                </span>
+                            }
+                            else if (FarmerContactLinks.TelHref(r.FarmerPhone) is { } tel)
                             {
                                 <a class="frq-call" href="@tel"><i class="bi bi-telephone-fill" aria-hidden="true"></i>
                                     <span>@FarmerContactLinks.Display(r.FarmerPhone)</span></a>
@@ -198,6 +206,7 @@
 
     private FarmerContactRequestStatus? _status = FarmerContactRequestStatus.Open;
     private int _page = 1;
+    private int _loadVersion;
     private bool _loading = true;
     private string? _error;
     private StaffFarmerRequestListDto? _list;
@@ -243,8 +252,9 @@
         _loading = true;
         _error = null;
         var status = _status;
+        var version = ++_loadVersion;
         var result = await Api.StaffRequestsAsync(status, page);
-        if (status != _status) return;   // another filter was chosen meanwhile
+        if (version != _loadVersion) return;   // another filter or page was asked for meanwhile
         _loading = false;
         _now = DateTime.UtcNow;
         if (result.Value is null)

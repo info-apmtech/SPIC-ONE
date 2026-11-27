@@ -18,7 +18,8 @@ namespace SpicAPI.Controllers
     ///   PUT api/FarmerRequests/{id}  { status, note }
     ///       Only the addressed staff member (404 for anyone else, so ids are not probed).
     ///
-    /// Staff see the farmer's name, phone, village and district: the farmer asked to be called.
+    /// Staff see the farmer's name, phone, village and district: the farmer asked to be called. The full phone
+    /// goes only to the addressed officer; Admin / SuperAdmin (view all) get it masked.
     /// </summary>
     [Authorize]
     [ApiController]
@@ -146,7 +147,9 @@ namespace SpicAPI.Controllers
                 {
                     Id = r.Id,
                     FarmerName = p?.Name ?? "Farmer",
-                    FarmerPhone = p?.Phone,
+                    // The farmer asked the addressed officer to call: only they get the full number.
+                    FarmerPhone = FarmerContactRequestRules.PhoneForStaffView(p?.Phone, r.StaffUserId == callerId),
+                    FarmerPhoneMasked = r.StaffUserId != callerId && !string.IsNullOrWhiteSpace(p?.Phone),
                     Village = p?.Village,
                     DistrictName = p is not null && districtNames.TryGetValue(p.DistrictId, out var dn) ? dn : null,
                     StateName = p is not null && stateNames.TryGetValue(p.StateId, out var sn) ? sn : null,

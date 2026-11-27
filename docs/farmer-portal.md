@@ -260,11 +260,16 @@ Add your own screens to the script or reuse its sign-in helper.
 - **My requests** `/farmer/requests`: the farmer's requests, newest first, with status (Open / Contacted /
   Closed). The staff note is not shown to the farmer.
 - **Farmer Call-backs** `/farmer-requests` (staff, title "Farmer Call-back Requests"): JMDO / MDO / RM / RMD
-  see the requests addressed to them (farmer name, `tel:` phone, village, district, topic, message, preferred
-  time) with Open / Contacted / Closed / All tabs and counts, and mark them Contacted / Closed (or reopen)
-  with a note in a sheet. Admin / SuperAdmin see every request, read-only, with the addressee. Menu entry
+  see the requests addressed to them (farmer name, full phone with `tel:`, village, district, topic, message,
+  preferred time) with Open / Contacted / Closed / All tabs and counts, and mark them Contacted / Closed (or reopen)
+  with a note in a sheet. Admin / SuperAdmin see every request, read-only, with the addressee; for them the
+  farmer's phone is masked (`98xxxxxx21`, no call link) unless they are the addressed officer
+  (`FarmerContactRequestRules.PhoneForStaffView`, `farmerPhoneMasked` in the DTO). Menu entry
   "Farmer Call-backs" in the desktop sidebar, the mobile sidebar and the More sheet (More only: it never
   takes a phone tab or rail slot), all through `ShellNavigation.ShowFarmerRequests`.
+- **Farmer shell**: Dealers near me, My SPIC team and My call-back requests are in the farmer More sheet
+  (`ShellNavigation` FarmerDealers / FarmerTeam / FarmerMyRequests, Farmer only) and the desktop sidebar
+  (NavMenu), next to Task 3's entries; the phone tab bar is unchanged.
 - **Access**: `/farmer/dealers|team|requests` sit under the role-gated `/farmer` prefix. `/farmer-requests`
   is role-gated in `RouteAccess` (no PagePermission): JMDO / MDO / RM / RMD with a designation, Admin and
   SuperAdmin through their bypass; everyone else goes to their landing page; staff with no designation still
@@ -288,8 +293,9 @@ Contracts: `SPIC.Core/DTOs/FarmerConnectDtos.cs`. Enums travel as numbers like t
 - **Which dealers** (`FarmerDealerRules.ListableForFarmers`, EF-translatable): `Status == Active`; not
   `InactiveProposal` Terminated ("to be terminated") or NotTraceable; `IsDealer` and `DealerType` null or
   Dealer (no Department / Institution registrations); a firm name; and a Create New Dealer registration
-  (`IsNewDealerRegistration`) only after its final AVP approval gave it a code (`AVPApproved == true` and a
-  `DealerCode`), because its `Status` is the enum default Active while it is still in the approval flow
+  (`IsNewDealerRegistration`) only after its final AVP approval gave it a code (`AVPApproved == true` OR
+  `FinalApprovalDate` set, and a `DealerCode`; the credit-limit maintenance cycle resets `AVPApproved` to
+  null on an approved dealer, `FinalApprovalDate` is never cleared), because its `Status` is the enum default Active while it is still in the approval flow
   (the controller sets Active at the final AVP approval). Existing / bulk-loaded dealers are trading dealers,
   so their Status alone decides (their RM / SM / AVP flags describe a later credit-limit review).
 - **Public fields only**: the dealer query projects firm name, shop / street, sub-village, village, taluk,
@@ -302,7 +308,8 @@ Contracts: `SPIC.Core/DTOs/FarmerConnectDtos.cs`. Enums travel as numbers like t
   `FarmerDealerRules.Select` is the in-memory form of the same chain.
 - **Team** (`FarmerTeamRules.Resolve`): listable dealers in the farmer's district -> their `HQ` and
   `Region` ids (a dealer without a Region takes its Headquarter's region) -> active `Employeelogins` (login
-  and user account both active) with role JMDO / MDO whose `HeadquartersId` or `HeadquartersIds` match, and
+  and user account both active, and the login role equal to the account role `AppUsers.Role`, which the
+  token and the staff page use: `FarmerTeamRules.IsTeamLogin`) with role JMDO / MDO whose `HeadquartersId` or `HeadquartersIds` match, and
   RM / RMD whose `RegionId` or `RegionIds` match. No dealer in the district: the nearest listable dealer with
   GPS within 100 km of the farmer's saved location. Nobody found: the RM / RMD logins of the farmer's
   state. Ordered JMDO, MDO, RM, RMD, then by how many of the area's dealers their HQ / region serves, then

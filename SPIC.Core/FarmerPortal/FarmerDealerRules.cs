@@ -57,7 +57,9 @@ public static class FarmerDealerRules
     /// Institution registration), with a firm name. A registration made through the Create New Dealer
     /// flow counts only after its FINAL (AVP) approval gave it a dealer code: until then its Status
     /// is the default Active although it is not trading yet (DealerRegistrationsController sets Active
-    /// at the final AVP approval). Existing / bulk-loaded dealers are trading dealers already, so their
+    /// at the final AVP approval). Once finally approved it stays listed: the credit-limit maintenance cycle
+    /// resets AVPApproved to null on an approved dealer, but FinalApprovalDate (set at the first final
+    /// approval, never cleared) still records it. Existing / bulk-loaded dealers are trading dealers already, so their
     /// Status alone decides (their approval flags describe a later credit-limit review).
     /// EF-translatable; <see cref="IsListable"/> is the compiled form.
     /// </summary>
@@ -68,7 +70,8 @@ public static class FarmerDealerRules
         && d.IsDealer
         && (d.DealerType == null || d.DealerType == RegistrationDealerType.Dealer)
         && d.FirmName != null && d.FirmName != ""
-        && (!d.IsNewDealerRegistration || (d.AVPApproved == true && d.DealerCode != null && d.DealerCode != ""));
+        && (!d.IsNewDealerRegistration
+            || ((d.AVPApproved == true || d.FinalApprovalDate != null) && d.DealerCode != null && d.DealerCode != ""));
 
     private static readonly Func<DealerRegistration, bool> ListableCompiled = ListableForFarmers.Compile();
 

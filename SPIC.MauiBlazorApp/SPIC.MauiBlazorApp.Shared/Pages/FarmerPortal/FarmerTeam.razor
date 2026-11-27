@@ -144,6 +144,11 @@
         }
         _team = team;
         _openTotal = team.Members.Sum(m => m.OpenRequests);
+
+        // The badge counts every open request, also to an officer who is no longer on this team.
+        var mine = await Api.MyRequestsAsync();
+        if (mine.Value is { } requests && ReferenceEquals(_team, team))
+            _openTotal = requests.Count(r => r.Status == FarmerContactRequestStatus.Open);
     }
 
     private void Ask(FarmerContactDto member)

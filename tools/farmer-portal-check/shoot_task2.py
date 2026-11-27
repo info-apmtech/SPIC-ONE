@@ -102,6 +102,17 @@ def farmer_screens(browser, base, out, phone, sizes):
         page.wait_for_selector(".fpr-list, .fp-empty", timeout=20000)
         shoot.settle(page, 900)
         shoot.shot(page, out, f"my-requests-{size}")
+
+        # Shell navigation (fix round 1): the phone More sheet / the desktop sidebar list the Task 2 pages.
+        if size == "phone":
+            page.click("button[aria-label='More pages']")
+            page.wait_for_timeout(900)
+            shoot.shot(page, out, "farmer-more-sheet-phone", full=False)
+        else:
+            page.goto(base + "/farmer/team")
+            page.wait_for_selector(".fpt-grid, .fp-empty", timeout=20000)
+            shoot.settle(page, 900)
+            shoot.shot(page, out, f"farmer-sidebar-{size}", full=False)
         ctx.close()
 
 

@@ -61,6 +61,16 @@ internal static class FarmerPortalConnectTests
 		Check.That("menu: JMDO's scoped More sheet still lists Farmer Call-backs",
 			ShellNavigation.MoreItems(TestLogin.As(AppRole.JMDO, "Dashboard.View")).Any(t => t.Key == ShellNavigation.FarmerRequestsKey));
 		Check.Equal("menu: /farmer-requests highlights its own entry", ShellNavigation.FarmerRequestsKey, ShellNavigation.ActiveKey("/farmer-requests"));
+		var farmerMore = ShellNavigation.MoreItems(farmer).Select(t => t.Key).ToList();
+		Check.That("menu: farmer More sheet has Dealers, My SPIC team and My requests",
+			new[] { ShellNavigation.FarmerDealersKey, ShellNavigation.FarmerTeamKey, ShellNavigation.FarmerMyRequestsKey }.All(farmerMore.Contains), string.Join(",", farmerMore));
+		Check.That("menu: those farmer entries open for a farmer",
+			ShellNavigation.MoreItems(farmer).All(t => RouteAccess.CanOpen(farmer, t.Href, null)));
+		Check.That("menu: staff and Admin never get the farmer Task 2 entries",
+			new[] { TestLogin.As(AppRole.MDO, "Dashboard.View"), TestLogin.As(AppRole.Admin, "") }.All(l =>
+				ShellNavigation.MoreItems(l).All(t => t.Key is not (ShellNavigation.FarmerDealersKey or ShellNavigation.FarmerTeamKey or ShellNavigation.FarmerMyRequestsKey))));
+		Check.That("menu: farmer phone tabs unchanged by the new entries",
+			ShellNavigation.GetPhoneTabs(farmer).All(t => t.Key is not (ShellNavigation.FarmerDealersKey or ShellNavigation.FarmerTeamKey or ShellNavigation.FarmerMyRequestsKey)));
 	}
 
 	private static void UiText()
@@ -159,6 +169,19 @@ internal static class FarmerPortalConnectTests
 		Check.That("listable: approved but no dealer code yet is hidden",
 			!FarmerDealerRules.IsListable(Dealer(d => { d.IsNewDealerRegistration = true; d.AVPApproved = true; d.DealerCode = ""; })));
 		Check.That("listable: no firm name is hidden", !FarmerDealerRules.IsListable(Dealer(d => d.FirmName = "")));
+		// Fix round 1 (I3): credit-limit maintenance resets AVPApproved to null on an approved new dealer.
+		Check.That("listable: an approved new dealer in a maintenance cycle (AVPApproved reset, FinalApprovalDate kept) stays listed",
+			FarmerDealerRules.IsListable(Dealer(d => { d.IsNewDealerRegistration = true; d.AVPApproved = null; d.FinalApprovalDate = new DateTime(2026, 6, 1); d.DealerCode = "1000123"; })));
+		Check.That("listable: FinalApprovalDate without a dealer code is still hidden",
+			!FarmerDealerRules.IsListable(Dealer(d => { d.IsNewDealerRegistration = true; d.FinalApprovalDate = new DateTime(2026, 6, 1); d.DealerCode = null; })));
+		Check.That("listable: FinalApprovalDate does not bring back a terminated dealer",
+			!FarmerDealerRules.IsListable(Dealer(d => { d.IsNewDealerRegistration = true; d.FinalApprovalDate = new DateTime(2026, 6, 1); d.DealerCode = "1000123"; d.Status = DealerStatus.Terminated; })));
+		Check.That("listable: FinalApprovalDate does not bring back a to-be-terminated dealer",
+			!FarmerDealerRules.IsListable(Dealer(d => { d.IsNewDealerRegistration = true; d.FinalApprovalDate = new DateTime(2026, 6, 1); d.DealerCode = "1000123"; d.Status = DealerStatus.InActive; d.InactiveProposal = FutureBusinessProposal.Terminated; })));
+		Check.That("listable: FinalApprovalDate does not bring back a not-traceable dealer",
+			!FarmerDealerRules.IsListable(Dealer(d => { d.IsNewDealerRegistration = true; d.FinalApprovalDate = new DateTime(2026, 6, 1); d.DealerCode = "1000123"; d.InactiveProposal = FutureBusinessProposal.NotTraceable; })));
+		Check.That("listable: FinalApprovalDate does not bring back an Institution",
+			!FarmerDealerRules.IsListable(Dealer(d => { d.IsNewDealerRegistration = true; d.FinalApprovalDate = new DateTime(2026, 6, 1); d.DealerCode = "1000123"; d.DealerType = RegistrationDealerType.Institution; })));
 	}
 
 	private static void Locator()
@@ -309,6 +332,16 @@ internal static class FarmerPortalConnectTests
 		var many = Enumerable.Range(1, 12).Select(i => Staff("j" + i, AppRole.JMDO, 5, 10, "JMDO " + i.ToString("00"))).ToArray();
 		Check.Equal("team: capped at 8", FarmerTeamRules.MaxMembers, FarmerTeamRules.Resolve(1, 1, null, null, dealers, many).Members.Count);
 
+		// Fix round 1 (I1): the login row's role must be the account role the token / staff page use.
+		Check.That("team login: MDO login on an MDO account", FarmerTeamRules.IsTeamLogin(AppRole.MDO, AppRole.MDO, true, true));
+		Check.That("team login: an MDO login row on an MO account is left out (its staff page would be 403)",
+			!FarmerTeamRules.IsTeamLogin(AppRole.MDO, AppRole.MO, true, true));
+		Check.That("team login: a JMDO login on an Admin account is left out", !FarmerTeamRules.IsTeamLogin(AppRole.JMDO, AppRole.Admin, true, true));
+		Check.That("team login: MO login on an MO account is not a team role", !FarmerTeamRules.IsTeamLogin(AppRole.MO, AppRole.MO, true, true));
+		Check.That("team login: inactive login or account left out",
+			!FarmerTeamRules.IsTeamLogin(AppRole.RM, AppRole.RM, false, true) && !FarmerTeamRules.IsTeamLogin(AppRole.RM, AppRole.RM, true, false));
+		Check.That("team login: every team-login role can open the staff page",
+			FarmerTeamRules.TeamRoles.All(r => !FarmerTeamRules.IsTeamLogin(r, r, true, true) || FarmerContactRequestRules.CanUseStaffPage(r)));
 		Check.Equal("role label: JMDO", "Junior Market Development Officer", FarmerTeamRules.RoleLabel(AppRole.JMDO));
 		Check.Equal("role label: MDO", "Market Development Officer", FarmerTeamRules.RoleLabel(AppRole.MDO));
 		Check.Equal("role label: RM", "Regional Manager", FarmerTeamRules.RoleLabel(AppRole.RM));
@@ -343,6 +376,11 @@ internal static class FarmerPortalConnectTests
 			new[] { AppRole.JMDO, AppRole.MDO, AppRole.RM, AppRole.RMD, AppRole.Admin, AppRole.SuperAdmin }.All(r => FarmerContactRequestRules.CanUseStaffPage(r)));
 		Check.That("staff page: not Farmer, MO, Dealer, CorporateAdmin",
 			new[] { AppRole.Farmer, AppRole.MO, AppRole.Dealer, AppRole.CorporateAdmin }.All(r => !FarmerContactRequestRules.CanUseStaffPage(r)));
+		// Fix round 1 (I2): the full phone only for the addressed officer.
+		Check.Equal("staff phone: the addressed officer sees the full number", "9876543221", FarmerContactRequestRules.PhoneForStaffView("9876543221", true));
+		Check.Equal("staff phone: anyone else gets it masked", "98xxxxxx21", FarmerContactRequestRules.PhoneForStaffView("9876543221", false));
+		Check.That("staff phone: a masked number has no call link", FarmerContactLinks.TelHref("98xxxxxx21") is null);
+		Check.Equal("staff phone: none stays none", (string?)null, FarmerContactRequestRules.PhoneForStaffView(" ", false));
 		Check.That("staff page: Admin is a read-only viewer", FarmerContactRequestRules.IsAdminViewer(AppRole.Admin) && !FarmerContactRequestRules.IsAdminViewer(AppRole.MDO));
 	}
 }

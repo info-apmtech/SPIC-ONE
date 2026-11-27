@@ -209,6 +209,22 @@ public static class ShellNavigation
             ShortLabel = "Profile",
             Rule = s => s.UserRole == AppRole.Farmer
         },
+        // Farmer portal Task 2: More sheet entries (the farmer tab bar / rail stay their priority list).
+        new(FarmerDealersKey, "Dealers near me", "bi-shop", "/farmer/dealers", FarmerHomeKey)
+        {
+            ShortLabel = "Dealers",
+            Rule = s => s.UserRole == AppRole.Farmer
+        },
+        new(FarmerTeamKey, "My SPIC team", "bi-people-fill", "/farmer/team", FarmerHomeKey)
+        {
+            ShortLabel = "SPIC team",
+            Rule = s => s.UserRole == AppRole.Farmer
+        },
+        new(FarmerMyRequestsKey, "My call-back requests", "bi-clock-history", "/farmer/requests", FarmerHomeKey)
+        {
+            ShortLabel = "My requests",
+            Rule = s => s.UserRole == AppRole.Farmer
+        },
         // Farmer portal Task 3: More sheet entries (the farmer tab bar / rail stay their priority list).
         new(FarmerTrendsKey, "Trends in my area", "bi-cloud-sun", "/farmer/trends", FarmerHomeKey)
         {
@@ -567,6 +583,9 @@ public static class ShellNavigation
         SPIC.Core.FarmerPortal.FarmerContactRequestRules.CanUseStaffPage(s.UserRole)
         && RouteAccess.CanOpen(s, "/" + FarmerRequestsKey, null);
     public const string FarmerProfileKey = "FarmerProfile";
+    public const string FarmerDealersKey = "FarmerDealers";
+    public const string FarmerTeamKey = "FarmerTeam";
+    public const string FarmerMyRequestsKey = "FarmerMyRequests";
     public const string FarmerTrendsKey = "FarmerTrends";
     public const string FarmerCommunityKey = "FarmerCommunity";
 
@@ -618,7 +637,7 @@ public static class ShellNavigation
     // no designation through (e.g. CSR-1 Create's `!IsAdmin`): only these keys, each still checked.
     private static readonly HashSet<string> FarmerShellKeys = new(StringComparer.OrdinalIgnoreCase)
     {
-        FarmerHomeKey, FarmerProfileKey, FarmerTrendsKey, FarmerCommunityKey, "SasMySamples", "SasMyReports", "SasMyPayments", "Help"
+        FarmerHomeKey, FarmerProfileKey, FarmerDealersKey, FarmerTeamKey, FarmerMyRequestsKey, FarmerTrendsKey, FarmerCommunityKey, "SasMySamples", "SasMyReports", "SasMyPayments", "Help"
     };
 
     /// <summary>Every accessible destination NOT already in the phone tab bar, in Candidate order.</summary>

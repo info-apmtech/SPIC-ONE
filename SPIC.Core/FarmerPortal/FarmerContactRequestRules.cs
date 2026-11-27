@@ -96,6 +96,16 @@ public static class FarmerContactRequestRules
     public static bool CanUseStaffPage(AppRole? role) =>
         role is { } r && (FarmerTeamRules.TeamRoles.Contains(r) || IsAdminViewer(r));
 
+    /// <summary>
+    /// The farmer's phone on the staff page: the full number only for the officer the request is addressed
+    /// to (the farmer asked THEM to call); anyone else (Admin / SuperAdmin viewing all) gets it masked,
+    /// "98xxxxxx21", and no call link.
+    /// </summary>
+    public static string? PhoneForStaffView(string? farmerPhone, bool callerIsAddressee) =>
+        string.IsNullOrWhiteSpace(farmerPhone) ? null
+        : callerIsAddressee ? farmerPhone
+        : FarmerPhone.Mask(farmerPhone);
+
     /// <summary>Admin / SuperAdmin see every request (read-only).</summary>
     public static bool IsAdminViewer(AppRole? role) => role is AppRole.Admin or AppRole.SuperAdmin;
 }

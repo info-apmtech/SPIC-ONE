@@ -122,6 +122,8 @@ def main():
     st, nogps = call(base, "GET", "api/Farmer/dealers", token=farmer)
     check("no GPS: District scope, by name", nogps.get("scope") == 1 and names(nogps) == sorted(names(nogps), key=str.lower), names(nogps))
     check("no GPS: no distances", all(d.get("distanceKm") is None for d in nogps.get("items", [])))
+    check("I3: an approved new dealer in a maintenance cycle (AVPApproved reset) is still listed",
+          "Demo Maintenance Agro" in names(nogps), names(nogps))
 
     st, q = call(base, "GET", "api/Farmer/dealers?q=ettaya", token=farmer)
     check("search: village search", names(q) == ["Demo Farm Inputs"], names(q))
@@ -142,6 +144,8 @@ def main():
     roles = [m["role"] for m in team.get("members", [])]
     check("team: district basis (0)", team.get("basis") == 0, team.get("basis"))
     order = {10: 0, 8: 1, 6: 2, 7: 3}
+    member_names = [m["name"] for m in team.get("members", [])]
+    check("I1: an MO account with an MDO login row (qa.mo) is not on the team", "QA MO" not in member_names, member_names)
     check("team: JMDO, MDO, RM, RMD (in that order, all four present)",
           [order[r] for r in roles] == sorted(order[r] for r in roles) and set(roles) == {10, 8, 6, 7}, roles)
     check("team: role labels in plain words", team["members"][0]["roleLabel"] == "Junior Market Development Officer", team["members"][0])
@@ -187,6 +191,8 @@ def main():
     st, lst = call(base, "GET", "api/FarmerRequests?status=Open", token=jmdo_staff)
     check("staff: JMDO sees its open requests", st == 200 and lst.get("open", 0) >= 3 and not lst.get("adminView"), lst)
     row = next((r for r in lst.get("items", []) if r["id"] == created[0]), None)
+    check("I2: the addressed officer gets the full phone, not masked", row is not None and row.get("farmerPhone") == args.phone
+          and row.get("farmerPhoneMasked") is False, row)
     check("staff: farmer phone, village and district shown", row is not None and row.get("farmerPhone") == args.phone
           and row.get("village") and row.get("districtName") == "Thoothukudi", row)
     check("staff: only requests addressed to the caller", all(r["staffRole"] == 10 for r in lst.get("items", [])))
@@ -203,6 +209,10 @@ def main():
     st, alist = call(base, "GET", "api/FarmerRequests?status=Contacted", token=admin)
     check("staff: Admin sees every request, read-only", st == 200 and alist.get("adminView") is True
           and any(r["id"] == created[0] for r in alist.get("items", [])) and all(not r["canUpdate"] for r in alist.get("items", [])), alist)
+    arow = next((r for r in alist.get("items", []) if r["id"] == created[0]), {})
+    masked = args.phone[:2] + "x" * 6 + args.phone[-2:]
+    check("I2: Admin sees the farmer phone masked (98xxxxxx21 style)", arow.get("farmerPhone") == masked and arow.get("farmerPhoneMasked") is True, arow)
+    check("I2: no full farmer phone anywhere in the Admin list", args.phone not in json.dumps(alist))
     st, _ = call(base, "PUT", f"api/FarmerRequests/{created[0]}", {"status": 2}, token=admin)
     check("staff: Admin cannot update (403)", st == 403, st)
     st, fbody = call(base, "GET", "api/FarmerRequests", token=farmer)

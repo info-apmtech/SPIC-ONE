@@ -356,7 +356,7 @@ namespace SpicAPI.Controllers
         /// <summary>
         /// Feeds <see cref="FarmerTeamRules.Resolve"/>: the listable dealers of the farmer's district (or,
         /// when there are none, those with GPS within 100 km of the farmer) and every active JMDO / MDO /
-        /// RM / RMD login whose user account is active.
+        /// RM / RMD login whose user account is active and has the same role.
         /// </summary>
         private async Task<FarmerTeamResult> ResolveTeamAsync(FarmerProfile profile, CancellationToken ct)
         {
@@ -386,11 +386,16 @@ namespace SpicAPI.Controllers
                 join user in _db.Users.AsNoTracking() on login.UserId equals user.Id
                 join info in _db.EmployeeInformation.AsNoTracking() on login.EmployeeInformationID equals info.Id into infoJoin
                 from info in infoJoin.DefaultIfEmpty()
-                where login.IsActive && user.IsActive && roles.Contains(login.Role)
+                // The login role must be the account role (FarmerTeamRules.IsTeamLogin): the token, and so
+                // the staff call-back page, carry the account role.
+                where login.IsActive && user.IsActive && roles.Contains(login.Role) && user.Role == login.Role
                 select new
                 {
                     login.UserId,
                     login.Role,
+                    AccountRole = user.Role,
+                    LoginActive = login.IsActive,
+                    AccountActive = user.IsActive,
                     login.StateId,
                     login.RegionId,
                     login.HeadquartersId,
@@ -401,7 +406,9 @@ namespace SpicAPI.Controllers
                     Official = info != null ? info.OfficialPhoneNumber : null
                 }).ToListAsync(ct);
 
-            var staff = staffRows.Select(s => new FarmerTeamStaff(
+            var staff = staffRows
+                .Where(s => FarmerTeamRules.IsTeamLogin(s.Role, s.AccountRole, s.LoginActive, s.AccountActive))
+                .Select(s => new FarmerTeamStaff(
                 s.UserId, s.Role, s.StateId, s.RegionId, s.HeadquartersId, s.RegionIds, s.HeadquartersIds,
                 FirstNonBlank(s.InfoName, s.UserName) ?? "SPIC officer",
                 s.Official)).ToList();
