@@ -423,6 +423,20 @@ namespace Spic.Infrastructure.Data
                 entity.Property(x => x.IrrigationType).HasConversion<string>().HasMaxLength(20);
                 entity.Property(x => x.PreferredLanguage).HasMaxLength(5);
             });
+            // Farmer portal Task 2: call-back requests (farmer -> one of their SPIC staff).
+            builder.Entity<FarmerContactRequest>(entity =>
+            {
+                entity.Property(x => x.FarmerUserId).HasMaxLength(450);
+                entity.Property(x => x.StaffUserId).HasMaxLength(450);
+                entity.Property(x => x.StaffRole).HasConversion<string>().HasMaxLength(20);
+                entity.Property(x => x.Topic).HasConversion<string>().HasMaxLength(20);
+                entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
+                entity.Property(x => x.Message).HasMaxLength(500);
+                entity.Property(x => x.PreferredTime).HasMaxLength(40);
+                entity.Property(x => x.StaffNote).HasMaxLength(500);
+                entity.HasIndex(x => new { x.FarmerUserId, x.CreatedAtUtc });
+                entity.HasIndex(x => new { x.StaffUserId, x.Status, x.CreatedAtUtc });
+            });
 
             builder.Entity<SampleLabResult>(entity =>
             {
@@ -1147,6 +1161,7 @@ namespace Spic.Infrastructure.Data
         //// Farmer Portal
         public DbSet<FarmerOtpChallenge> FarmerOtpChallenges { get; set; }
         public DbSet<FarmerProfile> FarmerProfiles { get; set; }
+        public DbSet<FarmerContactRequest> FarmerContactRequests { get; set; }
 
         //// JMDO Task Allocation
         public DbSet<JmdoTaskAllocation> JmdoTaskAllocations { get; set; }

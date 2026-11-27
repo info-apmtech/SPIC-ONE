@@ -62,3 +62,54 @@ public class FarmerProfile
     public DateTime CreatedAtUtc { get; set; }
     public DateTime UpdatedAtUtc { get; set; }
 }
+
+// Farmer Portal Task 2 (docs/farmer-portal.md, 2026-11-28): call-back requests a farmer sends to one of
+// their SPIC field staff (JMDO / MDO / RM / RMD) from /farmer/team; the staff member handles them on
+// /farmer-requests.
+
+/// <summary>What a call-back request is about (stored as text).</summary>
+public enum FarmerContactTopic
+{
+    Fertilizer,
+    CropProblem,
+    SoilTest,
+    Product,
+    Dealer,
+    Other
+}
+
+/// <summary>Open (new), Contacted (staff called), Closed (done). Stored as text.</summary>
+public enum FarmerContactRequestStatus
+{
+    Open,
+    Contacted,
+    Closed
+}
+
+/// <summary>
+/// One "please call me back" request from a farmer to one staff member. The staff member must be one
+/// of the farmer's resolved contacts when the request is made
+/// (<see cref="SPIC.Core.FarmerPortal.FarmerTeamRules"/>); at most
+/// <see cref="SPIC.Core.FarmerPortal.FarmerContactRequestRules.MaxOpenPerStaff"/> Open requests per farmer
+/// per staff member. Only the addressed staff member changes the status / note. Timestamps are UTC.
+/// </summary>
+public class FarmerContactRequest
+{
+    public int Id { get; set; }
+    /// <summary>The farmer's Identity user id (AppUsers.Id).</summary>
+    public string FarmerUserId { get; set; } = string.Empty;
+    /// <summary>The staff member's Identity user id (Employeelogins.UserId).</summary>
+    public string StaffUserId { get; set; } = string.Empty;
+    /// <summary>The staff member's role when the request was made (JMDO / MDO / RM / RMD), for the label.</summary>
+    public AppRole StaffRole { get; set; }
+    public FarmerContactTopic Topic { get; set; }
+    /// <summary>The farmer's own words, at most 500 characters ("" when none).</summary>
+    public string Message { get; set; } = string.Empty;
+    /// <summary>One of <see cref="SPIC.Core.FarmerPortal.FarmerContactRequestRules.PreferredTimes"/> keys, or null.</summary>
+    public string? PreferredTime { get; set; }
+    public FarmerContactRequestStatus Status { get; set; }
+    /// <summary>The staff member's note (not shown to the farmer).</summary>
+    public string? StaffNote { get; set; }
+    public DateTime CreatedAtUtc { get; set; }
+    public DateTime UpdatedAtUtc { get; set; }
+}

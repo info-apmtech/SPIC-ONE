@@ -100,6 +100,7 @@ internal static class Program
 		FarmerPortalAuthTests.Run();
 		FarmerPortalRouteTests.Run();
 		FarmerPortalUiTests.Run();
+		FarmerPortalConnectTests.Run();
 
 		return Check.Report("Total");
 	}
