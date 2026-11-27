@@ -52,6 +52,12 @@ Tasks run strictly one after another; each later task may build on earlier ones.
   answer is a rule-based fallback.
 - Commits: small, message style like the repo history, each ending with
   `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
+- Visual design: every farmer screen follows
+  docs/superpowers/specs/2026-11-27-farmer-portal-visual-design.md and (from Task 2 on) composes
+  the shared `Fp*` components and `.fp` styles from Task 1b instead of ad-hoc markup. Loading,
+  empty and error states are designed. Each task saves screenshots of its screens at 375x812 and
+  1280x800 under `.superpowers/sdd/2026-11-27-farmer-portal/shots/task-<N>/` and lists them in
+  its report.
 - Write a short `docs/farmer-portal.md` section for your feature (what it does, endpoints,
   config keys, tables, what is left), appending to the file other tasks create.
 
@@ -129,6 +135,38 @@ Tests: harness checks for phone normalisation/validation, OTP hash + compare, at
 rules, cooldown/hour-limit decisions (make the rule logic a pure class so it can be tested
 without a DB), profile validation. Smoke test request->verify->profile on the local API using
 `devCode` (Development environment).
+
+---
+
+## Task 1b: Farmer portal design system and polish of the Task 1 screens
+
+Goal: the owner wants a "very good, attractive, corporate" design. Build the shared visual
+language from docs/superpowers/specs/2026-11-27-farmer-portal-visual-design.md and apply it to
+every screen Task 1 made, so Tasks 2-7 only compose these pieces.
+
+- Create `SPIC.MauiBlazorApp.Shared/wwwroot/css/farmer-portal.css` with the `.fp` tokens and base
+  styles, and load it in BOTH hosts exactly the way tokens.css is loaded
+  (`SPIC.MauiBlazorApp/wwwroot/index.html` and `SPIC.MauiBlazorApp.Web/Components/App.razor`).
+- Build the shared components under `SPIC.MauiBlazorApp.Shared/Components/FarmerPortal/`:
+  FpHero, FpCard, FpTile, FpChip/FpStatus, FpZoneSlider, FpBigNumber (with range bar and
+  confidence), FpSteps, FpEmpty/FpError (inline SVG illustrations), FpSkeleton (or wrap the
+  existing Skeleton), FpDisclaimer, plus button classes. Keep each component small and
+  documented with a one-line usage comment. Add a dev gallery page `/dev/farmer-portal`
+  (Admin/SuperAdmin only, like the existing /dev pages) showing every component and state.
+- Restyle Task 1's screens to the brief: `/farmer/login` (split screen desktop, hero phone,
+  six-box OTP input with paste and auto-advance, resend countdown), `/farmer/onboarding`
+  (FpSteps, crop chips with icons), `/farmer/profile`, and the placeholder `/farmer` home
+  (FpHero greeting by IST time of day, tile grid wired to a tile registry later tasks extend).
+  Also make the "Farmer? Sign in with mobile number" entry on the normal login page look
+  intentional without changing that page's existing layout on desktop.
+- Everything scoped under `.fp`; existing pages must look identical (spot-check the normal
+  login and two staff pages at 1280 before/after).
+- Screenshots at 375x812 and 1280x800 of every farmer screen and the gallery, saved under
+  `.superpowers/sdd/2026-11-27-farmer-portal/shots/task-1b/`.
+
+Tests: harness check that OTP box paste/normalisation helper (if written in C#) and the IST
+greeting helper behave at boundaries (e.g. 04:59 / 05:00 / 11:59 / 12:00 / 16:59 / 17:00 IST
+from UTC inputs).
 
 ---
 
