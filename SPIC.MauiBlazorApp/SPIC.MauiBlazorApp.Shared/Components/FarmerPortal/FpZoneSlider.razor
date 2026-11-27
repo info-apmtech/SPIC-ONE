@@ -16,7 +16,7 @@
 <div class="fp-zone @(Value is null ? "is-empty" : null) @CssClass" style="@StyleVars">
     <div class="fp-zone__head">
         <label class="fp-zone__label" for="@Id">@Label</label>
-        <FpStatus Level="@Level" />
+        <FpStatus Level="@Level" Text="@LevelText" />
     </div>
     <div class="fp-zone__body">
         <div class="fp-zone__slider">
@@ -88,6 +88,21 @@
 
     [Parameter] public string? CssClass { get; set; }
 
+    /// <summary>Optional chip words instead of Low / Medium / High (soil pH: "Acidic", "Neutral", "Alkaline").</summary>
+    [Parameter] public string? LowText { get; set; }
+
+    [Parameter] public string? MediumText { get; set; }
+
+    [Parameter] public string? HighText { get; set; }
+
+    private string? LevelText => Level switch
+    {
+        FpLevel.Low => LowText,
+        FpLevel.Medium => MediumText,
+        FpLevel.High => HighText,
+        _ => null
+    };
+
     private FpLevel Level => FpUi.ZoneLevel(Value, LowBelow, HighAbove);
 
     private double Fraction(double v) => FpUi.Fraction(v, Min, Max);
@@ -100,7 +115,7 @@
 
     private string ValueText => Value is null
         ? "Not set"
-        : $"{Format(Value.Value)} {Unit}, {FpUi.LevelLabel(Level)}";
+        : $"{Format(Value.Value)} {Unit}, {LevelText ?? FpUi.LevelLabel(Level)}";
 
     // Track colours: soft red to the Low threshold, green to the High threshold, violet after.
     private string StyleVars

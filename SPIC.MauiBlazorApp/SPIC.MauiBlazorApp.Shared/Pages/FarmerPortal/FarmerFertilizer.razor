@@ -1,0 +1,443 @@
+@page "/farmer/fertilizer"
+@using System.Globalization
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
+@inject FarmerSession Farmer
+@inject FarmerFertilizerApi Api
+@inject LoginState LoginState
+
+@*
+    Fertilizer advice (farmer portal Task 4, api/Farmer/fertilizer/*). Two input cards like the owner's sketch:
+    "Soil test values" (N / P / K / pH zone sliders with Low / Medium / High chips from the SPIC lab's ranges,
+    "Use my soil report" for linked farmers) and "Crop-wise recommendations" (crop, type, soil type, area).
+    The result (FertilizerResultView) appears below and is saved to the farmer's history.
+*@
+
+<div class="fp fp-page fpfz">
+    <FpHero Title="Fertilizer advice" Compact="true" BackHref="@LoginState.FarmerLandingPath" BackLabel="Back to home"
+            Subtitle="Enter your soil test and crop. We show how much to apply, when, and how many bags to buy.">
+        <FpSteps Steps="@FertilizerUi.StepNames" Current="@Step" OnSelect="GoToStep" AriaLabel="Fertilizer advice steps" />
+        <a class="fp-btn fp-btn--light fp-btn--sm fpfz-history-link" href="/farmer/fertilizer/history"><i class="bi bi-clock-history" aria-hidden="true"></i> My past advice</a>
+    </FpHero>
+
+    @if (LoginState.UserRole != AppRole.Farmer)
+    {
+        <FpEmpty Art="FpArtKind.Field" Title="You are viewing as support staff"
+                 Message="Farmers get fertilizer advice for their crop and soil here. Support staff have no farmer profile, so nothing is saved." />
+    }
+    else if (_loading)
+    {
+        <FpSkeleton Variant="FpSkeletonVariant.Form" Count="2" LoadingText="Getting the crops and soil ranges..." />
+    }
+    else if (_error is not null || _options is null)
+    {
+        <FpError Title="We could not open fertilizer advice" Message="@(_error ?? "Please try again.")" OnRetry="LoadAsync" />
+    }
+    else
+    {
+        <div class="fpfz-inputs">
+            @* ---- Step 1: soil test ---- *@
+            <FpCard @ref="_soilCard" Title="Soil test values" Icon="bi-sliders" Hue="FpHue.Soil" CssClass="fpfz-card fpfz-card--soil"
+                    Subtitle="Move the sliders or type the values from your soil report.">
+                <ChildContent>
+                    @if (FarmerFeatureTiles.HasSoilTests(LoginState))
+                    {
+                        <div class="fpfz-usereport">
+                            <span class="fpfz-usereport__text">
+                                <strong>Have a SPIC soil report?</strong>
+                                <span class="fp-caption">Fill the four values from your latest report.</span>
+                            </span>
+                            <button type="button" class="fp-btn fp-btn--secondary fp-btn--sm" disabled="@_reportLoading" @onclick="UseReportAsync">
+                                @if (_reportLoading)
+                                {
+                                    <span class="fp-spinner" aria-hidden="true"></span>
+                                }
+                                else
+                                {
+                                    <i class="bi bi-file-earmark-arrow-down" aria-hidden="true"></i>
+                                }
+                                Use my soil report
+                            </button>
+                        </div>
+                    }
+                    @if (_reportNote is not null)
+                    {
+                        <div class="fp-alert @(_reportOk ? "fp-alert--success" : "fp-alert--info") fpfz-report" role="status">
+                            <i class="bi @(_reportOk ? "bi-check-circle-fill" : "bi-info-circle-fill")" aria-hidden="true"></i>
+                            <span>
+                                @_reportNote
+                                @foreach (var note in _reportNotes)
+                                {
+                                    <span class="fpfz-report__note">@note</span>
+                                }
+                            </span>
+                        </div>
+                    }
+                    <div class="fpfz-sliders">
+                        <FpZoneSlider Id="fz-n" Label="@Label(N)" Unit="kg/ha" Min="@N.Min" Max="@SliderMax(N, _n)" Step="@N.Step"
+                                      LowBelow="@N.LowBelow" HighAbove="@N.HighAbove" @bind-Value="_n" @bind-Value:after="SoilEdited"
+                                      Hint="@Thresholds(N)" />
+                        <FpZoneSlider Id="fz-p" Label="@Label(P)" Unit="kg/ha" Min="@P.Min" Max="@SliderMax(P, _p)" Step="@P.Step" Decimals="1"
+                                      LowBelow="@P.LowBelow" HighAbove="@P.HighAbove" @bind-Value="_p" @bind-Value:after="SoilEdited"
+                                      Hint="@Thresholds(P)" />
+                        <FpZoneSlider Id="fz-k" Label="@Label(K)" Unit="kg/ha" Min="@K.Min" Max="@SliderMax(K, _k)" Step="@K.Step"
+                                      LowBelow="@K.LowBelow" HighAbove="@K.HighAbove" @bind-Value="_k" @bind-Value:after="SoilEdited"
+                                      Hint="@Thresholds(K)" />
+                        <FpZoneSlider Id="fz-ph" Label="Soil pH" Min="@Ph.Min" Max="@Ph.Max" Step="@Ph.Step" Decimals="1"
+                                      LowBelow="@Ph.LowBelow" HighAbove="@Ph.HighAbove" @bind-Value="_ph" @bind-Value:after="SoilEdited"
+                                      LowText="@Ph.LowLabel" MediumText="@Ph.MediumLabel" HighText="@Ph.HighLabel"
+                                      Hint="@($"{Ph.LowLabel} below {Ph.LowBelow:0.0}, {Ph.MediumLabel} {Ph.LowBelow:0.0} - {Ph.HighAbove:0.0}, {Ph.HighLabel} above {Ph.HighAbove:0.0}")" />
+                    </div>
+                    <FpFieldError Text="@Err("n")" />
+                    <FpFieldError Text="@Err("p")" />
+                    <FpFieldError Text="@Err("k")" />
+                    <FpFieldError Text="@Err("ph")" />
+                    <p class="fp-caption fpfz-ranges">
+                        <i class="bi bi-info-circle" aria-hidden="true"></i>
+                        @(N.FromLabMaster ? "Low, Medium and High use the same ranges as your SPIC soil report." : "Low, Medium and High follow the usual soil test ranges.")
+                    </p>
+                </ChildContent>
+            </FpCard>
+
+            @* ---- Step 2: crop ---- *@
+            <FpCard @ref="_cropCard" Title="Crop-wise recommendations" Icon="bi-flower1" Hue="FpHue.Green" CssClass="fpfz-card"
+                    Subtitle="Choose your crop, soil and area.">
+                <div class="fp-field">
+                    <label class="fp-label" for="fz-crop">Crop <span class="fp-req" aria-hidden="true">*</span></label>
+                    <select id="fz-crop" class="fp-input @(Err("normId") is null ? null : "is-invalid")" value="@_crop" @onchange="CropChanged">
+                        <option value="">Choose your crop</option>
+                        @foreach (var c in _options.Crops)
+                        {
+                            <option value="@c.Crop">@CropOptionText(c)</option>
+                        }
+                    </select>
+                    <FpFieldError Text="@Err("normId")" />
+                </div>
+
+                @if (CropOption is { } crop && FertilizerUi.VariantNames(crop) is { Count: > 1 } variants)
+                {
+                    <div class="fp-field">
+                        <span class="fp-label" id="fz-variant-label">Type</span>
+                        <div class="fp-chips fpfz-variants" role="radiogroup" aria-labelledby="fz-variant-label">
+                            @foreach (var v in variants)
+                            {
+                                <FpChip Text="@v" Selected="@(v == _variant)" OnClick="() => VariantChanged(v)" CssClass="fpfz-variant" />
+                            }
+                        </div>
+                    </div>
+                }
+                else if (CropOption is not null && _variant is not null)
+                {
+                    <p class="fp-caption fpfz-variant-one"><i class="bi bi-check2-circle" aria-hidden="true"></i> @_variant</p>
+                }
+
+                <div class="fp-form-row">
+                    <div class="fp-field">
+                        <label class="fp-label" for="fz-soil">Soil type <span class="fp-req" aria-hidden="true">*</span></label>
+                        <select id="fz-soil" class="fp-input @(Err("soilType") is null ? null : "is-invalid")" value="@_soil" @onchange="SoilChanged">
+                            <option value="">Choose your soil</option>
+                            @foreach (var s in _options.SoilTypes)
+                            {
+                                <option value="@s">@s</option>
+                            }
+                        </select>
+                        <FpFieldError Text="@Err("soilType")" />
+                    </div>
+                    <div class="fp-field">
+                        <label class="fp-label" for="fz-acres">Area <span class="fp-optional">(acres)</span></label>
+                        <input id="fz-acres" type="number" inputmode="decimal" min="0.1" max="1000" step="0.1"
+                               class="fp-input @(Err("areaAcres") is null ? null : "is-invalid")"
+                               value="@(_acres?.ToString(CultureInfo.InvariantCulture))" @onchange="AcresChanged" />
+                        <FpFieldError Text="@Err("areaAcres")" />
+                    </div>
+                </div>
+
+                @if (Selected is { Basis: FertilizerDoseBasis.PerPlant } perPlant)
+                {
+                    <div class="fp-field">
+                        <label class="fp-label" for="fz-plants">Number of @FertilizerUi.PlantWord(_crop) <span class="fp-optional">(optional)</span></label>
+                        <input id="fz-plants" type="number" inputmode="numeric" min="1" step="1" class="fp-input fp-input--short @(Err("plantCount") is null ? null : "is-invalid")"
+                               value="@_plants" @onchange="PlantsChanged" aria-describedby="fz-plants-hint" />
+                        <p id="fz-plants-hint" class="fp-hint">@FertilizerUi.PlantsHint(perPlant, _acres, _crop)</p>
+                        <FpFieldError Text="@Err("plantCount")" />
+                    </div>
+                }
+
+                @if (CropOption is not null && _variant is not null && !string.IsNullOrEmpty(_soil) && Selected is null)
+                {
+                    <div class="fp-alert fp-alert--info" role="status">
+                        <i class="bi bi-info-circle-fill" aria-hidden="true"></i>
+                        <span>TNAU gives @(_crop?.ToLowerInvariant()) (@_variant.ToLowerInvariant()) doses for @FertilizerUi.SoilsFor(CropOption, _variant) only. Choose that soil, or ask your MDO for your field.</span>
+                    </div>
+                }
+                @if (_formError is not null)
+                {
+                    <div class="fp-alert fp-alert--error" role="alert"><i class="bi bi-exclamation-circle-fill" aria-hidden="true"></i><span>@_formError</span></div>
+                }
+            </FpCard>
+
+            @* In the grid: under the crop card on desktop, sticky at the bottom on phone while either card is on screen. *@
+            <div class="fp-actionbar fpfz-actionbar">
+            <button type="button" class="fp-btn fp-btn--primary" disabled="@(_submitting || Selected is null)" @onclick="SubmitAsync">
+                @if (_submitting)
+                {
+                    <span class="fp-spinner" aria-hidden="true"></span>
+                    <span>Working it out...</span>
+                }
+                else
+                {
+                    <i class="bi bi-magic" aria-hidden="true"></i>
+                    <span>@(_result is null ? "Get my recommendation" : "Update my recommendation")</span>
+                }
+            </button>
+            </div>
+        </div>
+
+        @if (_result is { } result)
+        {
+            <FertilizerResultView @ref="_resultView" Result="@result" />
+        }
+    }
+</div>
+
+@code {
+    private bool _loading = true;
+    private string? _error;
+    private FertilizerOptionsDto? _options;
+
+    private double? _n, _p, _k, _ph;
+    private string? _crop, _variant, _soil;
+    private decimal? _acres;
+    private int? _plants;
+
+    private bool _reportLoading;
+    private int? _reportId;
+    private string? _reportNote;
+    private bool _reportOk;
+    private List<string> _reportNotes = new();
+
+    private bool _submitting;
+    private string? _formError;
+    private IReadOnlyDictionary<string, string>? _errors;
+    private FertilizerRecommendationDto? _result;
+    private bool _focusResult;
+
+    private FpCard? _soilCard, _cropCard;
+    private FertilizerResultView? _resultView;
+
+    private static readonly FertilizerRangeDto Fallback = new() { Min = 0, Max = 100, Step = 1 };
+
+    private FertilizerRangeDto N => RangeOf("N");
+    private FertilizerRangeDto P => RangeOf("P");
+    private FertilizerRangeDto K => RangeOf("K");
+    private FertilizerRangeDto Ph => RangeOf("pH");
+
+    private FertilizerRangeDto RangeOf(string code) => _options?.Ranges.FirstOrDefault(r => r.Code == code) ?? Fallback;
+
+    private FertilizerCropOptionDto? CropOption => _options?.Crops.FirstOrDefault(c => c.Crop == _crop);
+
+    private FertilizerVariantOptionDto? Selected => FertilizerUi.Resolve(CropOption, _variant, _soil);
+
+    private int Step => _result is not null ? 2 : CropOption is not null ? 1 : 0;
+
+    private string? Err(string key) => _errors is not null && _errors.TryGetValue(key, out var v) ? v : null;
+
+    private static string Label(FertilizerRangeDto r) => r.Label;
+
+    private static double SliderMax(FertilizerRangeDto r, double? value) =>
+        value is { } v && v > r.Max ? Math.Ceiling(v / 50) * 50 : r.Max;
+
+    private static string Thresholds(FertilizerRangeDto r) =>
+        $"{r.LowLabel} below {r.LowBelow:0.#}, {r.MediumLabel} {r.LowBelow:0.#} - {r.HighAbove:0.#}, {r.HighLabel} above {r.HighAbove:0.#}";
+
+    private static string CropOptionText(FertilizerCropOptionDto c)
+    {
+        var regimes = c.Variants.Select(v => v.WaterRegime).Where(w => w != FertilizerWaterRegime.Any).Distinct().ToList();
+        if (regimes.Count == 2) return $"{c.Crop} (Irrigated & Rainfed)";
+        if (regimes.Count == 1) return $"{c.Crop} ({regimes[0]})";
+        return c.Crop;
+    }
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_focusResult || _resultView is null) return;
+        _focusResult = false;
+        try { await _resultView.FocusAsync(); } catch { /* never throw from here */ }
+    }
+
+    private async Task LoadAsync()
+    {
+        if (LoginState.UserRole != AppRole.Farmer)
+        {
+            _loading = false;
+            return;
+        }
+
+        _loading = true;
+        _error = null;
+        StateHasChanged();
+        var result = await Api.OptionsAsync();
+        if (result.Value is not { } options)
+        {
+            _loading = false;
+            _error = result.Message ?? "Please try again.";
+            return;
+        }
+
+        _options = options;
+        _n ??= N.Default;
+        _p ??= P.Default;
+        _k ??= K.Default;
+        _ph ??= Ph.Default;
+
+        try { await Farmer.EnsureLoadedAsync(); } catch { /* the profile only prefills */ }
+        var profile = Farmer.Profile;
+        if (_crop is null)
+        {
+            var crop = FertilizerUi.ProfileCrop(profile?.PrimaryCrops, options.Crops);
+            if (crop is not null) SelectCrop(crop);
+        }
+        _acres ??= profile?.LandAcres is { } land && land > 0 ? land : 1m;
+        _loading = false;
+    }
+
+    private void CropChanged(ChangeEventArgs e) => SelectCrop(e.Value?.ToString());
+
+    private void SelectCrop(string? crop)
+    {
+        _crop = string.IsNullOrEmpty(crop) ? null : crop;
+        _variant = FertilizerUi.VariantNames(CropOption).FirstOrDefault();
+        _plants = null;
+        ClearError("normId");
+    }
+
+    private void VariantChanged(string variant)
+    {
+        _variant = variant;
+        _plants = null;
+    }
+
+    private void SoilChanged(ChangeEventArgs e)
+    {
+        _soil = e.Value?.ToString();
+        ClearError("soilType");
+    }
+
+    private void AcresChanged(ChangeEventArgs e)
+    {
+        _acres = decimal.TryParse(e.Value?.ToString()?.Replace(',', '.'), NumberStyles.Number, CultureInfo.InvariantCulture, out var a) ? a : null;
+        ClearError("areaAcres");
+    }
+
+    private void PlantsChanged(ChangeEventArgs e)
+    {
+        _plants = int.TryParse(e.Value?.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var p) && p > 0 ? p : null;
+        ClearError("plantCount");
+    }
+
+    /// <summary>A value typed or slid by the farmer is no longer the report's.</summary>
+    private void SoilEdited()
+    {
+        if (_reportId is not null)
+        {
+            _reportId = null;
+            _reportOk = false;
+            _reportNote = "You changed a value, so this advice uses your own numbers.";
+            _reportNotes = new();
+        }
+    }
+
+    private async Task UseReportAsync()
+    {
+        _reportLoading = true;
+        StateHasChanged();
+        var result = await Api.SoilReportAsync();
+        _reportLoading = false;
+        _reportNotes = new();
+        if (result.Value is not { } report)
+        {
+            _reportOk = false;
+            _reportNote = result.Message ?? "We could not read your soil report. Please try again.";
+            return;
+        }
+        if (!report.Available)
+        {
+            _reportOk = false;
+            _reportNote = report.Message ?? "No soil report is ready for you yet.";
+            return;
+        }
+
+        if (report.N is { } n) _n = n;
+        if (report.P is { } p) _p = p;
+        if (report.K is { } k) _k = k;
+        if (report.Ph is { } ph) _ph = Math.Clamp(ph, Ph.Min, Ph.Max);
+        _reportId = report.ReportId;
+        _reportOk = true;
+        var when = report.GeneratedAt is { } at ? $" of {at:d MMM yyyy}" : "";
+        _reportNote = $"Filled from your soil report {report.ReportCode}{when}.";
+        _reportNotes = report.Notes.ToList();
+        if (_crop is null && report.SampleCrop is { } sampleCrop)
+        {
+            var match = FertilizerUi.ProfileCrop(new[] { sampleCrop }, _options!.Crops);
+            if (match is not null) SelectCrop(match);
+        }
+    }
+
+    private async Task GoToStep(int step)
+    {
+        if (step == 0 && _soilCard is not null) await _soilCard.FocusTitleAsync();
+        else if (step == 1 && _cropCard is not null) await _cropCard.FocusTitleAsync();
+    }
+
+    private async Task SubmitAsync()
+    {
+        _formError = null;
+        var errors = new Dictionary<string, string>();
+        var selected = Selected;
+        if (selected is null) errors["normId"] = "Please choose your crop.";
+        if (string.IsNullOrEmpty(_soil)) errors["soilType"] = "Please choose your soil type.";
+        if (_acres is not { } acres || acres < 0.1m || acres > 1000m) errors["areaAcres"] = "Enter your area in acres (0.1 to 1000).";
+        if (_n is null || _p is null || _k is null || _ph is null) errors["n"] = "Please set all four soil test values.";
+        if (errors.Count > 0)
+        {
+            _errors = errors;
+            _formError = "Please check the marked fields.";
+            return;
+        }
+
+        _errors = null;
+        _submitting = true;
+        StateHasChanged();
+        var request = new FertilizerRecommendRequest
+        {
+            NormId = selected!.NormId,
+            SoilType = _soil!,
+            AreaAcres = _acres!.Value,
+            PlantCount = selected.Basis == FertilizerDoseBasis.PerPlant ? _plants : null,
+            N = (decimal)_n!.Value,
+            P = (decimal)_p!.Value,
+            K = (decimal)_k!.Value,
+            Ph = Math.Round((decimal)_ph!.Value, 1),
+            SoilReportId = _reportId
+        };
+        var result = await Api.RecommendAsync(request);
+        _submitting = false;
+        if (result.Value is { } recommendation)
+        {
+            _result = recommendation;
+            _focusResult = true;
+            return;
+        }
+        _errors = result.Errors;
+        _formError = result.Message ?? "Please try again.";
+    }
+
+    private void ClearError(string key)
+    {
+        if (_errors is null || !_errors.ContainsKey(key)) return;
+        var copy = _errors.Where(e => e.Key != key).ToDictionary(e => e.Key, e => e.Value);
+        _errors = copy.Count == 0 ? null : copy;
+    }
+}

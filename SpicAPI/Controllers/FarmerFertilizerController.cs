@@ -90,11 +90,12 @@ namespace SpicAPI.Controllers
             return Ok(dto);
         }
 
-        /// <summary>Slider range: the default range, widened so the High zone is visible (max at least 125 % of the High threshold).</summary>
+        /// <summary>Slider range: the default range, widened (to 150 % of the High threshold) when the High zone would be
+        /// thinner than a quarter of the threshold, so it stays visible and the scale labels do not collide.</summary>
         public static FertilizerRangeDto Range(FertilizerAdvisor.Threshold t, double min, double max, double step, double def)
         {
             var high = (double)t.HighAbove;
-            if (t.Code != "pH" && high * 1.25 > max) max = Math.Ceiling(high * 1.25 / 10) * 10;
+            if (t.Code != "pH" && high * 1.25 > max) max = Math.Ceiling(high * 1.5 / 10) * 10;
             return new FertilizerRangeDto
             {
                 Code = t.Code,

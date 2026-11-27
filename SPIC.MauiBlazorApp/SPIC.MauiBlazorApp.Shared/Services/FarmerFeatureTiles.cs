@@ -33,6 +33,9 @@ public static class FarmerFeatureTiles
 
     public static readonly IReadOnlyList<FarmerFeatureTile> All = new List<FarmerFeatureTile>
     {
+        // Task 4: the main tool, first on the home.
+        new("fertilizer", "Fertilizer advice", "What to apply for your crop and soil",
+            "bi-flower2", FpHue.Green, "/farmer/fertilizer", Always),
         // Task 2
         new("dealers", "Dealers near me", "Call or visit a SPIC dealer",
             "bi-shop", FpHue.Gold, "/farmer/dealers", Always),

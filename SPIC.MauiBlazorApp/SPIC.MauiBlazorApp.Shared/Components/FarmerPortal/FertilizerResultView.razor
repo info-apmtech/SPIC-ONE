@@ -1,0 +1,215 @@
+@namespace SPIC.MauiBlazorApp.Shared.Components.FarmerPortal
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
+
+@*
+    FertilizerResultView - one fertilizer recommendation (farmer portal Task 4): the summary band (status and
+    need per nutrient, pH), what to buy, when to apply (DAP route or SSP route), pH correction, water / soil /
+    nutrient roadmap, how it was worked out, actions and the disclaimer. Used by /farmer/fertilizer and the
+    saved runs in /farmer/fertilizer/history/{id}.
+*@
+
+<section class="fpfr" aria-label="Your fertilizer recommendation">
+    <FpCard @ref="_summaryCard" Title="Your fertilizer plan" Icon="bi-clipboard2-check" Hue="FpHue.Green" Variant="FpCardVariant.Highlight"
+            Subtitle="@Subtitle" CssClass="fpfr-summary">
+        <div class="fpfr-need">
+            @foreach (var n in Result.Nutrients)
+            {
+                <div class="fpfr-need__item fpfr-need__item--@FpUi.LevelCss(FertilizerUi.Level(n.Level))">
+                    <div class="fpfr-need__head">
+                        <span class="fpfr-need__badge" aria-hidden="true">@n.Code</span>
+                        <span class="fpfr-need__label">@n.Label</span>
+                        <FpStatus Level="@FertilizerUi.Level(n.Level)" Text="@n.LevelLabel" />
+                    </div>
+                    <div class="fpfr-need__big fp-num">
+                        @FertilizerUi.Kg(n.NeedKgPerAcre)<span class="fpfr-need__unit">kg @n.DoseAs / acre</span>
+                    </div>
+                    <p class="fp-caption fpfr-need__caption">
+                        Soil test @n.SoilValue.ToString("0.#") kg/ha · @FertilizerUi.AdjustmentLine(n)
+                    </p>
+                </div>
+            }
+            <div class="fpfr-need__item fpfr-need__item--ph fpfr-need__item--@FpUi.LevelCss(FertilizerUi.Level(Result.Ph.Level))">
+                <div class="fpfr-need__head">
+                    <span class="fpfr-need__badge" aria-hidden="true">pH</span>
+                    <span class="fpfr-need__label">Soil pH</span>
+                    <FpStatus Level="@FertilizerUi.Level(Result.Ph.Level)" Text="@Result.Ph.LevelLabel" />
+                </div>
+                <div class="fpfr-need__big fp-num">@Result.Ph.Value.ToString("0.0")</div>
+                <p class="fp-caption fpfr-need__caption">@FertilizerUi.PhWord(Result.Ph.Band)</p>
+            </div>
+        </div>
+        @if (Result.FromSoilReport)
+        {
+            <p class="fp-caption fpfr-from"><i class="bi bi-file-earmark-check" aria-hidden="true"></i> Soil values from your SPIC soil report.</p>
+        }
+    </FpCard>
+
+    @* ---- What to buy ---- *@
+    <FpCard Title="@($"What to buy for {FertilizerUi.Acres(Result.AreaAcres)}")" Icon="bi-bag-check" Hue="FpHue.Gold" CssClass="fp-fade-up-2"
+            Subtitle="@BuySubtitle">
+        <div class="fpfr-route" role="group" aria-label="Phosphorus source">
+            <FpChip Text="With DAP" Icon="bi-check2" Small="true" Selected="@(!_ssp)" OnClick="() => SetRoute(false)" />
+            <FpChip Text="With SSP instead" Icon="bi-arrow-left-right" Small="true" Selected="@_ssp" OnClick="() => SetRoute(true)" />
+        </div>
+        <ul class="fpfr-products">
+            @foreach (var p in (_ssp ? Result.SspTotals : Result.Totals))
+            {
+                <li class="fpfr-product">
+                    <span class="fpfr-product__icon fp-hue-@ProductHue(p.Code)" aria-hidden="true"><i class="bi bi-bag-fill"></i></span>
+                    <span class="fpfr-product__name">
+                        <strong>@p.Name <span class="fpfr-product__grade">(@p.Grade)</span></strong>
+                        @if (!string.IsNullOrEmpty(p.SpicName))
+                        {
+                            <span class="fp-caption">Sold as @p.SpicName</span>
+                        }
+                    </span>
+                    <span class="fpfr-product__qty fp-num">
+                        <strong>@FertilizerUi.Kg(p.Kg) kg</strong>
+                        <span class="fp-caption">@FertilizerUi.Bags(p.Bags, p.BagKg)</span>
+                    </span>
+                </li>
+            }
+        </ul>
+        @if ((_ssp ? Result.SspTotals : Result.Totals).Count == 0)
+        {
+            <p class="fp-text fp-muted">No N, P or K fertilizer is needed for this crop on your soil test.</p>
+        }
+        <p class="fp-caption fpfr-note">
+            @if (_ssp)
+            {
+                <text>SSP also gives sulphur and calcium. Buy whole bags; keep what is left for the next season.</text>
+            }
+            else
+            {
+                <text>The nitrogen in DAP is counted, so you need less urea. Buy whole bags; keep what is left for the next season.</text>
+            }
+        </p>
+    </FpCard>
+
+    @* ---- When to apply ---- *@
+    <FpCard Title="When to apply" Icon="bi-calendar2-week" Hue="FpHue.Sky" CssClass="fp-fade-up-2"
+            Subtitle="@(Result.DurationDays is { } d ? $"Crop of about {d} days · amounts for your whole field" : "Amounts for your whole field")">
+        <ol class="fpfr-stages">
+            @foreach (var s in Result.Stages)
+            {
+                var products = _ssp ? s.SspProducts : s.Products;
+                <li class="fpfr-stage">
+                    <div class="fpfr-stage__when">
+                        <span class="fpfr-stage__dot" aria-hidden="true">@s.Seq</span>
+                        <span>
+                            <strong>@s.Stage</strong>
+                            @if (s.DayFrom is not null)
+                            {
+                                <span class="fp-caption">@s.When</span>
+                            }
+                        </span>
+                    </div>
+                    <div class="fpfr-stage__body">
+                        <p class="fp-caption fpfr-stage__nutrients fp-num">N @FertilizerUi.Kg(s.NKg) · P2O5 @FertilizerUi.Kg(s.PKg) · K2O @FertilizerUi.Kg(s.KKg) kg</p>
+                        @if (products.Count == 0)
+                        {
+                            <p class="fp-text fp-muted">Nothing to apply at this stage.</p>
+                        }
+                        else
+                        {
+                            <ul class="fpfr-stage__products">
+                                @foreach (var p in products)
+                                {
+                                    <li>
+                                        <span>@p.Name</span>
+                                        <strong class="fp-num">@FertilizerUi.Kg(p.Kg) kg</strong>
+                                        @if (p.GramsPerPlant is { } g)
+                                        {
+                                            <span class="fp-caption fp-num">@g.ToString("N0") g per @(FertilizerUi.PlantWord(Result.Crop).TrimEnd('s'))</span>
+                                        }
+                                    </li>
+                                }
+                            </ul>
+                        }
+                    </div>
+                </li>
+            }
+        </ol>
+    </FpCard>
+
+    @* ---- pH ---- *@
+    <FpCard Title="@Result.Ph.Title" Icon="bi-droplet-half" Hue="@(Result.Ph.Band == SPIC.Core.FarmerPortal.FertilizerAdvisor.Neutral ? FpHue.Green : FpHue.Soil)" CssClass="fp-fade-up-3"
+            Subtitle="@($"Soil pH {Result.Ph.Value:0.0} · {FertilizerUi.PhWord(Result.Ph.Band)}")">
+        <ul class="fpfr-list">
+            @foreach (var line in Result.Ph.Advice)
+            {
+                <li>@line</li>
+            }
+        </ul>
+        <a class="fpfr-source" href="@Result.Ph.SourceUrl" target="_blank" rel="noopener"><i class="bi bi-box-arrow-up-right" aria-hidden="true"></i> @Result.Ph.Source</a>
+    </FpCard>
+
+    @* ---- Roadmap ---- *@
+    <div class="fpfr-roadmap">
+        <FertilizerTipCard Title="Water management" Icon="bi-droplet" Hue="FpHue.Sky" Tips="@Result.WaterTips"
+                 Empty="@(Result.WaterRegime == FertilizerWaterRegime.Rainfed ? "Rainfed crop: sow when the soil has moisture and save rain water in the field." : "Irrigate as your officer advises for your soil.")" />
+        <FertilizerTipCard Title="Soil management" Icon="bi-layers" Hue="FpHue.Soil" Tips="@Result.SoilTips" Empty="Add organic manure (FYM / compost) every season." />
+        <FertilizerTipCard Title="Nutrients and micronutrients" Icon="bi-capsule" Hue="FpHue.Violet" Tips="@Result.NutrientTips" Empty="Follow your soil report for zinc and other micronutrients." />
+    </div>
+
+    @* ---- How it was worked out ---- *@
+    <FpCard Title="How we worked this out" Icon="bi-calculator" Hue="FpHue.Neutral" CssClass="fp-fade-up-3">
+        <dl class="fpfr-how">
+            <dt>Recommended dose (no soil test)</dt>
+            <dd class="fp-num">@FertilizerUi.Dose(Result, n => n.NormDose)</dd>
+            <dt>Your dose after the soil test</dt>
+            <dd class="fp-num">@FertilizerUi.Dose(Result, n => n.AdjustedDose)</dd>
+            @if (Result.PlantCount is { } plants)
+            {
+                <dt>Counted for</dt>
+                <dd class="fp-num">@plants.ToString("N0") @FertilizerUi.PlantWord(Result.Crop)@(Result.PlantCountFromSpacing && Result.Spacing is not null ? $" ({Result.Spacing} spacing)" : "")</dd>
+            }
+            <dt>Soil test rule</dt>
+            <dd>Low soil +25 %, Medium as recommended, High -25 %, using the same ranges and factors as your SPIC soil report.</dd>
+        </dl>
+        @if (!string.IsNullOrWhiteSpace(Result.NormNotes))
+        {
+            <p class="fp-text fpfr-notes">@Result.NormNotes</p>
+        }
+        <a class="fpfr-source" href="@Result.SourceUrl" target="_blank" rel="noopener"><i class="bi bi-box-arrow-up-right" aria-hidden="true"></i> @Result.Source</a>
+    </FpCard>
+
+    <div class="fp-action-pills fpfr-actions">
+        <a class="fp-action-pill" href="/farmer/team"><i class="bi bi-person-badge" aria-hidden="true"></i> Ask my MDO</a>
+        <a class="fp-action-pill" href="/farmer/dealers"><i class="bi bi-shop" aria-hidden="true"></i> Find a SPIC dealer</a>
+        <a class="fp-action-pill" href="/farmer/fertilizer/history"><i class="bi bi-clock-history" aria-hidden="true"></i> My past advice</a>
+    </div>
+
+    <FpDisclaimer>
+        @Result.Disclaimer <a href="/farmer/team">My SPIC team</a>
+    </FpDisclaimer>
+</section>
+
+@code {
+    [Parameter, EditorRequired] public FertilizerRecommendationDto Result { get; set; } = new();
+
+    private FpCard? _summaryCard;
+    private bool _ssp;
+
+    private string Subtitle =>
+        $"{Result.Crop} · {Result.Variant} · {Result.SoilType} · {FertilizerUi.Acres(Result.AreaAcres)}";
+
+    private string BuySubtitle => Result.PlantCount is { } plants
+        ? $"For {plants:N0} {FertilizerUi.PlantWord(Result.Crop)}, the whole {(Result.Crop == "Coconut" ? "year" : "crop")}"
+        : "For the whole crop, all applications together";
+
+    private void SetRoute(bool ssp) => _ssp = ssp;
+
+    private static string ProductHue(string code) => code switch
+    {
+        "Urea" => "sky",
+        "DAP" => "green",
+        "SSP" => "teal",
+        "MOP" => "rose",
+        _ => "neutral"
+    };
+
+    /// <summary>Moves focus (and the screen) to the summary. Never throws.</summary>
+    public Task FocusAsync() => _summaryCard?.FocusTitleAsync() ?? Task.CompletedTask;
+}

@@ -1,0 +1,124 @@
+@page "/farmer/fertilizer/history"
+@page "/farmer/fertilizer/history/{RunId:long}"
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
+@inject FarmerFertilizerApi Api
+@inject FarmerSession Farmer
+@inject LoginState LoginState
+
+@*
+    My past fertilizer advice (farmer portal Task 4): the farmer's latest 20 recommendations
+    (api/Farmer/fertilizer/history), and one saved recommendation in full (history/{id}).
+*@
+
+<div class="fp fp-page fpfh">
+    @if (RunId is null)
+    {
+        <FpHero Title="My past fertilizer advice" Compact="true" BackHref="/farmer/fertilizer" BackLabel="Back to fertilizer advice"
+                Subtitle="Your last 20 recommendations. Open one to see the full plan again." />
+    }
+    else
+    {
+        <FpHero Title="Saved fertilizer advice" Compact="true" BackHref="/farmer/fertilizer/history" BackLabel="Back to my past advice"
+                Subtitle="@(_run is { } r ? $"{r.Crop} · {FertilizerUi.When(r.CreatedAtUtc)}" : "Your saved plan")" />
+    }
+
+    @if (LoginState.UserRole != AppRole.Farmer)
+    {
+        <FpEmpty Art="FpArtKind.Field" Title="You are viewing as support staff" Message="Farmers see their own saved fertilizer advice here." />
+    }
+    else if (_loading)
+    {
+        <FpSkeleton Variant="FpSkeletonVariant.Cards" Count="3" LoadingText="Opening your saved advice..." />
+    }
+    else if (_error is not null)
+    {
+        <FpError Title="We could not open your saved advice" Message="@_error" OnRetry="LoadAsync" />
+    }
+    else if (RunId is not null && _run is { } run)
+    {
+        <FertilizerResultView Result="@run" />
+    }
+    else if (_items.Count == 0)
+    {
+        <FpEmpty Art="FpArtKind.Sprout" Card="true" Title="No fertilizer advice yet"
+                 Message="Enter your soil test and crop to get your first plan. It is saved here for you.">
+            <a class="fp-btn fp-btn--primary" href="/farmer/fertilizer"><i class="bi bi-flower2" aria-hidden="true"></i> Get fertilizer advice</a>
+        </FpEmpty>
+    }
+    else
+    {
+        <ul class="fpfh-list">
+            @foreach (var item in _items)
+            {
+                <li>
+                    <a class="fpfh-item fp-fade-up" href="@($"/farmer/fertilizer/history/{item.Id}")">
+                        <span class="fpfh-item__icon" aria-hidden="true">@(FpUi.CropEmoji(item.Crop) ?? "\U0001F331")</span>
+                        <span class="fpfh-item__body">
+                            <span class="fpfh-item__title">@item.Crop <span class="fpfh-item__variant">@item.Variant</span></span>
+                            <span class="fp-caption">@FertilizerUi.When(item.CreatedAtUtc) · @item.SoilType · @FertilizerUi.Acres(item.AreaAcres)@(item.FromSoilReport ? " · from soil report" : "")</span>
+                            <span class="fpfh-item__chips">
+                                <FpStatus Level="@FertilizerUi.Level(item.NStatus)" Text="@($"N {item.NStatus}")" />
+                                <FpStatus Level="@FertilizerUi.Level(item.PStatus)" Text="@($"P {item.PStatus}")" />
+                                <FpStatus Level="@FertilizerUi.Level(item.KStatus)" Text="@($"K {item.KStatus}")" />
+                                <span class="fpfh-item__ph fp-num">pH @item.SoilPh.ToString("0.0")</span>
+                            </span>
+                            <span class="fpfh-item__need fp-num">Need @item.NeedNKgPerAcre.ToString("0.#") : @item.NeedPKgPerAcre.ToString("0.#") : @item.NeedKKgPerAcre.ToString("0.#") kg N : P2O5 : K2O per acre</span>
+                        </span>
+                        <i class="bi bi-chevron-right fpfh-item__chevron" aria-hidden="true"></i>
+                    </a>
+                </li>
+            }
+        </ul>
+        <div class="fp-actionbar">
+            <a class="fp-btn fp-btn--primary" href="/farmer/fertilizer"><i class="bi bi-plus-lg" aria-hidden="true"></i> New recommendation</a>
+        </div>
+        <FpDisclaimer Text="@SPIC.Core.FarmerPortal.FertilizerAdvisor.Disclaimer" />
+    }
+</div>
+
+@code {
+    [Parameter] public long? RunId { get; set; }
+
+    private bool _loading = true;
+    private string? _error;
+    private List<FertilizerRunSummaryDto> _items = new();
+    private FertilizerRecommendationDto? _run;
+    private long? _loadedFor = -1;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedFor == RunId) return;
+        _loadedFor = RunId;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        if (LoginState.UserRole != AppRole.Farmer)
+        {
+            _loading = false;
+            return;
+        }
+
+        _loading = true;
+        _error = null;
+        _run = null;
+        StateHasChanged();
+        // The farmer shell (My Samples / My Reports tabs) reads the SAS link from the profile.
+        try { await Farmer.EnsureLoadedAsync(); } catch { /* the list does not need it */ }
+        if (RunId is { } id)
+        {
+            var result = await Api.RunAsync(id);
+            _loading = false;
+            if (result.Value is { } run) _run = run;
+            else _error = result.Message ?? "Please try again.";
+            return;
+        }
+
+        var list = await Api.HistoryAsync();
+        _loading = false;
+        if (list.Value is { } items) _items = items;
+        else _error = list.Message ?? "Please try again.";
+    }
+}

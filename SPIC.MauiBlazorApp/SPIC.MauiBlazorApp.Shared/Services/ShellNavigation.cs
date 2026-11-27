@@ -209,6 +209,12 @@ public static class ShellNavigation
             ShortLabel = "Profile",
             Rule = s => s.UserRole == AppRole.Farmer
         },
+        // Farmer portal Task 4 (More sheet first: the main farmer tool).
+        new(FarmerFertilizerKey, "Fertilizer advice", "bi-flower2", "/farmer/fertilizer", FarmerHomeKey)
+        {
+            ShortLabel = "Fertilizer",
+            Rule = s => s.UserRole == AppRole.Farmer
+        },
         // Farmer portal Task 2: More sheet entries (the farmer tab bar / rail stay their priority list).
         new(FarmerDealersKey, "Dealers near me", "bi-shop", "/farmer/dealers", FarmerHomeKey)
         {
@@ -586,6 +592,7 @@ public static class ShellNavigation
     public const string FarmerDealersKey = "FarmerDealers";
     public const string FarmerTeamKey = "FarmerTeam";
     public const string FarmerMyRequestsKey = "FarmerMyRequests";
+    public const string FarmerFertilizerKey = "FarmerFertilizer";
     public const string FarmerTrendsKey = "FarmerTrends";
     public const string FarmerCommunityKey = "FarmerCommunity";
 
@@ -637,7 +644,7 @@ public static class ShellNavigation
     // no designation through (e.g. CSR-1 Create's `!IsAdmin`): only these keys, each still checked.
     private static readonly HashSet<string> FarmerShellKeys = new(StringComparer.OrdinalIgnoreCase)
     {
-        FarmerHomeKey, FarmerProfileKey, FarmerDealersKey, FarmerTeamKey, FarmerMyRequestsKey, FarmerTrendsKey, FarmerCommunityKey, "SasMySamples", "SasMyReports", "SasMyPayments", "Help"
+        FarmerHomeKey, FarmerProfileKey, FarmerDealersKey, FarmerTeamKey, FarmerMyRequestsKey, FarmerFertilizerKey, FarmerTrendsKey, FarmerCommunityKey, "SasMySamples", "SasMyReports", "SasMyPayments", "Help"
     };
 
     /// <summary>Every accessible destination NOT already in the phone tab bar, in Candidate order.</summary>

@@ -89,6 +89,7 @@ builder.Services.AddScoped<FarmerApi>();
 builder.Services.AddScoped<FarmerSession>();
 builder.Services.AddScoped<FarmerConnectApi>();
 builder.Services.AddScoped<FarmerAreaApi>();
+builder.Services.AddScoped<FarmerFertilizerApi>();
 
 // Usage + error telemetry (docs/metrics-telemetry-plan.md): the app / version header on every API
 // call, page views and client errors per circuit, and anything this host logs at Error or above.

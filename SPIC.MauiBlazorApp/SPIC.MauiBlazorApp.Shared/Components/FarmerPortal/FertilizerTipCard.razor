@@ -1,0 +1,47 @@
+@namespace SPIC.MauiBlazorApp.Shared.Components.FarmerPortal
+@using SPIC.Core.DTOs
+
+@*
+    FertilizerTipCard - one block of the fertilizer roadmap (water / soil / nutrients): the tips in plain words,
+    each with its source as a small link chip. Shows Empty when there is no tip for this crop and soil.
+*@
+
+<FpCard Title="@Title" Icon="@Icon" Hue="@Hue" CssClass="fpft fp-fade-up-3">
+    @if (Tips.Count == 0)
+    {
+        <p class="fp-text fp-muted">@Empty</p>
+    }
+    else
+    {
+        <ul class="fpft-list">
+            @foreach (var tip in Tips)
+            {
+                <li class="fpft-item">
+                    <span class="fpft-item__text">@tip.Text</span>
+                    @if (!string.IsNullOrWhiteSpace(tip.SourceUrl))
+                    {
+                        <a class="fpft-item__source" href="@tip.SourceUrl" target="_blank" rel="noopener" title="@tip.Source">
+                            <i class="bi bi-book" aria-hidden="true"></i> @SourceShort(tip.Source)
+                        </a>
+                    }
+                </li>
+            }
+        </ul>
+    }
+</FpCard>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+
+    [Parameter] public string? Icon { get; set; }
+
+    [Parameter] public FpHue Hue { get; set; } = FpHue.Green;
+
+    [Parameter] public List<FertilizerTipDto> Tips { get; set; } = new();
+
+    [Parameter] public string Empty { get; set; } = "";
+
+    /// <summary>"TNAU Agritech: Irrigation management, Cotton" -> "TNAU: Irrigation management, Cotton".</summary>
+    private static string SourceShort(string source) =>
+        source.Replace("TNAU Agritech Horticulture:", "TNAU:").Replace("TNAU Agritech:", "TNAU:");
+}

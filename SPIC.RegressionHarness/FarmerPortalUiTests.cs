@@ -84,11 +84,11 @@ internal static class FarmerPortalUiTests
 			FarmerFeatureTiles.All.All(t => t.Title.Length > 0 && t.Description.Length > 0 && t.Icon.StartsWith("bi-") && t.Route.StartsWith('/')));
 		Check.Equal("hue css class", "fp-hue-soil", FpUi.HueCss(FpHue.Soil));
 		var farmer = TestLogin.As(AppRole.Farmer, "");
-		Check.Equal("tiles: farmer without soil tests sees only existing features", "dealers,team,trends,community,profile",
+		Check.Equal("tiles: farmer without soil tests sees only existing features", "fertilizer,dealers,team,trends,community,profile",
 			string.Join(",", FarmerFeatureTiles.For(farmer).Select(t => t.Id)));
 		var linked = TestLogin.As(AppRole.Farmer, "");
 		linked.SetFarmerSasLinked(true);
-		Check.Equal("tiles: linked farmer also sees the soil report and sample tiles", "dealers,team,trends,community,soil-reports,soil-samples,profile",
+		Check.Equal("tiles: linked farmer also sees the soil report and sample tiles", "fertilizer,dealers,team,trends,community,soil-reports,soil-samples,profile",
 			string.Join(",", FarmerFeatureTiles.For(linked).Select(t => t.Id)));
 		Check.That("tiles: every tile's route opens for a (linked) farmer",
 			FarmerFeatureTiles.All.All(t => RouteAccess.CanOpen(linked, t.Route, null)));
