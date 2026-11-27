@@ -150,7 +150,10 @@ and state: **`/dev/farmer-portal`** (Admin / SuperAdmin only; sample data).
 - Start every page with `FpHero` (it is the h1 and sets the tab title). Do not use `PageHeader` on farmer pages.
 - Every screen designs its loading (`FpSkeleton`), empty (`FpEmpty`) and error (`FpError`) states.
 - Estimates and AI answers end with `FpDisclaimer`.
-- Plain words; 44 px tap targets (the classes already do this); never a danger button for farmers.
+- Plain words; never a danger button for farmers.
+- 44 px tap targets on phone: every Fp control already has one (`fp-btn--sm` grows to 44 px on phone,
+  `fp-link-btn` keeps its text size but has an invisible 44 px hit area, the slider input is 44 px
+  tall). Keep it that way for anything new you add.
 - `Layout.css` forces every placeholder to the text colour with `!important`; inside `.fp` placeholders
   are a lighter grey (`#6b7a72`, 4.6:1) so an example like "98765 43210" does not look typed.
 
@@ -161,7 +164,8 @@ and state: **`/dev/farmer-portal`** (Admin / SuperAdmin only; sample data).
 `--fp-line-strong`, `--fp-bg`, `--fp-surface`, `--fp-low/-50` (red), `--fp-medium/-50` (green),
 `--fp-high/-50` (violet), `--fp-warn`, `--fp-radius` (16), `--fp-radius-input` (12), `--fp-radius-pill`,
 `--fp-shadow`, `--fp-shadow-lift`, `--fp-focus`, `--fp-hero-gradient`, `--fp-hero-pattern`.
-Hues for icons, tiles and chips: add `fp-hue-{green|gold|soil|sky|violet|teal|rose|neutral}`, which sets
+Hues for icons, tiles and chips: components take the `FpHue` enum (Green, Gold, Soil, Sky, Violet,
+Teal, Rose, Neutral); in plain markup add `fp-hue-{green|gold|...}` (`FpUi.HueCss(hue)`), which sets
 `--fp-hue` and `--fp-hue-bg`.
 
 ### CSS classes
@@ -188,8 +192,8 @@ Hues for icons, tiles and chips: add `fp-hue-{green|gold|soil|sky|violet|teal|ro
 | Component | Key parameters | Usage |
 |---|---|---|
 | `FpHero` | `Title`, `Subtitle`, `Eyebrow`, `BackHref`, `BackLabel`, `DocumentTitle`, `Compact`, `Aside`, `ChildContent` (chips / steps / weather strip) | `<FpHero Title="Dealers near you" BackHref="/farmer" Compact="true"><FpChip Icon="bi-geo-alt-fill" Text="@place" /></FpHero>` |
-| `FpCard` | `Title`, `Subtitle`, `Icon`, `Hue`, `Variant` (default / highlight / tinted / flush), `HeaderActions`, `ChildContent`, `Footer`, `Animate`; method `FocusTitleAsync()` | `<FpCard Title="Soil test values" Icon="bi-sliders" Hue="soil">...</FpCard>` |
-| `FpTile` | `Title`, `Description`, `Icon`, `Hue`, `Href` or `OnClick`, `Badge`, `Soon` | inside `<div class="fp-tile-grid">` |
+| `FpCard` | `Title`, `Subtitle`, `Icon`, `Hue` (`FpHue`), `Variant` (`FpCardVariant.Default/Highlight/Tinted/Flush`), `HeaderActions`, `ChildContent`, `Footer`, `Animate`; method `FocusTitleAsync()` | `<FpCard Title="Soil test values" Icon="bi-sliders" Hue="FpHue.Soil">...</FpCard>` |
+| `FpTile` | `Title`, `Description`, `Icon`, `Hue`, `Href` or `OnClick`, `Badge`, `Soon` (gallery only: the home never shows unbuilt features) | inside `<div class="fp-tile-grid">` |
 | `FpChip` | `Text` / `ChildContent`, `Icon`, `Emoji`, `Hue`, `Small`; with `OnClick` it is a toggle (`Selected`, `aria-pressed`) | `<FpChip Text="Paddy" Emoji="@FpUi.CropEmoji("Paddy")" Selected="@on" OnClick="Toggle" />` |
 | `FpStatus` | `Level` (`FpLevel.Low/Medium/High/Unknown`), `Text`, `Large` | `<FpStatus Level="FpLevel.Low" />` |
 | `FpZoneSlider` | `Id`, `Label`, `Unit`, `@bind-Value` (double?), `Min`, `Max`, `Step`, `LowBelow`, `HighAbove`, `Decimals`, `Hint`, `Disabled` | `<FpZoneSlider Id="n" Label="Nitrogen (N)" Unit="kg/ha" Max="700" LowBelow="280" HighAbove="560" @bind-Value="_n" />` |
@@ -198,9 +202,9 @@ Hues for icons, tiles and chips: add `fp-hue-{green|gold|soil|sky|violet|teal|ro
 | `FpEmpty` | `Art` (`FpArtKind.Sprout/Field/Offline/Search/Team`), `Title`, `Message`, `ChildContent` (buttons), `Card`, `Compact` | `<FpEmpty Art="FpArtKind.Search" Title="No dealers within 25 km" Message="...">buttons</FpEmpty>` |
 | `FpError` | `Title`, `Message`, `OnRetry`, `RetryLabel`, `Art`, `Compact` | `<FpError Message="@_error" OnRetry="LoadAsync" />` |
 | `FpArt` | `Kind` | inline SVG illustrations (no image files) |
-| `FpSkeleton` | `Variant` (home / hero / tiles / cards / form), `Count`, `LoadingText` | `<FpSkeleton Variant="cards" Count="3" />` |
+| `FpSkeleton` | `Variant` (`FpSkeletonVariant.Home/Hero/Tiles/Cards/Form`), `Count`, `LoadingText` | `<FpSkeleton Variant="FpSkeletonVariant.Cards" Count="3" />` |
 | `FpDisclaimer` | `Text` / `ChildContent`, `Icon` | `<FpDisclaimer Text="This is an estimate..." />` |
-| `FpOtpInput` | `Id`, `@bind-Value`, `OnComplete`, `Length`, `Invalid`, `Disabled`, `AriaDescribedBy`; method `FocusAsync()` | six boxes drawn over one real input (`one-time-code`, numeric); pasting "482 913" or a whole SMS fills it (`FpOtpInput.razor.js`) |
+| `FpOtpInput` | `Id`, `@bind-Value`, `OnComplete`, `Length`, `Invalid`, `Disabled`, `ReadOnly` (use while checking, keeps the keyboard open), `AriaDescribedBy`; method `FocusAsync()` | six boxes drawn over one real input (`one-time-code`, numeric); pasting "482 913" or a whole SMS fills it (`FpOtpInput.razor.js`) |
 | `FpFieldError` | `Text` | inline field error (renders nothing when empty) |
 
 Pure helpers in `FpUi` (`FpUi.cs`, checked by `SPIC.RegressionHarness/FarmerPortalUiTests.cs`):
@@ -210,20 +214,20 @@ Pure helpers in `FpUi` (`FpUi.cs`, checked by `SPIC.RegressionHarness/FarmerPort
 
 ### Home tiles (`Services/FarmerFeatureTiles.cs`)
 
-The home grid is `FarmerFeatureTiles.For(login)`: ready tiles first, then the rest with a "Soon" badge.
-Entries already exist for fertilizer (Task 4), dealers and team (Task 2), assistant (Task 5),
-leaf-check (Task 6), yield (Task 7) and community (Task 3), with their planned `/farmer/...` routes.
-**When your page ships, set `Ready: true` on your entry** (adjust the text if needed). A new feature
-appends `new FarmerFeatureTile(id, title, description, "bi-icon", hue, route, Ready, visiblePredicate)`.
-The harness checks that ids are unique, hues exist and every Ready route opens for a farmer.
-The "Your SPIC team" block on the home is a placeholder (`FpEmpty`) for Task 2; the weather strip
-(Task 3) goes in the home `FpHero`'s ChildContent.
+The home grid is `FarmerFeatureTiles.For(login)` in registry order. **The home shows only features that
+exist**: no "coming soon" tiles or blocks. Today the registry holds My soil reports and My soil samples
+(only for farmers with soil tests) and My profile. **A task adds its own entry in the same change that
+ships its page**, never earlier:
+`new FarmerFeatureTile(id, title, description, "bi-icon", FpHue.X, "/farmer/route", visiblePredicate)`
+(optional `Badge`, e.g. "New"). The harness checks ids are unique, every route opens for a farmer and
+every route is a real `@page` in the app. Task 2 adds its own "Your SPIC team" block to the home; the
+weather strip (Task 3) goes in the home `FpHero`'s ChildContent.
 
 ### Screenshots
 
-`python tools/farmer-portal-check/shoot.py --out .superpowers/sdd/<plan>/shots/task-<N> --set farmer|onboarding|gallery|staff|all`
+`python tools/farmer-portal-check/shoot.py --out .superpowers/sdd/<plan>/shots/task-<N> --set farmer|onboarding|gallery|staff|all [--sizes phone,tablet,desktop]`
 signs in to the LOCAL web host (refuses other hosts) as the local test farmer through the devCode and
-saves 375x812 and 1280x800 pictures (plus `-full` pictures of long pages) with the installed Edge.
+saves 375x812 and 1280x800 (and, with `--sizes`, 768x1024 tablet) pictures (plus `-full` pictures of long pages) with the installed Edge.
 Each sign-in uses one of the number's 5 codes per hour; the onboarding set creates two new local test
 farmers per run; the gallery and staff sets sign in as the local `qa.admin` (password from
 `tools/help-demo/shots.json`; that local user is normally inactive, activate it in `spicone_dev` first).
