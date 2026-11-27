@@ -10,6 +10,7 @@ LOCAL web host only (refuses other hosts), signed in as LOCAL test farmers throu
                 conversation with library sources (basic answers), My chats (the phone list and the desktop
                 column), the home tile, and the daily cap message for --cap-phone (a farmer whose allowance
                 smoke_task5.py used up today).
+  --set cap     only the daily cap message.
   --set stub    the API pointed at tools/farmer-portal-check/fake_anthropic.py --delay 6 (never the real
                 Anthropic API): the typing indicator while the stub waits, then the stub's full answer.
 
@@ -70,11 +71,17 @@ def basic(browser, base, out, sizes, phone, cap_phone):
         blur(page)
         shoot.shot(page, out, f"assistant-empty-{size}")
 
-        # 2. A conversation with sources: a starter chip, then a typed follow-up
-        page.click(".fpai-starter >> nth=0")
-        page.wait_for_function("() => !document.querySelector('.fpai-typing') && document.querySelectorAll('.fpai-msg--ai').length >= 1", timeout=30000)
-        shoot.settle(page, 800)
-        ask(page, "How much DAP should I apply for paddy?")
+        # 2. A conversation with sources: a starter chip, then a typed follow-up (asked once, on the first size;
+        #    the other sizes open the same chat from My chats).
+        if size == sizes[0]:
+            page.click(".fpai-starter >> nth=0")
+            page.wait_for_function("() => !document.querySelector('.fpai-typing') && document.querySelectorAll('.fpai-msg--ai').length >= 1", timeout=30000)
+            shoot.settle(page, 800)
+            ask(page, "How much DAP should I apply for paddy?")
+        else:
+            page.click(".fpai-conv__link >> nth=0")
+            page.wait_for_selector(".fpai-msg--ai", timeout=20000)
+            shoot.settle(page, 900)
         blur(page)
         shoot.shot(page, out, f"assistant-conversation-{size}")
 
@@ -91,7 +98,11 @@ def basic(browser, base, out, sizes, phone, cap_phone):
             shoot.shot(page, out, f"assistant-chats-{size}", full=False)
         ctx.close()
 
-    # 4. The daily cap (a farmer who used today's allowance)
+    cap(browser, base, out, sizes, cap_phone)
+
+
+def cap(browser, base, out, sizes, cap_phone):
+    """The daily cap (a farmer who used today's allowance)."""
     for size in sizes:
         ctx = shoot.new_context(browser, size)
         page = ctx.new_page()
@@ -137,7 +148,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--base", default="http://localhost:5027")
     ap.add_argument("--out", required=True)
-    ap.add_argument("--set", choices=("basic", "stub"), required=True)
+    ap.add_argument("--set", choices=("basic", "stub", "cap"), required=True)
     ap.add_argument("--phone", default="6777777703", help="English local test farmer (basic set)")
     ap.add_argument("--cap-phone", default="6163665844", help="local test farmer with no questions left today")
     ap.add_argument("--stub-phone", default="6999174165", help="local test farmer for the stub set")
@@ -152,6 +163,8 @@ def main():
         browser = p.chromium.launch(channel="msedge", headless=True)
         if args.set == "basic":
             basic(browser, base, out, sizes, args.phone, args.cap_phone)
+        elif args.set == "cap":
+            cap(browser, base, out, sizes, args.cap_phone)
         else:
             stub(browser, base, out, sizes, args.stub_phone)
         browser.close()
