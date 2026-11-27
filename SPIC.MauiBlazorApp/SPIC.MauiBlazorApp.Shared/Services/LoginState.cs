@@ -39,6 +39,11 @@ namespace SPIC.MauiBlazorApp.Shared.Services
         {
             get
             {
+                // Farmers land on the farmer portal home (it sends an incomplete profile on to
+                // onboarding), never on the staff dashboard or the "contact your administrator" page.
+                if (UserRole is AppRole.Farmer)
+                    return FarmerLandingPath;
+
                 // Admin and SuperAdmin do NOT use Designation-based landing-page logic: they
                 // always land on DefaultWelcome and keep their existing authorized pages.
                 if (UserRole is AppRole.Admin or AppRole.SuperAdmin)
@@ -58,6 +63,21 @@ namespace SPIC.MauiBlazorApp.Shared.Services
         // designation: a plain "Welcome to SPIC ONE" screen with no dashboard content. Shared with
         // PageGuard's always-open set so the route and the route that is permitted cannot drift apart.
         public const string DefaultLandingPath = "/DefaultWelcome";
+
+        /// <summary>Farmer portal home (docs/farmer-portal.md); RouteAccess opens /farmer/* by role.</summary>
+        public const string FarmerLandingPath = "/farmer";
+
+        // Farmer portal: true when the signed-in farmer has a linked SAS farmer record, so the shell
+        // shows My Samples / My Reports even without a designation. Set by FarmerSession from
+        // GET api/Farmer/profile; cleared whenever the signed-in user changes (ParseClaims).
+        public bool FarmerSasLinked { get; private set; }
+
+        public void SetFarmerSasLinked(bool linked)
+        {
+            if (FarmerSasLinked == linked) return;
+            FarmerSasLinked = linked;
+            OnChange?.Invoke();
+        }
 
         public event Action? OnChange;
 
@@ -279,6 +299,14 @@ namespace SPIC.MauiBlazorApp.Shared.Services
         // -------------------------------------------------------------------------------------
 
         private void ParseClaims(string? token)
+        {
+            var previousUserId = UserId;
+            ParseTokenClaims(token);
+            if (string.IsNullOrWhiteSpace(token) || !string.Equals(previousUserId, UserId, StringComparison.Ordinal))
+                FarmerSasLinked = false;
+        }
+
+        private void ParseTokenClaims(string? token)
         {
             UserRole = null;
             ZoneId = 0;

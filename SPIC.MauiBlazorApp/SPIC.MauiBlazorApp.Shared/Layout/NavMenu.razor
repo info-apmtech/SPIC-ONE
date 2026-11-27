@@ -156,7 +156,22 @@
             Payment History
         </NavLink>
     }
-    @if (loginState.UserRole == AppRole.Farmer && loginState.CanSeeMenu(nameof(PagePermission.SampleCollection)))
+    @* Farmer portal (docs/farmer-portal.md): ROLE-gated like the /farmer routes (RouteAccess), so a
+       self signed-up farmer with no designation sees them and staff never do. *@
+    @if (loginState.UserRole == AppRole.Farmer)
+    {
+        <NavLink class="@NavLinkClass("Farmer Home")" href="/farmer" Match="NavLinkMatch.All">
+            <i class="bi bi-house-door SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+            Home
+        </NavLink>
+        <NavLink class="@NavLinkClass("My Profile")" href="/farmer/profile">
+            <i class="bi bi-person-circle SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+            My Profile
+        </NavLink>
+    }
+    @* My Samples / My Reports: the designation grant, or a SAS farmer record linked to this account. *@
+    @if (loginState.UserRole == AppRole.Farmer
+         && (loginState.CanSeeMenu(nameof(PagePermission.SampleCollection)) || loginState.FarmerSasLinked))
     {
         <NavLink class="@NavLinkClass("My Samples")" href="/Sas/MySamples">
             <i class="bi bi-droplet-half SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
@@ -166,6 +181,9 @@
             <i class="bi bi-file-earmark-text SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
             My Reports
         </NavLink>
+    }
+    @if (loginState.UserRole == AppRole.Farmer && loginState.CanSeeMenu(nameof(PagePermission.SampleCollection)))
+    {
         <NavLink class="@NavLinkClass("Payments")" href="/Sas/Payments" Match="NavLinkMatch.All">
             <i class="bi bi-wallet2 SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
             Payments

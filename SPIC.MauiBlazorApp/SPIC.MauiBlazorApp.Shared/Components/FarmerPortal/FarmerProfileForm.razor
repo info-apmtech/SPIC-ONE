@@ -1,0 +1,491 @@
+@namespace SPIC.MauiBlazorApp.Shared.Components.FarmerPortal
+@using System.Globalization
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
+@using SPIC.Core.FarmerPortal
+@inject FarmerApi Api
+@inject IJSRuntime JS
+
+@*
+    The farmer profile form, shared by /farmer/onboarding (first time) and /farmer/profile (edit).
+
+        <FarmerProfileForm Initial="@Session.Profile" Phone="@Session.Phone" SubmitLabel="Save" OnSaved="Saved" />
+
+    Required: name, state, district, village, pincode. Everything else is optional. Rules come from
+    SPIC.Core.FarmerPortal.FarmerProfileRules (the API checks the same rules, plus that the
+    district belongs to the state). The pincode fills state / district when they are still empty.
+*@
+
+<form class="fpf" @onsubmit="SubmitAsync" @onsubmit:preventDefault novalidate>
+
+    <section class="fpf-group" aria-labelledby="fpf-about">
+        <h2 id="fpf-about" class="fpf-group-title"><i class="bi bi-person" aria-hidden="true"></i> About you</h2>
+
+        <div class="fpf-field">
+            <label for="fpf-name">Your name <span class="fpf-req">*</span></label>
+            <input id="fpf-name" class="fpf-input @Invalid("name")" @bind="_name" maxlength="@FarmerProfileRules.NameMax"
+                   autocomplete="name" placeholder="For example: Murugan K" />
+            <FpFieldError Text="@ErrorFor("name")" />
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(Phone))
+        {
+            <div class="fpf-field">
+                <label for="fpf-phone">Mobile number</label>
+                <input id="fpf-phone" class="fpf-input" value="@($"+91 {Phone}")" readonly aria-readonly="true" />
+                <p class="fpf-hint">This is the number you signed in with.</p>
+            </div>
+        }
+
+        <div class="fpf-field">
+            <label for="fpf-email">Email <span class="fpf-optional">(optional)</span></label>
+            <input id="fpf-email" type="email" inputmode="email" class="fpf-input @Invalid("email")" @bind="_email"
+                   maxlength="@FarmerProfileRules.EmailMax" autocomplete="email" />
+            <FpFieldError Text="@ErrorFor("email")" />
+        </div>
+
+        <div class="fpf-field">
+            <label for="fpf-lang">Language for SPIC AI answers</label>
+            <select id="fpf-lang" class="fpf-input @Invalid("preferredLanguage")" @bind="_language">
+                @foreach (var (langCode, langName) in FarmerProfileRules.Languages)
+                {
+                    <option value="@langCode">@langName</option>
+                }
+            </select>
+            <FpFieldError Text="@ErrorFor("preferredLanguage")" />
+        </div>
+    </section>
+
+    <section class="fpf-group" aria-labelledby="fpf-village">
+        <h2 id="fpf-village" class="fpf-group-title"><i class="bi bi-geo-alt" aria-hidden="true"></i> Your village</h2>
+
+        <div class="fpf-field">
+            <label for="fpf-pin">Pincode <span class="fpf-req">*</span></label>
+            <input id="fpf-pin" class="fpf-input fpf-input--short @Invalid("pinCode")" value="@_pinCode"
+                   @oninput="OnPinInputAsync" inputmode="numeric" maxlength="6" autocomplete="postal-code" placeholder="6 digits" />
+            @if (_pinHint is not null)
+            {
+                <p class="fpf-hint fpf-hint--ok"><i class="bi bi-check-circle" aria-hidden="true"></i> @_pinHint</p>
+            }
+            <FpFieldError Text="@ErrorFor("pinCode")" />
+        </div>
+
+        <div class="fpf-row">
+            <div class="fpf-field">
+                <label for="fpf-state">State <span class="fpf-req">*</span></label>
+                <select id="fpf-state" class="fpf-input @Invalid("stateId")" value="@_stateId" @onchange="OnStateChangedAsync"
+                        disabled="@(_states is null)">
+                    <option value="0">@(_states is null ? "Loading..." : "Choose your state")</option>
+                    @foreach (var s in _states ?? new())
+                    {
+                        <option value="@s.Id">@s.Name</option>
+                    }
+                </select>
+                <FpFieldError Text="@(ErrorFor("stateId") ?? _listError)" />
+            </div>
+
+            <div class="fpf-field">
+                <label for="fpf-district">District <span class="fpf-req">*</span></label>
+                <select id="fpf-district" class="fpf-input @Invalid("districtId")" @bind="_districtId"
+                        disabled="@(_stateId == 0 || _districts is null)">
+                    <option value="0">@(_stateId == 0 ? "Choose the state first" : _districts is null ? "Loading..." : "Choose your district")</option>
+                    @foreach (var d in _districts ?? new())
+                    {
+                        <option value="@d.Id">@d.Name</option>
+                    }
+                </select>
+                <FpFieldError Text="@ErrorFor("districtId")" />
+            </div>
+        </div>
+
+        <div class="fpf-row">
+            <div class="fpf-field">
+                <label for="fpf-villagename">Village <span class="fpf-req">*</span></label>
+                <input id="fpf-villagename" class="fpf-input @Invalid("village")" @bind="_village" maxlength="@FarmerProfileRules.VillageMax" />
+                <FpFieldError Text="@ErrorFor("village")" />
+            </div>
+            <div class="fpf-field">
+                <label for="fpf-taluk">Taluk <span class="fpf-optional">(optional)</span></label>
+                <input id="fpf-taluk" class="fpf-input @Invalid("taluk")" @bind="_taluk" maxlength="@FarmerProfileRules.TalukMax" />
+                <FpFieldError Text="@ErrorFor("taluk")" />
+            </div>
+        </div>
+
+        <div class="fpf-field">
+            <span class="fpf-label">Farm location <span class="fpf-optional">(optional)</span></span>
+            <div class="fpf-location">
+                <button type="button" class="fpf-btn fpf-btn--outline" @onclick="UseMyLocationAsync" disabled="@_locating">
+                    <i class="bi @(_locating ? "bi-hourglass-split" : "bi-crosshair")" aria-hidden="true"></i>
+                    @(_locating ? "Finding you..." : "Use my location")
+                </button>
+                <span class="fpf-location-status" aria-live="polite">
+                    @if (_latitude is not null && _longitude is not null)
+                    {
+                        <i class="bi bi-geo-alt-fill" aria-hidden="true"></i>
+                        <text>Saved: @_latitude.Value.ToString("0.0000", CultureInfo.InvariantCulture), @_longitude.Value.ToString("0.0000", CultureInfo.InvariantCulture)</text>
+                        <button type="button" class="fpf-link" @onclick="ClearLocation">Remove</button>
+                    }
+                    else if (_locationMessage is not null)
+                    {
+                        @_locationMessage
+                    }
+                    else
+                    {
+                        <text>Helps us show dealers and weather near your farm.</text>
+                    }
+                </span>
+            </div>
+            <FpFieldError Text="@ErrorFor("latitude")" />
+        </div>
+    </section>
+
+    <section class="fpf-group" aria-labelledby="fpf-farm">
+        <h2 id="fpf-farm" class="fpf-group-title"><i class="bi bi-flower1" aria-hidden="true"></i> Your farm</h2>
+
+        <div class="fpf-field">
+            <span class="fpf-label" id="fpf-crops-label">Main crops <span class="fpf-optional">(tap all that you grow)</span></span>
+            <div class="fpf-chips" role="group" aria-labelledby="fpf-crops-label">
+                @foreach (var crop in CropChoices)
+                {
+                    var selected = IsSelected(crop);
+                    <button type="button" class="fpf-chip @(selected ? "is-on" : null)" aria-pressed="@(selected ? "true" : "false")"
+                            @onclick="() => ToggleCrop(crop)">
+                        @if (selected)
+                        {
+                            <i class="bi bi-check-lg" aria-hidden="true"></i>
+                        }
+                        @crop
+                    </button>
+                }
+            </div>
+            <div class="fpf-addcrop">
+                @* form="..." takes this box out of the profile form, so Enter adds the crop instead of saving. *@
+                <input class="fpf-input" form="fpf-crop-entry" @bind="_otherCrop" @bind:event="oninput" maxlength="@FarmerProfileRules.CropMax"
+                       placeholder="Another crop" aria-label="Another crop" @onkeydown="OnOtherCropKey" />
+                <button type="button" class="fpf-btn fpf-btn--outline" @onclick="AddOtherCrop" disabled="@string.IsNullOrWhiteSpace(_otherCrop)">Add</button>
+            </div>
+            <FpFieldError Text="@ErrorFor("primaryCrops")" />
+        </div>
+
+        <div class="fpf-row">
+            <div class="fpf-field">
+                <label for="fpf-land">Land <span class="fpf-optional">(acres, optional)</span></label>
+                <input id="fpf-land" class="fpf-input fpf-input--short @Invalid("landAcres")" @bind="_land" inputmode="decimal" placeholder="e.g. 2.5" />
+                <FpFieldError Text="@ErrorFor("landAcres")" />
+            </div>
+            <div class="fpf-field">
+                <label for="fpf-water">Water source <span class="fpf-optional">(optional)</span></label>
+                <select id="fpf-water" class="fpf-input @Invalid("irrigationType")" @bind="_irrigation">
+                    <option value="">Choose</option>
+                    @foreach (var (value, label) in IrrigationChoices)
+                    {
+                        <option value="@value">@label</option>
+                    }
+                </select>
+                <FpFieldError Text="@ErrorFor("irrigationType")" />
+            </div>
+        </div>
+    </section>
+
+    @if (_formError is not null)
+    {
+        <div class="fpf-alert" role="alert"><i class="bi bi-exclamation-circle" aria-hidden="true"></i> @_formError</div>
+    }
+
+    <div class="fpf-actions">
+        <button type="submit" class="fpf-btn fpf-btn--primary" disabled="@_saving">
+            @if (_saving)
+            {
+                <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+                <span>Saving...</span>
+            }
+            else
+            {
+                <span>@SubmitLabel</span>
+            }
+        </button>
+    </div>
+</form>
+
+@code {
+    /// <summary>The saved profile to edit; null on first onboarding.</summary>
+    [Parameter] public FarmerProfileDto? Initial { get; set; }
+
+    /// <summary>The verified mobile, shown read-only.</summary>
+    [Parameter] public string? Phone { get; set; }
+
+    [Parameter] public string SubmitLabel { get; set; } = "Save";
+
+    /// <summary>Raised with the saved profile from the API.</summary>
+    [Parameter] public EventCallback<FarmerProfileDto> OnSaved { get; set; }
+
+    private static readonly (FarmerIrrigationType Value, string Label)[] IrrigationChoices =
+    {
+        (FarmerIrrigationType.Rainfed, "Rain only (rainfed)"),
+        (FarmerIrrigationType.Canal, "Canal / tank"),
+        (FarmerIrrigationType.Borewell, "Borewell / well"),
+        (FarmerIrrigationType.Drip, "Drip"),
+        (FarmerIrrigationType.Sprinkler, "Sprinkler"),
+        (FarmerIrrigationType.Mixed, "More than one")
+    };
+
+    private string _name = "";
+    private string _email = "";
+    private string _language = FarmerProfileRules.DefaultLanguage;
+    private string _pinCode = "";
+    private int _stateId;
+    private int _districtId;
+    private string _village = "";
+    private string _taluk = "";
+    private double? _latitude;
+    private double? _longitude;
+    private readonly List<string> _crops = new();
+    private readonly List<string> _extraCrops = new();
+    private string _otherCrop = "";
+    private string _land = "";
+    private string _irrigation = "";
+
+    private List<FarmerApi.LocationOption>? _states;
+    private List<FarmerApi.LocationOption>? _districts;
+    private string? _listError;
+    private string? _pinHint;
+    private bool _locating;
+    private string? _locationMessage;
+    private bool _saving;
+    private string? _formError;
+    private Dictionary<string, string> _errors = new();
+    private FarmerProfileDto? _appliedInitial;
+
+    private IEnumerable<string> CropChoices => FarmerProfileRules.CommonCrops.Concat(_extraCrops);
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!ReferenceEquals(Initial, _appliedInitial))
+        {
+            _appliedInitial = Initial;
+            Apply(Initial);
+        }
+
+        if (_states is null)
+        {
+            _states = await Api.StatesAsync();
+            if (_states is null)
+            {
+                _states = new();
+                _listError = "We could not load the list of states. Please check your connection and open this page again.";
+            }
+        }
+
+        if (_stateId > 0 && _districts is null)
+            await LoadDistrictsAsync(_stateId);
+    }
+
+    private void Apply(FarmerProfileDto? p)
+    {
+        if (p is null) return;
+        _name = p.Name;
+        _email = p.Email ?? "";
+        _language = FarmerProfileRules.IsKnownLanguage(p.PreferredLanguage) ? p.PreferredLanguage : FarmerProfileRules.DefaultLanguage;
+        _pinCode = p.PinCode;
+        _stateId = p.StateId;
+        _districtId = p.DistrictId;
+        _districts = null;
+        _village = p.Village;
+        _taluk = p.Taluk ?? "";
+        _latitude = p.Latitude;
+        _longitude = p.Longitude;
+        _crops.Clear();
+        _crops.AddRange(p.PrimaryCrops);
+        _extraCrops.Clear();
+        _extraCrops.AddRange(p.PrimaryCrops.Where(c => !FarmerProfileRules.CommonCrops.Contains(c, StringComparer.OrdinalIgnoreCase)));
+        _land = p.LandAcres?.ToString("0.##", CultureInfo.InvariantCulture) ?? "";
+        _irrigation = p.IrrigationType?.ToString() ?? "";
+    }
+
+    private async Task LoadDistrictsAsync(int stateId)
+    {
+        _districts = null;
+        var list = await Api.DistrictsAsync(stateId);
+        if (stateId != _stateId) return; // the farmer picked another state meanwhile
+        _districts = list ?? new();
+        if (list is null) _listError = "We could not load the districts. Please check your connection and try again.";
+        if (_districtId > 0 && _districts.All(d => d.Id != _districtId)) _districtId = 0;
+    }
+
+    private async Task OnStateChangedAsync(ChangeEventArgs e)
+    {
+        _stateId = int.TryParse(e.Value?.ToString(), out var id) ? id : 0;
+        _districtId = 0;
+        _districts = null;
+        _pinHint = null;
+        _errors.Remove("stateId");
+        if (_stateId > 0) await LoadDistrictsAsync(_stateId);
+    }
+
+    /// <summary>Six digits typed: fill state / district (and taluk) from the pincode when still empty.</summary>
+    private async Task OnPinInputAsync(ChangeEventArgs e)
+    {
+        _pinCode = new string((e.Value?.ToString() ?? "").Where(char.IsAsciiDigit).Take(6).ToArray());
+        _pinHint = null;
+        if (_pinCode.Length != 6 || (_stateId > 0 && _districtId > 0) || _states is not { Count: > 0 }) return;
+
+        var pin = _pinCode;
+        var place = await Api.LookupPincodeAsync(pin);
+        if (place is null || pin != _pinCode) return;
+
+        var state = _states.FirstOrDefault(s => SameName(s.Name, place.State));
+        if (state is null) return;
+
+        if (_stateId != state.Id)
+        {
+            _stateId = state.Id;
+            _districtId = 0;
+            await LoadDistrictsAsync(state.Id);
+            if (pin != _pinCode || _stateId != state.Id) return;
+        }
+        else if (_districts is null)
+        {
+            await LoadDistrictsAsync(state.Id);
+            if (pin != _pinCode) return;
+        }
+
+        var district = _districts?.FirstOrDefault(d => SameName(d.Name, place.District));
+        if (district is not null && _districtId == 0) _districtId = district.Id;
+        if (string.IsNullOrWhiteSpace(_taluk) && !string.IsNullOrWhiteSpace(place.Block) && place.Block != "NA") _taluk = place.Block;
+
+        _pinHint = district is not null
+            ? $"Filled from your pincode: {district.Name}, {state.Name}. Please check."
+            : $"Filled your state from the pincode: {state.Name}. Please choose the district.";
+    }
+
+    private static bool SameName(string? a, string? b) =>
+        !string.IsNullOrWhiteSpace(a) && !string.IsNullOrWhiteSpace(b) &&
+        string.Equals(Simplify(a), Simplify(b), StringComparison.OrdinalIgnoreCase);
+
+    private static string Simplify(string s) => new(s.Where(char.IsLetterOrDigit).ToArray());
+
+    private sealed class GeoResult
+    {
+        public double Latitude { get; set; }
+        public double Longitude { get; set; }
+        public string? Error { get; set; }
+    }
+
+    /// <summary>window.getCurrentPosition (js/location.js on the Web; the MAUI host bridges the same name).</summary>
+    private async Task UseMyLocationAsync()
+    {
+        _locating = true;
+        _locationMessage = null;
+        try
+        {
+            var position = await JS.InvokeAsync<GeoResult?>("getCurrentPosition");
+            if (position is null || !string.IsNullOrWhiteSpace(position.Error) || (position.Latitude == 0 && position.Longitude == 0))
+            {
+                _locationMessage = "We could not find your location. Please allow location access, or skip this.";
+                return;
+            }
+            _latitude = Math.Round(position.Latitude, 6);
+            _longitude = Math.Round(position.Longitude, 6);
+            _errors.Remove("latitude");
+        }
+        catch (Exception)
+        {
+            _locationMessage = "Location is not available on this device. You can skip this.";
+        }
+        finally
+        {
+            _locating = false;
+        }
+    }
+
+    private void ClearLocation()
+    {
+        _latitude = null;
+        _longitude = null;
+        _locationMessage = null;
+    }
+
+    private bool IsSelected(string crop) => _crops.Contains(crop, StringComparer.OrdinalIgnoreCase);
+
+    private void ToggleCrop(string crop)
+    {
+        var existing = _crops.FirstOrDefault(c => string.Equals(c, crop, StringComparison.OrdinalIgnoreCase));
+        if (existing is not null) _crops.Remove(existing);
+        else _crops.Add(crop);
+        _errors.Remove("primaryCrops");
+    }
+
+    private void AddOtherCrop()
+    {
+        var crop = FarmerProfileRules.CleanCrops(new[] { _otherCrop }).FirstOrDefault();
+        _otherCrop = "";
+        if (crop is null) return;
+        if (!CropChoices.Contains(crop, StringComparer.OrdinalIgnoreCase)) _extraCrops.Add(crop);
+        if (!IsSelected(crop)) _crops.Add(crop);
+    }
+
+    private void OnOtherCropKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") AddOtherCrop();
+    }
+
+    private FarmerProfileUpsertDto BuildDto()
+    {
+        decimal? land = decimal.TryParse(_land.Trim().Replace(',', '.'), NumberStyles.Number, CultureInfo.InvariantCulture, out var acres)
+            ? acres : null;
+        return new FarmerProfileUpsertDto
+        {
+            Name = _name,
+            Email = _email,
+            StateId = _stateId,
+            DistrictId = _districtId,
+            Village = _village,
+            Taluk = _taluk,
+            PinCode = _pinCode,
+            Latitude = _latitude,
+            Longitude = _longitude,
+            PrimaryCrops = _crops.ToList(),
+            LandAcres = land,
+            IrrigationType = Enum.TryParse<FarmerIrrigationType>(_irrigation, out var irrigation) ? irrigation : null,
+            PreferredLanguage = _language
+        };
+    }
+
+    private async Task SubmitAsync()
+    {
+        if (_saving) return;
+        _formError = null;
+
+        var dto = BuildDto();
+        _errors = FarmerProfileRules.Validate(dto);
+        if (!string.IsNullOrWhiteSpace(_land) && dto.LandAcres is null)
+            _errors["landAcres"] = "Please write the land in numbers, for example 2.5.";
+        if (_errors.Count > 0)
+        {
+            _formError = "Please check the fields marked in red.";
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            var result = await Api.SaveProfileAsync(dto);
+            if (result.Profile is null)
+            {
+                _errors = result.Errors.ToDictionary(kv => kv.Key, kv => kv.Value);
+                _formError = result.Message ?? "We could not save your profile. Please try again.";
+                return;
+            }
+            _appliedInitial = result.Profile;
+            await OnSaved.InvokeAsync(result.Profile);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private string? ErrorFor(string field) => _errors.TryGetValue(field, out var message) ? message : null;
+
+    private string? Invalid(string field) => _errors.ContainsKey(field) ? "is-invalid" : null;
+}

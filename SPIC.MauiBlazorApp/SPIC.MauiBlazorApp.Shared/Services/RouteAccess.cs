@@ -65,6 +65,39 @@ namespace SPIC.MauiBlazorApp.Shared.Services
             "Community"
         };
 
+        internal const string FarmerSegment = "farmer";
+
+        // Pages a farmer WITHOUT a designation may still open outside /farmer: the sign-in plumbing
+        // and their own SAS samples / reports (the API scopes those to their linked farmer record).
+        private static readonly HashSet<string> FarmerInfraRoutes = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "", "login", "AccountSelector", "error", "notfound", "forbidden"
+        };
+
+        private static RouteDecision? FarmerRoute(LoginState login, string firstSegment, string secondSegment)
+        {
+            if (firstSegment.Equals(FarmerSegment, StringComparison.OrdinalIgnoreCase))
+            {
+                if (secondSegment.Equals("login", StringComparison.OrdinalIgnoreCase)) return Allow;
+                return login.UserRole is AppRole.Farmer or AppRole.Admin ? Allow : Redirect(login.LandingPage);
+            }
+
+            if (login.UserRole != AppRole.Farmer) return null;
+
+            if (firstSegment.Equals("Sas", StringComparison.OrdinalIgnoreCase)
+                && (secondSegment.Equals("MySamples", StringComparison.OrdinalIgnoreCase)
+                    || secondSegment.Equals("MyReports", StringComparison.OrdinalIgnoreCase)))
+                return Allow;
+
+            // A farmer with no designation never sees the staff Welcome / dashboard pages: anything
+            // else goes to the farmer home. A farmer WITH a designation (older SAS accounts) keeps
+            // the normal rules below; their LandingPage is the farmer home too.
+            if (login.AllowedPages.Count == 0)
+                return FarmerInfraRoutes.Contains(firstSegment) ? Allow : Redirect(LoginState.FarmerLandingPath);
+
+            return null;
+        }
+
         /// <summary>True when the user may open <paramref name="url"/> (absolute or relative).</summary>
         public static bool CanOpen(LoginState login, string url, string? dataExplorerAuthorizedId) =>
             Decide(login, url, dataExplorerAuthorizedId).Allowed;
@@ -91,6 +124,13 @@ namespace SPIC.MauiBlazorApp.Shared.Services
 
             // SuperAdmin bypasses everything else.
             if (LoginState.UserRole == AppRole.SuperAdmin) return Allow;
+
+            // Farmer portal (docs/farmer-portal.md): gated by ROLE, not designation, so open sign-up
+            // works without any designation data. /farmer/login is the anonymous sign-in page (a
+            // signed-in user opening it is sent on by the page itself). Admin (and SuperAdmin above)
+            // may open the portal for support; every staff role is sent back to its own home.
+            var farmerRoute = FarmerRoute(LoginState, firstSegment, secondSegment);
+            if (farmerRoute is not null) return farmerRoute;
 
             // Data Explorer: SuperAdmin or authorized CorporateAdmin only. Admin is strictly denied.
             bool isDataExplorer = firstSegment.Equals("DataExplorer", StringComparison.OrdinalIgnoreCase);

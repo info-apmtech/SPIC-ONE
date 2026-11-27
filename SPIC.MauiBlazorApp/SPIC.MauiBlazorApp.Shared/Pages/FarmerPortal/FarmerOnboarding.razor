@@ -1,0 +1,63 @@
+@page "/farmer/onboarding"
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
+@inject FarmerSession Farmer
+@inject LoginState LoginState
+@inject NavigationManager Nav
+@inject ToastService Toast
+
+@* First-time farmer profile (docs/farmer-portal.md). Saving goes to the farmer home. *@
+
+<div class="fp fp-page fpo">
+    <PageHeader Title="Welcome to SPIC ONE" Subtitle="Tell us a little about you and your farm. It takes a minute." ShowBack="false" />
+
+    @if (LoginState.UserRole != AppRole.Farmer)
+    {
+        <EmptyState Icon="bi-person-badge" Title="Farmer onboarding"
+                    Message="Farmers fill this form the first time they sign in. Support staff have no farmer profile." />
+    }
+    else if (_loading)
+    {
+        <Skeleton Rows="6" Height="18px" LoadingText="Loading..." />
+    }
+    else if (_error is not null)
+    {
+        <EmptyState Icon="bi-wifi-off" Title="We could not open the form" Message="@_error">
+            <button type="button" class="btn btn-success" @onclick="LoadAsync">Try again</button>
+        </EmptyState>
+    }
+    else
+    {
+        <p class="fpo-note"><i class="bi bi-asterisk" aria-hidden="true"></i> Fields marked * are needed. You can change everything later in My Profile.</p>
+        <FarmerProfileForm Initial="@Farmer.Profile" Phone="@Farmer.Phone" SubmitLabel="Save and continue" OnSaved="SavedAsync" />
+    }
+</div>
+
+@code {
+    private bool _loading = true;
+    private string? _error;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        if (LoginState.UserRole != AppRole.Farmer)
+        {
+            _loading = false;
+            return;
+        }
+        _loading = true;
+        _error = null;
+        var ok = await Farmer.EnsureLoadedAsync();
+        _loading = false;
+        if (!ok) _error = Farmer.LoadError ?? "Please check your internet connection and try again.";
+    }
+
+    private Task SavedAsync(FarmerProfileDto profile)
+    {
+        Farmer.Update(profile);
+        Toast.Success("Your profile is saved.");
+        Nav.NavigateTo(LoginState.FarmerLandingPath);
+        return Task.CompletedTask;
+    }
+}

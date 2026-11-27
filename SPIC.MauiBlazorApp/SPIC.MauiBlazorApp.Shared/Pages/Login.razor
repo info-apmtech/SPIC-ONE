@@ -21,7 +21,10 @@
         {
             <header class="top-header">
                 <h1 class="brand-logo">SPIC</h1>
-                <button type="button" class="btn-contact">Contact Us</button>
+                <div class="top-header-actions">
+                    <a class="farmer-login-top" href="/farmer/login"><i class="bi bi-phone" aria-hidden="true"></i> Farmer sign in</a>
+                    <button type="button" class="btn-contact">Contact Us</button>
+                </div>
             </header>
         }
 
@@ -38,6 +41,13 @@
             </div>
 
             <LoginCard />
+
+            @* Farmer portal: farmers sign in with their mobile number and a one-time code. *@
+            <a class="farmer-login-entry" href="/farmer/login">
+                <i class="bi bi-phone" aria-hidden="true"></i>
+                <span>Farmer? <strong>Sign in with mobile number</strong></span>
+                <i class="bi bi-chevron-right" aria-hidden="true"></i>
+            </a>
         </main>
 
         @if (Platform.IsWeb)
@@ -76,25 +86,7 @@
         // on the login form. Anything invalid or expired falls through to the form.
         try
         {
-            if (!LoginState.IsLoggedIn)
-            {
-                var token = await SessionStore.GetAsync(SessionKeys.Token);
-                var expirationText = await SessionStore.GetAsync(SessionKeys.Expiration);
-                LoginState.Clock.Restore(await SessionStore.GetAsync(SessionKeys.ServerClockOffset));
-
-                if (!string.IsNullOrWhiteSpace(token)
-                    && DateTime.TryParse(expirationText, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var expiration)
-                    && expiration.ToUniversalTime() > LoginState.Clock.UtcNow.AddMinutes(1))
-                {
-                    LoginState.Token = token;
-                    LoginState.Expiration = expiration;
-                    LoginState.RefreshToken = await SessionStore.GetAsync(SessionKeys.RefreshToken);
-                    LoginState.SetAllowedPages(await SessionStore.GetAsync(SessionKeys.RoleAccess));
-                    LoginState.SetDesignationName(await SessionStore.GetAsync(SessionKeys.DesignationName));
-                }
-            }
-
-            if (LoginState.IsLoggedIn && !LoginState.IsTokenExpired)
+            if (await SessionPersistence.TryRestoreAsync(SessionStore, LoginState))
             {
                 Nav.NavigateTo(LoginState.LandingPage, replace: true);
                 return;

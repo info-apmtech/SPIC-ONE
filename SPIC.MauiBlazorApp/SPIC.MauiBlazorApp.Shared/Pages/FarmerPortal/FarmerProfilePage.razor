@@ -1,0 +1,59 @@
+@page "/farmer/profile"
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
+@inject FarmerSession Farmer
+@inject LoginState LoginState
+@inject ToastService Toast
+
+@* The farmer's own profile: the same form as onboarding, filled in. *@
+
+<div class="fp fp-page fpp">
+    <PageHeader Title="My profile" Subtitle="Your details help SPIC give advice for your village and crops." BackHref="@LoginState.FarmerLandingPath" />
+
+    @if (LoginState.UserRole != AppRole.Farmer)
+    {
+        <EmptyState Icon="bi-person-badge" Title="Farmer profile"
+                    Message="This is where a farmer edits their own details. Support staff have no farmer profile." />
+    }
+    else if (_loading)
+    {
+        <Skeleton Rows="6" Height="18px" LoadingText="Loading your profile..." />
+    }
+    else if (_error is not null)
+    {
+        <EmptyState Icon="bi-wifi-off" Title="We could not load your profile" Message="@_error">
+            <button type="button" class="btn btn-success" @onclick="LoadAsync">Try again</button>
+        </EmptyState>
+    }
+    else
+    {
+        <FarmerProfileForm Initial="@Farmer.Profile" Phone="@Farmer.Phone" SubmitLabel="Save changes" OnSaved="Saved" />
+    }
+</div>
+
+@code {
+    private bool _loading = true;
+    private string? _error;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        if (LoginState.UserRole != AppRole.Farmer)
+        {
+            _loading = false;
+            return;
+        }
+        _loading = true;
+        _error = null;
+        var ok = await Farmer.EnsureLoadedAsync(force: true);
+        _loading = false;
+        if (!ok) _error = Farmer.LoadError ?? "Please check your internet connection and try again.";
+    }
+
+    private void Saved(FarmerProfileDto profile)
+    {
+        Farmer.Update(profile);
+        Toast.Success("Your changes are saved.");
+    }
+}

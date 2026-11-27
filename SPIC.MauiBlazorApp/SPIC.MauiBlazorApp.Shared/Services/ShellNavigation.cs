@@ -189,20 +189,34 @@ public static class ShellNavigation
             ShortLabel = "History", Group = "SAS Portal",
             Rule = s => s.HasPageStrict(PagePermission.SasPaymentVerification)
         },
+        // ---- Farmer portal (docs/farmer-portal.md): ROLE-gated like the /farmer routes in RouteAccess,
+        //      so a self signed-up farmer (no designation) gets them and staff never do. ----
+        new(FarmerHomeKey, "Home", "bi-house-door-fill", LoginState.FarmerLandingPath, FarmerHomeKey)
+        {
+            Rule = s => s.UserRole == AppRole.Farmer
+        },
+        new(FarmerProfileKey, "My Profile", "bi-person-circle", "/farmer/profile", FarmerHomeKey)
+        {
+            ShortLabel = "Profile",
+            Rule = s => s.UserRole == AppRole.Farmer
+        },
+
         // Farmer pages (v1 SampleCollection key; the API scopes to the farmer's own samples).
         // The `UserRole == AppRole.Farmer` term is KEPT deliberately: it is a true business
         // authorization, not a menu restriction - SasController rejects a non-Farmer outright
         // (account.Role != AppRole.Farmer), so these three destinations only exist for a Farmer.
-        // The permission half of the condition already goes through CanSeeMenu.
+        // The permission half of the condition already goes through CanSeeMenu. My Samples / My Reports
+        // also show for a farmer whose account is linked to a SAS farmer record (FarmerSasLinked) -
+        // RouteAccess opens those two routes to every Farmer; Payments still needs the designation.
         new("SasMySamples", "My Samples", "bi-droplet-half", "/Sas/MySamples", nameof(PagePermission.SampleCollection))
         {
             ShortLabel = "Samples", Group = "SAS Portal",
-            Rule = s => s.UserRole == AppRole.Farmer && s.CanSeeMenu(PagePermission.SampleCollection)
+            Rule = s => s.UserRole == AppRole.Farmer && (s.CanSeeMenu(PagePermission.SampleCollection) || s.FarmerSasLinked)
         },
         new("SasMyReports", "My Reports", "bi-file-earmark-text", "/Sas/MyReports", nameof(PagePermission.SampleCollection))
         {
             ShortLabel = "Reports", Group = "SAS Portal",
-            Rule = s => s.UserRole == AppRole.Farmer && s.CanSeeMenu(PagePermission.SampleCollection)
+            Rule = s => s.UserRole == AppRole.Farmer && (s.CanSeeMenu(PagePermission.SampleCollection) || s.FarmerSasLinked)
         },
         new("SasMyPayments", "Payments", "bi-wallet2", "/Sas/Payments", nameof(PagePermission.SampleCollection))
         {
@@ -521,7 +535,12 @@ public static class ShellNavigation
     private static readonly string[] StatePriority = { "Dashboard", "SubDealerList", "ReportsCenter", "DigitalLibrary" };         // SMD / SMM
     private static readonly string[] AdminPriority = { "Dashboard", "SubDealerList", "ReportsCenter", "DigitalLibrary" };        // Admin / CorporateAdmin / Director / AVP
     private static readonly string[] SpecialAdminPriority = { "Logistics", "LogisticsMaster", "LogisticsReport", "UserProfile" };
+    // Farmer portal: Home | My Samples | My Reports | Profile (the SAS pair only when linked / granted).
+    private static readonly string[] FarmerPriority = { FarmerHomeKey, "SasMySamples", "SasMyReports", FarmerProfileKey };
     private static readonly string[] DefaultPriority = FieldStaffPriority;
+
+    public const string FarmerHomeKey = "farmer";
+    public const string FarmerProfileKey = "FarmerProfile";
 
     public static IReadOnlyList<string> GetRolePriority(AppRole? role) => role switch
     {
@@ -533,6 +552,7 @@ public static class ShellNavigation
         AppRole.SMD or AppRole.SMM => StatePriority,
         AppRole.Admin or AppRole.CorporateAdmin or AppRole.Director or AppRole.AVP => AdminPriority,
         AppRole.SpecialAdmin => SpecialAdminPriority,
+        AppRole.Farmer => FarmerPriority,
         _ => DefaultPriority
     };
 
@@ -559,10 +579,19 @@ public static class ShellNavigation
     /// whose curated 3-item priority list is used as-is - see Pick's allowFallback param).
     /// </summary>
     public static IReadOnlyList<ShellTab> GetPhoneTabs(LoginState state) =>
-        Pick(state, MaxPhoneTabs, allowFallback: state?.UserRole is not (AppRole.JMDO or AppRole.MDO));
+        Pick(state, MaxPhoneTabs, allowFallback: state?.UserRole is not (AppRole.JMDO or AppRole.MDO or AppRole.Farmer));
 
-    /// <summary>Up to <see cref="MaxRailItems"/> accessible destinations for the tablet rail (same ordering).</summary>
-    public static IReadOnlyList<ShellTab> GetRailItems(LoginState state) => Pick(state, MaxRailItems);
+    /// <summary>Up to <see cref="MaxRailItems"/> accessible destinations for the tablet rail (same ordering).
+    /// A farmer's rail is their own list only (no fill from staff pages).</summary>
+    public static IReadOnlyList<ShellTab> GetRailItems(LoginState state) =>
+        Pick(state, MaxRailItems, allowFallback: state?.UserRole != AppRole.Farmer);
+
+    // The farmer's shell never offers staff destinations, even ones whose Rule would let a user with
+    // no designation through (e.g. CSR-1 Create's `!IsAdmin`): only these keys, each still checked.
+    private static readonly HashSet<string> FarmerShellKeys = new(StringComparer.OrdinalIgnoreCase)
+    {
+        FarmerHomeKey, FarmerProfileKey, "SasMySamples", "SasMyReports", "SasMyPayments", "Help"
+    };
 
     /// <summary>Every accessible destination NOT already in the phone tab bar, in Candidate order.</summary>
     public static IReadOnlyList<ShellTab> MoreItems(LoginState state)
@@ -581,7 +610,9 @@ public static class ShellNavigation
         // Demo Documentation is JMDO-only (requirement, 2026-10-24) - it was part of their old
         // "full menu" sidebar too, but is not an MDO destination. Ungrouped items (Digital Library,
         // Community, Contact Us - open to every signed-in role) still show for both.
-        if (state?.UserRole == AppRole.JMDO)
+        if (state?.UserRole == AppRole.Farmer)
+            items = items.Where(c => FarmerShellKeys.Contains(c.Key));
+        else if (state?.UserRole == AppRole.JMDO)
             items = items.Where(c => c.Group is null or GroupJmdoPortal or GroupMdoPortal or GroupDemoDocumentation);
         else if (state?.UserRole == AppRole.MDO)
             items = items.Where(c => c.Group is null or GroupJmdoPortal or GroupMdoPortal);
@@ -727,11 +758,29 @@ public static class ShellNavigation
         return path.Split('/', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? string.Empty;
     }
 
+    private static string SecondSegment(string uriOrPath, string? baseUri)
+    {
+        var path = uriOrPath;
+        if (Uri.TryCreate(uriOrPath, UriKind.Absolute, out var abs))
+        {
+            path = abs.AbsolutePath;
+            if (!string.IsNullOrEmpty(baseUri) && Uri.TryCreate(baseUri, UriKind.Absolute, out var b)
+                && path.StartsWith(b.AbsolutePath, StringComparison.OrdinalIgnoreCase))
+            {
+                path = path.Substring(b.AbsolutePath.Length);
+            }
+        }
+        return path.Split('?', '#')[0].Trim('/').Split('/', StringSplitOptions.RemoveEmptyEntries).Skip(1).FirstOrDefault() ?? string.Empty;
+    }
+
     /// <summary>Resolves the Candidate key that should be highlighted for the given URI (null if none).</summary>
     public static string? ActiveKey(string uri, string? baseUri = null)
     {
         var seg = FirstSegment(uri, baseUri);
         if (seg.Length == 0) return null;
+        // The farmer portal lives under one prefix: /farmer/profile highlights Profile, the rest Home.
+        if (seg.Equals(FarmerHomeKey, StringComparison.OrdinalIgnoreCase))
+            return SecondSegment(uri, baseUri).Equals("profile", StringComparison.OrdinalIgnoreCase) ? FarmerProfileKey : FarmerHomeKey;
         if (RouteAliases.TryGetValue(seg, out var alias)) seg = alias;
         return Find(seg)?.Key;
     }

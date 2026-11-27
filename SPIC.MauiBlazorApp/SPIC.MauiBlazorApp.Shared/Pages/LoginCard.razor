@@ -144,50 +144,10 @@
 			}
 
 			LogToFile("Token received successfully, setting session store");
-			var rawToken = result.Token.StartsWith("Bearer ")
-				? result.Token.Substring("Bearer ".Length)
-				: result.Token;
-
-			Http.DefaultRequestHeaders.Authorization =
-				new AuthenticationHeaderValue("Bearer", rawToken);
-
-			// Persist to the session store FIRST, then populate LoginState as one
-			// atomic synchronous batch. This way every LoginState.OnChange
-			// subscriber (NavMenu, PageGuard) and the authenticated layout only
-			// ever sees the complete authenticated state, never intermediate
-			// partial states during login.
-			await SessionStore.SetAsync(SessionKeys.Token, rawToken);
-			await SessionStore.SetAsync(SessionKeys.Expiration, result.Expiration.ToString("O"));
-			await SessionStore.SetAsync(SessionKeys.RoleAccess, result.RoleAccess ?? "");
-			await SessionStore.SetAsync(SessionKeys.DesignationName, result.DesignationName ?? "");
-			await SessionStore.SetAsync(SessionKeys.RefreshToken, result.RefreshToken ?? "");
-			await SessionStore.SetAsync(SessionKeys.ServerClockOffset, LoginState.Clock.SavedOffset);
-
-			if (_model.RememberMe)
-			{
-				await SessionStore.SetPersistentAsync(SessionKeys.Token, rawToken);
-				await SessionStore.SetPersistentAsync(SessionKeys.Expiration, result.Expiration.ToString("O"));
-				await SessionStore.SetPersistentAsync(SessionKeys.RoleAccess, result.RoleAccess ?? "");
-				await SessionStore.SetPersistentAsync(SessionKeys.DesignationName, result.DesignationName ?? "");
-				await SessionStore.SetPersistentAsync(SessionKeys.RefreshToken, result.RefreshToken ?? "");
-				await SessionStore.SetPersistentAsync(SessionKeys.ServerClockOffset, LoginState.Clock.SavedOffset);
-			}
-			else
-			{
-				await SessionStore.RemovePersistentAsync(SessionKeys.Token);
-				await SessionStore.RemovePersistentAsync(SessionKeys.Expiration);
-				await SessionStore.RemovePersistentAsync(SessionKeys.RoleAccess);
-				await SessionStore.RemovePersistentAsync(SessionKeys.DesignationName);
-				await SessionStore.RemovePersistentAsync(SessionKeys.RefreshToken);
-				await SessionStore.RemovePersistentAsync(SessionKeys.ServerClockOffset);
-			}
-
-			// Persist token + page permissions for refreshes and other pages
-			LoginState.Token = rawToken;
-			LoginState.Expiration = result.Expiration;
-			LoginState.RefreshToken = result.RefreshToken;
-			LoginState.SetAllowedPages(result.RoleAccess);
-			LoginState.SetDesignationName(result.DesignationName);
+			// Header, session store (persistent copy when "Remain logged in"), then LoginState as one
+			// batch - the same code path the farmer OTP sign-in uses (Services/SessionPersistence).
+			await SessionPersistence.StartAsync(Http, SessionStore, LoginState, result.Token, result.Expiration,
+				result.RoleAccess, result.DesignationName, result.RefreshToken, _model.RememberMe);
 
 			LogToFile($"Login complete, navigating to {LoginState.LandingPage}");
 			Navigation.NavigateTo(LoginState.LandingPage);

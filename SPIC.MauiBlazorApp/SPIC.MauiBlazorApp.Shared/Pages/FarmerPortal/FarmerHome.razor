@@ -1,0 +1,98 @@
+@page "/farmer"
+@using SPIC.Core.Entities
+@inject FarmerSession Farmer
+@inject LoginState LoginState
+@inject NavigationManager Nav
+
+@*
+    Farmer home (placeholder for Task 1; Task 2 builds the real home). Sends a farmer whose profile
+    is not complete to /farmer/onboarding. Admin / SuperAdmin may open it for support (RouteAccess)
+    but have no farmer profile of their own.
+*@
+
+<div class="fp fp-page fph">
+    <PageHeader Title="Home" Subtitle="SPIC ONE for farmers" ShowBack="false" CssClass="fph-header" />
+
+    @if (LoginState.UserRole != AppRole.Farmer)
+    {
+        <EmptyState Icon="bi-person-badge" Title="Farmer portal"
+                    Message="You are looking at the farmer portal as support staff. Farmers see their own home here after they sign in with their mobile number." />
+    }
+    else if (_loading)
+    {
+        <Skeleton Rows="4" Height="18px" LoadingText="Loading your home..." />
+    }
+    else if (_error is not null)
+    {
+        <EmptyState Icon="bi-wifi-off" Title="We could not load your home" Message="@_error">
+            <button type="button" class="btn btn-success" @onclick="() => LoadAsync(force: true)">Try again</button>
+        </EmptyState>
+    }
+    else if (Farmer.Profile is { } profile)
+    {
+        <section class="fph-hero" aria-labelledby="fph-welcome">
+            <h2 id="fph-welcome" class="fph-welcome">Welcome, @profile.Name</h2>
+            <p class="fph-place">
+                <i class="bi bi-geo-alt-fill" aria-hidden="true"></i>
+                @Place(profile)
+            </p>
+            <a class="fph-edit" href="/farmer/profile"><i class="bi bi-pencil" aria-hidden="true"></i> Edit my profile</a>
+        </section>
+
+        @if (_showSas)
+        {
+            <section class="fph-card" aria-labelledby="fph-soil">
+                <h3 id="fph-soil" class="fph-card-title"><i class="bi bi-moisture" aria-hidden="true"></i> Your soil tests</h3>
+                <p class="fph-card-text">See the samples your SPIC officer collected and download your soil reports.</p>
+                <div class="fph-links">
+                    <a class="fph-link" href="/Sas/MySamples"><i class="bi bi-droplet-half" aria-hidden="true"></i> My samples</a>
+                    <a class="fph-link" href="/Sas/MyReports"><i class="bi bi-file-earmark-text" aria-hidden="true"></i> My reports</a>
+                </div>
+            </section>
+        }
+
+        <section class="fph-card fph-soon" aria-labelledby="fph-soon">
+            <h3 id="fph-soon" class="fph-card-title"><i class="bi bi-stars" aria-hidden="true"></i> Coming soon</h3>
+            <p class="fph-card-text">SPIC dealers near you, your SPIC field team, fertilizer advice, SPIC AI answers, leaf check and harvest forecast will appear here.</p>
+        </section>
+    }
+</div>
+
+@code {
+    private bool _loading = true;
+    private string? _error;
+    private bool _showSas;
+
+    protected override Task OnInitializedAsync() => LoadAsync(force: false);
+
+    private async Task LoadAsync(bool force)
+    {
+        if (LoginState.UserRole != AppRole.Farmer)
+        {
+            _loading = false;
+            return;
+        }
+
+        _loading = true;
+        _error = null;
+        var ok = await Farmer.EnsureLoadedAsync(force);
+        _loading = false;
+
+        if (!ok)
+        {
+            _error = Farmer.LoadError ?? "Please check your internet connection and try again.";
+            return;
+        }
+
+        if (!Farmer.ProfileComplete)
+        {
+            Nav.NavigateTo("/farmer/onboarding", replace: true);
+            return;
+        }
+
+        _showSas = LoginState.FarmerSasLinked || LoginState.CanSeeMenu(nameof(PagePermission.SampleCollection));
+    }
+
+    private static string Place(SPIC.Core.DTOs.FarmerProfileDto p) =>
+        string.Join(", ", new[] { p.Village, p.DistrictName, p.StateName }.Where(x => !string.IsNullOrWhiteSpace(x)));
+}

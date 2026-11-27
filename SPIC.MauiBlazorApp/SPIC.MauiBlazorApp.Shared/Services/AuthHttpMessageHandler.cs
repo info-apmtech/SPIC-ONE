@@ -135,6 +135,7 @@ namespace SPIC.MauiBlazorApp.Shared.Services
             var path = uri?.AbsolutePath ?? uri?.OriginalString ?? string.Empty;
             // api/Telemetry/batch is a background post: its answer must never sign the user out
             return path.Contains("/api/Authentication/", StringComparison.OrdinalIgnoreCase)
+                || path.Contains("/api/FarmerAuth/", StringComparison.OrdinalIgnoreCase)
                 || path.Contains("/api/Telemetry/", StringComparison.OrdinalIgnoreCase);
         }
 

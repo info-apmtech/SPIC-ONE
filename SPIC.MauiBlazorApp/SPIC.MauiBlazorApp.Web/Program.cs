@@ -83,6 +83,9 @@ builder.Services.AddScoped<HelpTourState>();
 builder.Services.AddScoped<HelpPanelState>();
 builder.Services.AddScoped<HelpApi>();
 builder.Services.AddScoped<JmdoTrackingClientLoop>();
+// Farmer portal (docs/farmer-portal.md): OTP sign-in + profile calls and the farmer's profile state.
+builder.Services.AddScoped<FarmerApi>();
+builder.Services.AddScoped<FarmerSession>();
 
 // Usage + error telemetry (docs/metrics-telemetry-plan.md): the app / version header on every API
 // call, page views and client errors per circuit, and anything this host logs at Error or above.
