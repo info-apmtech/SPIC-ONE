@@ -594,3 +594,111 @@ sugarcane, irrigated groundnut, hybrid rice, hybrid tomato.
 - Sugarcane, irrigated groundnut, hybrid rice and hybrid tomato need a confirmed source before they are added.
 - SPIC complex fertilizers (SPIC Jyoti, Sangamam ...) are not offered because no grade is recorded anywhere in the
   code or the product master; add them when the master carries their grade.
+
+## 5. Ask SPIC AI, the farmers' chatbot (Task 5, 2026-11-28)
+
+### What it does
+
+- **Ask SPIC AI** `/farmer/assistant` (second home tile "Ask SPIC AI", More sheet after Fertilizer advice, desktop
+  sidebar under Fertilizer advice). A chat: the farmer types a farming question (max 1000 letters) or taps a starter
+  question for their crops; SPIC AI answers **in the profile's PreferredLanguage** (the screen itself stays English),
+  grounded in the published Digital Library items retrieved for the question and the farmer's own context. Answers
+  show the library items used as link chips ("From the SPIC library", opening `/DigitalLibrary/view/{id}`), three
+  follow-up chips and the time in IST; a typing indicator shows while waiting; under the composer the disclaimer
+  "SPIC AI can make mistakes. Check doses on the product label or with your SPIC team before you use them." with a
+  My SPIC team link.
+- **My chats**: the farmer's conversations, newest first, grouped Today / Yesterday / Earlier (IST), with delete
+  (confirm dialog; soft delete). Desktop / tablet: a column left of the chat; phone: `/farmer/assistant/chats`
+  ("My chats" button). `/farmer/assistant/{id}` opens one chat.
+- **Daily cap**: 30 questions per farmer per IST day (midnight to midnight IST, computed from UTC). The hero shows
+  "N of 30 questions left today"; at the limit the composer is replaced by a "That's all for today" card with the
+  API's message and Ask my SPIC team / Community near me buttons.
+- **No Anthropic key** (local, or until the owner sets one): every answer is the **basic answer**, built from the
+  matching library items and always starting "Basic answer from the SPIC library: ..."; the bubble carries a gold
+  "Basic answer from the library" tag, the empty chat says "For now SPIC AI gives basic answers from the SPIC library,
+  in English", and a non-English farmer is told basic answers are in English only. A pesticide question adds the
+  label / safety line. The same basic answer is used when the Anthropic call fails or is refused.
+- Access: Farmer role (API `[Authorize(Roles = Farmer)]`, page under `/farmer`); Admin / SuperAdmin see a "viewing as
+  support staff" note. Farmers may now open `/DigitalLibrary/view/{id}` (the source links); the rest of the library
+  keeps its rules (`RouteAccess.FarmerRoute`).
+
+### Endpoints (`SpicAPI/Controllers/FarmerAssistantController.cs`, Farmer role, scoped to the caller)
+
+| Method | Route | Notes |
+|---|---|---|
+| GET | `api/Farmer/assistant/status` | `FarmerAssistantStatusDto`: `dailyLimit`, `usedToday`, `leftToday`, `resetsAtUtc` (next IST midnight), `maxQuestionChars`, `fullAnswers` (key configured), `language`, `languageName`, `starters` |
+| GET | `api/Farmer/assistant/conversations` | the caller's conversations (newest 50): `id`, `title`, `createdAtUtc`, `updatedAtUtc`, `questionCount` |
+| GET | `api/Farmer/assistant/conversations/{id}` | `FarmerChatDetailDto` with `messages` (`role`, `text`, `createdAtUtc`, `sources`, `suggestions`, `provider`); 404 for anyone else's |
+| DELETE | `api/Farmer/assistant/conversations/{id}` | 204; soft delete; its questions still count today |
+| POST | `api/Farmer/assistant/ask` `{ conversationId?, question }` | 200 `FarmerAskResponse` (`conversationId`, `conversationTitle`, `question`, `answer`, `leftToday`, `resetsAtUtc`); 400 empty / over 1000 letters; 404 unknown conversation; 429 `{ message, retryAfterSeconds, resetsAtUtc, dailyLimit }` + `Retry-After` |
+
+Contracts: `SPIC.Core/DTOs/FarmerAssistantDtos.cs`. Client: `Services/FarmerAssistantApi.cs` (no toasts).
+
+### How an answer is made
+
+1. Validate (`FarmerAssistantRules.Validate`) and load the conversation (the caller's, not deleted).
+2. Load the farmer context (`SpicAPI/Services/FarmerAssistantContextLoader.cs`): profile crops, district and state
+   names, land acres, water source, language; the **ratings only** (the lab's label, else Low / Medium / High from the
+   status) of the latest completed SPIC soil report (same report rule as the fertilizer controller); the one-line
+   summary of the latest fertilizer advice run. Never the name, phone, village, GPS or user id.
+3. Under `pg_advisory_xact_lock(hashtextextended('fai:' + userId, 0))`: count the farmer's questions since IST midnight
+   (`FarmerChatMessages` with Role user, deleted chats included); at the limit 429; else store the question (and a
+   new conversation) and commit. The lock is released before the answer is made, so parallel taps and both API
+   replicas cannot pass the cap (smoke: 8 parallel asks at 26 used give exactly 4 answers and 4 x 429).
+4. Retrieve library items (`LibraryRetriever`, published only, top 4) and call `IAssistantProvider` in
+   `AssistantMode.Farmer` with the farmer system prompt (`FarmerAssistantRules.SystemPrompt(language)`), the context
+   block (`FarmerAssistantRules.ContextBlock`), the last 10 earlier messages (`FarmerAssistantRules.History`: starts
+   with a question; back-to-back same-role messages joined) and `Assistant:FarmerMaxTokens` (1500).
+5. Store the answer (sources, follow-ups, provider, language) even if the farmer has left the page.
+
+The Anthropic call now lives in `Spic.Infrastructure/Services/Assistant/AnthropicMessagesClient.cs` (raw HTTP as
+before; content blocks incl. `AnthropicContent.ImageBase64` for the leaf-photo check; HTTP errors, `refusal` and empty
+replies return a failed result and the provider falls back). The library assistant keeps its own prompt, 800 tokens
+and behaviour.
+
+### Config keys
+
+| Key | Meaning |
+|---|---|
+| `Assistant:AnthropicApiKey` | (existing) empty = basic answers only; in Azure `Assistant__AnthropicApiKey` from Key Vault |
+| `Assistant:Model` | (existing) default `claude-sonnet-5`, used by both assistants |
+| `Assistant:FarmerMaxTokens` | farmer answer length, default 1500 (Indian scripts take more tokens) |
+| `Assistant:Endpoint` | optional Messages API URL (a gateway / proxy, or the local stub); empty = `https://api.anthropic.com/v1/messages`. The key is sent there |
+| `FarmerPortal:AssistantDailyLimit` | questions per farmer per IST day; empty = 30 |
+
+### Tables (migration `V37_FarmerAssistant`)
+
+New tables instead of a discriminator on `LibraryConversations` / `LibraryMessages`: those store local `DateTime.Now`
+times and int ids, and every query of the live library controller (list, detail, delete, ask) would have needed a
+scope filter.
+
+- `FarmerChatConversations` (Id bigint, FarmerUserId, Title varchar(80), CreatedAtUtc, UpdatedAtUtc, IsDeleted); index
+  (FarmerUserId, UpdatedAtUtc).
+- `FarmerChatMessages` (Id bigint, ConversationId -> conversation with cascade, FarmerUserId, Role varchar(16), Text,
+  SourcesJson, SuggestionsJson, Provider varchar(20), Language varchar(8), CreatedAtUtc); indexes (ConversationId, Id)
+  and (FarmerUserId, Role, CreatedAtUtc) for the cap.
+
+### Tests and tools
+
+- Harness: `FarmerPortalAssistantTests` (the IST day boundary at 18:29:59 / 18:30:00 UTC, reset, counts-today, limits,
+  cap message, validation 1000 / 1001, titles, the system prompt per language and its safety rules, the context block
+  and that the facts type has no personal fields, soil rating words, the Anthropic request (system, history, context
+  first, no thinking / sampling fields, image block shape), response parsing (thinking skipped, refusal), Tamil
+  suggestions, the history window, the labelled basic answer incl. duplicates / pesticide / Tamil, the keyword
+  provider in farmer mode, starters, the screen helpers, tile / More sheet / routes); updated tile and More-sheet
+  expectations in `FarmerPortalUiTests` / `FarmerPortalRouteTests`.
+- Smoke: `python tools/farmer-portal-check/smoke_task5.py [--phone ...] [--cap-phone ...]` (local API without a key:
+  401 / 403, validation, basic answers, sources, another farmer's 404s, delete, the cap incl. 8 parallel asks) and
+  `--mode stub --record <file>` against `tools/farmer-portal-check/fake_anthropic.py`, a local stand-in for the
+  Messages API (the Anthropic path, the request body, history, failure and refusal fallback). The stub never calls
+  Anthropic.
+- Screenshots: `python tools/farmer-portal-check/shoot_task5.py --out ... --set basic|stub`.
+- `tools/farmer-portal-check/cleanup_task5_local.sql` removes the local test farmers' chats (resets their allowance).
+
+### Left / for the owner
+
+- Prod migration `V37_FarmerAssistant` (owner runs prod).
+- Set `Assistant__AnthropicApiKey` for full answers in the farmer's language; until then farmers get labelled basic
+  English answers from the library. Cost ceiling: 30 questions x 1500 output tokens per farmer per day.
+- The library has few published items today; answers (the basic ones especially) are only as good as the library.
+- An agronomist should read a sample of real answers (Tamil especially) before go-live.
