@@ -170,6 +170,15 @@ public sealed class LabFertilizerSchedule
         return row;
     }
 
+    /// <summary>The dose factor this schedule applies for a nutrient code ("N", "P", "K", ...) and a status name
+    /// (Deficient / Moderate / Normal / Excess / NotTested). Farmer portal Task 4 uses it so the fertilizer
+    /// advice scales doses exactly like the soil report.</summary>
+    public decimal FactorFor(string nutrient, string status) => Rules().Factor(nutrient, status);
+
+    /// <summary>The LabParameter code whose status a nutrient code follows (Sas:Lab:NutrientParameters; N = S-N ...).</summary>
+    public string? ParameterCodeFor(string nutrient) =>
+        Rules().Parameters.TryGetValue(nutrient, out var code) ? code : null;
+
     // ---------------------------------------------------------------- configuration
 
     private sealed class ScheduleRules

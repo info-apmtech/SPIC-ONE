@@ -2000,6 +2000,863 @@ namespace Spic.Infrastructure.Migrations
                     b.ToTable("Crops");
                 });
 
+            modelBuilder.Entity("SPIC.Core.Entities.CropSoilTip", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Crop")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("SoilType")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("SourceUrl")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Text")
+                        .IsRequired()
+                        .HasMaxLength(600)
+                        .HasColumnType("character varying(600)");
+
+                    b.Property<int>("WaterRegime")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Crop", "SoilType");
+
+                    b.ToTable("CropSoilTips");
+
+                    b.HasData(
+                        new
+                        {
+                            Id = 1,
+                            Category = "Soil",
+                            IsActive = true,
+                            SoilType = "Black Cotton Soil",
+                            SortOrder = 1,
+                            Source = "TNAU Agritech: Soil related constraints and their management",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_reosurcemgt_soil_soilcontraints.html",
+                            Text = "Black soil lets water in slowly. Plough deep with a mould board or disc plough in summer so water soaks in and drains better.",
+                            WaterRegime = 0
+                        },
+                        new
+                        {
+                            Id = 2,
+                            Category = "Soil",
+                            IsActive = true,
+                            SoilType = "Black Cotton Soil",
+                            SortOrder = 2,
+                            Source = "TNAU Agritech: Soil related constraints and their management",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_reosurcemgt_soil_soilcontraints.html",
+                            Text = "Add FYM, composted coir pith or pressmud at 25 t/ha (about 10 t/acre) every year to improve drainage and soil structure.",
+                            WaterRegime = 0
+                        },
+                        new
+                        {
+                            Id = 3,
+                            Category = "Water",
+                            IsActive = true,
+                            SoilType = "Black Cotton Soil",
+                            SortOrder = 3,
+                            Source = "TNAU Agritech: Irrigation management, Rice",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_irrigationmgt_cereals_rice.html",
+                            Text = "Do not let water stand in the field. Where it collects after rain or irrigation, cut open drains (TNAU: about 60 cm deep and 45 cm wide for waterlogged fields).",
+                            WaterRegime = 0
+                        },
+                        new
+                        {
+                            Id = 4,
+                            Category = "Soil",
+                            IsActive = true,
+                            SoilType = "Clay Loam",
+                            SortOrder = 4,
+                            Source = "TNAU Agritech: Soil related constraints and their management",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_reosurcemgt_soil_soilcontraints.html",
+                            Text = "Heavy clay soil: plough deep with a mould board or disc plough in summer to help water soak in and drain.",
+                            WaterRegime = 0
+                        },
+                        new
+                        {
+                            Id = 5,
+                            Category = "Water",
+                            IsActive = true,
+                            SoilType = "Clay Loam",
+                            SortOrder = 5,
+                            Source = "TNAU Agritech: Irrigation management, Rice",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_irrigationmgt_cereals_rice.html",
+                            Text = "Do not let water stand in the field. Where it collects, cut open drains (TNAU: about 60 cm deep and 45 cm wide for waterlogged fields).",
+                            WaterRegime = 0
+                        },
+                        new
+                        {
+                            Id = 6,
+                            Category = "Soil",
+                            IsActive = true,
+                            SoilType = "Red Soil",
+                            SortOrder = 6,
+                            Source = "TNAU Agritech: Soil related constraints and their management",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_reosurcemgt_soil_soilcontraints.html",
+                            Text = "Red soil loses water fast. Add tank silt or black soil at 25 t/ha (about 10 t/acre) a year, together with FYM, composted coir pith or pressmud at 25 t/ha.",
+                            WaterRegime = 0
+                        },
+                        new
+                        {
+                            Id = 7,
+                            Category = "Soil",
+                            IsActive = true,
+                            SoilType = "Red Soil",
+                            SortOrder = 7,
+                            Source = "TNAU Agritech: Soil related constraints and their management",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_reosurcemgt_soil_soilcontraints.html",
+                            Text = "If a hard layer below 15 cm stops the roots, chisel plough at 0.5 m spacing in both directions once in three years and add FYM or composted coir pith at 12.5 t/ha (about 5 t/acre).",
+                            WaterRegime = 0
+                        },
+                        new
+                        {
+                            Id = 8,
+                            Category = "Soil",
+                            IsActive = true,
+                            SoilType = "Red Soil",
+                            SortOrder = 8,
+                            Source = "TNAU Agritech: Soil related constraints and their management",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_reosurcemgt_soil_soilcontraints.html",
+                            Text = "If the surface forms a hard crust after rain, break it by harrowing; lime or gypsum at 2 t/ha with FYM at 12.5 t/ha prevents it.",
+                            WaterRegime = 0
+                        },
+                        new
+                        {
+                            Id = 9,
+                            Category = "Soil",
+                            IsActive = true,
+                            SoilType = "Sandy / Sandy Loam",
+                            SortOrder = 9,
+                            Source = "TNAU Agritech: Soil related constraints and their management",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_reosurcemgt_soil_soilcontraints.html",
+                            Text = "Sandy soil loses water and fertilizer fast. Roll it with a 400 kg stone roller (or an oil drum filled with stones) 8 times at the right moisture, once in three years.",
+                            WaterRegime = 0
+                        },
+                        new
+                        {
+                            Id = 10,
+                            Category = "Soil",
+                            IsActive = true,
+                            SoilType = "Sandy / Sandy Loam",
+                            SortOrder = 10,
+                            Source = "TNAU Agritech: Soil related constraints and their management",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_reosurcemgt_soil_soilcontraints.html",
+                            Text = "Coastal sandy soil: add tank silt to make it more productive.",
+                            WaterRegime = 0
+                        },
+                        new
+                        {
+                            Id = 11,
+                            Category = "Soil",
+                            IsActive = true,
+                            SoilType = "Laterite Soil",
+                            SortOrder = 11,
+                            Source = "TNAU Agritech: Soil related constraints and their management",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_reosurcemgt_soil_soilcontraints.html",
+                            Text = "Laterite soils (for example in Pudukkottai and Kanyakumari) are often acidic. Below pH 6, apply lime as per the lime requirement test of your soil.",
+                            WaterRegime = 0
+                        },
+                        new
+                        {
+                            Id = 12,
+                            Category = "Soil",
+                            IsActive = true,
+                            SoilType = "Laterite Soil",
+                            SortOrder = 12,
+                            Source = "TNAU Agritech: Soil related constraints and their management",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_reosurcemgt_soil_soilcontraints.html",
+                            Text = "Where iron or aluminium toxicity shows up (common in these soils when flooded), lime as per the lime requirement and organic manure reduce it.",
+                            WaterRegime = 0
+                        },
+                        new
+                        {
+                            Id = 13,
+                            Category = "Soil",
+                            IsActive = true,
+                            SoilType = "Coastal Saline",
+                            SortOrder = 13,
+                            Source = "TNAU Agritech: Soil related constraints and their management",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_reosurcemgt_soil_soilcontraints.html",
+                            Text = "Saline soil (EC above 4 dS/m on the soil report): make field and main drains 60 cm deep and 45 cm wide and wash the salts out with water.",
+                            WaterRegime = 0
+                        },
+                        new
+                        {
+                            Id = 14,
+                            Category = "Soil",
+                            IsActive = true,
+                            SoilType = "Coastal Saline",
+                            SortOrder = 14,
+                            Source = "TNAU Agritech: Soil related constraints and their management",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_reosurcemgt_soil_soilcontraints.html",
+                            Text = "Apply FYM at 5 t/ha (about 2 t/acre) 10-15 days before transplanting or sowing to ease the salt problem.",
+                            WaterRegime = 0
+                        },
+                        new
+                        {
+                            Id = 15,
+                            Category = "Soil",
+                            Crop = "Cotton",
+                            IsActive = true,
+                            SortOrder = 15,
+                            Source = "TNAU Agritech: Nutrient management, Cotton (updated 19.03.2013)",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_nutrientmgt_cotton.html",
+                            Text = "Spread 12.5 t/ha (about 5 t/acre) of FYM or compost, or 2.5 t/ha of vermicompost, on the field before ploughing.",
+                            WaterRegime = 0
+                        },
+                        new
+                        {
+                            Id = 16,
+                            Category = "Nutrient",
+                            Crop = "Cotton",
+                            IsActive = true,
+                            SortOrder = 16,
+                            Source = "TNAU Agritech: Nutrient management, Cotton (updated 19.03.2013)",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_nutrientmgt_cotton.html",
+                            Text = "Zinc-deficient soil: zinc sulphate 50 kg/ha (about 20 kg/acre) as basal, or a 0.5 % zinc sulphate spray three times at 45, 60 and 75 days.",
+                            WaterRegime = 0
+                        },
+                        new
+                        {
+                            Id = 17,
+                            Category = "Nutrient",
+                            Crop = "Cotton",
+                            IsActive = true,
+                            SortOrder = 17,
+                            Source = "TNAU Agritech: Nutrient management, Cotton (updated 19.03.2013)",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_nutrientmgt_cotton.html",
+                            Text = "Where leaves turn red or magnesium is short: magnesium sulphate 20 kg/ha (about 8 kg/acre) as basal; a 2 % magnesium sulphate + 1 % urea spray at boll formation if needed.",
+                            WaterRegime = 0
+                        },
+                        new
+                        {
+                            Id = 18,
+                            Category = "Nutrient",
+                            Crop = "Cotton",
+                            IsActive = true,
+                            SortOrder = 18,
+                            Source = "TNAU Agritech: Nutrient management, Cotton (updated 19.03.2013)",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_nutrientmgt_cotton.html",
+                            Text = "Seed treatment and seed-line application of Azospirillum and Phosphobacteria (or Azophos) saves about 25 % of the nitrogen.",
+                            WaterRegime = 0
+                        },
+                        new
+                        {
+                            Id = 19,
+                            Category = "Water",
+                            Crop = "Cotton",
+                            IsActive = true,
+                            SortOrder = 19,
+                            Source = "TNAU Agritech: Irrigation management, Cotton",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_irrigationmgt_cotton.html",
+                            Text = "Irrigate right after sowing and give a life irrigation on the 5th day. The flowering phase (about 45-100 days) needs plenty of water; give less water at maturity and stop after about 150 days.",
+                            WaterRegime = 1
+                        },
+                        new
+                        {
+                            Id = 20,
+                            Category = "Water",
+                            Crop = "Cotton",
+                            IsActive = true,
+                            SoilType = "Black Cotton Soil",
+                            SortOrder = 20,
+                            Source = "TNAU Agritech: Irrigation management, Cotton",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_irrigationmgt_cotton.html",
+                            Text = "Heavy (black) soil schedule: about the 20th and 40th day, then in flowering about the 55th, 70th, 85th and 100th day.",
+                            WaterRegime = 1
+                        },
+                        new
+                        {
+                            Id = 21,
+                            Category = "Water",
+                            Crop = "Cotton",
+                            IsActive = true,
+                            SoilType = "Clay Loam",
+                            SortOrder = 21,
+                            Source = "TNAU Agritech: Irrigation management, Cotton",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_irrigationmgt_cotton.html",
+                            Text = "Heavy soil schedule: about the 20th and 40th day, then in flowering about the 55th, 70th, 85th and 100th day.",
+                            WaterRegime = 1
+                        },
+                        new
+                        {
+                            Id = 22,
+                            Category = "Water",
+                            Crop = "Cotton",
+                            IsActive = true,
+                            SoilType = "Sandy / Sandy Loam",
+                            SortOrder = 22,
+                            Source = "TNAU Agritech: Irrigation management, Cotton",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_irrigationmgt_cotton.html",
+                            Text = "Light soil schedule: about the 20th and 35th day, then in flowering about the 48th, 60th, 72nd and 84th day.",
+                            WaterRegime = 1
+                        },
+                        new
+                        {
+                            Id = 23,
+                            Category = "Water",
+                            Crop = "Cotton",
+                            IsActive = true,
+                            SoilType = "Red Soil",
+                            SortOrder = 23,
+                            Source = "TNAU Agritech: Irrigation management, Cotton",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_irrigationmgt_cotton.html",
+                            Text = "Light soil schedule: about the 20th and 35th day, then in flowering about the 48th, 60th, 72nd and 84th day.",
+                            WaterRegime = 1
+                        },
+                        new
+                        {
+                            Id = 24,
+                            Category = "Water",
+                            Crop = "Cotton",
+                            IsActive = true,
+                            SoilType = "Black Cotton Soil",
+                            SortOrder = 24,
+                            Source = "TNAU Agritech: Irrigation management, Cotton",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_irrigationmgt_cotton.html",
+                            Text = "Skip-furrow or alternate-furrow irrigation suits heavy soils and saves water (skip furrow saves about half).",
+                            WaterRegime = 1
+                        },
+                        new
+                        {
+                            Id = 25,
+                            Category = "Water",
+                            Crop = "Cotton",
+                            IsActive = true,
+                            SoilType = "Clay Loam",
+                            SortOrder = 25,
+                            Source = "TNAU Agritech: Irrigation management, Cotton",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_irrigationmgt_cotton.html",
+                            Text = "Skip-furrow or alternate-furrow irrigation suits clay and loam soils and saves water (skip furrow saves about half).",
+                            WaterRegime = 1
+                        },
+                        new
+                        {
+                            Id = 26,
+                            Category = "Nutrient",
+                            Crop = "Paddy",
+                            IsActive = true,
+                            SortOrder = 26,
+                            Source = "TNAU Agritech: Rice main field, application of inorganic fertilizers (updated Jan 2023)",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_main_feild_%20InOrganic_biofertilizers_Rice.html",
+                            Text = "Zinc sulphate 25 kg/ha (about 10 kg/acre) mixed with 50 kg of dry sand just before transplanting; 12.5 kg/ha is enough when green manure (6.25 t/ha) or enriched FYM is applied.",
+                            WaterRegime = 0
+                        },
+                        new
+                        {
+                            Id = 27,
+                            Category = "Nutrient",
+                            Crop = "Paddy",
+                            IsActive = true,
+                            SortOrder = 27,
+                            Source = "TNAU Agritech: Rice main field, application of inorganic fertilizers (updated Jan 2023)",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_main_feild_%20InOrganic_biofertilizers_Rice.html",
+                            Text = "Gypsum 500 kg/ha (about 200 kg/acre) at the last ploughing gives calcium and sulphur.",
+                            WaterRegime = 0
+                        },
+                        new
+                        {
+                            Id = 28,
+                            Category = "Nutrient",
+                            Crop = "Paddy",
+                            IsActive = true,
+                            SoilType = "Coastal Saline",
+                            SortOrder = 28,
+                            Source = "TNAU Agritech: Rice main field, application of inorganic fertilizers (updated Jan 2023)",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_main_feild_%20InOrganic_biofertilizers_Rice.html",
+                            Text = "Saline or sodic soil: zinc sulphate 37.5 kg/ha (about 15 kg/acre).",
+                            WaterRegime = 0
+                        },
+                        new
+                        {
+                            Id = 29,
+                            Category = "Water",
+                            Crop = "Paddy",
+                            IsActive = true,
+                            SortOrder = 29,
+                            Source = "TNAU Agritech: Irrigation management, Rice",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_irrigationmgt_cereals_rice.html",
+                            Text = "Keep 2 cm of water for 7 days after transplanting. Then irrigate when the ponded water has just gone (clay soil) or one day later (loamy soil) in summer; in winter 1-2 days (clay) or 3 days (loamy) after it has gone.",
+                            WaterRegime = 0
+                        },
+                        new
+                        {
+                            Id = 30,
+                            Category = "Water",
+                            Crop = "Paddy",
+                            IsActive = true,
+                            SortOrder = 30,
+                            Source = "TNAU Agritech: Irrigation management, Rice",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_irrigationmgt_cereals_rice.html",
+                            Text = "Panicle initiation, booting, heading and flowering are critical: do not delay irrigation then. Stop irrigating about 15 days before harvest.",
+                            WaterRegime = 0
+                        },
+                        new
+                        {
+                            Id = 31,
+                            Category = "Soil",
+                            Crop = "Maize",
+                            IsActive = true,
+                            SortOrder = 31,
+                            Source = "TNAU Agritech: Nutrient management, Maize (updated 29.05.2013)",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_nutrientmgt_maize.html",
+                            Text = "Spread 12.5 t/ha (about 5 t/acre) of FYM, compost or composted coir pith with Azospirillum and Phosphobacteria (2 kg/ha each) or Azophos (4 kg/ha) before ploughing.",
+                            WaterRegime = 0
+                        },
+                        new
+                        {
+                            Id = 32,
+                            Category = "Nutrient",
+                            Crop = "Maize",
+                            IsActive = true,
+                            SortOrder = 32,
+                            Source = "TNAU Agritech: Nutrient management, Maize (updated 29.05.2013)",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_nutrientmgt_maize.html",
+                            Text = "Zinc-deficient soil: zinc sulphate 37.5 kg/ha (about 15 kg/acre), or the micronutrient mixture of the Department of Agriculture 12.5 kg/ha mixed with sand.",
+                            WaterRegime = 0
+                        },
+                        new
+                        {
+                            Id = 33,
+                            Category = "Water",
+                            Crop = "Maize",
+                            IsActive = true,
+                            SortOrder = 33,
+                            Source = "TNAU Agritech: Irrigation management, Maize",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_irrigationmgt_maize.html",
+                            Text = "45-65 days after sowing (flowering) is the most critical time for water: the yield drops a lot if the crop is short of water then.",
+                            WaterRegime = 1
+                        },
+                        new
+                        {
+                            Id = 34,
+                            Category = "Water",
+                            Crop = "Maize",
+                            IsActive = true,
+                            SoilType = "Black Cotton Soil",
+                            SortOrder = 34,
+                            Source = "TNAU Agritech: Irrigation management, Maize",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_irrigationmgt_maize.html",
+                            Text = "Heavy soil schedule: after sowing, life irrigations on the 4th and 12th day, then about the 25th, 36th, 48th, 60th, 72nd and 85th day.",
+                            WaterRegime = 1
+                        },
+                        new
+                        {
+                            Id = 35,
+                            Category = "Water",
+                            Crop = "Maize",
+                            IsActive = true,
+                            SoilType = "Clay Loam",
+                            SortOrder = 35,
+                            Source = "TNAU Agritech: Irrigation management, Maize",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_irrigationmgt_maize.html",
+                            Text = "Heavy soil schedule: after sowing, life irrigations on the 4th and 12th day, then about the 25th, 36th, 48th, 60th, 72nd and 85th day.",
+                            WaterRegime = 1
+                        },
+                        new
+                        {
+                            Id = 36,
+                            Category = "Water",
+                            Crop = "Maize",
+                            IsActive = true,
+                            SoilType = "Sandy / Sandy Loam",
+                            SortOrder = 36,
+                            Source = "TNAU Agritech: Irrigation management, Maize",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_irrigationmgt_maize.html",
+                            Text = "Light soil schedule: after sowing, life irrigations on the 4th and 12th day, then about the 22nd, 32nd, 40th, 50th, 60th, 72nd, 85th and 95th day.",
+                            WaterRegime = 1
+                        },
+                        new
+                        {
+                            Id = 37,
+                            Category = "Water",
+                            Crop = "Maize",
+                            IsActive = true,
+                            SoilType = "Red Soil",
+                            SortOrder = 37,
+                            Source = "TNAU Agritech: Irrigation management, Maize",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_irrigationmgt_maize.html",
+                            Text = "Light soil schedule: after sowing, life irrigations on the 4th and 12th day, then about the 22nd, 32nd, 40th, 50th, 60th, 72nd, 85th and 95th day.",
+                            WaterRegime = 1
+                        },
+                        new
+                        {
+                            Id = 38,
+                            Category = "Nutrient",
+                            Crop = "Groundnut",
+                            IsActive = true,
+                            SortOrder = 38,
+                            Source = "TNAU Agritech: Groundnut, rainfed (crop production advisory)",
+                            SourceUrl = "https://agritech.tnau.ac.in/govt_schemes_services/aas/groundnut.html",
+                            Text = "Gypsum 400 kg/ha (about 160 kg/acre) beside the plants between the 40th and 70th day (depending on soil moisture), hoed in and earthed up: better pod filling. Do not use gypsum on calcareous soil.",
+                            WaterRegime = 0
+                        },
+                        new
+                        {
+                            Id = 39,
+                            Category = "Nutrient",
+                            Crop = "Groundnut",
+                            IsActive = true,
+                            SortOrder = 39,
+                            Source = "TNAU Agritech: Groundnut, rainfed (crop production advisory)",
+                            SourceUrl = "https://agritech.tnau.ac.in/govt_schemes_services/aas/groundnut.html",
+                            Text = "Zinc sulphate 25 kg/ha (about 10 kg/acre) as basal when soil zinc is below 1.3 ppm.",
+                            WaterRegime = 0
+                        },
+                        new
+                        {
+                            Id = 40,
+                            Category = "Nutrient",
+                            Crop = "Groundnut",
+                            IsActive = true,
+                            SortOrder = 40,
+                            Source = "TNAU Agritech: Groundnut, rainfed (crop production advisory)",
+                            SourceUrl = "https://agritech.tnau.ac.in/govt_schemes_services/aas/groundnut.html",
+                            Text = "Micronutrient mixture of the Department of Agriculture 12.5 kg/ha, mixed with sand to 50 kg and spread on the surface right after sowing. Do not mix it into the soil.",
+                            WaterRegime = 0
+                        },
+                        new
+                        {
+                            Id = 41,
+                            Category = "Soil",
+                            Crop = "Groundnut",
+                            IsActive = true,
+                            SortOrder = 41,
+                            Source = "TNAU Agritech: Groundnut, rainfed (crop production advisory)",
+                            SourceUrl = "https://agritech.tnau.ac.in/govt_schemes_services/aas/groundnut.html",
+                            Text = "If the surface crusts, lime at 2 t/ha with FYM or composted coir pith at 12.5 t/ha helps the seedlings come up.",
+                            WaterRegime = 0
+                        },
+                        new
+                        {
+                            Id = 42,
+                            Category = "Soil",
+                            Crop = "Black gram",
+                            IsActive = true,
+                            SortOrder = 42,
+                            Source = "TNAU Agritech: Nutrient management, Blackgram (2013)",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_nutrientmgt_blackgram.html",
+                            Text = "Lime is recommended for pulses when the soil pH is below 6.0.",
+                            WaterRegime = 0
+                        },
+                        new
+                        {
+                            Id = 43,
+                            Category = "Nutrient",
+                            Crop = "Black gram",
+                            IsActive = true,
+                            SortOrder = 43,
+                            Source = "TNAU Agritech: Nutrient management, Blackgram (2013)",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_nutrientmgt_blackgram.html",
+                            Text = "Irrigated crop: zinc sulphate 25 kg/ha (about 10 kg/acre).",
+                            WaterRegime = 1
+                        },
+                        new
+                        {
+                            Id = 44,
+                            Category = "Nutrient",
+                            Crop = "Black gram",
+                            IsActive = true,
+                            SortOrder = 44,
+                            Source = "TNAU Agritech: Nutrient management, Blackgram (2013)",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_nutrientmgt_blackgram.html",
+                            Text = "Spray 1 % urea on the 30th and 45th day after sowing for a better yield; a 2 % DAP spray at flowering and 15 days later also helps.",
+                            WaterRegime = 0
+                        },
+                        new
+                        {
+                            Id = 45,
+                            Category = "Water",
+                            Crop = "Black gram",
+                            IsActive = true,
+                            SortOrder = 45,
+                            Source = "TNAU Agritech: Irrigation management, Blackgram / Greengram",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_irrigationmgt_blackgram.html",
+                            Text = "Irrigate right after sowing, a life irrigation on the 3rd day, then every 7-10 days. Flowering and pod formation must not lack water; never let water stand.",
+                            WaterRegime = 1
+                        },
+                        new
+                        {
+                            Id = 46,
+                            Category = "Soil",
+                            Crop = "Green gram",
+                            IsActive = true,
+                            SortOrder = 46,
+                            Source = "TNAU Agritech: Nutrient management, Blackgram (2013)",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_nutrientmgt_blackgram.html",
+                            Text = "Lime is recommended for pulses when the soil pH is below 6.0.",
+                            WaterRegime = 0
+                        },
+                        new
+                        {
+                            Id = 47,
+                            Category = "Nutrient",
+                            Crop = "Green gram",
+                            IsActive = true,
+                            SortOrder = 47,
+                            Source = "TNAU Agritech: Nutrient management, Greengram (04.06.2013)",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_nutrientmgt_greengram.html",
+                            Text = "Irrigated crop: zinc sulphate 25 kg/ha (about 10 kg/acre).",
+                            WaterRegime = 1
+                        },
+                        new
+                        {
+                            Id = 48,
+                            Category = "Nutrient",
+                            Crop = "Green gram",
+                            IsActive = true,
+                            SortOrder = 48,
+                            Source = "TNAU Agritech: Nutrient management, Greengram (04.06.2013)",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_nutrientmgt_greengram.html",
+                            Text = "Spray 1 % urea on the 30th and 45th day after sowing for a better yield.",
+                            WaterRegime = 0
+                        },
+                        new
+                        {
+                            Id = 49,
+                            Category = "Water",
+                            Crop = "Green gram",
+                            IsActive = true,
+                            SortOrder = 49,
+                            Source = "TNAU Agritech: Irrigation management, Blackgram / Greengram",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_irrigationmgt_blackgram.html",
+                            Text = "Irrigate right after sowing, a life irrigation on the 3rd day, then every 7-10 days. Flowering and pod formation must not lack water; never let water stand.",
+                            WaterRegime = 1
+                        },
+                        new
+                        {
+                            Id = 50,
+                            Category = "Nutrient",
+                            Crop = "Soybean",
+                            IsActive = true,
+                            SortOrder = 50,
+                            Source = "TNAU Agritech: Nutrient management, Soybean",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_nutrientmgt_soybean.html",
+                            Text = "Irrigated crop: zinc sulphate 25 kg/ha (about 10 kg/acre).",
+                            WaterRegime = 1
+                        },
+                        new
+                        {
+                            Id = 51,
+                            Category = "Water",
+                            Crop = "Soybean",
+                            IsActive = true,
+                            SortOrder = 51,
+                            Source = "TNAU Agritech: Irrigation management, Soybean",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_irrigationmgt_soybean.html",
+                            Text = "Irrigate after sowing, a life irrigation on the 3rd day, then every 7-10 days in summer or 10-15 days in winter. Soybean is harmed by standing water; keep it free of water stress from flowering to maturity.",
+                            WaterRegime = 1
+                        },
+                        new
+                        {
+                            Id = 52,
+                            Category = "Soil",
+                            Crop = "Wheat",
+                            IsActive = true,
+                            SortOrder = 52,
+                            Source = "TNAU Agritech: Nutrient management, Wheat",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_nutrientmgt_wheat.html",
+                            Text = "Spread 12.5 t/ha (about 5 t/acre) of FYM or compost on the field before ploughing.",
+                            WaterRegime = 0
+                        },
+                        new
+                        {
+                            Id = 53,
+                            Category = "Water",
+                            Crop = "Wheat",
+                            IsActive = true,
+                            SortOrder = 53,
+                            Source = "TNAU Agritech: Critical stages for irrigation",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_irrigationmgt_criticalstage.html",
+                            Text = "Crown root initiation (about 15-20 days) is the most critical stage for water; tillering, jointing, booting, flowering, milk and dough stages also need water.",
+                            WaterRegime = 1
+                        },
+                        new
+                        {
+                            Id = 54,
+                            Category = "Soil",
+                            Crop = "Chilli",
+                            IsActive = true,
+                            SortOrder = 54,
+                            Source = "TNAU Agritech Horticulture: Fertilizer schedule for vegetable crops",
+                            SourceUrl = "https://agritech.tnau.ac.in/horticulture/FERTILIZER%20SCHEDULE%20FOR%20VEGETABLES.pdf",
+                            Text = "Apply FYM at 25 t/ha (about 10 t/acre) before planting.",
+                            WaterRegime = 0
+                        },
+                        new
+                        {
+                            Id = 55,
+                            Category = "Nutrient",
+                            Crop = "Chilli",
+                            IsActive = true,
+                            SortOrder = 55,
+                            Source = "TNAU Agritech Horticulture: Fertilizer schedule for vegetable crops",
+                            SourceUrl = "https://agritech.tnau.ac.in/horticulture/FERTILIZER%20SCHEDULE%20FOR%20VEGETABLES.pdf",
+                            Text = "Giving the potash as potassium sulphate improves the quality of the pods.",
+                            WaterRegime = 0
+                        },
+                        new
+                        {
+                            Id = 56,
+                            Category = "Soil",
+                            Crop = "Tomato",
+                            IsActive = true,
+                            SortOrder = 56,
+                            Source = "TNAU Agritech Horticulture: Fertilizer schedule for vegetable crops",
+                            SourceUrl = "https://agritech.tnau.ac.in/horticulture/FERTILIZER%20SCHEDULE%20FOR%20VEGETABLES.pdf",
+                            Text = "Apply FYM at 25 t/ha (about 10 t/acre) before planting.",
+                            WaterRegime = 0
+                        },
+                        new
+                        {
+                            Id = 57,
+                            Category = "Nutrient",
+                            Crop = "Tomato",
+                            IsActive = true,
+                            SortOrder = 57,
+                            Source = "TNAU Agritech Horticulture: Fertilizer schedule for vegetable crops",
+                            SourceUrl = "https://agritech.tnau.ac.in/horticulture/FERTILIZER%20SCHEDULE%20FOR%20VEGETABLES.pdf",
+                            Text = "Basal borax 10 kg/ha (about 4 kg/acre) and zinc sulphate 50 kg/ha (about 20 kg/acre).",
+                            WaterRegime = 0
+                        },
+                        new
+                        {
+                            Id = 58,
+                            Category = "Soil",
+                            Crop = "Onion",
+                            IsActive = true,
+                            SortOrder = 58,
+                            Source = "TNAU Agritech Horticulture: Fertilizer schedule for vegetable crops",
+                            SourceUrl = "https://agritech.tnau.ac.in/horticulture/FERTILIZER%20SCHEDULE%20FOR%20VEGETABLES.pdf",
+                            Text = "Apply FYM at 25 t/ha (about 10 t/acre) with Azospirillum and Phosphobacteria 2 kg/ha each before planting.",
+                            WaterRegime = 0
+                        },
+                        new
+                        {
+                            Id = 59,
+                            Category = "Nutrient",
+                            Crop = "Onion",
+                            IsActive = true,
+                            SortOrder = 59,
+                            Source = "TNAU Agritech Horticulture: Fertilizer schedule for vegetable crops",
+                            SourceUrl = "https://agritech.tnau.ac.in/horticulture/FERTILIZER%20SCHEDULE%20FOR%20VEGETABLES.pdf",
+                            Text = "Bellary onion: zinc sulphate 50 kg/ha (about 20 kg/acre) at the last ploughing.",
+                            WaterRegime = 0
+                        },
+                        new
+                        {
+                            Id = 60,
+                            Category = "Soil",
+                            Crop = "Turmeric",
+                            IsActive = true,
+                            SortOrder = 60,
+                            Source = "TNAU Agritech Horticulture: Fertilizer schedule for spice crops",
+                            SourceUrl = "https://agritech.tnau.ac.in/horticulture/FERTILIZER%20SCHEDULE%20FOR%20SPICES.pdf",
+                            Text = "Mix in FYM 10 t/ha (about 4 t/acre) and neem or groundnut cake 200 kg/ha at planting; apply Azospirillum and Phosphobacteria 10 kg/ha each one month after planting.",
+                            WaterRegime = 0
+                        },
+                        new
+                        {
+                            Id = 61,
+                            Category = "Nutrient",
+                            Crop = "Turmeric",
+                            IsActive = true,
+                            SortOrder = 61,
+                            Source = "TNAU Agritech Horticulture: Fertilizer schedule for spice crops",
+                            SourceUrl = "https://agritech.tnau.ac.in/horticulture/FERTILIZER%20SCHEDULE%20FOR%20SPICES.pdf",
+                            Text = "Basal ferrous sulphate 30 kg/ha and zinc sulphate 15 kg/ha. For boron, iron and zinc shortage at rhizome development, TNAU advises a micronutrient spray twice at 25-day intervals.",
+                            WaterRegime = 0
+                        },
+                        new
+                        {
+                            Id = 62,
+                            Category = "Water",
+                            Crop = "Banana",
+                            IsActive = true,
+                            SortOrder = 62,
+                            Source = "TNAU Agritech Horticulture: Banana (application of fertilizers, spacing)",
+                            SourceUrl = "https://agritech.tnau.ac.in/horticulture/horti_fruits_banana.html",
+                            Text = "Irrigate right after planting and again after 4 days, then once a week (garden land) or every 10-15 days (wetland). Irrigate well after every manure application.",
+                            WaterRegime = 0
+                        },
+                        new
+                        {
+                            Id = 63,
+                            Category = "Water",
+                            Crop = "Banana",
+                            IsActive = true,
+                            SortOrder = 63,
+                            Source = "TNAU Agritech Horticulture: Banana (application of fertilizers, spacing)",
+                            SourceUrl = "https://agritech.tnau.ac.in/horticulture/horti_fruits_banana.html",
+                            Text = "With drip: 5-10 litres per plant a day up to the 4th month, 10-15 litres from the 5th month to shooting, and 15 litres from shooting until 15 days before harvest.",
+                            WaterRegime = 0
+                        },
+                        new
+                        {
+                            Id = 64,
+                            Category = "Nutrient",
+                            Crop = "Banana",
+                            IsActive = true,
+                            SortOrder = 64,
+                            Source = "TNAU Agritech Horticulture: Banana (application of fertilizers, spacing)",
+                            SourceUrl = "https://agritech.tnau.ac.in/horticulture/horti_fruits_banana.html",
+                            Text = "Spray zinc sulphate 0.5 %, ferrous sulphate 0.2 %, copper sulphate 0.2 % and boric acid 0.1 % at 3, 5 and 7 months after planting for yield and quality.",
+                            WaterRegime = 0
+                        },
+                        new
+                        {
+                            Id = 65,
+                            Category = "Soil",
+                            Crop = "Coconut",
+                            IsActive = true,
+                            SortOrder = 65,
+                            Source = "TNAU Agritech Horticulture: Coconut manuring; spacing 7.5 x 7.5 m = 175 palms/ha (coconut spacing page)",
+                            SourceUrl = "https://agritech.tnau.ac.in/horticulture/horti_pcrops_coconut_manuring.html",
+                            Text = "Give 50 kg of FYM, compost or green manure per palm a year; sunnhemp sown in the basin (50 g per palm) and ploughed in before flowering also works.",
+                            WaterRegime = 0
+                        },
+                        new
+                        {
+                            Id = 66,
+                            Category = "Nutrient",
+                            Crop = "Coconut",
+                            IsActive = true,
+                            SortOrder = 66,
+                            Source = "TNAU Agritech Horticulture: Coconut manuring; spacing 7.5 x 7.5 m = 175 palms/ha (coconut spacing page)",
+                            SourceUrl = "https://agritech.tnau.ac.in/horticulture/horti_pcrops_coconut_manuring.html",
+                            Text = "Biofertilizers: 50 g Azospirillum, 50 g Phosphobacteria (or 100 g Azophos) and 50 g VAM per palm every 6 months, mixed with compost; never mixed with chemical fertilizer.",
+                            WaterRegime = 0
+                        });
+                });
+
             modelBuilder.Entity("SPIC.Core.Entities.CropStage", b =>
                 {
                     b.Property<int>("Id")
@@ -4441,6 +5298,1454 @@ namespace Spic.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("FarmerProfiles");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.FertilizerCropNorm", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("Basis")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Crop")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
+
+                    b.Property<int?>("DurationDays")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<decimal>("K2O")
+                        .HasColumnType("numeric(10,2)");
+
+                    b.Property<decimal>("N")
+                        .HasColumnType("numeric(10,2)");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<decimal>("P2O5")
+                        .HasColumnType("numeric(10,2)");
+
+                    b.Property<int?>("PlantsPerHectare")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SoilType")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("SourceUrl")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Spacing")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("Variant")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<int>("WaterRegime")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Crop", "SortOrder");
+
+                    b.ToTable("FertilizerCropNorms");
+
+                    b.HasData(
+                        new
+                        {
+                            Id = 1,
+                            Basis = 0,
+                            Crop = "Paddy",
+                            DurationDays = 135,
+                            IsActive = true,
+                            K2O = 50m,
+                            N = 150m,
+                            Notes = "TNAU: phosphorus all as basal; nitrogen and potash in four equal splits (basal, active tillering, panicle initiation, heading). Do not cut the tillering and panicle initiation doses. Stage days are counted from sowing.",
+                            P2O5 = 50m,
+                            SortOrder = 10,
+                            Source = "TNAU Agritech: Rice main field, application of inorganic fertilizers (updated Jan 2023)",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_main_feild_%20InOrganic_biofertilizers_Rice.html",
+                            Variant = "Medium duration (about 135 days)",
+                            WaterRegime = 1
+                        },
+                        new
+                        {
+                            Id = 2,
+                            Basis = 0,
+                            Crop = "Paddy",
+                            DurationDays = 150,
+                            IsActive = true,
+                            K2O = 50m,
+                            N = 150m,
+                            Notes = "TNAU: phosphorus all as basal; nitrogen and potash in four equal splits (basal, active tillering, panicle initiation, heading). Do not cut the tillering and panicle initiation doses. Stage days are counted from sowing.",
+                            P2O5 = 50m,
+                            SortOrder = 11,
+                            Source = "TNAU Agritech: Rice main field, application of inorganic fertilizers (updated Jan 2023)",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_main_feild_%20InOrganic_biofertilizers_Rice.html",
+                            Variant = "Long duration (about 150 days)",
+                            WaterRegime = 1
+                        },
+                        new
+                        {
+                            Id = 3,
+                            Basis = 0,
+                            Crop = "Paddy",
+                            DurationDays = 105,
+                            IsActive = true,
+                            K2O = 50m,
+                            N = 150m,
+                            Notes = "TNAU: phosphorus all as basal; nitrogen and potash in four equal splits (basal, active tillering, panicle initiation, heading). Do not cut the tillering and panicle initiation doses. Stage days are counted from sowing.",
+                            P2O5 = 50m,
+                            SortOrder = 12,
+                            Source = "TNAU Agritech: Rice main field, application of inorganic fertilizers (updated Jan 2023)",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_main_feild_%20InOrganic_biofertilizers_Rice.html",
+                            Variant = "Short duration, Cauvery delta and Coimbatore (about 105 days)",
+                            WaterRegime = 1
+                        },
+                        new
+                        {
+                            Id = 4,
+                            Basis = 0,
+                            Crop = "Paddy",
+                            DurationDays = 105,
+                            IsActive = true,
+                            K2O = 40m,
+                            N = 120m,
+                            Notes = "TNAU: phosphorus all as basal; nitrogen and potash in four equal splits (basal, active tillering, panicle initiation, heading). Do not cut the tillering and panicle initiation doses. Stage days are counted from sowing.",
+                            P2O5 = 40m,
+                            SortOrder = 13,
+                            Source = "TNAU Agritech: Rice main field, application of inorganic fertilizers (updated Jan 2023)",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_main_feild_%20InOrganic_biofertilizers_Rice.html",
+                            Variant = "Short duration, other areas (about 105 days)",
+                            WaterRegime = 1
+                        },
+                        new
+                        {
+                            Id = 5,
+                            Basis = 0,
+                            Crop = "Cotton",
+                            IsActive = true,
+                            K2O = 40m,
+                            N = 80m,
+                            Notes = "TNAU: half the N and K and all the P2O5 as basal, the rest of N and K at 40-45 days. If the basal dose could not be given, apply it on the 25th day. Place the fertilizer in a band two-thirds down from the top of the ridge and cover it.",
+                            P2O5 = 40m,
+                            SortOrder = 20,
+                            Source = "TNAU Agritech: Nutrient management, Cotton (updated 19.03.2013)",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_nutrientmgt_cotton.html",
+                            Variant = "Irrigated varieties (MCU 5, MCU 12, MCU 13, Suvin, SVPR 2)",
+                            WaterRegime = 1
+                        },
+                        new
+                        {
+                            Id = 6,
+                            Basis = 0,
+                            Crop = "Cotton",
+                            IsActive = true,
+                            K2O = 60m,
+                            N = 120m,
+                            Notes = "TNAU: hybrid nitrogen in three equal splits (basal, 40-45 and 60-65 days); all the P2O5 basal; potash half basal and half at 40-45 days, as for varieties.",
+                            P2O5 = 60m,
+                            SortOrder = 21,
+                            Source = "TNAU Agritech: Nutrient management, Cotton (updated 19.03.2013)",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_nutrientmgt_cotton.html",
+                            Variant = "Irrigated hybrids (e.g. TCHB 213)",
+                            WaterRegime = 1
+                        },
+                        new
+                        {
+                            Id = 7,
+                            Basis = 0,
+                            Crop = "Cotton",
+                            IsActive = true,
+                            K2O = 40m,
+                            N = 40m,
+                            Notes = "TNAU gives no split for rainfed cotton: apply the whole dose at sowing when the soil has moisture. Spray 0.5 % urea + 1 % potassium chloride on the 45th and 65th day if there is moisture.",
+                            P2O5 = 20m,
+                            SortOrder = 22,
+                            Source = "TNAU Agritech: Nutrient management, Cotton (updated 19.03.2013)",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_nutrientmgt_cotton.html",
+                            Variant = "Rainfed (SVPR 2, KC 2)",
+                            WaterRegime = 2
+                        },
+                        new
+                        {
+                            Id = 8,
+                            Basis = 0,
+                            Crop = "Maize",
+                            IsActive = true,
+                            K2O = 50m,
+                            N = 135m,
+                            Notes = "TNAU: a quarter of the N and all the P2O5 and K2O at sowing in a furrow 6 cm deep on the side of the ridge (cover with 4 cm of soil); half the N on the 25th day; the last quarter on the 45th day. With Azospirillum seed and soil treatment the N can be cut by 25 %.",
+                            P2O5 = 62.5m,
+                            SortOrder = 30,
+                            Source = "TNAU Agritech: Nutrient management, Maize (updated 29.05.2013)",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_nutrientmgt_maize.html",
+                            Variant = "Irrigated varieties",
+                            WaterRegime = 1
+                        },
+                        new
+                        {
+                            Id = 9,
+                            Basis = 0,
+                            Crop = "Maize",
+                            IsActive = true,
+                            K2O = 75m,
+                            N = 150m,
+                            Notes = "TNAU: hybrid maize 150:75:75, applied like the varieties (a quarter of N basal, half on the 25th day, a quarter on the 45th day).",
+                            P2O5 = 75m,
+                            SortOrder = 31,
+                            Source = "TNAU Agritech: Nutrient management, Maize (updated 29.05.2013)",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_nutrientmgt_maize.html",
+                            Variant = "Irrigated hybrids",
+                            WaterRegime = 1
+                        },
+                        new
+                        {
+                            Id = 10,
+                            Basis = 0,
+                            Crop = "Maize",
+                            IsActive = true,
+                            K2O = 0m,
+                            N = 40m,
+                            Notes = "TNAU: rainfed maize on Vertisols (black soils) 40:20:0; half the N and all the P2O5 with enriched FYM at sowing, the other half of N at tasselling.",
+                            P2O5 = 20m,
+                            SoilType = "Black Cotton Soil",
+                            SortOrder = 32,
+                            Source = "TNAU Agritech: Nutrient management, Maize (updated 29.05.2013)",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_nutrientmgt_maize.html",
+                            Variant = "Rainfed",
+                            WaterRegime = 2
+                        },
+                        new
+                        {
+                            Id = 11,
+                            Basis = 0,
+                            Crop = "Maize",
+                            IsActive = true,
+                            K2O = 30m,
+                            N = 60m,
+                            Notes = "TNAU: rainfed maize on Alfisols (red soils) 60:30:30; half the N and all the P2O5 and K2O with enriched FYM at sowing, the other half of N at tasselling.",
+                            P2O5 = 30m,
+                            SoilType = "Red Soil",
+                            SortOrder = 33,
+                            Source = "TNAU Agritech: Nutrient management, Maize (updated 29.05.2013)",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_nutrientmgt_maize.html",
+                            Variant = "Rainfed",
+                            WaterRegime = 2
+                        },
+                        new
+                        {
+                            Id = 12,
+                            Basis = 0,
+                            Crop = "Groundnut",
+                            IsActive = true,
+                            K2O = 45m,
+                            N = 10m,
+                            Notes = "TNAU rainfed groundnut blanket recommendation (no soil test). Gypsum and micronutrients are separate (see the nutrient tips).",
+                            P2O5 = 10m,
+                            SortOrder = 40,
+                            Source = "TNAU Agritech: Groundnut, rainfed (crop production advisory)",
+                            SourceUrl = "https://agritech.tnau.ac.in/govt_schemes_services/aas/groundnut.html",
+                            Variant = "Rainfed",
+                            WaterRegime = 2
+                        },
+                        new
+                        {
+                            Id = 13,
+                            Basis = 0,
+                            Crop = "Black gram",
+                            IsActive = true,
+                            K2O = 12.5m,
+                            N = 12.5m,
+                            Notes = "TNAU: all as basal before sowing, plus 10 kg sulphur per hectare as gypsum when SSP is not the phosphorus source.",
+                            P2O5 = 25m,
+                            SortOrder = 50,
+                            Source = "TNAU Agritech: Nutrient management, Blackgram (2013)",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_nutrientmgt_blackgram.html",
+                            Variant = "Rainfed",
+                            WaterRegime = 2
+                        },
+                        new
+                        {
+                            Id = 14,
+                            Basis = 0,
+                            Crop = "Black gram",
+                            IsActive = true,
+                            K2O = 25m,
+                            N = 25m,
+                            Notes = "TNAU: all as basal before sowing, plus 20 kg sulphur per hectare as gypsum when SSP is not the phosphorus source.",
+                            P2O5 = 50m,
+                            SortOrder = 51,
+                            Source = "TNAU Agritech: Nutrient management, Blackgram (2013)",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_nutrientmgt_blackgram.html",
+                            Variant = "Irrigated",
+                            WaterRegime = 1
+                        },
+                        new
+                        {
+                            Id = 15,
+                            Basis = 0,
+                            Crop = "Green gram",
+                            IsActive = true,
+                            K2O = 12.5m,
+                            N = 12.5m,
+                            Notes = "TNAU: all as basal before sowing, plus 10 kg sulphur per hectare as gypsum when SSP is not the phosphorus source.",
+                            P2O5 = 25m,
+                            SortOrder = 52,
+                            Source = "TNAU Agritech: Nutrient management, Greengram (04.06.2013)",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_nutrientmgt_greengram.html",
+                            Variant = "Rainfed",
+                            WaterRegime = 2
+                        },
+                        new
+                        {
+                            Id = 16,
+                            Basis = 0,
+                            Crop = "Green gram",
+                            IsActive = true,
+                            K2O = 25m,
+                            N = 25m,
+                            Notes = "TNAU: all as basal before sowing, plus 20 kg sulphur per hectare as gypsum when SSP is not the phosphorus source.",
+                            P2O5 = 50m,
+                            SortOrder = 53,
+                            Source = "TNAU Agritech: Nutrient management, Greengram (04.06.2013)",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_nutrientmgt_greengram.html",
+                            Variant = "Irrigated",
+                            WaterRegime = 1
+                        },
+                        new
+                        {
+                            Id = 17,
+                            Basis = 0,
+                            Crop = "Soybean",
+                            IsActive = true,
+                            K2O = 40m,
+                            N = 20m,
+                            Notes = "TNAU: all as basal, plus 40 kg sulphur per hectare as gypsum (220 kg gypsum/ha).",
+                            P2O5 = 80m,
+                            SortOrder = 54,
+                            Source = "TNAU Agritech: Nutrient management, Soybean",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_nutrientmgt_soybean.html",
+                            Variant = "Irrigated",
+                            WaterRegime = 1
+                        },
+                        new
+                        {
+                            Id = 18,
+                            Basis = 0,
+                            Crop = "Soybean",
+                            IsActive = true,
+                            K2O = 20m,
+                            N = 20m,
+                            Notes = "TNAU: all as basal when there is enough soil moisture, plus 20 kg sulphur per hectare.",
+                            P2O5 = 40m,
+                            SortOrder = 55,
+                            Source = "TNAU Agritech: Nutrient management, Soybean",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_nutrientmgt_soybean.html",
+                            Variant = "Rainfed",
+                            WaterRegime = 2
+                        },
+                        new
+                        {
+                            Id = 19,
+                            Basis = 0,
+                            Crop = "Wheat",
+                            IsActive = true,
+                            K2O = 40m,
+                            N = 80m,
+                            Notes = "TNAU: half the N and all the P2O5 and K2O basal in the sowing line; the other half of N at crown root initiation (15-20 days).",
+                            P2O5 = 40m,
+                            SortOrder = 60,
+                            Source = "TNAU Agritech: Nutrient management, Wheat",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_nutrientmgt_wheat.html",
+                            Variant = "Irrigated",
+                            WaterRegime = 1
+                        },
+                        new
+                        {
+                            Id = 20,
+                            Basis = 0,
+                            Crop = "Chilli",
+                            IsActive = true,
+                            K2O = 30m,
+                            N = 120m,
+                            Notes = "TNAU: 30:60:30 basal, then 30 kg N each on the 30th, 60th and 90th day after planting. Potash as potassium sulphate improves pod quality.",
+                            P2O5 = 60m,
+                            SortOrder = 70,
+                            Source = "TNAU Agritech Horticulture: Fertilizer schedule for vegetable crops",
+                            SourceUrl = "https://agritech.tnau.ac.in/horticulture/FERTILIZER%20SCHEDULE%20FOR%20VEGETABLES.pdf",
+                            Variant = "Irrigated (transplanted)",
+                            WaterRegime = 1
+                        },
+                        new
+                        {
+                            Id = 21,
+                            Basis = 0,
+                            Crop = "Tomato",
+                            IsActive = true,
+                            K2O = 50m,
+                            N = 150m,
+                            Notes = "TNAU: 75:100:50 basal (with borax 10 kg and zinc sulphate 50 kg per hectare), then 75 kg N on the 30th day at earthing up.",
+                            P2O5 = 100m,
+                            SortOrder = 71,
+                            Source = "TNAU Agritech Horticulture: Fertilizer schedule for vegetable crops",
+                            SourceUrl = "https://agritech.tnau.ac.in/horticulture/FERTILIZER%20SCHEDULE%20FOR%20VEGETABLES.pdf",
+                            Variant = "Varieties (transplanted)",
+                            WaterRegime = 1
+                        },
+                        new
+                        {
+                            Id = 22,
+                            Basis = 0,
+                            Crop = "Onion",
+                            IsActive = true,
+                            K2O = 30m,
+                            N = 60m,
+                            Notes = "TNAU: 30:60:30 basal, then 30 kg N on the 30th day.",
+                            P2O5 = 60m,
+                            SortOrder = 72,
+                            Source = "TNAU Agritech Horticulture: Fertilizer schedule for vegetable crops",
+                            SourceUrl = "https://agritech.tnau.ac.in/horticulture/FERTILIZER%20SCHEDULE%20FOR%20VEGETABLES.pdf",
+                            Variant = "Small onion (aggregatum)",
+                            WaterRegime = 1
+                        },
+                        new
+                        {
+                            Id = 23,
+                            Basis = 0,
+                            Crop = "Onion",
+                            IsActive = true,
+                            K2O = 75m,
+                            N = 100m,
+                            Notes = "TNAU: 50:150:75 basal (and zinc sulphate 50 kg/ha at the last ploughing), then 50 kg N on the 30th day after planting.",
+                            P2O5 = 150m,
+                            SortOrder = 73,
+                            Source = "TNAU Agritech Horticulture: Fertilizer schedule for vegetable crops",
+                            SourceUrl = "https://agritech.tnau.ac.in/horticulture/FERTILIZER%20SCHEDULE%20FOR%20VEGETABLES.pdf",
+                            Variant = "Bellary onion",
+                            WaterRegime = 1
+                        },
+                        new
+                        {
+                            Id = 24,
+                            Basis = 0,
+                            Crop = "Turmeric",
+                            IsActive = true,
+                            K2O = 108m,
+                            N = 150m,
+                            Notes = "TNAU: 25:60:18 basal, then 25 kg N and 18 kg K2O on the 30th, 60th, 90th, 120th and 150th day after planting (total 150:60:108).",
+                            P2O5 = 60m,
+                            SortOrder = 74,
+                            Source = "TNAU Agritech Horticulture: Fertilizer schedule for spice crops",
+                            SourceUrl = "https://agritech.tnau.ac.in/horticulture/FERTILIZER%20SCHEDULE%20FOR%20SPICES.pdf",
+                            Variant = "Irrigated",
+                            WaterRegime = 1
+                        },
+                        new
+                        {
+                            Id = 25,
+                            Basis = 1,
+                            Crop = "Banana",
+                            IsActive = true,
+                            K2O = 330m,
+                            N = 110m,
+                            Notes = "TNAU: grams per plant; N and K in three splits (3rd, 5th and 7th month), P in the 3rd month; N as neem coated urea. Tissue culture banana: 50 % extra fertilizer at the 2nd, 4th, 6th and 8th month. Plants are counted at 1.8 x 1.8 m (3,080 per hectare); enter your own count for other spacing.",
+                            P2O5 = 35m,
+                            PlantsPerHectare = 3080,
+                            SortOrder = 80,
+                            Source = "TNAU Agritech Horticulture: Banana (application of fertilizers, spacing)",
+                            SourceUrl = "https://agritech.tnau.ac.in/horticulture/horti_fruits_banana.html",
+                            Spacing = "1.8 x 1.8 m",
+                            Variant = "Garden land, varieties other than Nendran (e.g. Robusta)",
+                            WaterRegime = 1
+                        },
+                        new
+                        {
+                            Id = 26,
+                            Basis = 1,
+                            Crop = "Banana",
+                            IsActive = true,
+                            K2O = 300m,
+                            N = 150m,
+                            Notes = "TNAU: grams per plant; N and K in three splits (3rd, 5th and 7th month), P in the 3rd month; N as neem coated urea. Plants are counted at 1.8 x 1.8 m (3,080 per hectare); enter your own count for other spacing.",
+                            P2O5 = 90m,
+                            PlantsPerHectare = 3080,
+                            SortOrder = 81,
+                            Source = "TNAU Agritech Horticulture: Banana (application of fertilizers, spacing)",
+                            SourceUrl = "https://agritech.tnau.ac.in/horticulture/horti_fruits_banana.html",
+                            Spacing = "1.8 x 1.8 m",
+                            Variant = "Garden land, Nendran",
+                            WaterRegime = 1
+                        },
+                        new
+                        {
+                            Id = 27,
+                            Basis = 1,
+                            Crop = "Coconut",
+                            IsActive = true,
+                            K2O = 1200m,
+                            N = 560m,
+                            Notes = "TNAU: grams per palm per year in two equal splits (June - July and December - January), with 50 kg FYM or compost per palm. Apply in a 1.8 m circle around the palm, mix in and irrigate. Younger palms get a quarter to three quarters of this dose. Palms are counted at 7.5 x 7.5 m (175 per hectare).",
+                            P2O5 = 320m,
+                            PlantsPerHectare = 175,
+                            SortOrder = 90,
+                            Source = "TNAU Agritech Horticulture: Coconut manuring; spacing 7.5 x 7.5 m = 175 palms/ha (coconut spacing page)",
+                            SourceUrl = "https://agritech.tnau.ac.in/horticulture/horti_pcrops_coconut_manuring.html",
+                            Spacing = "7.5 x 7.5 m",
+                            Variant = "Palms from the 5th year",
+                            WaterRegime = 0
+                        });
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.FertilizerNormSplit", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("DayBasis")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("DayFrom")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("DayTo")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("K2O")
+                        .HasColumnType("numeric(10,2)");
+
+                    b.Property<decimal>("N")
+                        .HasColumnType("numeric(10,2)");
+
+                    b.Property<int>("NormId")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("P2O5")
+                        .HasColumnType("numeric(10,2)");
+
+                    b.Property<int>("Seq")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Stage")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("NormId", "Seq")
+                        .IsUnique();
+
+                    b.ToTable("FertilizerNormSplits");
+
+                    b.HasData(
+                        new
+                        {
+                            Id = 1,
+                            DayBasis = 1,
+                            K2O = 12.5m,
+                            N = 37.5m,
+                            NormId = 1,
+                            P2O5 = 50m,
+                            Seq = 1,
+                            Stage = "Basal (at transplanting)"
+                        },
+                        new
+                        {
+                            Id = 2,
+                            DayBasis = 0,
+                            DayFrom = 50,
+                            DayTo = 55,
+                            K2O = 12.5m,
+                            N = 37.5m,
+                            NormId = 1,
+                            P2O5 = 0m,
+                            Seq = 2,
+                            Stage = "Active tillering"
+                        },
+                        new
+                        {
+                            Id = 3,
+                            DayBasis = 0,
+                            DayFrom = 70,
+                            DayTo = 75,
+                            K2O = 12.5m,
+                            N = 37.5m,
+                            NormId = 1,
+                            P2O5 = 0m,
+                            Seq = 3,
+                            Stage = "Panicle initiation"
+                        },
+                        new
+                        {
+                            Id = 4,
+                            DayBasis = 0,
+                            DayFrom = 100,
+                            DayTo = 105,
+                            K2O = 12.5m,
+                            N = 37.5m,
+                            NormId = 1,
+                            P2O5 = 0m,
+                            Seq = 4,
+                            Stage = "Heading"
+                        },
+                        new
+                        {
+                            Id = 5,
+                            DayBasis = 1,
+                            K2O = 12.5m,
+                            N = 37.5m,
+                            NormId = 2,
+                            P2O5 = 50m,
+                            Seq = 1,
+                            Stage = "Basal (at transplanting)"
+                        },
+                        new
+                        {
+                            Id = 6,
+                            DayBasis = 0,
+                            DayFrom = 55,
+                            DayTo = 60,
+                            K2O = 12.5m,
+                            N = 37.5m,
+                            NormId = 2,
+                            P2O5 = 0m,
+                            Seq = 2,
+                            Stage = "Active tillering"
+                        },
+                        new
+                        {
+                            Id = 7,
+                            DayBasis = 0,
+                            DayFrom = 85,
+                            DayTo = 90,
+                            K2O = 12.5m,
+                            N = 37.5m,
+                            NormId = 2,
+                            P2O5 = 0m,
+                            Seq = 3,
+                            Stage = "Panicle initiation"
+                        },
+                        new
+                        {
+                            Id = 8,
+                            DayBasis = 0,
+                            DayFrom = 115,
+                            DayTo = 120,
+                            K2O = 12.5m,
+                            N = 37.5m,
+                            NormId = 2,
+                            P2O5 = 0m,
+                            Seq = 4,
+                            Stage = "Heading"
+                        },
+                        new
+                        {
+                            Id = 9,
+                            DayBasis = 1,
+                            K2O = 12.5m,
+                            N = 37.5m,
+                            NormId = 3,
+                            P2O5 = 50m,
+                            Seq = 1,
+                            Stage = "Basal (at transplanting)"
+                        },
+                        new
+                        {
+                            Id = 10,
+                            DayBasis = 0,
+                            DayFrom = 35,
+                            DayTo = 40,
+                            K2O = 12.5m,
+                            N = 37.5m,
+                            NormId = 3,
+                            P2O5 = 0m,
+                            Seq = 2,
+                            Stage = "Active tillering"
+                        },
+                        new
+                        {
+                            Id = 11,
+                            DayBasis = 0,
+                            DayFrom = 45,
+                            DayTo = 50,
+                            K2O = 12.5m,
+                            N = 37.5m,
+                            NormId = 3,
+                            P2O5 = 0m,
+                            Seq = 3,
+                            Stage = "Panicle initiation"
+                        },
+                        new
+                        {
+                            Id = 12,
+                            DayBasis = 0,
+                            DayFrom = 70,
+                            DayTo = 75,
+                            K2O = 12.5m,
+                            N = 37.5m,
+                            NormId = 3,
+                            P2O5 = 0m,
+                            Seq = 4,
+                            Stage = "Heading"
+                        },
+                        new
+                        {
+                            Id = 13,
+                            DayBasis = 1,
+                            K2O = 10m,
+                            N = 30m,
+                            NormId = 4,
+                            P2O5 = 40m,
+                            Seq = 1,
+                            Stage = "Basal (at transplanting)"
+                        },
+                        new
+                        {
+                            Id = 14,
+                            DayBasis = 0,
+                            DayFrom = 35,
+                            DayTo = 40,
+                            K2O = 10m,
+                            N = 30m,
+                            NormId = 4,
+                            P2O5 = 0m,
+                            Seq = 2,
+                            Stage = "Active tillering"
+                        },
+                        new
+                        {
+                            Id = 15,
+                            DayBasis = 0,
+                            DayFrom = 45,
+                            DayTo = 50,
+                            K2O = 10m,
+                            N = 30m,
+                            NormId = 4,
+                            P2O5 = 0m,
+                            Seq = 3,
+                            Stage = "Panicle initiation"
+                        },
+                        new
+                        {
+                            Id = 16,
+                            DayBasis = 0,
+                            DayFrom = 70,
+                            DayTo = 75,
+                            K2O = 10m,
+                            N = 30m,
+                            NormId = 4,
+                            P2O5 = 0m,
+                            Seq = 4,
+                            Stage = "Heading"
+                        },
+                        new
+                        {
+                            Id = 17,
+                            DayBasis = 0,
+                            K2O = 20m,
+                            N = 40m,
+                            NormId = 5,
+                            P2O5 = 40m,
+                            Seq = 1,
+                            Stage = "Basal (at sowing)"
+                        },
+                        new
+                        {
+                            Id = 18,
+                            DayBasis = 0,
+                            DayFrom = 40,
+                            DayTo = 45,
+                            K2O = 20m,
+                            N = 40m,
+                            NormId = 5,
+                            P2O5 = 0m,
+                            Seq = 2,
+                            Stage = "Top dressing"
+                        },
+                        new
+                        {
+                            Id = 19,
+                            DayBasis = 0,
+                            K2O = 30m,
+                            N = 40m,
+                            NormId = 6,
+                            P2O5 = 60m,
+                            Seq = 1,
+                            Stage = "Basal (at sowing)"
+                        },
+                        new
+                        {
+                            Id = 20,
+                            DayBasis = 0,
+                            DayFrom = 40,
+                            DayTo = 45,
+                            K2O = 30m,
+                            N = 40m,
+                            NormId = 6,
+                            P2O5 = 0m,
+                            Seq = 2,
+                            Stage = "1st top dressing"
+                        },
+                        new
+                        {
+                            Id = 21,
+                            DayBasis = 0,
+                            DayFrom = 60,
+                            DayTo = 65,
+                            K2O = 0m,
+                            N = 40m,
+                            NormId = 6,
+                            P2O5 = 0m,
+                            Seq = 3,
+                            Stage = "2nd top dressing"
+                        },
+                        new
+                        {
+                            Id = 22,
+                            DayBasis = 0,
+                            K2O = 40m,
+                            N = 40m,
+                            NormId = 7,
+                            P2O5 = 20m,
+                            Seq = 1,
+                            Stage = "Basal (at sowing)"
+                        },
+                        new
+                        {
+                            Id = 23,
+                            DayBasis = 0,
+                            K2O = 50m,
+                            N = 33.75m,
+                            NormId = 8,
+                            P2O5 = 62.5m,
+                            Seq = 1,
+                            Stage = "Basal (at sowing)"
+                        },
+                        new
+                        {
+                            Id = 24,
+                            DayBasis = 0,
+                            DayFrom = 25,
+                            DayTo = 25,
+                            K2O = 0m,
+                            N = 67.5m,
+                            NormId = 8,
+                            P2O5 = 0m,
+                            Seq = 2,
+                            Stage = "1st top dressing"
+                        },
+                        new
+                        {
+                            Id = 25,
+                            DayBasis = 0,
+                            DayFrom = 45,
+                            DayTo = 45,
+                            K2O = 0m,
+                            N = 33.75m,
+                            NormId = 8,
+                            P2O5 = 0m,
+                            Seq = 3,
+                            Stage = "2nd top dressing"
+                        },
+                        new
+                        {
+                            Id = 26,
+                            DayBasis = 0,
+                            K2O = 75m,
+                            N = 37.5m,
+                            NormId = 9,
+                            P2O5 = 75m,
+                            Seq = 1,
+                            Stage = "Basal (at sowing)"
+                        },
+                        new
+                        {
+                            Id = 27,
+                            DayBasis = 0,
+                            DayFrom = 25,
+                            DayTo = 25,
+                            K2O = 0m,
+                            N = 75m,
+                            NormId = 9,
+                            P2O5 = 0m,
+                            Seq = 2,
+                            Stage = "1st top dressing"
+                        },
+                        new
+                        {
+                            Id = 28,
+                            DayBasis = 0,
+                            DayFrom = 45,
+                            DayTo = 45,
+                            K2O = 0m,
+                            N = 37.5m,
+                            NormId = 9,
+                            P2O5 = 0m,
+                            Seq = 3,
+                            Stage = "2nd top dressing"
+                        },
+                        new
+                        {
+                            Id = 29,
+                            DayBasis = 0,
+                            K2O = 0m,
+                            N = 20m,
+                            NormId = 10,
+                            P2O5 = 20m,
+                            Seq = 1,
+                            Stage = "Basal (at sowing)"
+                        },
+                        new
+                        {
+                            Id = 30,
+                            DayBasis = 2,
+                            K2O = 0m,
+                            N = 20m,
+                            NormId = 10,
+                            P2O5 = 0m,
+                            Seq = 2,
+                            Stage = "At tasselling"
+                        },
+                        new
+                        {
+                            Id = 31,
+                            DayBasis = 0,
+                            K2O = 30m,
+                            N = 30m,
+                            NormId = 11,
+                            P2O5 = 30m,
+                            Seq = 1,
+                            Stage = "Basal (at sowing)"
+                        },
+                        new
+                        {
+                            Id = 32,
+                            DayBasis = 2,
+                            K2O = 0m,
+                            N = 30m,
+                            NormId = 11,
+                            P2O5 = 0m,
+                            Seq = 2,
+                            Stage = "At tasselling"
+                        },
+                        new
+                        {
+                            Id = 33,
+                            DayBasis = 0,
+                            K2O = 45m,
+                            N = 10m,
+                            NormId = 12,
+                            P2O5 = 10m,
+                            Seq = 1,
+                            Stage = "Basal (at sowing)"
+                        },
+                        new
+                        {
+                            Id = 34,
+                            DayBasis = 0,
+                            K2O = 12.5m,
+                            N = 12.5m,
+                            NormId = 13,
+                            P2O5 = 25m,
+                            Seq = 1,
+                            Stage = "Basal (before sowing)"
+                        },
+                        new
+                        {
+                            Id = 35,
+                            DayBasis = 0,
+                            K2O = 25m,
+                            N = 25m,
+                            NormId = 14,
+                            P2O5 = 50m,
+                            Seq = 1,
+                            Stage = "Basal (before sowing)"
+                        },
+                        new
+                        {
+                            Id = 36,
+                            DayBasis = 0,
+                            K2O = 12.5m,
+                            N = 12.5m,
+                            NormId = 15,
+                            P2O5 = 25m,
+                            Seq = 1,
+                            Stage = "Basal (before sowing)"
+                        },
+                        new
+                        {
+                            Id = 37,
+                            DayBasis = 0,
+                            K2O = 25m,
+                            N = 25m,
+                            NormId = 16,
+                            P2O5 = 50m,
+                            Seq = 1,
+                            Stage = "Basal (before sowing)"
+                        },
+                        new
+                        {
+                            Id = 38,
+                            DayBasis = 0,
+                            K2O = 40m,
+                            N = 20m,
+                            NormId = 17,
+                            P2O5 = 80m,
+                            Seq = 1,
+                            Stage = "Basal (at sowing)"
+                        },
+                        new
+                        {
+                            Id = 39,
+                            DayBasis = 0,
+                            K2O = 20m,
+                            N = 20m,
+                            NormId = 18,
+                            P2O5 = 40m,
+                            Seq = 1,
+                            Stage = "Basal (at sowing)"
+                        },
+                        new
+                        {
+                            Id = 40,
+                            DayBasis = 0,
+                            K2O = 40m,
+                            N = 40m,
+                            NormId = 19,
+                            P2O5 = 40m,
+                            Seq = 1,
+                            Stage = "Basal (at sowing)"
+                        },
+                        new
+                        {
+                            Id = 41,
+                            DayBasis = 0,
+                            DayFrom = 15,
+                            DayTo = 20,
+                            K2O = 0m,
+                            N = 40m,
+                            NormId = 19,
+                            P2O5 = 0m,
+                            Seq = 2,
+                            Stage = "Crown root initiation"
+                        },
+                        new
+                        {
+                            Id = 42,
+                            DayBasis = 1,
+                            K2O = 30m,
+                            N = 30m,
+                            NormId = 20,
+                            P2O5 = 60m,
+                            Seq = 1,
+                            Stage = "Basal (at planting)"
+                        },
+                        new
+                        {
+                            Id = 43,
+                            DayBasis = 1,
+                            DayFrom = 30,
+                            DayTo = 30,
+                            K2O = 0m,
+                            N = 30m,
+                            NormId = 20,
+                            P2O5 = 0m,
+                            Seq = 2,
+                            Stage = "1st top dressing"
+                        },
+                        new
+                        {
+                            Id = 44,
+                            DayBasis = 1,
+                            DayFrom = 60,
+                            DayTo = 60,
+                            K2O = 0m,
+                            N = 30m,
+                            NormId = 20,
+                            P2O5 = 0m,
+                            Seq = 3,
+                            Stage = "2nd top dressing"
+                        },
+                        new
+                        {
+                            Id = 45,
+                            DayBasis = 1,
+                            DayFrom = 90,
+                            DayTo = 90,
+                            K2O = 0m,
+                            N = 30m,
+                            NormId = 20,
+                            P2O5 = 0m,
+                            Seq = 4,
+                            Stage = "3rd top dressing"
+                        },
+                        new
+                        {
+                            Id = 46,
+                            DayBasis = 1,
+                            K2O = 50m,
+                            N = 75m,
+                            NormId = 21,
+                            P2O5 = 100m,
+                            Seq = 1,
+                            Stage = "Basal (at planting)"
+                        },
+                        new
+                        {
+                            Id = 47,
+                            DayBasis = 1,
+                            DayFrom = 30,
+                            DayTo = 30,
+                            K2O = 0m,
+                            N = 75m,
+                            NormId = 21,
+                            P2O5 = 0m,
+                            Seq = 2,
+                            Stage = "Top dressing (earthing up)"
+                        },
+                        new
+                        {
+                            Id = 48,
+                            DayBasis = 1,
+                            K2O = 30m,
+                            N = 30m,
+                            NormId = 22,
+                            P2O5 = 60m,
+                            Seq = 1,
+                            Stage = "Basal (at planting)"
+                        },
+                        new
+                        {
+                            Id = 49,
+                            DayBasis = 1,
+                            DayFrom = 30,
+                            DayTo = 30,
+                            K2O = 0m,
+                            N = 30m,
+                            NormId = 22,
+                            P2O5 = 0m,
+                            Seq = 2,
+                            Stage = "Top dressing"
+                        },
+                        new
+                        {
+                            Id = 50,
+                            DayBasis = 1,
+                            K2O = 75m,
+                            N = 50m,
+                            NormId = 23,
+                            P2O5 = 150m,
+                            Seq = 1,
+                            Stage = "Basal (at planting)"
+                        },
+                        new
+                        {
+                            Id = 51,
+                            DayBasis = 1,
+                            DayFrom = 30,
+                            DayTo = 30,
+                            K2O = 0m,
+                            N = 50m,
+                            NormId = 23,
+                            P2O5 = 0m,
+                            Seq = 2,
+                            Stage = "Top dressing"
+                        },
+                        new
+                        {
+                            Id = 52,
+                            DayBasis = 1,
+                            K2O = 18m,
+                            N = 25m,
+                            NormId = 24,
+                            P2O5 = 60m,
+                            Seq = 1,
+                            Stage = "Basal (at planting)"
+                        },
+                        new
+                        {
+                            Id = 53,
+                            DayBasis = 1,
+                            DayFrom = 30,
+                            DayTo = 30,
+                            K2O = 18m,
+                            N = 25m,
+                            NormId = 24,
+                            P2O5 = 0m,
+                            Seq = 2,
+                            Stage = "1st top dressing"
+                        },
+                        new
+                        {
+                            Id = 54,
+                            DayBasis = 1,
+                            DayFrom = 60,
+                            DayTo = 60,
+                            K2O = 18m,
+                            N = 25m,
+                            NormId = 24,
+                            P2O5 = 0m,
+                            Seq = 3,
+                            Stage = "2nd top dressing"
+                        },
+                        new
+                        {
+                            Id = 55,
+                            DayBasis = 1,
+                            DayFrom = 90,
+                            DayTo = 90,
+                            K2O = 18m,
+                            N = 25m,
+                            NormId = 24,
+                            P2O5 = 0m,
+                            Seq = 4,
+                            Stage = "3rd top dressing"
+                        },
+                        new
+                        {
+                            Id = 56,
+                            DayBasis = 1,
+                            DayFrom = 120,
+                            DayTo = 120,
+                            K2O = 18m,
+                            N = 25m,
+                            NormId = 24,
+                            P2O5 = 0m,
+                            Seq = 5,
+                            Stage = "4th top dressing"
+                        },
+                        new
+                        {
+                            Id = 57,
+                            DayBasis = 1,
+                            DayFrom = 150,
+                            DayTo = 150,
+                            K2O = 18m,
+                            N = 25m,
+                            NormId = 24,
+                            P2O5 = 0m,
+                            Seq = 6,
+                            Stage = "5th top dressing"
+                        },
+                        new
+                        {
+                            Id = 58,
+                            DayBasis = 2,
+                            K2O = 110m,
+                            N = 36.67m,
+                            NormId = 25,
+                            P2O5 = 35m,
+                            Seq = 1,
+                            Stage = "3rd month after planting"
+                        },
+                        new
+                        {
+                            Id = 59,
+                            DayBasis = 2,
+                            K2O = 110m,
+                            N = 36.67m,
+                            NormId = 25,
+                            P2O5 = 0m,
+                            Seq = 2,
+                            Stage = "5th month after planting"
+                        },
+                        new
+                        {
+                            Id = 60,
+                            DayBasis = 2,
+                            K2O = 110m,
+                            N = 36.66m,
+                            NormId = 25,
+                            P2O5 = 0m,
+                            Seq = 3,
+                            Stage = "7th month after planting"
+                        },
+                        new
+                        {
+                            Id = 61,
+                            DayBasis = 2,
+                            K2O = 100m,
+                            N = 50m,
+                            NormId = 26,
+                            P2O5 = 90m,
+                            Seq = 1,
+                            Stage = "3rd month after planting"
+                        },
+                        new
+                        {
+                            Id = 62,
+                            DayBasis = 2,
+                            K2O = 100m,
+                            N = 50m,
+                            NormId = 26,
+                            P2O5 = 0m,
+                            Seq = 2,
+                            Stage = "5th month after planting"
+                        },
+                        new
+                        {
+                            Id = 63,
+                            DayBasis = 2,
+                            K2O = 100m,
+                            N = 50m,
+                            NormId = 26,
+                            P2O5 = 0m,
+                            Seq = 3,
+                            Stage = "7th month after planting"
+                        },
+                        new
+                        {
+                            Id = 64,
+                            DayBasis = 2,
+                            K2O = 600m,
+                            N = 280m,
+                            NormId = 27,
+                            P2O5 = 160m,
+                            Seq = 1,
+                            Stage = "June - July"
+                        },
+                        new
+                        {
+                            Id = 65,
+                            DayBasis = 2,
+                            K2O = 600m,
+                            N = 280m,
+                            NormId = 27,
+                            P2O5 = 160m,
+                            Seq = 2,
+                            Stage = "December - January"
+                        });
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.FertilizerRecommendationRun", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<decimal>("AreaAcres")
+                        .HasColumnType("numeric(10,2)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("Crop")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
+
+                    b.Property<string>("FarmerUserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
+                    b.Property<bool>("FromSoilReport")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("InputsJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("KStatus")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<string>("NStatus")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<decimal>("NeedKKgPerAcre")
+                        .HasColumnType("numeric(10,2)");
+
+                    b.Property<decimal>("NeedNKgPerAcre")
+                        .HasColumnType("numeric(10,2)");
+
+                    b.Property<decimal>("NeedPKgPerAcre")
+                        .HasColumnType("numeric(10,2)");
+
+                    b.Property<int>("NormId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("PStatus")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<string>("PhBand")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("ResultJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<decimal>("SoilK")
+                        .HasColumnType("numeric(10,2)");
+
+                    b.Property<decimal>("SoilN")
+                        .HasColumnType("numeric(10,2)");
+
+                    b.Property<decimal>("SoilP")
+                        .HasColumnType("numeric(10,2)");
+
+                    b.Property<decimal>("SoilPh")
+                        .HasColumnType("numeric(4,1)");
+
+                    b.Property<int?>("SoilReportId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SoilType")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("Summary")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Variant")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FarmerUserId", "CreatedAtUtc");
+
+                    b.ToTable("FertilizerRecommendationRuns");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.FinancialYear", b =>
@@ -13418,6 +15723,17 @@ namespace Spic.Infrastructure.Migrations
                     b.Navigation("FarmProduct");
                 });
 
+            modelBuilder.Entity("SPIC.Core.Entities.FertilizerNormSplit", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.FertilizerCropNorm", "Norm")
+                        .WithMany("Splits")
+                        .HasForeignKey("NormId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Norm");
+                });
+
             modelBuilder.Entity("SPIC.Core.Entities.GuestHouseBill", b =>
                 {
                     b.HasOne("SPIC.Core.Entities.GuestHouseBooking", "GuestHouseBooking")
@@ -14408,6 +16724,11 @@ namespace Spic.Infrastructure.Migrations
                     b.Navigation("IncomeItems");
 
                     b.Navigation("InventoryItems");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.FertilizerCropNorm", b =>
+                {
+                    b.Navigation("Splits");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.GuestHouse", b =>

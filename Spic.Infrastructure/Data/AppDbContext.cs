@@ -437,6 +437,64 @@ namespace Spic.Infrastructure.Data
                 entity.HasIndex(x => new { x.FarmerUserId, x.CreatedAtUtc });
                 entity.HasIndex(x => new { x.StaffUserId, x.Status, x.CreatedAtUtc });
             });
+            // Farmer portal Task 4: fertilizer recommendation (seed: FertilizerAdviceSeed, sources on every row).
+            builder.Entity<FertilizerCropNorm>(entity =>
+            {
+                entity.Property(x => x.Crop).HasMaxLength(60);
+                entity.Property(x => x.Variant).HasMaxLength(120);
+                entity.Property(x => x.SoilType).HasMaxLength(40);
+                entity.Property(x => x.N).HasColumnType("numeric(10,2)");
+                entity.Property(x => x.P2O5).HasColumnType("numeric(10,2)");
+                entity.Property(x => x.K2O).HasColumnType("numeric(10,2)");
+                entity.Property(x => x.Spacing).HasMaxLength(40);
+                entity.Property(x => x.Notes).HasMaxLength(1000);
+                entity.Property(x => x.Source).HasMaxLength(300);
+                entity.Property(x => x.SourceUrl).HasMaxLength(500);
+                entity.HasIndex(x => new { x.Crop, x.SortOrder });
+                entity.HasMany(x => x.Splits).WithOne(x => x.Norm!).HasForeignKey(x => x.NormId).OnDelete(DeleteBehavior.Cascade);
+                entity.HasData(FertilizerAdviceSeed.Norms);
+            });
+            builder.Entity<FertilizerNormSplit>(entity =>
+            {
+                entity.Property(x => x.Stage).HasMaxLength(80);
+                entity.Property(x => x.N).HasColumnType("numeric(10,2)");
+                entity.Property(x => x.P2O5).HasColumnType("numeric(10,2)");
+                entity.Property(x => x.K2O).HasColumnType("numeric(10,2)");
+                entity.HasIndex(x => new { x.NormId, x.Seq }).IsUnique();
+                entity.HasData(FertilizerAdviceSeed.Splits);
+            });
+            builder.Entity<CropSoilTip>(entity =>
+            {
+                entity.Property(x => x.Crop).HasMaxLength(60);
+                entity.Property(x => x.SoilType).HasMaxLength(40);
+                entity.Property(x => x.Category).HasMaxLength(20);
+                entity.Property(x => x.Text).HasMaxLength(600);
+                entity.Property(x => x.Source).HasMaxLength(300);
+                entity.Property(x => x.SourceUrl).HasMaxLength(500);
+                entity.HasIndex(x => new { x.Crop, x.SoilType });
+                entity.HasData(FertilizerAdviceSeed.Tips);
+            });
+            builder.Entity<FertilizerRecommendationRun>(entity =>
+            {
+                entity.Property(x => x.FarmerUserId).HasMaxLength(450);
+                entity.Property(x => x.Crop).HasMaxLength(60);
+                entity.Property(x => x.Variant).HasMaxLength(120);
+                entity.Property(x => x.SoilType).HasMaxLength(40);
+                entity.Property(x => x.AreaAcres).HasColumnType("numeric(10,2)");
+                entity.Property(x => x.SoilN).HasColumnType("numeric(10,2)");
+                entity.Property(x => x.SoilP).HasColumnType("numeric(10,2)");
+                entity.Property(x => x.SoilK).HasColumnType("numeric(10,2)");
+                entity.Property(x => x.SoilPh).HasColumnType("numeric(4,1)");
+                entity.Property(x => x.NStatus).HasMaxLength(10);
+                entity.Property(x => x.PStatus).HasMaxLength(10);
+                entity.Property(x => x.KStatus).HasMaxLength(10);
+                entity.Property(x => x.PhBand).HasMaxLength(20);
+                entity.Property(x => x.NeedNKgPerAcre).HasColumnType("numeric(10,2)");
+                entity.Property(x => x.NeedPKgPerAcre).HasColumnType("numeric(10,2)");
+                entity.Property(x => x.NeedKKgPerAcre).HasColumnType("numeric(10,2)");
+                entity.Property(x => x.Summary).HasMaxLength(500);
+                entity.HasIndex(x => new { x.FarmerUserId, x.CreatedAtUtc });
+            });
 
             builder.Entity<SampleLabResult>(entity =>
             {
@@ -1162,6 +1220,10 @@ namespace Spic.Infrastructure.Data
         public DbSet<FarmerOtpChallenge> FarmerOtpChallenges { get; set; }
         public DbSet<FarmerProfile> FarmerProfiles { get; set; }
         public DbSet<FarmerContactRequest> FarmerContactRequests { get; set; }
+        public DbSet<FertilizerCropNorm> FertilizerCropNorms { get; set; }
+        public DbSet<FertilizerNormSplit> FertilizerNormSplits { get; set; }
+        public DbSet<CropSoilTip> CropSoilTips { get; set; }
+        public DbSet<FertilizerRecommendationRun> FertilizerRecommendationRuns { get; set; }
 
         //// JMDO Task Allocation
         public DbSet<JmdoTaskAllocation> JmdoTaskAllocations { get; set; }
