@@ -188,13 +188,23 @@
         <div class="items-per-page">
             Items Per Page
             <select @bind="PageSize" @bind:after="ResetPage">
-                <option value="16">16</option>
-                <option value="32">32</option>
-                <option value="50">50</option>
+                @foreach (var size in (PageSizeOptions is { Length: > 0 } ? PageSizeOptions : new[] { 16, 32, 50 }))
+                {
+                    <option value="@size">@size</option>
+                }
             </select>
         </div>
 
-        <div class="spic-page-status">Page @CurrentPage of @TotalPages</div>
+        <div class="spic-page-status">
+            @if (ShowEntriesText)
+            {
+                @EntriesText
+            }
+            else
+            {
+                @:Page @CurrentPage of @TotalPages
+            }
+        </div>
 
         <div class="pagination-controls">
             <div class="page-btn @(CurrentPage <= 1 ? "disabled" : "")" @onclick="PreviousPage" role="button" aria-label="Previous page">
@@ -262,9 +272,23 @@
     // Universal Search — parent binds its existing search textbox to this
     [Parameter] public string SearchText { get; set; } = "";
 
+    // ---- Pagination customization (additive, optional - every existing caller keeps the exact
+    // 16/32/50 + "Page X of Y" behavior unless it opts into these) ----
+    /// <summary>Items-per-page <select> options. Default {16,32,50} matches every existing caller.</summary>
+    [Parameter] public int[] PageSizeOptions { get; set; } = new[] { 16, 32, 50 };
+    /// <summary>Starting PageSize. Applied once in OnInitialized (not re-applied every render, so
+    /// the host can give a different starting size - e.g. 10 - without fighting the page-size
+    /// <select> the user changes afterward, the way a plain [Parameter] PageSize would).</summary>
+    [Parameter] public int InitialPageSize { get; set; } = 16;
+    /// <summary>When true, shows "Showing X to Y of Z entries" instead of "Page X of Y". Default
+    /// false preserves the existing text for every caller that doesn't opt in.</summary>
+    [Parameter] public bool ShowEntriesText { get; set; }
+
     // Pagination State
     public int CurrentPage { get; set; } = 1;
     public int PageSize { get; set; } = 16;
+
+    protected override void OnInitialized() => PageSize = InitialPageSize;
 
     // Number of "Label: value" rows shown before the per-card "Show more" toggle.
     private const int CardPrimaryRows = 5;
@@ -298,6 +322,17 @@
 
     private int TotalPages => Math.Max(1, (int)Math.Ceiling(SearchedItems.Count() / (double)PageSize));
     private IEnumerable<TItem> PagedItems => SearchedItems.Skip((CurrentPage - 1) * PageSize).Take(PageSize);
+
+    private string EntriesText
+    {
+        get
+        {
+            var total = SearchedItems.Count();
+            var start = total == 0 ? 0 : ((CurrentPage - 1) * PageSize) + 1;
+            var end = Math.Min(CurrentPage * PageSize, total);
+            return $"Showing {start} to {end} of {total} entries";
+        }
+    }
 
     // Columns used to build the auto card: everything exportable except the serial number
     // (the card shows its own row number) and columns flagged HideInCard.

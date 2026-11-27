@@ -35,6 +35,22 @@ internal static class Program
 		GuestHousePermissionTests.Run();
 		Console.WriteLine();
 
+		// Receptionist state scope on the booking API (houses / availability / rooms / book).
+		GuestHouseReceptionistScopeTests.Run();
+		Console.WriteLine();
+
+		// Room number is shown only once assigned at check-in (Booking Preview, My Bookings, Booking Details).
+		GuestHouseRoomNumberDisplayTests.Run();
+		Console.WriteLine();
+
+		// Employee Stay shows "Booked"; Dealer Paid / Pending / Failed / Refunded unchanged (display only).
+		GuestHousePaymentBadgeTests.Run();
+		Console.WriteLine();
+
+		// My Bookings: Cancel Booking hidden once CheckedIn / Completed / Cancelled.
+		GuestHouseMyBookingsCancelButtonTests.Run();
+		Console.WriteLine();
+
 		// One booking = one room = one bill: real controller actions on an InMemory database
 		// with a stubbed Razorpay service (no real payment, no real database).
 		GuestHouseSingleRoomBookingTests.Run();

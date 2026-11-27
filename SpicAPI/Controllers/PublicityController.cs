@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Security.Claims;
 using System.Text;
 using System.Text.RegularExpressions;
+using ClosedXML.Excel;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -86,7 +87,8 @@ namespace SpicAPI.Controllers
             return Ok(new PubLookupsDto
             {
                 Materials = await _db.PublicityMaterialTypes.AsNoTracking().Where(m => m.IsActive)
-                    .OrderBy(m => m.SortOrder).ThenBy(m => m.Name).Select(m => new PubOption { Id = m.Id, Name = m.Name }).ToListAsync(),
+                    .OrderBy(m => m.SortOrder).ThenBy(m => m.Name)
+                    .Select(m => new PubMaterialOption { Id = m.Id, Name = m.Name, Category = m.Category }).ToListAsync(),
                 Products = await _db.Products.AsNoTracking().Where(p => p.IsActive)
                     .OrderBy(p => p.Name).Select(p => new PubOption { Id = p.Id, Name = p.Name }).ToListAsync(),
                 Couriers = couriers.Concat(KnownCouriers).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(x => x).ToList(),
@@ -99,6 +101,105 @@ namespace SpicAPI.Controllers
                 MyHqId = ClaimInt("spic:hq_id"),
                 MyScope = await ScopeLabelAsync()
             });
+        }
+
+        // ================================================================ material master (ADMIN-MD CS only)
+        // Every endpoint below is gated on IsAdminMdCsAsync() (plus the super-admin bypass every other
+        // admin-only Publicity action already allows) - never DGM-MD CS, SMM, SMD, RM or RMDO, even
+        // though those roles DO reach the ordinary Lookups endpoint above for request creation.
+
+        [HttpGet("materials")]
+        public async Task<IActionResult> MaterialsAdmin()
+        {
+            if (!await IsAdminMdCsAsync() && !IsSuper()) return Forbid();
+            var rows = await _db.PublicityMaterialTypes.AsNoTracking()
+                .OrderBy(m => m.Category).ThenBy(m => m.SortOrder).ThenBy(m => m.Name)
+                .Select(m => new PubMaterialAdminDto { Id = m.Id, Name = m.Name, Category = m.Category, IsActive = m.IsActive, SortOrder = m.SortOrder })
+                .ToListAsync();
+            return Ok(rows);
+        }
+
+        [HttpPost("materials")]
+        public async Task<IActionResult> CreateMaterial([FromBody] PubMaterialUpsertDto dto)
+        {
+            if (!await IsAdminMdCsAsync() && !IsSuper()) return Forbid();
+            var error = await ValidateMaterialAsync(dto, null);
+            if (error is not null) return BadRequest(error);
+
+            var maxSort = await _db.PublicityMaterialTypes.AsNoTracking()
+                .Where(m => m.Category == dto.Category).Select(m => (int?)m.SortOrder).MaxAsync() ?? 0;
+            var m2 = new PublicityMaterialType
+            {
+                Name = dto.Name.Trim(),
+                Category = dto.Category,
+                IsActive = dto.IsActive,
+                SortOrder = maxSort + 1
+            };
+            _db.PublicityMaterialTypes.Add(m2);
+            await _db.SaveChangesAsync();
+            return Ok(new PubMaterialAdminDto { Id = m2.Id, Name = m2.Name, Category = m2.Category, IsActive = m2.IsActive, SortOrder = m2.SortOrder });
+        }
+
+        [HttpPut("materials/{id:int}")]
+        public async Task<IActionResult> UpdateMaterial(int id, [FromBody] PubMaterialUpsertDto dto)
+        {
+            if (!await IsAdminMdCsAsync() && !IsSuper()) return Forbid();
+            var m2 = await _db.PublicityMaterialTypes.FirstOrDefaultAsync(m => m.Id == id);
+            if (m2 is null) return NotFound();
+            var error = await ValidateMaterialAsync(dto, id);
+            if (error is not null) return BadRequest(error);
+
+            m2.Name = dto.Name.Trim();
+            m2.Category = dto.Category;
+            m2.IsActive = dto.IsActive;
+            await _db.SaveChangesAsync();
+            return Ok(new PubMaterialAdminDto { Id = m2.Id, Name = m2.Name, Category = m2.Category, IsActive = m2.IsActive, SortOrder = m2.SortOrder });
+        }
+
+        [HttpDelete("materials/{id:int}")]
+        public async Task<IActionResult> DeleteMaterial(int id)
+        {
+            if (!await IsAdminMdCsAsync() && !IsSuper()) return Forbid();
+            var m2 = await _db.PublicityMaterialTypes.FirstOrDefaultAsync(m => m.Id == id);
+            if (m2 is null) return NotFound();
+
+            // FK_PublicityRequests_PublicityMaterialTypes_MaterialTypeId is ReferentialAction.Restrict
+            // (V31_PublicityTracking) - the database would already reject this delete if any request
+            // (including a soft-deleted one, IsDeleted is a display flag only, not a real row removal)
+            // references it. Checking first gives a clear message instead of a raw DbUpdateException,
+            // and - per the master plan - deactivation is the safe alternative so existing requests
+            // keep displaying their saved material type (PublicityForm/PubDetailDto.Material already
+            // resolve the name with no IsActive filter either way).
+            var inUse = await _db.PublicityRequests.AsNoTracking().CountAsync(r => r.MaterialTypeId == id);
+            if (inUse > 0)
+                return BadRequest(new
+                {
+                    Message = $"Cannot delete \"{m2.Name}\" - it is used by {inUse} publicity request(s). Deactivate it instead to hide it from new requests."
+                });
+
+            _db.PublicityMaterialTypes.Remove(m2);
+            await _db.SaveChangesAsync();
+            return Ok(new { Success = true });
+        }
+
+        private async Task<string?> ValidateMaterialAsync(PubMaterialUpsertDto dto, int? id)
+        {
+            var name = dto.Name?.Trim();
+            if (string.IsNullOrWhiteSpace(name)) return "Enter the material name.";
+            if (name.Length > 100) return "Material name must be 100 characters or fewer.";
+            if (!Enum.IsDefined(typeof(PublicityMaterialCategory), dto.Category)) return "Select a valid category.";
+            // Duplicate check only ever blocks another ACTIVE row with the same name in the same
+            // category - an inactive (deactivated) material keeping its old name never blocks a
+            // fresh/renamed active one from reusing it, consistent with "prefer deactivation over
+            // deletion" (the deactivated row stays only for historical FK integrity, not as a name
+            // reservation).
+            if (dto.IsActive)
+            {
+                var dup = await _db.PublicityMaterialTypes.AsNoTracking().AnyAsync(m =>
+                    m.Id != (id ?? 0) && m.IsActive && m.Category == dto.Category && m.Name.ToLower() == name.ToLower());
+                if (dup) return "An active material with this name already exists in this category.";
+            }
+            return null;
         }
 
         private async Task<List<PubPerson>> GetAuthorizedPeopleAsync()
@@ -182,10 +283,14 @@ namespace SpicAPI.Controllers
         // ================================================================ list + stats
 
         [HttpGet("requests/stats")]
-        public async Task<IActionResult> Stats()
+        public async Task<IActionResult> Stats([FromQuery] int? category = null)
         {
             var q = await ScopedAsync();
-            var rows = await q.Select(r => new { r.Status, r.Stage }).ToListAsync();
+            if (category.HasValue)
+            {
+                q = q.Where(r => (int)r.MaterialType!.Category == category.Value);
+            }
+            var rows = await q.Select(r => new { r.Status, r.Stage, r.IsGiftArticle }).ToListAsync();
             var mine = await MyStageAsync();
             return Ok(new PubStatsDto
             {
@@ -202,7 +307,9 @@ namespace SpicAPI.Controllers
                 DispatchPending = rows.Count(r => r.Status == PublicityStatus.FinalApproved),
                 Returned = rows.Count(r => r.Status == PublicityStatus.Returned),
                 ApprovedByMe = mine is null ? 0 : rows.Count(r => r.Stage > mine && r.Status is not (PublicityStatus.Draft or PublicityStatus.Returned or PublicityStatus.Rejected)),
-                FinalApproval = mine is null ? 0 : rows.Count(r => r.Stage > mine && r.Stage <= PublicityStage.DgmMdCsReview && r.Status is PublicityStatus.PendingApproval or PublicityStatus.PendingFinalApproval)
+                FinalApproval = mine is null ? 0 : rows.Count(r => r.Stage > mine && r.Stage <= PublicityStage.DgmMdCsReview && r.Status is PublicityStatus.PendingApproval or PublicityStatus.PendingFinalApproval),
+                PublicityMaterialCount = rows.Count(r => !r.IsGiftArticle),
+                GiftArticlesCount = rows.Count(r => r.IsGiftArticle)
             });
         }
 
@@ -211,12 +318,14 @@ namespace SpicAPI.Controllers
             [FromQuery] int? productId, [FromQuery] int? materialTypeId, [FromQuery] int? status, [FromQuery] int? stage,
             [FromQuery] int? stateId, [FromQuery] int? regionId, [FromQuery] int? hqId, [FromQuery] string? q,
             [FromQuery] bool awaitingMe = false, [FromQuery] bool submittedOnly = false,
+            [FromQuery] int? category = null,
             [FromQuery] int page = 1, [FromQuery] int size = 16)
         {
             var query = await ScopedAsync();
+            if (category.HasValue) query = query.Where(r => (int)r.MaterialType!.Category == category.Value);
             if (from.HasValue) query = query.Where(r => r.CreatedAt >= from.Value.Date);
             if (to.HasValue) query = query.Where(r => r.CreatedAt < to.Value.Date.AddDays(1));
-            if (productId > 0) query = query.Where(r => r.ProductId == productId);
+            if (productId > 0) query = query.Where(r => r.ProductId == productId || r.Items.Any(i => i.ProductId == productId));
             if (materialTypeId > 0) query = query.Where(r => r.MaterialTypeId == materialTypeId);
             if (status.HasValue) query = query.Where(r => (int)r.Status == status.Value);
             if (stage.HasValue) query = query.Where(r => (int)r.Stage == stage.Value);
@@ -236,6 +345,7 @@ namespace SpicAPI.Controllers
                 var term = q.Trim().ToLower();
                 var productIds = await _db.Products.AsNoTracking().Where(p => p.Name.ToLower().Contains(term)).Select(p => p.Id).ToListAsync();
                 query = query.Where(r => r.IndentNo.ToLower().Contains(term) || productIds.Contains(r.ProductId)
+                    || r.Items.Any(i => productIds.Contains(i.ProductId))
                     || r.MaterialType!.Name.ToLower().Contains(term));
             }
 
@@ -635,6 +745,248 @@ namespace SpicAPI.Controllers
             return Ok(new { r.Id, r.IndentNo });
         }
 
+        // ================================================================ specific product (bulk)
+
+        /// <summary>Parses a "Product, Quantity" Excel upload into unsaved rows for the "Specific
+        /// Product" Request Items table - nothing is persisted here, the client reviews/edits the
+        /// parsed rows and only POSTs requests/bulk once the user actually submits/saves.</summary>
+        [HttpPost("requests/import-excel")]
+        [RequestSizeLimit(10L * 1024 * 1024)]
+        public async Task<IActionResult> ImportExcel(IFormFile file)
+        {
+            var isChainRole = MyRole() is AppRole.RMD or AppRole.MDO or AppRole.MO or AppRole.JMDO or AppRole.RM or AppRole.SMD or AppRole.SMM;
+            if (!isChainRole && !await IsAdminMdCsAsync() && !await IsDgmMdCsAsync() && !IsSuper()) return Forbid();
+            if (file is null || file.Length == 0) return BadRequest(new { Success = false, Message = "No file uploaded." });
+            if (file.Length > 10 * 1024 * 1024) return BadRequest(new { Success = false, Message = "File must be under 10 MB." });
+            var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
+            if (ext != ".xlsx" && ext != ".xls") return BadRequest(new { Success = false, Message = "Only Excel files (.xlsx/.xls) are supported." });
+
+            var products = await _db.Products.AsNoTracking().Where(p => p.IsActive).Select(p => new { p.Id, p.Name }).ToListAsync();
+            var byName = products.GroupBy(p => p.Name.Trim().ToLowerInvariant())
+                .ToDictionary(g => g.Key, g => g.First().Id, StringComparer.Ordinal);
+
+            List<PubBulkImportRowDto> result;
+            try
+            {
+                using var stream = file.OpenReadStream();
+                using var workbook = new XLWorkbook(stream);
+                var ws = workbook.Worksheets.First();
+                var headerRow = ws.Row(1);
+                var lastCol = headerRow.LastCellUsed()?.Address.ColumnNumber ?? 0;
+                if (lastCol == 0) return BadRequest(new { Success = false, Message = "Empty worksheet or missing header row." });
+
+                var headerMap = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+                for (var c = 1; c <= lastCol; c++)
+                {
+                    var h = headerRow.Cell(c).GetString().Trim().Replace(" ", "").ToLowerInvariant();
+                    if (!string.IsNullOrEmpty(h) && !headerMap.ContainsKey(h)) headerMap[h] = c;
+                }
+                string GetCell(IXLRow row, string key) => headerMap.TryGetValue(key, out var col) ? row.Cell(col).GetString().Trim() : "";
+                if (!headerMap.ContainsKey("product")) return BadRequest(new { Success = false, Message = "Missing required column: Product." });
+                if (!headerMap.ContainsKey("quantity")) return BadRequest(new { Success = false, Message = "Missing required column: Quantity." });
+
+                result = new List<PubBulkImportRowDto>();
+                foreach (var row in ws.RowsUsed().Skip(1).Take(500))
+                {
+                    var productName = GetCell(row, "product");
+                    var qtyText = GetCell(row, "quantity");
+                    if (string.IsNullOrWhiteSpace(productName) && string.IsNullOrWhiteSpace(qtyText)) continue;
+                    var dto = new PubBulkImportRowDto { RowNumber = row.RowNumber(), ProductName = productName };
+                    var errors = new List<string>();
+                    if (string.IsNullOrWhiteSpace(productName)) errors.Add("Product is required.");
+                    else if (byName.TryGetValue(productName.Trim().ToLowerInvariant(), out var pid)) dto.ProductId = pid;
+                    else errors.Add($"Product \"{productName}\" not found.");
+                    if (!int.TryParse(qtyText, out var qty) || qty < 0) errors.Add("Enter a valid quantity.");
+                    else dto.Quantity = qty;
+                    if (errors.Count > 0) dto.Error = string.Join(" ", errors);
+                    result.Add(dto);
+                }
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { Success = false, Message = $"Could not read the Excel file: {ex.Message}" });
+            }
+            if (result.Count == 0) return BadRequest(new { Success = false, Message = "No data rows found in the uploaded file." });
+            return Ok(result);
+        }
+
+        /// <summary>"Specific Product" submit: one PublicityRequest PER ITEM (same Validate/Apply path
+        /// Create() uses), but only the FIRST item is the group's "root" (GroupId stays null); every
+        /// later item gets GroupId = root.Id, so the whole Excel import is ONE group - PublicityReview's
+        /// list/stats/consolidation only ever surface GroupId == null rows (see ScopedAsync-derived
+        /// queries), collapsing the group to one visible "request". Each item still keeps its own real,
+        /// unique IndentNo (the DB's unique index on IndentNo is untouched) and its own full dispatch/
+        /// acknowledgement/exception lifecycle once the group reaches Dispatch stage - grouping only
+        /// ever affects the REVIEW chain (IndentCreation..DgmMdCsReview, see ReviewOneAsync's sibling
+        /// sync) and the list-screen display, never dispatch/transfer/exception, which keep operating
+        /// per-row exactly as every other request already does. Three passes - validate all, create all
+        /// (one transaction, so a bad row never leaves others orphaned), then Created/Submit ONCE on the
+        /// root with children mirroring its resulting Stage/Status - so one Excel upload produces
+        /// exactly one history entry/notification, never one per row.</summary>
+        [HttpPost("requests/bulk")]
+        public async Task<IActionResult> CreateBulk([FromBody] PubBulkUpsertDto dto)
+        {
+            var isChainRole = MyRole() is AppRole.RMD or AppRole.MDO or AppRole.MO or AppRole.JMDO or AppRole.RM or AppRole.SMD or AppRole.SMM;
+            if (!isChainRole && !await IsAdminMdCsAsync() && !await IsDgmMdCsAsync() && !IsSuper()) return Forbid();
+            if (dto.Items is null || dto.Items.Count == 0) return BadRequest(new { Success = false, Message = "Add at least one item." });
+            if (dto.Items.Count > 200) return BadRequest(new { Success = false, Message = "Too many items in a single request (max 200)." });
+
+            // This endpoint is the "Specific Product" Excel-import flow only (PublicityForm's
+            // ShowBulk) - unlike the single-item Create/Update path, the server here definitely knows
+            // the intended category (there is no General/Gift Articles equivalent of this endpoint),
+            // so it can and must reject a General-category material slipping through, not just check
+            // existence/active like ValidateAsync already does for every row below.
+            var materialCategory = await _db.PublicityMaterialTypes.AsNoTracking()
+                .Where(m => m.Id == dto.MaterialTypeId).Select(m => (PublicityMaterialCategory?)m.Category).FirstOrDefaultAsync();
+            if (materialCategory != PublicityMaterialCategory.Specific)
+                return BadRequest(new { Success = false, Message = "Select a Specific Product material type for this import." });
+
+            PubUpsertDto RowDto(PubBulkItemDto item) => new()
+            {
+                MaterialTypeId = dto.MaterialTypeId, ProductId = item.ProductId, Quantity = item.Quantity,
+                RequestedByUserId = dto.RequestedByUserId, StateId = dto.StateId, RegionId = dto.RegionId,
+                HeadquarterId = dto.HeadquarterId, Remarks = dto.Remarks, Submit = dto.Submit
+            };
+
+            for (var i = 0; i < dto.Items.Count; i++)
+            {
+                var error = await ValidateAsync(RowDto(dto.Items[i]));
+                if (error != null) return BadRequest(new { Success = false, Message = $"Row {i + 1}: {error}" });
+            }
+
+            var name = await MyNameAsync();
+            var requestedUserId = string.IsNullOrWhiteSpace(dto.RequestedByUserId) ? Uid() : dto.RequestedByUserId;
+            var requestedName = await _db.Users.AsNoTracking().Where(u => u.Id == requestedUserId)
+                .Select(u => u.Name ?? u.UserName).FirstOrDefaultAsync() ?? name;
+
+            var r = new PublicityRequest
+            {
+                IndentNo = await NextNoAsync("IND"),
+                CreatedByUserId = Uid(),
+                CreatedByName = name,
+                Stage = PublicityStage.IndentCreation,
+                Status = PublicityStatus.Draft,
+                MaterialTypeId = dto.MaterialTypeId,
+                StateId = dto.StateId,
+                RegionId = dto.RegionId,
+                HeadquarterId = dto.HeadquarterId,
+                Remarks = Clean(dto.Remarks),
+                IsGiftArticle = false,
+                ProductId = dto.Items[0].ProductId,
+                Quantity = dto.Items.Sum(x => x.Quantity),
+                OriginalQuantity = dto.Items.Sum(x => x.Quantity),
+                RequestedByUserId = requestedUserId,
+                RequestedByName = requestedName
+            };
+
+            foreach (var item in dto.Items)
+            {
+                r.Items.Add(new PublicityRequestItem
+                {
+                    ProductId = item.ProductId,
+                    Quantity = item.Quantity,
+                    OriginalQuantity = item.Quantity
+                });
+            }
+
+            _db.PublicityRequests.Add(r);
+            await _db.SaveChangesAsync();
+            await AddEvent(r, PublicityStage.IndentCreation, "Created", name, dto.Remarks);
+            if (dto.Submit) await Submit(r, name, dto.Remarks);
+            await _db.SaveChangesAsync();
+
+            var result = new PubBulkCreatedDto
+            {
+                Id = r.Id,
+                IndentNo = r.IndentNo,
+                TotalQuantity = r.Quantity,
+                Items = r.Items.Select(i => new PubBulkCreatedItemDto
+                {
+                    Id = i.Id,
+                    ProductId = i.ProductId,
+                    Quantity = i.Quantity
+                }).ToList()
+            };
+            return Ok(result);
+        }
+
+        /// <summary>Edit a Specific Product (multi-item) request's own item rows - the ONE write path
+        /// missing for PublicityForm's edit page (Update/ApplyAsync above only ever touch the parent's
+        /// own ProductId/Quantity mirror, never r.Items). Same authorization shape as Update: the
+        /// creator's own Draft/Returned request, or the reviewer whose turn it currently is (never DGM-
+        /// MD CS, approve-only). Items missing from the submitted list are deleted; Id == null rows are
+        /// new items; everything else is matched by Id and updated in place - so saved item ids are
+        /// preserved across edits (needed to attach a freshly re-uploaded design file to the right item,
+        /// see Upload's requestItemId param) instead of recreating every row from scratch. Never touches
+        /// Stage/Status/RequestedByUserId/Remarks - those stay on the existing single-item Update
+        /// endpoint, which PublicityForm's edit page calls separately for the parent-level fields.</summary>
+        [HttpPut("requests/{id:int}/items")]
+        public async Task<IActionResult> UpdateItems(int id, [FromBody] PubItemsUpdateDto dto)
+        {
+            var r = await _db.PublicityRequests.Include(x => x.Items).FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted);
+            if (r is null) return NotFound(new { Success = false, Message = "Request not found." });
+            if (r.Items.Count == 0) return BadRequest(new { Success = false, Message = "This request does not have multiple items." });
+
+            var approverEdit = !CanEdit(r) && r.Status is PublicityStatus.PendingApproval or PublicityStatus.PendingFinalApproval
+                && r.Stage != PublicityStage.DgmMdCsReview && await IsMyTurnAsync(r.Stage) && await CanReadAsync(r);
+            if (!CanEdit(r) && !approverEdit) return BadRequest(new { Success = false, Message = "Only your draft or returned request can be edited." });
+
+            if (dto.Items is null || dto.Items.Count == 0) return BadRequest(new { Success = false, Message = "Keep at least one item." });
+            if (dto.Items.Count > 200) return BadRequest(new { Success = false, Message = "Too many items in a single request (max 200)." });
+            foreach (var item in dto.Items)
+            {
+                if (item.Quantity < 0) return BadRequest(new { Success = false, Message = "Enter a valid quantity for every item." });
+                if (!await _db.Products.AnyAsync(p => p.Id == item.ProductId)) return BadRequest(new { Success = false, Message = "Select a valid product for every item." });
+            }
+
+            var existingById = r.Items.ToDictionary(i => i.Id);
+            var keepIds = dto.Items.Where(i => i.Id is > 0).Select(i => i.Id!.Value).ToHashSet();
+            var changes = new List<string>();
+            foreach (var removed in r.Items.Where(i => !keepIds.Contains(i.Id)).ToList())
+            {
+                changes.Add($"Removed a line item (product #{removed.ProductId}).");
+                _db.PublicityRequestItems.Remove(removed);
+            }
+            foreach (var incoming in dto.Items)
+            {
+                if (incoming.Id is int existingId && existingById.TryGetValue(existingId, out var item))
+                {
+                    if (item.ProductId != incoming.ProductId || item.Quantity != incoming.Quantity)
+                        changes.Add($"Item #{item.Id}: product #{item.ProductId} -> #{incoming.ProductId}, quantity {item.Quantity} -> {incoming.Quantity}.");
+                    item.ProductId = incoming.ProductId;
+                    item.Quantity = incoming.Quantity;
+                    if (!approverEdit) item.OriginalQuantity = incoming.Quantity;
+                }
+                else
+                {
+                    r.Items.Add(new PublicityRequestItem { ProductId = incoming.ProductId, Quantity = incoming.Quantity, OriginalQuantity = incoming.Quantity });
+                    changes.Add($"Added a line item (product #{incoming.ProductId}).");
+                }
+            }
+
+            // Keep the parent row's own ProductId/Quantity mirror (CreateBulk sets it to the first
+            // item's product + the items' summed quantity, read by Stats/dispatch/list screens that
+            // don't know about Items) in sync with whatever the items list now actually is.
+            r.ProductId = dto.Items[0].ProductId;
+            r.Quantity = dto.Items.Sum(i => i.Quantity);
+            if (!approverEdit) r.OriginalQuantity = r.Quantity;
+            r.UpdatedAt = DateTime.UtcNow;
+
+            if (approverEdit && changes.Count > 0)
+                await AddEvent(r, r.Stage, "Edited", await MyNameAsync(), $"Request items updated: {string.Join(" ", changes)}");
+
+            await _db.SaveChangesAsync();
+
+            var result = new PubBulkCreatedDto
+            {
+                Id = r.Id,
+                IndentNo = r.IndentNo,
+                TotalQuantity = r.Quantity,
+                Items = r.Items.Select(i => new PubBulkCreatedItemDto { Id = i.Id, ProductId = i.ProductId, Quantity = i.Quantity }).ToList()
+            };
+            return Ok(result);
+        }
+
         [HttpDelete("requests/{id:int}")]
         public async Task<IActionResult> Delete(int id)
         {
@@ -916,51 +1268,51 @@ namespace SpicAPI.Controllers
 
         // ================================================================ delivery addresses (admin)
 
-        // A small, shared, Publicity-specific address book (regional offices etc.) - gated by the
-        // exact same IsDispatcherAsync() check CreateDispatch itself already uses, so nobody who
-        // couldn't create a dispatch can read or add addresses either; no separate/broader address
-        // permission exists. There is deliberately no update/delete endpoint (the spec explicitly asks
-        // not to introduce address-edit/delete permissions beyond what's needed) - IsActive exists so
-        // a bad entry can be deactivated directly in the database if that's ever needed, without an API
-        // surface for it.
+        // A small, shared, Publicity-specific address book (regional offices etc.). Read/create from
+        // the dispatch page stays gated on IsDispatcherAsync() exactly as before - unchanged. The admin
+        // management list/update/delete below (2026-11-26) are a separate, narrower surface gated on
+        // IsAdminMdCsAsync()/IsSuper() only, same convention as the Material Master endpoints above -
+        // every write is independently re-checked server-side regardless of what the sidebar/page hide.
         [HttpGet("delivery-addresses")]
         public async Task<IActionResult> DeliveryAddresses()
         {
             if (!await IsDispatcherAsync()) return Forbid();
             var rows = await _db.PublicityDeliveryAddresses.AsNoTracking().Where(a => a.IsActive)
                 .OrderBy(a => a.AddressLabel).Take(500).ToListAsync();
+            return Ok(await ToDeliveryAddressDtosAsync(rows));
+        }
+
+        [HttpGet("delivery-addresses/admin")]
+        public async Task<IActionResult> DeliveryAddressesAdmin()
+        {
+            if (!await IsAdminMdCsAsync() && !IsSuper()) return Forbid();
+            var rows = await _db.PublicityDeliveryAddresses.AsNoTracking()
+                .OrderBy(a => a.AddressLabel).ToListAsync();
+            return Ok(await ToDeliveryAddressDtosAsync(rows));
+        }
+
+        private async Task<List<PubDeliveryAddressDto>> ToDeliveryAddressDtosAsync(List<PublicityDeliveryAddress> rows)
+        {
             var stateIds = rows.Select(a => a.StateId).Distinct().ToList();
             var districtIds = rows.Where(a => a.DistrictId.HasValue).Select(a => a.DistrictId!.Value).Distinct().ToList();
             var states = await _db.States.AsNoTracking().Where(s => stateIds.Contains(s.Id)).ToDictionaryAsync(s => s.Id, s => s.StateName);
             var districts = await _db.Districts.AsNoTracking().Where(d => districtIds.Contains(d.Id)).ToDictionaryAsync(d => d.Id, d => d.DistrictName);
-            return Ok(rows.Select(a => new PubDeliveryAddressDto
+            return rows.Select(a => new PubDeliveryAddressDto
             {
                 Id = a.Id, AddressLabel = a.AddressLabel, RecipientName = a.RecipientName, ContactPerson = a.ContactPerson,
                 MobileNumber = a.MobileNumber, AddressLine1 = a.AddressLine1, AddressLine2 = a.AddressLine2, Landmark = a.Landmark,
                 StateId = a.StateId, StateName = states.GetValueOrDefault(a.StateId),
                 DistrictId = a.DistrictId, DistrictName = a.DistrictId is int did ? districts.GetValueOrDefault(did) : null,
-                City = a.City, PinCode = a.PinCode
-            }).ToList());
+                City = a.City, PinCode = a.PinCode, IsActive = a.IsActive
+            }).ToList();
         }
 
         [HttpPost("delivery-addresses")]
         public async Task<IActionResult> CreateDeliveryAddress([FromBody] PubDeliveryAddressCreateDto dto)
         {
             if (!await IsDispatcherAsync()) return Forbid();
-            string? Req(string? v, string label, int max) =>
-                string.IsNullOrWhiteSpace(v) ? $"Enter the {label}." : v.Trim().Length > max ? $"{label} is too long." : null;
-            var error = Req(dto.AddressLabel, "address name / label", 150)
-                ?? Req(dto.RecipientName, "recipient / office name", 200)
-                ?? Req(dto.AddressLine1, "address line 1", 300)
-                ?? Req(dto.City, "district / city", 150)
-                ?? (dto.ContactPerson is { Length: > 150 } ? "Contact person is too long." : null)
-                ?? (dto.AddressLine2 is { Length: > 300 } ? "Address line 2 is too long." : null)
-                ?? (dto.Landmark is { Length: > 150 } ? "Landmark is too long." : null)
-                ?? (!Regex.IsMatch(dto.MobileNumber?.Trim() ?? "", @"^[6-9]\d{9}$") ? "Enter a valid 10-digit Indian mobile number." : null)
-                ?? (!Regex.IsMatch(dto.PinCode?.Trim() ?? "", @"^\d{6}$") ? "Enter a valid 6-digit PIN code." : null)
-                ?? (!await _db.States.AnyAsync(s => s.Id == dto.StateId && s.IsActive) ? "Select the state." : null)
-                ?? (dto.DistrictId is > 0 && !await _db.Districts.AnyAsync(d => d.Id == dto.DistrictId && d.StateId == dto.StateId && d.IsActive)
-                    ? "Select a district that belongs to the selected state." : null);
+            var error = await ValidateDeliveryAddressAsync(dto.AddressLabel, dto.RecipientName, dto.ContactPerson, dto.MobileNumber,
+                dto.AddressLine1, dto.AddressLine2, dto.Landmark, dto.StateId, dto.DistrictId, dto.City, dto.PinCode);
             if (error != null) return BadRequest(new { Success = false, Message = error });
 
             var a = new PublicityDeliveryAddress
@@ -973,6 +1325,70 @@ namespace SpicAPI.Controllers
             _db.PublicityDeliveryAddresses.Add(a);
             await _db.SaveChangesAsync();
             return Ok(new { a.Id });
+        }
+
+        [HttpPut("delivery-addresses/{id:int}")]
+        public async Task<IActionResult> UpdateDeliveryAddress(int id, [FromBody] PubDeliveryAddressUpdateDto dto)
+        {
+            if (!await IsAdminMdCsAsync() && !IsSuper()) return Forbid();
+            var a = await _db.PublicityDeliveryAddresses.FirstOrDefaultAsync(x => x.Id == id);
+            if (a is null) return NotFound();
+            var error = await ValidateDeliveryAddressAsync(dto.AddressLabel, dto.RecipientName, dto.ContactPerson, dto.MobileNumber,
+                dto.AddressLine1, dto.AddressLine2, dto.Landmark, dto.StateId, dto.DistrictId, dto.City, dto.PinCode);
+            if (error != null) return BadRequest(new { Success = false, Message = error });
+
+            // Editing/deactivating this row never touches any dispatch already created against it - a
+            // dispatch copies the address text into its own DestinationAddress at creation time (see
+            // the PublicityDeliveryAddress entity's doc comment); only this live row changes.
+            a.AddressLabel = dto.AddressLabel.Trim(); a.RecipientName = dto.RecipientName.Trim(); a.ContactPerson = Clean(dto.ContactPerson);
+            a.MobileNumber = dto.MobileNumber!.Trim(); a.AddressLine1 = dto.AddressLine1.Trim(); a.AddressLine2 = Clean(dto.AddressLine2);
+            a.Landmark = Clean(dto.Landmark); a.StateId = dto.StateId; a.DistrictId = dto.DistrictId > 0 ? dto.DistrictId : null;
+            a.City = dto.City.Trim(); a.PinCode = dto.PinCode!.Trim(); a.IsActive = dto.IsActive;
+            a.UpdatedByUserId = Uid(); a.UpdatedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync();
+            return Ok(new { a.Id });
+        }
+
+        [HttpDelete("delivery-addresses/{id:int}")]
+        public async Task<IActionResult> DeleteDeliveryAddress(int id)
+        {
+            if (!await IsAdminMdCsAsync() && !IsSuper()) return Forbid();
+            var a = await _db.PublicityDeliveryAddresses.FirstOrDefaultAsync(x => x.Id == id);
+            if (a is null) return NotFound();
+
+            // Same "prefer deactivation over deletion" pattern as DeleteMaterial above: a dispatch's
+            // own DestinationAddress text is a frozen snapshot, but PublicityDispatch.DeliveryAddressId
+            // is still a live FK to this row (used e.g. to re-select it on a future dispatch) - block
+            // the hard delete if any dispatch references it and point the admin at Deactivate instead.
+            var inUse = await _db.PublicityDispatches.AsNoTracking().CountAsync(d => d.DeliveryAddressId == id);
+            if (inUse > 0)
+                return BadRequest(new
+                {
+                    Message = $"Cannot delete \"{a.AddressLabel}\" - it is used by {inUse} dispatch record(s). Deactivate it instead to hide it from new dispatches."
+                });
+
+            _db.PublicityDeliveryAddresses.Remove(a);
+            await _db.SaveChangesAsync();
+            return Ok(new { Success = true });
+        }
+
+        private async Task<string?> ValidateDeliveryAddressAsync(string addressLabel, string recipientName, string? contactPerson,
+            string mobileNumber, string addressLine1, string? addressLine2, string? landmark, int stateId, int? districtId, string city, string pinCode)
+        {
+            string? Req(string? v, string label, int max) =>
+                string.IsNullOrWhiteSpace(v) ? $"Enter the {label}." : v.Trim().Length > max ? $"{label} is too long." : null;
+            return Req(addressLabel, "address name / label", 150)
+                ?? Req(recipientName, "recipient / office name", 200)
+                ?? Req(addressLine1, "address line 1", 300)
+                ?? Req(city, "district / city", 150)
+                ?? (contactPerson is { Length: > 150 } ? "Contact person is too long." : null)
+                ?? (addressLine2 is { Length: > 300 } ? "Address line 2 is too long." : null)
+                ?? (landmark is { Length: > 150 } ? "Landmark is too long." : null)
+                ?? (!Regex.IsMatch(mobileNumber?.Trim() ?? "", @"^[6-9]\d{9}$") ? "Enter a valid 10-digit Indian mobile number." : null)
+                ?? (!Regex.IsMatch(pinCode?.Trim() ?? "", @"^\d{6}$") ? "Enter a valid 6-digit PIN code." : null)
+                ?? (!await _db.States.AnyAsync(s => s.Id == stateId && s.IsActive) ? "Select the state." : null)
+                ?? (districtId is > 0 && !await _db.Districts.AnyAsync(d => d.Id == districtId && d.StateId == stateId && d.IsActive)
+                    ? "Select a district that belongs to the selected state." : null);
         }
 
         private async Task<string> ComposeAddressTextAsync(PublicityDeliveryAddress a)
@@ -1158,18 +1574,33 @@ namespace SpicAPI.Controllers
                 d.Status = PublicityDispatchStatus.Acknowledged;
                 d.DeliveredAt ??= DateTime.UtcNow;
                 var shortage = Math.Max(0, d.Quantity - ack.ReceivedQty);
-                var type = ExceptionType(shortage, Math.Max(0, ack.ReceivedQty - d.Quantity), ack.DamagedQty);
+                var excess = Math.Max(0, ack.ReceivedQty - d.Quantity);
+                var type = ExceptionType(shortage, excess, ack.DamagedQty);
                 var name = await MyNameAsync();
                 await AddEvent(r, PublicityStage.Acknowledgement, type == "None" ? "Acknowledged" : "Exception Raised", name,
                     ack.Remarks ?? $"Received {ack.ReceivedQty} of {d.Quantity} Nos.", d.Id);
-                if (type != "None" && type != "Excess")
+                if (type != "None")
                 {
-                    var parts = new List<string>();
-                    if (shortage > 0) parts.Add("Shortage");
-                    if (ack.DamagedQty > 0) parts.Add("Damaged");
-                    await NotifyAsync(PublicityNotificationType.Exception, r, d.Id, null, AppRole.MDAdmin, null,
-                        $"Exception Raised - {string.Join(" + ", parts)}",
-                        $"{r.IndentNo} reported {string.Join(" and ", parts).ToLowerInvariant()} material ({(shortage > 0 ? $"{shortage} Nos short" : "")}{(shortage > 0 && ack.DamagedQty > 0 ? ", " : "")}{(ack.DamagedQty > 0 ? $"{ack.DamagedQty} Nos damaged" : "")}). Review required.", ack.Remarks);
+                    if (excess > 0 && shortage == 0 && ack.DamagedQty == 0)
+                    {
+                        var pm = await ProductMaterialPartsAsync(r);
+                        var sub = $"{d.DispatchNo} - {pm.Product} ({pm.Material}) - Dispatched: {d.Quantity} Nos, Received: {ack.ReceivedQty} Nos, Excess: {excess} Nos - Reported by {name} on {DateTime.Now:dd MMM yyyy}";
+                        await NotifyAsync(PublicityNotificationType.Exception, r, d.Id, null, AppRole.MDAdmin, null,
+                            "Excess Material Reported",
+                            $"Request {r.IndentNo}: {name} acknowledged receiving {ack.ReceivedQty} Nos against {d.Quantity} Nos dispatched. Excess: {excess} Nos. Review the exception and available excess stock.",
+                            sub);
+                    }
+                    else
+                    {
+                        var parts = new List<string>();
+                        if (shortage > 0) parts.Add("Shortage");
+                        if (excess > 0) parts.Add("Excess");
+                        if (ack.DamagedQty > 0) parts.Add("Damaged");
+                        await NotifyAsync(PublicityNotificationType.Exception, r, d.Id, null, AppRole.MDAdmin, null,
+                            $"Exception Raised - {string.Join(" + ", parts)}",
+                            $"{r.IndentNo} reported {string.Join(" and ", parts).ToLowerInvariant()} material ({(shortage > 0 ? $"{shortage} Nos short" : "")}{(shortage > 0 && (excess > 0 || ack.DamagedQty > 0) ? ", " : "")}{(excess > 0 ? $"{excess} Nos excess" : "")}{(excess > 0 && ack.DamagedQty > 0 ? ", " : "")}{(ack.DamagedQty > 0 ? $"{ack.DamagedQty} Nos damaged" : "")}). Review required.",
+                            ack.Remarks);
+                    }
                 }
                 else if (d.Kind == PublicityDispatchKind.Transfer)
                     // Clean transfer acknowledgement (no shortage/damage) - this is specifically the
@@ -1192,13 +1623,15 @@ namespace SpicAPI.Controllers
 
         [HttpPost("requests/{id:int}/files")]
         [RequestSizeLimit(60L * 1024 * 1024)]
-        public async Task<IActionResult> Upload(int id, [FromQuery] PublicityFileKind kind, [FromQuery] int? dispatchId, [FromForm] List<IFormFile> files)
+        public async Task<IActionResult> Upload(int id, [FromQuery] PublicityFileKind kind, [FromQuery] int? dispatchId, [FromQuery] int? requestItemId, [FromForm] List<IFormFile> files)
         {
             var r = await LoadAsync(id);
             if (r is null || !await CanReadAsync(r)) return NotFound(new { Success = false, Message = "Request not found." });
             if (files is null || files.Count == 0) return BadRequest(new { Success = false, Message = "No file uploaded." });
             if (dispatchId.HasValue && !await _db.PublicityDispatches.AnyAsync(d => d.Id == dispatchId && (d.RequestId == id || d.SourceRequestId == id)))
                 return BadRequest(new { Success = false, Message = "Dispatch does not belong to this request." });
+            if (requestItemId.HasValue && !await _db.PublicityRequestItems.AnyAsync(i => i.Id == requestItemId && i.RequestId == id))
+                return BadRequest(new { Success = false, Message = "Request item does not belong to this request." });
             foreach (var f in files)
             {
                 if (f.Length == 0 || f.Length > MaxFileBytes) return BadRequest(new { Success = false, Message = $"\"{f.FileName}\" must be under 10 MB." });
@@ -1216,7 +1649,7 @@ namespace SpicAPI.Controllers
                     await f.CopyToAsync(stream);
                 var row = new PublicityFile
                 {
-                    RequestId = id, DispatchId = dispatchId, Kind = kind, FileName = Path.GetFileName(f.FileName),
+                    RequestId = id, DispatchId = dispatchId, RequestItemId = requestItemId, Kind = kind, FileName = Path.GetFileName(f.FileName),
                     Path = $"Publicity/{id}/{safe}", SizeBytes = f.Length, UploadedByName = name
                 };
                 _db.PublicityFiles.Add(row);
@@ -1270,6 +1703,16 @@ namespace SpicAPI.Controllers
             return Ok(rows.Select(ToNotice).ToList());
         }
 
+        // Cheap poll target for the header bell / PublicityReview Notifications button badge - same
+        // "mine" scoping as the full list (MyNotificationsAsync), just a COUNT so a 20-30s poll loop
+        // doesn't pull all 200 rows just to show a number.
+        [HttpGet("notifications/unread-count")]
+        public async Task<IActionResult> UnreadNotificationCount()
+        {
+            var count = await (await MyNotificationsAsync()).CountAsync(n => n.ReadAt == null);
+            return Ok(new PubUnreadCountDto { Count = count });
+        }
+
         [HttpGet("notifications/{id:int}")]
         public async Task<IActionResult> Notification(int id)
         {
@@ -1282,29 +1725,70 @@ namespace SpicAPI.Controllers
                     .Select(x => (PublicityStatus?)x.Status).FirstOrDefaultAsync();
                 dto.CanDispatch = status == PublicityStatus.FinalApproved && await IsAdminMdCsAsync();
             }
-            var d = n.DispatchId is int did ? await _db.PublicityDispatches.AsNoTracking().FirstOrDefaultAsync(x => x.Id == did) : null;
+            var d = n.DispatchId is int did ? await _db.PublicityDispatches.AsNoTracking().Include(x => x.Acknowledgement).FirstOrDefaultAsync(x => x.Id == did) : null;
             if (d is not null)
             {
+                var isStockTransfer = n.Type == PublicityNotificationType.StockTransfer || d.Kind == PublicityDispatchKind.Transfer || d.SourceRequestId.HasValue;
+                dto.IsTransfer = isStockTransfer;
+
                 var dest = await LoadAsync(d.RequestId);
-                var source = d.SourceRequestId is int sid ? await LoadAsync(sid) : null;
-                var names = await NamesAsync(Array.Empty<int>(), Array.Empty<int>(), new[] { dest!.HeadquarterId, source?.HeadquarterId ?? 0 });
-                dto.DestinationIndentNo = dest.IndentNo;
-                dto.DestinationHq = names.Hqs.GetValueOrDefault(dest.HeadquarterId);
-                dto.TransferQty = d.Quantity;
-                dto.Status = DispatchStatusLabel(d.Status, d.Kind);
-                dto.Reason = d.Remarks ?? $"Shortage resolution for {dto.DestinationHq}";
-                var pm = await ProductMaterialPartsAsync(dest);
+                var pm = dest is not null ? await ProductMaterialPartsAsync(dest) : (Product: "", Material: "");
                 dto.Product = pm.Product;
                 dto.Material = pm.Material;
-                if (source is not null)
+                dto.Status = DispatchStatusLabel(d.Status, d.Kind);
+
+                if (isStockTransfer)
                 {
-                    var s = await SummaryAsync(source);
-                    dto.SourceIndentNo = source.IndentNo;
-                    dto.SourceHq = names.Hqs.GetValueOrDefault(source.HeadquarterId);
-                    dto.ReportedExcess = s.Excess;
-                    // every other transfer order on this excess, shipped or not, so two open orders never both show the full excess
-                    dto.AlreadyTransferred = s.TransferredOut - d.Quantity;
-                    dto.RemainingExcess = Math.Max(0, s.Excess - dto.AlreadyTransferred);
+                    var source = d.SourceRequestId is int sid ? await LoadAsync(sid) : null;
+                    var names = await NamesAsync(Array.Empty<int>(), Array.Empty<int>(), new[] { dest?.HeadquarterId ?? 0, source?.HeadquarterId ?? 0 });
+                    dto.DestinationIndentNo = dest?.IndentNo;
+                    dto.DestinationHq = dest is not null ? names.Hqs.GetValueOrDefault(dest.HeadquarterId) : null;
+                    dto.TransferQty = d.Quantity;
+                    dto.Reason = d.Remarks ?? (dto.DestinationHq is not null ? $"Shortage resolution for {dto.DestinationHq}" : null);
+                    if (source is not null)
+                    {
+                        var s = await SummaryAsync(source);
+                        dto.SourceIndentNo = source.IndentNo;
+                        dto.SourceHq = names.Hqs.GetValueOrDefault(source.HeadquarterId);
+                        dto.ReportedExcess = s.Excess;
+                        // every other transfer order on this excess, shipped or not, so two open orders never both show the full excess
+                        dto.AlreadyTransferred = s.TransferredOut - d.Quantity;
+                        dto.RemainingExcess = Math.Max(0, s.Excess - dto.AlreadyTransferred);
+                    }
+                }
+                else
+                {
+                    var names = await NamesAsync(Array.Empty<int>(), Array.Empty<int>(), new[] { dest?.HeadquarterId ?? 0 });
+                    dto.DispatchNo = d.DispatchNo;
+                    dto.RequestIndentNo = dest?.IndentNo;
+                    dto.DispatchQty = d.Quantity;
+                    dto.DispatchDate = d.DispatchDate;
+                    dto.VendorName = d.VendorName;
+                    dto.DestinationHq = dest is not null ? names.Hqs.GetValueOrDefault(dest.HeadquarterId) : null;
+                    dto.DestinationAddress = d.DestinationAddress;
+                    dto.Transporter = d.Transporter;
+                    dto.TrackingNo = d.TrackingNo;
+
+                    if (d.Acknowledgement is { IsDraft: false } ack)
+                    {
+                        dto.ReceivedQty = ack.ReceivedQty;
+                        dto.ExcessQty = Math.Max(0, ack.ReceivedQty - d.Quantity);
+                        dto.ShortageQty = Math.Max(0, d.Quantity - ack.ReceivedQty);
+                        dto.DamagedQty = ack.DamagedQty;
+                        dto.ReportedByName = ack.AcknowledgedByName;
+                        dto.ReportedDate = ack.SubmittedAt;
+                    }
+                }
+            }
+            else if (n.RequestId is int reqId)
+            {
+                var req = await LoadAsync(reqId);
+                if (req is not null)
+                {
+                    var pm = await ProductMaterialPartsAsync(req);
+                    dto.Product = pm.Product;
+                    dto.Material = pm.Material;
+                    dto.RequestIndentNo = req.IndentNo;
                 }
             }
             return Ok(dto);
@@ -1316,7 +1800,8 @@ namespace SpicAPI.Controllers
             var ids = await (await MyNotificationsAsync()).Where(x => id == 0 || x.Id == id).Select(x => x.Id).ToListAsync();
             await _db.PublicityNotifications.Where(x => ids.Contains(x.Id) && x.ReadAt == null)
                 .ExecuteUpdateAsync(s => s.SetProperty(x => x.ReadAt, DateTime.UtcNow));
-            return Ok(new { Success = true });
+            var count = await (await MyNotificationsAsync()).CountAsync(n => n.ReadAt == null);
+            return Ok(new PubUnreadCountDto { Count = count });
         }
 
         // ================================================================ derived state
@@ -1332,6 +1817,9 @@ namespace SpicAPI.Controllers
             var open = incoming.Where(d => d.Status != PublicityDispatchStatus.Acknowledged).ToList();
             var outgoingOpen = await _db.PublicityDispatches.AnyAsync(d => d.SourceRequestId == r.Id && d.Status < PublicityDispatchStatus.Dispatched);
 
+            var remainingExcess = Math.Max(0, s.Excess - s.TransferredOut);
+            var hasUnresolvedException = s.Outstanding > 0 || (s.Damaged > 0 && incoming.All(d => d.Status == PublicityDispatchStatus.Acknowledged)) || remainingExcess > 0;
+
             (PublicityStage, PublicityStatus) next;
             if (incoming.Count == 0) next = (PublicityStage.Dispatch, PublicityStatus.FinalApproved);
             else if (open.Any(d => d.Status < PublicityDispatchStatus.Dispatched)) next = (PublicityStage.InterHqTransfer, PublicityStatus.TransferInProgress);
@@ -1339,7 +1827,7 @@ namespace SpicAPI.Controllers
             else if (open.Any(d => d.Kind == PublicityDispatchKind.Transfer)) next = (PublicityStage.InterHqTransfer, PublicityStatus.TransferInProgress);
             else if (open.Any(d => d.Kind == PublicityDispatchKind.ReInitiation)) next = (PublicityStage.ReInitiation, PublicityStatus.ReInitiationInProgress);
             else if (open.Count > 0) next = (PublicityStage.Delivery, PublicityStatus.InDispatch);
-            else if (s.Outstanding > 0) next = (PublicityStage.ExceptionHandling, PublicityStatus.ExceptionRaised);
+            else if (hasUnresolvedException) next = (PublicityStage.ExceptionHandling, PublicityStatus.ExceptionRaised);
             else if (outgoingOpen) next = (PublicityStage.TransferCreation, PublicityStatus.TransferOrderReceived);
             else next = (PublicityStage.Completed, PublicityStatus.Completed);
 
@@ -1373,7 +1861,7 @@ namespace SpicAPI.Controllers
             s.Excess = Math.Max(0, s.Usable - s.Requested);
             s.ExceptionType = ExceptionType(s.Shortage, acks.Sum(d => Math.Max(0, d.Acknowledgement!.ReceivedQty - d.Quantity)), s.Damaged);
             s.ExceptionStatus = s.ExceptionType == "None" ? "None"
-                : s.ExceptionType == "Excess" ? "Reported"
+                : s.ExceptionType == "Excess" ? (s.Excess - s.TransferredOut > 0 ? "Reported" : "Resolved")
                 : acks.Count == 0 ? "None" : s.Outstanding > 0 ? "Raised" : "Resolved";
             s.MaterialCondition = acks.Count == 0 ? "-"
                 : s.Damaged == 0 && s.Shortage == 0 ? "Good"
@@ -1396,20 +1884,31 @@ namespace SpicAPI.Controllers
         private async Task<List<PubRowDto>> RowsAsync(List<PublicityRequest> items)
         {
             var names = await NamesAsync(items.Select(r => r.StateId), items.Select(r => r.RegionId), items.Select(r => r.HeadquarterId));
-            var productIds = items.Select(r => r.ProductId).Distinct().ToList();
-            var products = await _db.Products.AsNoTracking().Where(p => productIds.Contains(p.Id)).ToDictionaryAsync(p => p.Id, p => p.Name);
-            var materials = await _db.PublicityMaterialTypes.AsNoTracking().ToDictionaryAsync(m => m.Id, m => m.Name);
-            var mine = await MyStageAsync();
-            // Who actually approved the RM stage, per request - from the existing per-request audit
-            // trail (PublicityEvent), never from the Region's CURRENT RM assignment (see PubRowDto.
-            // RmApprovedByName's own doc comment for why that would be wrong for a request an earlier,
-            // since-reassigned RM approved).
             var requestIds = items.Select(r => r.Id).ToList();
-            // A request made by a chain role (e.g. RMDO) and later approved by the RM has a distinct
-            // Stage=RmReview "Approved" event - that's the normal case. But a request an RM created for
-            // THEMSELVES skips RmReview entirely (Submit()'s creatorIndex logic), so no such event ever
-            // exists for it; the RM's own "Submitted" action (logged at Stage=IndentCreation, the stage it
-            // was submitted FROM) is the only recorded act of theirs and functionally is their approval.
+            var itemsByReq = await _db.PublicityRequestItems.AsNoTracking()
+                .Where(i => requestIds.Contains(i.RequestId))
+                .ToListAsync();
+            var allProductIds = items.Select(r => r.ProductId)
+                .Concat(itemsByReq.Select(i => i.ProductId))
+                .Distinct().ToList();
+            var products = await _db.Products.AsNoTracking().Where(p => allProductIds.Contains(p.Id)).ToDictionaryAsync(p => p.Id, p => p.Name);
+            var materials = await _db.PublicityMaterialTypes.AsNoTracking().ToDictionaryAsync(m => m.Id, m => m);
+            // One query feeds both the per-request design-file COUNT (DesignFilesCount, used by the
+            // flat list/KPI screens) and the per-ITEM file (Items[].DesignFile*, used by consolidation's
+            // nested product table and PubDetailDto.Items) - a design file is tagged with RequestItemId
+            // only when it was uploaded against a specific item (see Upload's requestItemId param).
+            var designFiles = await _db.PublicityFiles.AsNoTracking()
+                .Where(f => requestIds.Contains(f.RequestId) && f.Kind == PublicityFileKind.Design)
+                .ToListAsync();
+            var designFilesCountByReq = designFiles.GroupBy(f => f.RequestId).ToDictionary(g => g.Key, g => g.Count());
+            var itemFiles = designFiles.Where(f => f.RequestItemId.HasValue).GroupBy(f => f.RequestItemId!.Value)
+                .ToDictionary(g => g.Key, g => g.OrderByDescending(f => f.Id).First());
+            var mine = await MyStageAsync();
+            var ackRows = await _db.PublicityAcknowledgements.AsNoTracking()
+                .Include(a => a.Dispatch)
+                .Where(a => requestIds.Contains(a.RequestId) && !a.IsDraft)
+                .ToListAsync();
+            var acksByReq = ackRows.GroupBy(a => a.RequestId).ToDictionary(g => g.Key, g => g.ToList());
             var rmApprovedByName = await _db.PublicityEvents.AsNoTracking()
                 .Where(e => requestIds.Contains(e.RequestId) &&
                     ((e.Stage == PublicityStage.RmReview && e.Action == "Approved") ||
@@ -1417,19 +1916,62 @@ namespace SpicAPI.Controllers
                 .GroupBy(e => e.RequestId)
                 .Select(g => new { RequestId = g.Key, Name = g.OrderByDescending(e => e.At).ThenByDescending(e => e.Id).First().ActorName })
                 .ToDictionaryAsync(x => x.RequestId, x => x.Name);
-            return items.Select(r => new PubRowDto
+            return items.Select(r =>
             {
-                Id = r.Id, IndentNo = r.IndentNo, Quantity = r.Quantity, OriginalQuantity = r.OriginalQuantity,
-                Product = products.GetValueOrDefault(r.ProductId, ""), Material = materials.GetValueOrDefault(r.MaterialTypeId, ""),
-                Hq = names.Hqs.GetValueOrDefault(r.HeadquarterId, ""), State = names.States.GetValueOrDefault(r.StateId, ""),
-                Region = names.Regions.GetValueOrDefault(r.RegionId, ""),
-                Stage = r.Stage, Status = r.Status, CreatedAt = r.CreatedAt,
-                AwaitingMe = IsPendingAt(r.Status, r.Stage, mine),
-                StatusNote = r.Status == PublicityStatus.Returned ? $"Return by {StageLabel(r.Stage).Replace(" Review", "")}" : null,
-                CreatedByName = r.CreatedByName,
-                RmApprovedByName = rmApprovedByName.GetValueOrDefault(r.Id),
-                SmdReviewedAt = r.SmdReviewedAt,
-                SmdReviewedByName = r.SmdReviewedByName
+                var reqItems = itemsByReq.Where(i => i.RequestId == r.Id).ToList();
+                var mat = materials.GetValueOrDefault(r.MaterialTypeId);
+                var category = mat?.Category ?? PublicityMaterialCategory.General;
+                var reqAcks = acksByReq.GetValueOrDefault(r.Id) ?? new();
+                string? excType = null;
+                if (reqAcks.Count > 0)
+                {
+                    var shortage = reqAcks.Sum(a => Math.Max(0, (a.Dispatch?.Quantity ?? 0) - a.ReceivedQty));
+                    var excess = reqAcks.Sum(a => Math.Max(0, a.ReceivedQty - (a.Dispatch?.Quantity ?? 0)));
+                    var damaged = reqAcks.Sum(a => a.DamagedQty);
+                    var rawType = ExceptionType(shortage, excess, damaged);
+                    if (rawType != "None") excType = rawType;
+                }
+                return new PubRowDto
+                {
+                    Id = r.Id, IndentNo = r.IndentNo, Quantity = r.Quantity, OriginalQuantity = r.OriginalQuantity,
+                    Product = products.GetValueOrDefault(r.ProductId, ""), Material = mat?.Name ?? "",
+                    Hq = names.Hqs.GetValueOrDefault(r.HeadquarterId, ""), State = names.States.GetValueOrDefault(r.StateId, ""),
+                    Region = names.Regions.GetValueOrDefault(r.RegionId, ""),
+                    Stage = r.Stage, Status = r.Status, CreatedAt = r.CreatedAt,
+                    AwaitingMe = IsPendingAt(r.Status, r.Stage, mine),
+                    StatusNote = r.Status == PublicityStatus.Returned ? $"Return by {StageLabel(r.Stage).Replace(" Review", "")}" : null,
+                    CreatedByName = r.CreatedByName,
+                    RmApprovedByName = rmApprovedByName.GetValueOrDefault(r.Id),
+                    SmdReviewedAt = r.SmdReviewedAt,
+                    SmdReviewedByName = r.SmdReviewedByName,
+                    ItemCount = reqItems.Count > 0 ? reqItems.Count : (r.ProductId > 0 ? 1 : 0),
+                    DesignFilesCount = designFilesCountByReq.GetValueOrDefault(r.Id, 0),
+                    MaterialCategory = category,
+                    IsGiftArticle = r.IsGiftArticle,
+                    ExceptionType = excType,
+                    // The one fix this bug report is about: every caller of RowsAsync (the flat list,
+                    // Stats, and - critically - BuildRegionGroupsAsync's consolidation rows) used to get
+                    // an empty Items list, so a Specific Product (multi-item) request's consolidation
+                    // row could only ever show r.Product - the parent's own mirrored "first item"
+                    // field, never the other N-1 products. Populated for every row now, single- or
+                    // multi-item alike (empty for a plain single-item request, same as before).
+                    Items = reqItems.Select(i =>
+                    {
+                        var f = itemFiles.GetValueOrDefault(i.Id);
+                        return new PubRequestItemDto
+                        {
+                            Id = i.Id,
+                            ProductId = i.ProductId,
+                            ProductName = products.GetValueOrDefault(i.ProductId, $"Product #{i.ProductId}"),
+                            Quantity = i.Quantity,
+                            OriginalQuantity = i.OriginalQuantity,
+                            DesignFileId = f?.Id,
+                            DesignFileName = f?.FileName,
+                            DesignFilePath = f?.Path,
+                            DesignFileSizeBytes = f?.SizeBytes ?? 0
+                        };
+                    }).ToList()
+                };
             }).ToList();
         }
 
@@ -1447,11 +1989,6 @@ namespace SpicAPI.Controllers
                 .OrderBy(f => f.Id).ToListAsync();
             var outgoing = await _db.PublicityDispatches.AsNoTracking().Include(d => d.Acknowledgement)
                 .Where(d => d.SourceRequestId == r.Id).OrderBy(d => d.Id).ToListAsync();
-            // The courier proof for an outgoing transfer is uploaded from THIS source request's own
-            // page (api/requests/{sourceId}/files), so it is stored with RequestId == r.Id - excluding
-            // f.RequestId == r.Id here (as this query previously did) silently hid the proof the source
-            // RMDO had just submitted, leaving Proof permanently null on their own tracking page and the
-            // "Create Transfer" action visible even after submission.
             var transferFiles = await _db.PublicityFiles.AsNoTracking().Where(f => f.DispatchId != null &&
                 outgoing.Select(o => o.Id).Contains(f.DispatchId.Value)).ToListAsync();
             var requestedRole = r.RequestedByUserId is null ? null
@@ -1459,6 +1996,12 @@ namespace SpicAPI.Controllers
 
             var canReview = r.Status is PublicityStatus.PendingApproval or PublicityStatus.PendingFinalApproval && await IsMyTurnAsync(r.Stage);
             var isDispatcher = await IsDispatcherAsync();
+
+            var itemProductIds = r.Items.Select(i => i.ProductId).Distinct().ToList();
+            var itemProducts = await _db.Products.AsNoTracking().Where(p => itemProductIds.Contains(p.Id)).ToDictionaryAsync(p => p.Id, p => p.Name);
+            var itemFiles = files.Where(f => f.RequestItemId.HasValue).GroupBy(f => f.RequestItemId!.Value)
+                .ToDictionary(g => g.Key, g => g.OrderByDescending(f => f.Id).First());
+
             var dto = new PubDetailDto
             {
                 Id = r.Id, IndentNo = r.IndentNo, Stage = r.Stage, Status = r.Status, CreatedAt = r.CreatedAt,
@@ -1468,15 +2011,30 @@ namespace SpicAPI.Controllers
                 StateId = r.StateId, RegionId = r.RegionId, HeadquarterId = r.HeadquarterId,
                 State = names.States.GetValueOrDefault(r.StateId, ""), Region = names.Regions.GetValueOrDefault(r.RegionId, ""),
                 Hq = names.Hqs.GetValueOrDefault(r.HeadquarterId, ""), Remarks = r.Remarks,
+                MaterialCategory = r.MaterialType?.Category ?? PublicityMaterialCategory.General,
+                IsGiftArticle = r.IsGiftArticle,
+                Items = r.Items.Select(i =>
+                {
+                    var f = itemFiles.GetValueOrDefault(i.Id);
+                    return new PubRequestItemDto
+                    {
+                        Id = i.Id,
+                        ProductId = i.ProductId,
+                        ProductName = itemProducts.GetValueOrDefault(i.ProductId, $"Product #{i.ProductId}"),
+                        Quantity = i.Quantity,
+                        OriginalQuantity = i.OriginalQuantity,
+                        DesignFileId = f?.Id,
+                        DesignFileName = f?.FileName,
+                        DesignFilePath = f?.Path,
+                        DesignFileSizeBytes = f?.SizeBytes ?? 0
+                    };
+                }).ToList(),
                 CanEdit = CanEdit(r),
                 CanReview = canReview,
                 CanDispatch = isDispatcher && r.Status == PublicityStatus.FinalApproved,
                 CanResolve = isDispatcher && r.Status == PublicityStatus.ExceptionRaised,
                 SmdReviewedAt = r.SmdReviewedAt,
                 SmdReviewedByName = r.SmdReviewedByName,
-                // An outgoing transfer's proof file has RequestId == r.Id (uploaded from this very
-                // request's own page) AND its DispatchId is in the outgoing set, so it legitimately
-                // matches both `files` and `transferFiles` above - dedupe by Id so it is listed once.
                 Files = files.Concat(transferFiles).DistinctBy(f => f.Id).Select(ToFile).ToList(),
                 Summary = await SummaryAsync(r)
             };
@@ -1533,7 +2091,7 @@ namespace SpicAPI.Controllers
             {
                 var candidates = await _db.PublicityRequests.AsNoTracking().Where(x => !x.IsDeleted && x.Id != r.Id &&
                     x.ProductId == r.ProductId && x.MaterialTypeId == r.MaterialTypeId &&
-                    (x.Status == PublicityStatus.Completed || x.Status == PublicityStatus.TransferOrderReceived)).Take(50).ToListAsync();
+                    (x.Status == PublicityStatus.Completed || x.Status == PublicityStatus.TransferOrderReceived || x.Status == PublicityStatus.ExceptionRaised)).Take(50).ToListAsync();
                 var srcNames = await NamesAsync(candidates.Select(c => c.StateId), candidates.Select(c => c.RegionId), candidates.Select(c => c.HeadquarterId));
                 foreach (var c in candidates)
                 {
@@ -1593,8 +2151,8 @@ namespace SpicAPI.Controllers
                 }
             };
             var acked = a is { IsDraft: false };
-            var ackPill = !acked ? "Pending" : dto.Ack!.ExceptionType == "None" ? "Completed" : "Exception Raised";
-            var ackState = !acked ? 0 : dto.Ack!.ExceptionType is "None" or "Excess" ? 2 : 3;
+            var ackPill = !acked ? "Pending" : dto.Ack!.ExceptionType == "None" ? "Completed" : dto.Ack!.ExceptionType == "Excess" ? "Excess Reported" : "Exception Raised";
+            var ackState = !acked ? 0 : dto.Ack!.ExceptionType == "None" ? 2 : 3;
             if (d.Kind == PublicityDispatchKind.Transfer)
             {
                 dto.Steps = Steps(
@@ -1876,7 +2434,20 @@ namespace SpicAPI.Controllers
         private async Task<string?> ValidateAsync(PubUpsertDto dto, int? requestId = null)
         {
             if (dto.Quantity < 0) return "Enter the required quantity.";
-            if (!await _db.PublicityMaterialTypes.AnyAsync(m => m.Id == dto.MaterialTypeId)) return "Select the type of publicity material.";
+            var material = await _db.PublicityMaterialTypes.AsNoTracking()
+                .Where(m => m.Id == dto.MaterialTypeId).Select(m => new { m.IsActive }).FirstOrDefaultAsync();
+            if (material is null) return "Select the type of publicity material.";
+            if (!material.IsActive)
+            {
+                // Deactivated materials are rejected for a brand-new pick, but an existing request
+                // that already held this (now-inactive) material before the edit must still be
+                // allowed to save unrelated changes without being forced to switch it - see
+                // PublicityMaterialMaster's deactivate action and PublicityForm's historical-material
+                // handling (PubDetailDto.Material resolves the name with no IsActive filter either).
+                var unchanged = requestId.HasValue && await _db.PublicityRequests.AsNoTracking()
+                    .AnyAsync(r => r.Id == requestId.Value && r.MaterialTypeId == dto.MaterialTypeId);
+                if (!unchanged) return "The selected publicity material type is no longer active. Please choose another.";
+            }
             if (!await _db.Products.AnyAsync(p => p.Id == dto.ProductId)) return "Select the product.";
             if (!await _db.Headquarters.AnyAsync(h => h.Id == dto.HeadquarterId && h.RegionId == dto.RegionId)) return "Select the headquarter.";
             if (!await _db.Regions.AnyAsync(x => x.Id == dto.RegionId && x.StateId == dto.StateId)) return "Select the region.";
@@ -1912,6 +2483,7 @@ namespace SpicAPI.Controllers
             r.RegionId = dto.RegionId;
             r.HeadquarterId = dto.HeadquarterId;
             r.Remarks = Clean(dto.Remarks);
+            r.IsGiftArticle = dto.IsGiftArticle;
             r.RequestedByUserId = string.IsNullOrWhiteSpace(dto.RequestedByUserId) ? Uid() : dto.RequestedByUserId;
             r.RequestedByName = await _db.Users.AsNoTracking().Where(u => u.Id == r.RequestedByUserId)
                 .Select(u => u.Name ?? u.UserName).FirstOrDefaultAsync() ?? await MyNameAsync();
@@ -1967,7 +2539,7 @@ namespace SpicAPI.Controllers
         {
             var exists = await _db.PublicityNotifications.AnyAsync(n =>
                 n.Type == type && n.RequestId == r.Id && n.DispatchId == dispatchId && n.TargetUserId == userId &&
-                n.TargetRole == role && n.TargetHqId == hqId && n.Title == title && n.ReadAt == null);
+                n.TargetRole == role && n.TargetHqId == hqId && n.Title == title);
             if (exists) return;
             _db.PublicityNotifications.Add(new PublicityNotification
             {
@@ -2029,7 +2601,7 @@ namespace SpicAPI.Controllers
 
         private async Task<PublicityRequest?> LoadAsync(int id, bool tracking = false)
         {
-            var q = _db.PublicityRequests.Include(r => r.Events).Where(r => r.Id == id && !r.IsDeleted);
+            var q = _db.PublicityRequests.Include(r => r.Events).Include(r => r.Items).Include(r => r.MaterialType).Where(r => r.Id == id && !r.IsDeleted);
             return await (tracking ? q : q.AsNoTracking()).FirstOrDefaultAsync();
         }
 
@@ -2044,9 +2616,25 @@ namespace SpicAPI.Controllers
                 await _db.Headquarters.AsNoTracking().Where(x => h.Contains(x.Id)).ToDictionaryAsync(x => x.Id, x => x.HeadquarterName));
         }
 
-        private async Task<(string Product, string Material)> ProductMaterialPartsAsync(PublicityRequest r) =>
-            (await _db.Products.AsNoTracking().Where(p => p.Id == r.ProductId).Select(p => p.Name).FirstOrDefaultAsync() ?? "",
-             await _db.PublicityMaterialTypes.AsNoTracking().Where(m => m.Id == r.MaterialTypeId).Select(m => m.Name).FirstOrDefaultAsync() ?? "");
+        private async Task<(string Product, string Material)> ProductMaterialPartsAsync(PublicityRequest r)
+        {
+            var mat = await _db.PublicityMaterialTypes.AsNoTracking().Where(m => m.Id == r.MaterialTypeId).Select(m => m.Name).FirstOrDefaultAsync() ?? "";
+            string prod;
+            if (r.Items.Count > 1)
+            {
+                prod = $"{r.Items.Count} Products";
+            }
+            else if (r.Items.Count == 1)
+            {
+                var pid = r.Items[0].ProductId;
+                prod = await _db.Products.AsNoTracking().Where(p => p.Id == pid).Select(p => p.Name).FirstOrDefaultAsync() ?? "";
+            }
+            else
+            {
+                prod = await _db.Products.AsNoTracking().Where(p => p.Id == r.ProductId).Select(p => p.Name).FirstOrDefaultAsync() ?? "";
+            }
+            return (prod, mat);
+        }
 
         private async Task<string> ProductMaterialAsync(PublicityRequest r)
         {
@@ -2111,7 +2699,8 @@ namespace SpicAPI.Controllers
 
         private static PubFileDto ToFile(PublicityFile f) => new()
         {
-            Id = f.Id, DispatchId = f.DispatchId, Kind = f.Kind, FileName = f.FileName, Path = f.Path,
+            Id = f.Id, DispatchId = f.DispatchId, RequestItemId = f.RequestItemId, Kind = f.Kind,
+            FileName = f.FileName, Path = f.Path,
             SizeBytes = f.SizeBytes, UploadedByName = f.UploadedByName, UploadedAt = f.UploadedAt
         };
 

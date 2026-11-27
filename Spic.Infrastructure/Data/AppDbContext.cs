@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
+using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
@@ -354,8 +354,15 @@ namespace Spic.Infrastructure.Data
                 entity.HasIndex(x => x.CreatedByUserId);
                 entity.HasIndex(x => x.Status);
                 entity.HasOne(x => x.MaterialType).WithMany().HasForeignKey(x => x.MaterialTypeId).OnDelete(DeleteBehavior.Restrict);
+                entity.HasMany(x => x.Items).WithOne(i => i.Request).HasForeignKey(i => i.RequestId).OnDelete(DeleteBehavior.Cascade);
                 entity.HasMany(x => x.Dispatches).WithOne(d => d.Request).HasForeignKey(d => d.RequestId).OnDelete(DeleteBehavior.Cascade);
                 entity.HasMany(x => x.Events).WithOne(e => e.Request).HasForeignKey(e => e.RequestId).OnDelete(DeleteBehavior.Cascade);
+            });
+            builder.Entity<PublicityRequestItem>(entity =>
+            {
+                entity.HasKey(x => x.Id);
+                entity.HasIndex(x => x.RequestId);
+                entity.HasIndex(x => x.ProductId);
             });
             builder.Entity<PublicityDispatch>(entity =>
             {
@@ -365,9 +372,20 @@ namespace Spic.Infrastructure.Data
                 entity.HasOne(x => x.DeliveryAddress).WithMany().HasForeignKey(x => x.DeliveryAddressId).OnDelete(DeleteBehavior.Restrict);
                 entity.HasOne(x => x.Acknowledgement).WithOne(a => a.Dispatch)
                     .HasForeignKey<PublicityAcknowledgement>(a => a.DispatchId).OnDelete(DeleteBehavior.Cascade);
+                entity.HasMany(x => x.Items).WithOne(i => i.Dispatch).HasForeignKey(i => i.DispatchId).OnDelete(DeleteBehavior.Cascade);
+            });
+            builder.Entity<PublicityDispatchItem>(entity =>
+            {
+                entity.HasKey(x => x.Id);
+                entity.HasIndex(x => x.DispatchId);
+                entity.HasIndex(x => x.RequestItemId);
             });
             builder.Entity<PublicityAcknowledgement>(entity => entity.HasIndex(x => x.DispatchId).IsUnique());
-            builder.Entity<PublicityFile>(entity => entity.HasIndex(x => x.RequestId));
+            builder.Entity<PublicityFile>(entity =>
+            {
+                entity.HasIndex(x => x.RequestId);
+                entity.HasIndex(x => x.RequestItemId);
+            });
             builder.Entity<PublicityEvent>(entity => entity.HasIndex(x => x.RequestId));
             // One current finalization per Region - re-finalizing (ApproveRegion/ConfirmZeroRegion)
             // overwrites it rather than appending, see PublicityRegionFinalization's own doc comment.
@@ -1111,7 +1129,9 @@ namespace Spic.Infrastructure.Data
         //// Publicity Material Tracking
         public DbSet<PublicityMaterialType> PublicityMaterialTypes { get; set; }
         public DbSet<PublicityRequest> PublicityRequests { get; set; }
+        public DbSet<PublicityRequestItem> PublicityRequestItems { get; set; }
         public DbSet<PublicityDispatch> PublicityDispatches { get; set; }
+        public DbSet<PublicityDispatchItem> PublicityDispatchItems { get; set; }
         public DbSet<PublicityAcknowledgement> PublicityAcknowledgements { get; set; }
         public DbSet<PublicityFile> PublicityFiles { get; set; }
         public DbSet<PublicityEvent> PublicityEvents { get; set; }

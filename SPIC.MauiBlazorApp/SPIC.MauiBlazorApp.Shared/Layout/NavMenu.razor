@@ -1963,9 +1963,18 @@
             || uri.StartsWith("extensionrequests?");
     }
 
-    // Publicity group: pure union of its two children's CanSeeMenu, same shape as DemoDocumentation.
+    // Publicity group: pure union of its children's CanSeeMenu, same shape as DemoDocumentation.
     private bool AnyPublicityAccessible =>
-        loginState.CanSeeMenu(PagePermission.PublicityRequest) || loginState.CanSeeMenu(PagePermission.PublicityReview);
+        loginState.CanSeeMenu(PagePermission.PublicityRequest) || loginState.CanSeeMenu(PagePermission.PublicityReview) || CanManagePublicityMaterials;
+
+    // Publicity Material Master (2026-11-26): ADMIN-MD CS only, deliberately hardcoded rather than a
+    // Designation-grid PagePermission - the spec requires this locked to exactly ADMIN-MD CS, never
+    // configurable onto DGM-MD CS/SMM/SMD/RM/RMDO via the grid. Mirrors PublicityApi.CanManageMaterials
+    // and PublicityController.IsAdminMdCsAsync()/IsSuper() exactly, so menu/page/API never disagree.
+    private bool CanManagePublicityMaterials =>
+        loginState.UserRole is AppRole.Admin or AppRole.SuperAdmin ||
+        loginState.UserRole == AppRole.MDAdmin ||
+        (loginState.UserRole == AppRole.CommonRole && loginState.DesignationName is "ADMIN MD CS" or "ADMIN-MD CS");
 
     private RenderFragment PublicityMenuItems =>
     @<text>
@@ -1984,6 +1993,24 @@
                 <NavLink href="/PublicityReview" class="@SubmenuLinkClass("Publicity Review")" Match="NavLinkMatch.All">
                     <i class="bi bi-clipboard2-check SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
                     Publicity Review
+                </NavLink>
+            </li>
+        }
+        @if (CanManagePublicityMaterials)
+        {
+            <li class="submenu-item">
+                <NavLink href="/PublicityMaterialMaster" class="@SubmenuLinkClass("Publicity Material Master")" Match="NavLinkMatch.All">
+                    <i class="bi bi-boxes SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+                    Publicity Material Master
+                </NavLink>
+            </li>
+        }
+        @if (CanManagePublicityMaterials)
+        {
+            <li class="submenu-item">
+                <NavLink href="/PublicityDeliveryAddresses" class="@SubmenuLinkClass("Delivery Address Management")" Match="NavLinkMatch.All">
+                    <i class="bi bi-geo-alt SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+                    Delivery Address Management
                 </NavLink>
             </li>
         }

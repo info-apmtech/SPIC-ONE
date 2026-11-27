@@ -1,4 +1,4 @@
-﻿ @* Dealer Dashboard*@
+ @* Dealer Dashboard*@
 @page "/Dashboard" 
 @using System.Net.Http.Json
 @using System.Text.Json
@@ -284,7 +284,7 @@
             <div class="kpi-card h-100">
                 <div class="kpi-header">
                     <div class="kpi-icon bg-light-yellow"><i class="bi bi-clock"></i></div>
-                  <div class="kpi-number">@(_summary.InAVP + _summary.InFinalAvp)</div>
+                  <div class="kpi-number">@_summary.InAVP</div>
                 </div>
                 <div class="kpi-label">In AVP</div>
             </div>
@@ -446,7 +446,7 @@
                                 <div class="progress-circle p-30">
                                     <div class="progress-inner">
                                         <div class="progress-val">
-                                            @(approvalStatus == "Draft" ? "Draft" : approvalStatus.StartsWith("Rejected") ? "!" : "...")
+                                            @(approvalStatus == "Draft" ? "Draft" : (approvalStatus.StartsWith("Rejected") || approvalStatus.StartsWith("Returned")) ? "!" : "...")
                                         </div>
                                         <div class="progress-steps">@approvalStatus</div>
                                     </div>
@@ -486,7 +486,7 @@
                                     {
                                         <span class="badge-custom badge-green-dashboard" style="background:#D1FAE5; color:#047857;">Approved</span>
                                     }
-                                    else if (approvalStatus.StartsWith("Rejected"))
+                                    else if (approvalStatus.StartsWith("Rejected") || approvalStatus.StartsWith("Returned"))
                                     {
                                         <span class="badge-custom" style="background:#FEE2E2; color:#DC2626;">@approvalStatus</span>
                                     }
@@ -1423,22 +1423,15 @@
         if (d.IsSubmittedForReview != true) return "Draft";
 
         if (d.RMApproved == false) return "Rejected by RM";
+        if (d.IsAvpOfficeReturned) return "Returned by AVP Office";
         if (d.SMApproved == false) return "Rejected by SMM";
         if (d.AVPApproved == false) return "Rejected by AVP";
-        if (d.AVPApproved == true)
-        {
-            // Initial New Dealers get their company Dealer IDs from AVP Office, followed
-            // by a separate final AVP approval.
-            if (d.IsNewDealerRegistration && !d.IsAvpOfficeSubmitted) return "In AVP Office";
-            if (d.IsNewDealerRegistration && !d.IsFinalAvpApproved) return "In Final AVP";
-            return "Approved";
-        }
+        if (d.AVPApproved == true) return "Approved";
         if (d.RMApproved == null) return "In RM";
         if (d.RMApproved == true && d.SMApproved == null) return "In SMM";
         if (d.RMApproved == true && d.SMApproved == true && d.AVPApproved == null)
         {
-            // New Dealers go to AVP Office after SM approval; Existing Dealers go to AVP.
-            if (d.IsNewDealerRegistration && !d.IsAvpOfficeSubmitted && !d.IsFinalAvpApproved)
+            if (d.IsNewDealerRegistration && !d.IsAvpOfficeSubmitted)
                 return "In AVP Office";
             return "In AVP";
         }
@@ -1466,18 +1459,13 @@
         // Never submitted â†’ still a draft owned by the MO/creator.
         if (d.IsSubmittedForReview != true) return OwnerLevel.MO;
 
-        // Fully approved â†’ nobody needs to act. An initial New Dealer sits with
-        // AVP Office until Dealer IDs are saved, then with AVP for final approval.
-        if (d.AVPApproved == true)
-        {
-            if (d.IsNewDealerRegistration && !d.IsAvpOfficeSubmitted) return OwnerLevel.AvpOffice;
-            if (d.IsNewDealerRegistration && !d.IsFinalAvpApproved) return OwnerLevel.FinalAvp;
-            return OwnerLevel.None;
-        }
+        // Fully approved → nobody needs to act.
+        if (d.AVPApproved == true) return OwnerLevel.None;
 
         // Rejections route BACK DOWN one level (order matters: match GetApprovalStatus).
-        if (d.RMApproved == false) return OwnerLevel.MO;   // Rejected by RM  â†’ MO
-        if (d.SMApproved == false) return OwnerLevel.RM;   // Rejected by SMM â†’ RM
+        if (d.RMApproved == false) return OwnerLevel.MO;   // Rejected by RM  → MO
+        if (d.IsAvpOfficeReturned) return OwnerLevel.SMM;  // Returned by AVP Office → SMM
+        if (d.SMApproved == false) return OwnerLevel.RM;   // Rejected by SMM → RM
         if (d.AVPApproved == false) return OwnerLevel.SMM; // Rejected by AVP â†’ SMM
 
         // Normal forward flow.
@@ -1485,8 +1473,7 @@
         if (d.RMApproved == true && d.SMApproved == null) return OwnerLevel.SMM;          // In SMM
         if (d.RMApproved == true && d.SMApproved == true && d.AVPApproved == null)
         {
-            // New Dealers go to AVP Office after SM approval; Existing Dealers go to AVP.
-            if (d.IsNewDealerRegistration && !d.IsAvpOfficeSubmitted && !d.IsFinalAvpApproved)
+            if (d.IsNewDealerRegistration && !d.IsAvpOfficeSubmitted)
                 return OwnerLevel.AvpOffice;
             return OwnerLevel.AVP; // In AVP
         }
@@ -1583,12 +1570,12 @@
             {
                 "Pending Draft" => query.Where(d => GetApprovalStatus(d) == "Draft"),
                 "Pending RM" => query.Where(d => GetApprovalStatus(d) == "In RM"),
-                "Pending SMM" => query.Where(d => GetApprovalStatus(d) == "In SMM"),
+                "Pending SMM" => query.Where(d => GetApprovalStatus(d) == "In SMM" || GetApprovalStatus(d) == "Returned by AVP Office"),
                 "Pending AVP" => query.Where(d => GetApprovalStatus(d) == "In AVP"),
                 "Pending AVP Office" => query.Where(d => GetApprovalStatus(d) == "In AVP Office"),
                 "Pending Final AVP" => query.Where(d => GetApprovalStatus(d) == "In Final AVP"),
                 "Approved" => query.Where(d => GetApprovalStatus(d) == "Approved"),
-                "Rejected/Returned" => query.Where(d => GetApprovalStatus(d).StartsWith("Rejected")),
+                "Rejected/Returned" => query.Where(d => GetApprovalStatus(d).StartsWith("Rejected") || GetApprovalStatus(d).StartsWith("Returned")),
                 _ => query
             };
         }
@@ -2054,6 +2041,7 @@ private string GetStatusName(int status) => status switch
         public bool IsNewDealerRegistration { get; set; }
         // True once AVP Office saved the manual company Dealer IDs for an initial New Dealer.
         public bool IsAvpOfficeSubmitted { get; set; }
+        public bool IsAvpOfficeReturned { get; set; }
         // True once AVP completed the blocking final approval for an initial New Dealer.
         public bool IsFinalAvpApproved { get; set; }
         // True only after an originally New Dealer completed the Existing Dealer

@@ -1,12 +1,35 @@
 @namespace SPIC.MauiBlazorApp.Shared.Components.Publicity
-@* Drag-and-drop / browse zone. Keeps the picked files in Files (two-way); the page uploads them. *@
-<div class="pub-drop @(_over ? "is-over" : "") @CssClass">
-    <InputFile class="pub-drop__input" multiple="@Multiple" accept="@Accept" OnChange="Picked"
-               @ondragenter="() => _over = true" @ondragleave="() => _over = false" @ondrop="() => _over = false" aria-label="@Title" />
-    <i class="bi bi-cloud-arrow-up pub-drop__icon" aria-hidden="true"></i>
-    <span class="pub-drop__title">@Title <span class="pub-link">or click to browse</span></span>
-    <span class="pub-drop__hint">Support formats: @Formats (Max 10 MB)</span>
-</div>
+@* Drag-and-drop / browse zone. Keeps the picked files in Files (two-way); the page uploads them.
+   Compact swaps the big centred dropzone for a short horizontal icon+text+button bar (Figma "Upload
+   Design (Optional)") - same Picked/Remove logic, default false so every other existing caller
+   (PublicityDetails/PublicityDispatch) keeps its original look untouched. *@
+@if (Compact)
+{
+    <div class="pub-upload-box @CssClass">
+        <div class="pub-upload-box__icon"><i class="bi bi-cloud-arrow-up" aria-hidden="true"></i></div>
+        <div class="pub-upload-box__text">
+            <span class="pub-upload-box__title">@Title</span>
+            <span class="pub-muted">@Subtitle</span>
+        </div>
+        <div class="pub-upload-box__action">
+            <label class="pub-btn pub-btn--line" style="cursor:pointer">
+                Choose File
+                <InputFile style="display:none" multiple="@Multiple" accept="@Accept" OnChange="Picked" aria-label="@Title" />
+            </label>
+            <span class="pub-muted pub-upload-box__hint">Support formats: @Formats (Max 10 MB)</span>
+        </div>
+    </div>
+}
+else
+{
+    <div class="pub-drop @(_over ? "is-over" : "") @CssClass">
+        <InputFile class="pub-drop__input" multiple="@Multiple" accept="@Accept" OnChange="Picked"
+                   @ondragenter="() => _over = true" @ondragleave="() => _over = false" @ondrop="() => _over = false" aria-label="@Title" />
+        <i class="bi bi-cloud-arrow-up pub-drop__icon" aria-hidden="true"></i>
+        <span class="pub-drop__title">@Title <span class="pub-link">or click to browse</span></span>
+        <span class="pub-drop__hint">Support formats: @Formats (Max 10 MB)</span>
+    </div>
+}
 @if (Files.Count > 0)
 {
     <ul class="pub-chips">
@@ -25,6 +48,8 @@
     [Parameter] public string Accept { get; set; } = PublicityApi.Accept;
     [Parameter] public string Formats { get; set; } = "PDF, JPG, PNG, DOC, DOCX";
     [Parameter] public string Title { get; set; } = "Drag and drop your file here";
+    [Parameter] public string Subtitle { get; set; } = "Attach your file if available";
+    [Parameter] public bool Compact { get; set; }
     [Parameter] public string? CssClass { get; set; }
     private bool _over;
 

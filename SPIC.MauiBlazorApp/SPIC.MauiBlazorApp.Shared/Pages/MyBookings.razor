@@ -184,7 +184,8 @@
                                         <h2>@booking.RoomType</h2>
                                         <span class="bk-badge @BookingStatusBadgeClass(booking.BookingStatus)">@booking.BookingStatus</span>
                                     </div>
-                                    <span class="bk-badge @PaymentStatusBadgeClass(booking.PaymentStatus)">@booking.PaymentStatus</span>
+                                    @{ var paymentBadge = GuestHousePaymentBadge.Text(booking.PaymentMethod, booking.BookingStatus, booking.PaymentStatus, booking.HasInvoice); }
+                                    <span class="bk-badge @PaymentStatusBadgeClass(paymentBadge)">@paymentBadge</span>
                                 </div>
 
                                 <div class="bk-details-grid">
@@ -224,7 +225,7 @@
                                     {
                                         <button class="bk-btn bk-btn-default" @onclick="() => ViewRefundStatus(booking.BookingId)">Refund Status</button>
                                     }
-                                    else if (!IsCompleted(booking.BookingStatus))
+                                    else if (!IsCompleted(booking.BookingStatus) && !IsCheckedIn(booking.BookingStatus))
                                     {
                                         <button class="bk-btn bk-btn-default" @onclick="() => OpenCancelBooking(booking.BookingId)">Cancel Booking</button>
                                     }
@@ -343,6 +344,11 @@
     private static bool IsCompleted(string status) =>
         string.Equals(status, "Completed", StringComparison.OrdinalIgnoreCase);
 
+    // The API sends the checked-in status as "CheckedIn". A checked-in stay can no longer be cancelled
+    // (the server refuses), so the Cancel Booking button is not offered.
+    private static bool IsCheckedIn(string status) =>
+        string.Equals(status?.Replace(" ", ""), "CheckedIn", StringComparison.OrdinalIgnoreCase);
+
     private static bool IsCancelled(string status) =>
         string.Equals(status, "Cancelled", StringComparison.OrdinalIgnoreCase);
 
@@ -363,6 +369,7 @@
         return status switch
         {
             "Paid" => "bk-badge",
+            "Booked" => "bk-badge",
             "Pending" => "bk-badge bk-badge-amber",
             "Failed" => "bk-badge bk-badge-red",
             "Refunded" => "bk-badge bk-badge-blue",
@@ -420,6 +427,8 @@
         public string? RoomNumber { get; set; }
         public string BookingStatus { get; set; } = "";
         public string PaymentStatus { get; set; } = "";
+        public string? PaymentMethod { get; set; }
+        public bool HasInvoice { get; set; }
         public DateTime? CheckInDate { get; set; }
         public TimeSpan? CheckInTime { get; set; }
         public DateTime? CheckOutDate { get; set; }

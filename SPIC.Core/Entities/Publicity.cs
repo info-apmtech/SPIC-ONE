@@ -48,6 +48,14 @@ namespace SPIC.Core.Entities
     // RmZeroSubmitted is when the Region's RM explicitly submitted Zero Requirement, awaiting SMD finalization.
     public enum PublicityRegionFinalizationStatus { Approved = 0, ZeroConfirmed = 1, RmZeroSubmitted = 2 }
 
+    // Publicity Material Master (2026-11-26): Specific Product materials go through the
+    // Excel-import + per-SKU-quantity flow (PublicityForm's ShowBulk); General Product materials
+    // (and Gift Articles, which reuses the General list - see PublicityForm's GiftMode) go through
+    // plain manual entry. Pre-existing rows (seeded before this Category column existed) default to
+    // General, since that is the least disruptive bucket for materials that were previously shown to
+    // both flows undifferentiated.
+    public enum PublicityMaterialCategory { Specific = 0, General = 1 }
+
     public class PublicityMaterialType
     {
         public int Id { get; set; }
@@ -55,6 +63,7 @@ namespace SPIC.Core.Entities
         [MaxLength(30)] public string? Code { get; set; }
         public bool IsActive { get; set; } = true;
         public int SortOrder { get; set; }
+        public PublicityMaterialCategory Category { get; set; } = PublicityMaterialCategory.General;
     }
 
     public class PublicityRequest
@@ -80,6 +89,7 @@ namespace SPIC.Core.Entities
         public DateTime? SubmittedAt { get; set; }
         public DateTime? UpdatedAt { get; set; }
         public bool IsDeleted { get; set; }
+        public bool IsGiftArticle { get; set; }
         // Request-level review sign-off at the SMD stage - distinct from Region-level approval
         // (PublicityRegionFinalization below): a Region can only be approved once every one of its
         // currently-eligible requests has this set. Cleared automatically whenever the request is
@@ -89,6 +99,19 @@ namespace SPIC.Core.Entities
         [MaxLength(200)] public string? SmdReviewedByName { get; set; }
         public List<PublicityDispatch> Dispatches { get; set; } = new();
         public List<PublicityEvent> Events { get; set; } = new();
+        public List<PublicityRequestItem> Items { get; set; } = new();
+    }
+
+    /// <summary>One product line item within a parent PublicityRequest (used primarily for Specific Product
+    /// multi-item requests from Excel import, where one Indent contains multiple products).</summary>
+    public class PublicityRequestItem
+    {
+        public int Id { get; set; }
+        public int RequestId { get; set; }
+        public PublicityRequest? Request { get; set; }
+        public int ProductId { get; set; }
+        public int Quantity { get; set; }
+        public int OriginalQuantity { get; set; }
     }
 
     /// <summary>One Region's sign-off for its state-level approver's review pass - either every
@@ -172,6 +195,21 @@ namespace SPIC.Core.Entities
         [MaxLength(200)] public string? ProofByName { get; set; }
         public DateTime? ProofAt { get; set; }
         public PublicityAcknowledgement? Acknowledgement { get; set; }
+        public List<PublicityDispatchItem> Items { get; set; } = new();
+    }
+
+    /// <summary>Item-level dispatch quantity tracking for multi-item requests.</summary>
+    public class PublicityDispatchItem
+    {
+        public int Id { get; set; }
+        public int DispatchId { get; set; }
+        public PublicityDispatch? Dispatch { get; set; }
+        public int? RequestItemId { get; set; }
+        public PublicityRequestItem? RequestItem { get; set; }
+        public int ProductId { get; set; }
+        public int DispatchedQty { get; set; }
+        public int ReceivedQty { get; set; }
+        public int DamagedQty { get; set; }
     }
 
     public class PublicityAcknowledgement
@@ -197,6 +235,7 @@ namespace SPIC.Core.Entities
         public int Id { get; set; }
         public int RequestId { get; set; }
         public int? DispatchId { get; set; }
+        public int? RequestItemId { get; set; }
         public PublicityFileKind Kind { get; set; }
         [MaxLength(260)] public string FileName { get; set; } = "";
         [MaxLength(500)] public string Path { get; set; } = "";

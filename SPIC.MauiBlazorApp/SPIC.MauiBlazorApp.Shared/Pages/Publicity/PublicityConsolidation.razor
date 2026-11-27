@@ -238,7 +238,19 @@
                                                                         <td data-label="Request Date">@PubText.Date(r.CreatedAt)</td>
                                                                         <td data-label="Region">@r.Region</td>
                                                                         <td data-label="HQ">@r.Hq</td>
-                                                                        <td data-label="Product">@(string.IsNullOrWhiteSpace(r.Product) ? "—" : r.Product)</td>
+                                                                        <td data-label="Product">
+                                                                            @if (r.Items.Count > 1)
+                                                                            {
+                                                                                <button type="button" class="pub-btn-chevron" aria-expanded="@IsRowOpen(r.Id)" aria-label="Show all products for @r.IndentNo" @onclick="() => ToggleRow(r.Id)">
+                                                                                    <i class="bi bi-chevron-@(IsRowOpen(r.Id) ? "up" : "down")"></i>
+                                                                                </button>
+                                                                                <span>@r.Items.Count Products</span>
+                                                                            }
+                                                                            else
+                                                                            {
+                                                                                @(string.IsNullOrWhiteSpace(r.Product) ? "—" : r.Product)
+                                                                            }
+                                                                        </td>
                                                                         <td data-label="Publicity Material">@r.Material</td>
                                                                         <td data-label="Request Qty">@r.OriginalQuantity</td>
                                                                         <td data-label="Approved Qty">@r.Quantity</td>
@@ -248,12 +260,57 @@
                                                                             {
                                                                                 <span class="pub-review-subtag pub-review-subtag--neutral">@r.RmApprovedByName</span>
                                                                             }
+                                                                            @if (IsSmd)
+                                                                            {
+                                                                                @if (r.SmdReviewedAt is not null)
+                                                                                {
+                                                                                    <span class="pub-review-subtag pub-review-subtag--done"><i class="bi bi-check-circle-fill"></i> Reviewed by SMD@(string.IsNullOrWhiteSpace(r.SmdReviewedByName) ? "" : $" — {r.SmdReviewedByName}")</span>
+                                                                                }
+                                                                                else
+                                                                                {
+                                                                                    <span class="pub-review-subtag pub-review-subtag--pending">Pending SMD Review</span>
+                                                                                }
+                                                                            }
                                                                         </td>
                                                                         <td data-label="Action" class="pub-inner-actions">
                                                                             <a class="pub-inner-action-link pub-action-view" href="@($"/PublicityReview/{r.Id}?back=consolidation")" title="View @r.IndentNo" aria-label="View @r.IndentNo"><i class="bi bi-eye"></i></a>
                                                                             <a class="pub-inner-action-link pub-action-edit" href="@($"/PublicityReview/edit/{r.Id}?back=consolidation")" title="Edit @r.IndentNo" aria-label="Edit @r.IndentNo"><i class="bi bi-pencil"></i></a>
                                                                         </td>
                                                                     </tr>
+                                                                    @if (r.Items.Count > 1 && IsRowOpen(r.Id))
+                                                                    {
+                                                                        <tr class="pub-subrow">
+                                                                            <td colspan="11">
+                                                                                <div class="pub-inner-wrap">
+                                                                                    <table class="pub-table pub-table--inner">
+                                                                                        <thead><tr><th>Product</th><th>Requested Qty</th><th>Approved Qty</th><th>Design File</th></tr></thead>
+                                                                                        <tbody>
+                                                                                            @foreach (var item in r.Items)
+                                                                                            {
+                                                                                                <tr>
+                                                                                                    <td data-label="Product">@item.ProductName</td>
+                                                                                                    <td data-label="Requested Qty">@item.OriginalQuantity</td>
+                                                                                                    <td data-label="Approved Qty">@item.Quantity</td>
+                                                                                                    <td data-label="Design File">
+                                                                                                        @if (!string.IsNullOrEmpty(item.DesignFilePath))
+                                                                                                        {
+                                                                                                            <span class="pub-muted">@(item.DesignFileName ?? "Design File")</span>
+                                                                                                            <a class="pub-icon-btn" href="@Api.FileUrl(item.DesignFilePath)" target="_blank" rel="noopener" title="Preview" aria-label="Preview @item.DesignFileName"><i class="bi bi-eye"></i></a>
+                                                                                                            <a class="pub-icon-btn pub-icon-btn--green" href="@Api.FileUrl(item.DesignFilePath, download: true)" target="_blank" rel="noopener" title="Download" aria-label="Download @item.DesignFileName"><i class="bi bi-download"></i></a>
+                                                                                                        }
+                                                                                                        else
+                                                                                                        {
+                                                                                                            <span class="pub-muted">—</span>
+                                                                                                        }
+                                                                                                    </td>
+                                                                                                </tr>
+                                                                                            }
+                                                                                        </tbody>
+                                                                                    </table>
+                                                                                </div>
+                                                                            </td>
+                                                                        </tr>
+                                                                    }
                                                                 }
                                                             </tbody>
                                                         </table>
@@ -365,7 +422,19 @@
                                                                         <td data-label="Request Date">@PubText.Date(r.CreatedAt)</td>
                                                                         <td data-label="HQ">@r.Hq</td>
                                                                         <td data-label="RMDO">@(string.IsNullOrWhiteSpace(r.CreatedByName) ? "—" : r.CreatedByName)</td>
-                                                                        <td data-label="Product">@(string.IsNullOrWhiteSpace(r.Product) ? "—" : r.Product)</td>
+                                                                        <td data-label="Product">
+                                                                            @if (r.Items.Count > 1)
+                                                                            {
+                                                                                <button type="button" class="pub-btn-chevron" aria-expanded="@IsRowOpen(r.Id)" aria-label="Show all products for @r.IndentNo" @onclick="() => ToggleRow(r.Id)">
+                                                                                    <i class="bi bi-chevron-@(IsRowOpen(r.Id) ? "up" : "down")"></i>
+                                                                                </button>
+                                                                                <span>@r.Items.Count Products</span>
+                                                                            }
+                                                                            else
+                                                                            {
+                                                                                @(string.IsNullOrWhiteSpace(r.Product) ? "—" : r.Product)
+                                                                            }
+                                                                        </td>
                                                                         <td data-label="Publicity Material">@r.Material</td>
                                                                         <td data-label="Request Qty">@r.OriginalQuantity</td>
                                                                         <td data-label="Approved Qty">@r.Quantity</td>
@@ -392,6 +461,40 @@
                                                                             <a class="pub-inner-action-link pub-action-edit" href="@($"/PublicityReview/edit/{r.Id}?back=consolidation")" title="Edit @r.IndentNo" aria-label="Edit @r.IndentNo"><i class="bi bi-pencil"></i></a>
                                                                         </td>
                                                                     </tr>
+                                                                    @if (r.Items.Count > 1 && IsRowOpen(r.Id))
+                                                                    {
+                                                                        <tr class="pub-subrow">
+                                                                            <td colspan="11">
+                                                                                <div class="pub-inner-wrap">
+                                                                                    <table class="pub-table pub-table--inner">
+                                                                                        <thead><tr><th>Product</th><th>Requested Qty</th><th>Approved Qty</th><th>Design File</th></tr></thead>
+                                                                                        <tbody>
+                                                                                            @foreach (var item in r.Items)
+                                                                                            {
+                                                                                                <tr>
+                                                                                                    <td data-label="Product">@item.ProductName</td>
+                                                                                                    <td data-label="Requested Qty">@item.OriginalQuantity</td>
+                                                                                                    <td data-label="Approved Qty">@item.Quantity</td>
+                                                                                                    <td data-label="Design File">
+                                                                                                        @if (!string.IsNullOrEmpty(item.DesignFilePath))
+                                                                                                        {
+                                                                                                            <span class="pub-muted">@(item.DesignFileName ?? "Design File")</span>
+                                                                                                            <a class="pub-icon-btn" href="@Api.FileUrl(item.DesignFilePath)" target="_blank" rel="noopener" title="Preview" aria-label="Preview @item.DesignFileName"><i class="bi bi-eye"></i></a>
+                                                                                                            <a class="pub-icon-btn pub-icon-btn--green" href="@Api.FileUrl(item.DesignFilePath, download: true)" target="_blank" rel="noopener" title="Download" aria-label="Download @item.DesignFileName"><i class="bi bi-download"></i></a>
+                                                                                                        }
+                                                                                                        else
+                                                                                                        {
+                                                                                                            <span class="pub-muted">—</span>
+                                                                                                        }
+                                                                                                    </td>
+                                                                                                </tr>
+                                                                                            }
+                                                                                        </tbody>
+                                                                                    </table>
+                                                                                </div>
+                                                                            </td>
+                                                                        </tr>
+                                                                    }
                                                                 }
                                                             </tbody>
                                                         </table>
@@ -474,6 +577,14 @@
     private PubConsolidationDto? _c;
     private readonly HashSet<string> _open = new();
     private readonly HashSet<string> _openStates = new();
+    // Per-request product expand (RowsAsync now populates PubRowDto.Items for every request, single-
+    // or multi-item alike) - a Specific Product request's inner "HQ Request" row shows just its first
+    // product + a count until expanded, same two-level disclosure pattern as the Region/State groups
+    // above, just one level deeper. Keyed by request Id, shared across both the State-bulk and
+    // Region-grouped inner tables below since a request can only ever appear in one of them.
+    private readonly HashSet<int> _openRows = new();
+    private bool IsRowOpen(int id) => _openRows.Contains(id);
+    private void ToggleRow(int id) { if (!_openRows.Remove(id)) _openRows.Add(id); }
     private string _q = "";
     private bool _busy;
 

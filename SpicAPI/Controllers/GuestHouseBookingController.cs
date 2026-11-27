@@ -57,15 +57,27 @@ namespace SpicAPI.Controllers
 			_logger = logger;
 		}
 
+		// True unless the signed-in user is a Receptionist and the guest house is outside their state
+		// (GuestHouseReceptionistScope: null = unrestricted, so every other role is unaffected).
+		private async Task<bool> IsGuestHouseInScopeAsync(int guestHouseId)
+		{
+			var scope = await GuestHouseReceptionistScope.GetAllowedGuestHouseIdsAsync(_db, User);
+			return scope == null || scope.Contains(guestHouseId);
+		}
+
 		// GET /api/GuestHouseBooking/houses
 		// Active guest houses shown on the GuestHouse selection page.
 		[GuestHouseBookingAccess(PagePermission.GuestHouseBooking)]
 		[HttpGet("houses")]
 		public async Task<ActionResult<List<GuestHouseCardDto>>> GetHouses()
 		{
+			// Receptionist state scope (null = unrestricted): same rule as the Front Office.
+			var scope = await GuestHouseReceptionistScope.GetAllowedGuestHouseIdsAsync(_db, User);
+
 			var items = await _db.GuestHouses
 				.AsNoTracking()
 				.Where(h => h.IsActive)
+				.Where(h => scope == null || scope.Contains(h.Id))
 				.OrderBy(h => h.Name)
 				.Select(h => new GuestHouseCardDto
 				{
@@ -342,6 +354,10 @@ namespace SpicAPI.Controllers
 			if (checkOut.Date <= checkIn.Date)
 				return BadRequest(new { Success = false, Message = "Check-out must be after check-in." });
 
+			// A Receptionist's other-state guest house is "not found" (Front Office pattern).
+			if (!await IsGuestHouseInScopeAsync(guestHouseId))
+				return NotFound(new { Success = false, Message = "Guest House not found." });
+
 			var house = await _db.GuestHouses
 				.AsNoTracking()
 				.FirstOrDefaultAsync(h => h.Id == guestHouseId && h.IsActive);
@@ -447,7 +463,7 @@ namespace SpicAPI.Controllers
 				.AsNoTracking()
 				.Include(r => r.GuestHouse)
 				.FirstOrDefaultAsync(r => r.Id == roomId && r.IsActive);
-			if (room == null)
+			if (room == null || !await IsGuestHouseInScopeAsync(room.GuestHouseId))
 				return NotFound(new { Success = false, Message = "Room not found." });
 
 			return Ok(new RoomDetailDto
@@ -486,6 +502,10 @@ namespace SpicAPI.Controllers
             // Validate guest house and room.
             if (request.GuestHouseId <= 0 || request.RoomTypeId <= 0)
                 return BadRequest(new { Success = false, Message = "Guest House and Room are required." });
+
+            // Receptionist state scope: another state's guest house is "not found".
+            if (!await IsGuestHouseInScopeAsync(request.GuestHouseId))
+                return NotFound(new { Success = false, Message = "Guest House not found." });
 
             var house = await _db.GuestHouses.AsNoTracking().FirstOrDefaultAsync(h => h.Id == request.GuestHouseId && h.IsActive);
             if (house == null)
@@ -1219,6 +1239,7 @@ namespace SpicAPI.Controllers
 				.Include(b => b.GuestHouseRoom)
 				.Include(b => b.RoomAllocations)
 				.Include(b => b.Guests)
+				.Include(b => b.Payments)
 				.OrderByDescending(b => b.CreatedAt)
 				.ToListAsync();
 
@@ -1229,6 +1250,17 @@ namespace SpicAPI.Controllers
 					.Where(i => houseIds.Contains(i.GuestHouseId) && i.IsActive)
 					.ToListAsync()
 				: new List<GuestHouseImage>();
+
+			// Bookings whose bill has been generated (a GuestHouseBill exists) - same fact Booking Details reports
+			// as HasInvoice. Display only: an Employee Stay badge turns Paid once its bill exists.
+			var bookingIds = bookings.Select(b => b.Id).ToList();
+			var billedBookingIds = bookingIds.Count > 0
+				? (await _db.GuestHouseBills
+					.AsNoTracking()
+					.Where(bill => bookingIds.Contains(bill.GuestHouseBookingId))
+					.Select(bill => bill.GuestHouseBookingId)
+					.ToListAsync()).ToHashSet()
+				: new HashSet<int>();
 
 			var today = DateTime.Today;
 			var summary = new BookingSummaryDto
@@ -1268,6 +1300,10 @@ namespace SpicAPI.Controllers
 					RoomNumber = CustomerRoomNumber(b),
 					BookingStatus = BookingStatusName(b.BookingStatus),
 					PaymentStatus = PaymentStatusName(b.PaymentStatus),
+					// The booking's original payment row (same one Booking Details shows); lets the page tell an
+					// Employee Stay (Complimentary) from a paid / pay-after-stay booking. Display only.
+					PaymentMethod = b.Payments.OrderBy(p => p.Id).FirstOrDefault() is { } firstPayment ? PaymentMethodName(firstPayment.PaymentMethod) : "",
+					HasInvoice = billedBookingIds.Contains(b.Id),
 					CheckInDate = b.CheckInDate,
 					CheckInTime = b.CheckInTime,
 					CheckOutDate = b.CheckOutDate,
@@ -1700,7 +1736,13 @@ namespace SpicAPI.Controllers
 		// Room No shown to the customer (My Bookings / Booking Details). A single-record booking
 		// shows its record's RoomNumber, exactly as before. A multi-record booking shows every room
 		// it holds: its reservation / allocation rows while active, the Check-Out snapshot after.
-		private static string? CustomerRoomNumber(GuestHouseBooking booking)
+		//
+		// A physical room is only assigned at Front Office Check-In. Before that, GuestHouseRoom.RoomNumber
+		// is merely the first number of the room-type record, not this guest's room, so a booking that is
+		// not yet CheckedIn / Completed shows no room number (null). Once in the stay, the actual
+		// allocation rows win, then the Check-Out snapshot; the record's base number is only a last
+		// fallback for legacy stays that have neither.
+		internal static string? CustomerRoomNumber(GuestHouseBooking booking)
 		{
 			if (GuestHouseRoomInventory.IsMultiRecordBooking(booking.GuestHouseRoomId, booking.RoomAllocations))
 			{
@@ -1710,15 +1752,21 @@ namespace SpicAPI.Controllers
 					.OrderBy(n => n));
 			}
 
-			// After Check-Out the rows are gone; a snapshot holding a number the primary record does
-			// not own can only come from a multi-record booking.
-			if (!string.IsNullOrWhiteSpace(booking.AllocatedRoomNumber) && booking.GuestHouseRoom != null)
-			{
-				var own = GuestHouseRoomInventory.EnumeratePhysicalRoomNumbers(booking.GuestHouseRoom, booking.GuestHouseRoom.AvailableQuantity);
-				var snapshot = booking.AllocatedRoomNumber.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-				if (snapshot.Any(n => !GuestHouseRoomInventory.ContainsNumber(own, n)))
-					return booking.AllocatedRoomNumber;
-			}
+			if (booking.BookingStatus != GuestHouseBookingStatus.CheckedIn
+				&& booking.BookingStatus != GuestHouseBookingStatus.Completed)
+				return null;
+
+			var allocated = booking.RoomAllocations?
+				.Select(a => a.RoomNumber)
+				.Where(n => !string.IsNullOrWhiteSpace(n))
+				.Distinct(StringComparer.OrdinalIgnoreCase)
+				.OrderBy(n => n)
+				.ToList();
+			if (allocated is { Count: > 0 })
+				return string.Join(", ", allocated);
+
+			if (!string.IsNullOrWhiteSpace(booking.AllocatedRoomNumber))
+				return booking.AllocatedRoomNumber;
 
 			return booking.GuestHouseRoom?.RoomNumber;
 		}
@@ -2251,6 +2299,8 @@ namespace SpicAPI.Controllers
 		public string? RoomNumber { get; set; }
 		public string BookingStatus { get; set; } = "";
 		public string PaymentStatus { get; set; } = "";
+		public string? PaymentMethod { get; set; }
+		public bool HasInvoice { get; set; }
 		public DateTime? CheckInDate { get; set; }
 		public TimeSpan? CheckInTime { get; set; }
 		public DateTime? CheckOutDate { get; set; }
