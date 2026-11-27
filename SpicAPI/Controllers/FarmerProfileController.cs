@@ -16,7 +16,7 @@ namespace SpicAPI.Controllers
     ///
     ///   GET api/Farmer/profile -> FarmerProfileDto, or 404 { profileComplete: false, sasLinked, phone }
     ///   PUT api/Farmer/profile -> validates (FarmerProfileRules + state / district exist and match),
-    ///                             saves, and copies Name / Email to the Identity user
+    ///                             saves, and copies the Name (never the email) to the Identity user
     ///
     /// State and district dropdowns use the existing api/State and api/District/byState/{id}.
     /// </summary>
@@ -111,10 +111,12 @@ namespace SpicAPI.Controllers
                 : dto.PreferredLanguage.Trim();
             profile.UpdatedAtUtc = now;
 
-            // The account shows the same name and email everywhere (top bar, staff lists).
+            // The account shows the same name everywhere (top bar, staff lists). The email stays on
+            // the farmer profile ONLY: Identity emails are not unique here (RequireUniqueEmail = false)
+            // and staff profile flows call FindByEmailAsync, which throws when two accounts share one,
+            // so a farmer typing a staff member's email must never reach AppUsers. An Identity email
+            // the account already has is left alone.
             user.Name = profile.Name;
-            user.Email = email;
-            user.NormalizedEmail = email is null ? null : _userManager.NormalizeEmail(email);
             user.UpdatedAt = now;
             user.UpdatedBy = user.UserName ?? "FarmerOtp";
 
