@@ -215,8 +215,8 @@ Pure helpers in `FpUi` (`FpUi.cs`, checked by `SPIC.RegressionHarness/FarmerPort
 ### Home tiles (`Services/FarmerFeatureTiles.cs`)
 
 The home grid is `FarmerFeatureTiles.For(login)` in registry order. **The home shows only features that
-exist**: no "coming soon" tiles or blocks. Today the registry holds My soil reports and My soil samples
-(only for farmers with soil tests) and My profile. **A task adds its own entry in the same change that
+exist**: no "coming soon" tiles or blocks. Today the registry holds Dealers near me and My SPIC team
+(Task 2), My soil reports and My soil samples (only for farmers with soil tests) and My profile. **A task adds its own entry in the same change that
 ships its page**, never earlier:
 `new FarmerFeatureTile(id, title, description, "bi-icon", FpHue.X, "/farmer/route", visiblePredicate)`
 (optional `Badge`, e.g. "New"). The harness checks ids are unique, every route opens for a farmer and
@@ -232,3 +232,122 @@ Each sign-in uses one of the number's 5 codes per hour; the onboarding set creat
 farmers per run; the gallery and staff sets sign in as the local `qa.admin` (password from
 `tools/help-demo/shots.json`; that local user is normally inactive, activate it in `spicone_dev` first).
 Add your own screens to the script or reuse its sign-in helper.
+
+## 2. Farmer home, dealers near me and My SPIC team (Task 2, 2026-11-28)
+
+### What it does
+
+- **Home** `/farmer`: two new tiles first in the registry (**Dealers near me**, **My SPIC team**), then the
+  soil and profile tiles. Below the tiles a **Your SPIC team** block shows up to three people (the first
+  JMDO, MDO and RM when there are such; `FarmerConnectUi.Preview`) with Request call back: a swipeable row
+  on phone, three columns on desktop. It loads after the page, so the home never waits for it.
+- **Dealers near me** `/farmer/dealers`: starts from the farm location saved in the profile; "Use my
+  location" asks the device (`window.getCurrentPosition`, js/location.js, as the profile form does); with
+  no GPS it lists the farmer's district. Radius 10 / 25 / 50 / 100 km, a shop-name / village search, list or
+  map (Leaflet + OpenStreetMap tiles as on ContactUs / Logistics; pins are divIcons, popups are built with
+  `textContent`; `Pages/FarmerPortal/FarmerDealers.razor.js`). Cards: distance, Call (`tel:`), WhatsApp
+  (`https://wa.me/91...`), Directions (Google Maps directions to the GPS point, else the dealer's own map
+  link, else a Maps search for the firm + village). A plain-words note explains a fallback ("No SPIC dealer
+  within 25 km of you, so we show the dealers in Thoothukudi."). The GPS point is rounded to 3 decimals
+  (about 110 m) before it is sent (`FarmerGeo.Coarse`).
+- **My SPIC team** `/farmer/team`: the JMDO / MDO / RM / RMD cards (role in plain words, headquarter or
+  region, open requests), a note when the team came from a fallback, Request call back, and Call / WhatsApp
+  only when phone numbers are switched on. A "My requests" link on top.
+- **Request a call back** (`Components/FarmerPortal/FarmerCallBackSheet.razor`, shell BottomSheet): topic
+  (Fertilizer, Crop problem, Soil test, Product, Dealer, Other), optional message (required for Other, max
+  500), preferred time (Morning 9-12, Afternoon 12-4, Evening 4-7, Any time), and a line saying the farmer's
+  name, mobile and village go to that officer only.
+- **My requests** `/farmer/requests`: the farmer's requests, newest first, with status (Open / Contacted /
+  Closed). The staff note is not shown to the farmer.
+- **Farmer Call-backs** `/farmer-requests` (staff, title "Farmer Call-back Requests"): JMDO / MDO / RM / RMD
+  see the requests addressed to them (farmer name, `tel:` phone, village, district, topic, message, preferred
+  time) with Open / Contacted / Closed / All tabs and counts, and mark them Contacted / Closed (or reopen)
+  with a note in a sheet. Admin / SuperAdmin see every request, read-only, with the addressee. Menu entry
+  "Farmer Call-backs" in the desktop sidebar, the mobile sidebar and the More sheet (More only: it never
+  takes a phone tab or rail slot), all through `ShellNavigation.ShowFarmerRequests`.
+- **Access**: `/farmer/dealers|team|requests` sit under the role-gated `/farmer` prefix. `/farmer-requests`
+  is role-gated in `RouteAccess` (no PagePermission): JMDO / MDO / RM / RMD with a designation, Admin and
+  SuperAdmin through their bypass; everyone else goes to their landing page; staff with no designation still
+  see only /Welcome.
+
+### Endpoints
+
+| Method | Route | Who | Notes |
+|---|---|---|---|
+| GET | `api/Farmer/dealers?lat&lng&radiusKm&districtId&q&page&pageSize` | Farmer | `FarmerDealerListDto`: `scope` Nearby (0) / District (1) / State (2) / None (3), `radiusKm` (default 25, 1..100), `usedLocation`, `districtName`, `stateName`, paging (default 20, max 50), `items` (`FarmerDealerDto`). `districtId` defaults to the profile district (unknown id = 400); 404 without a profile |
+| GET | `api/Farmer/contacts` | Farmer | `FarmerTeamDto`: `basis` District / NearestDealer / State / None, `nearestDealerKm`, `phonesShown`, `members` (`contactId`, name, role, roleLabel, areaName, areaKind Headquarter / Region, phone / whatsApp only when switched on, openRequests) |
+| POST | `api/Farmer/contacts/{contactId}/request` `{ topic, message, preferredTime }` | Farmer | 200 `FarmerContactRequestDto`; 400 `{ message, errors }`; 404 not on the farmer's team; 409 already 3 open requests to that person |
+| GET | `api/Farmer/contacts/requests` | Farmer | the caller's own requests (newest 100), without the staff note |
+| GET | `api/FarmerRequests?status&page&pageSize` | JMDO / MDO / RM / RMD (own), Admin / SuperAdmin (all, `adminView`) | `StaffFarmerRequestListDto` with per-status counts; Open first (oldest waiting first); other roles 403 |
+| PUT | `api/FarmerRequests/{id}` `{ status, note }` | the addressed staff member only | 200 `StaffFarmerRequestDto`; 404 for anyone else (ids cannot be probed); Admin 403 |
+
+Contracts: `SPIC.Core/DTOs/FarmerConnectDtos.cs`. Enums travel as numbers like the rest of the API.
+
+### Rules (`SPIC.Core/FarmerPortal`, pinned by the harness)
+
+- **Which dealers** (`FarmerDealerRules.ListableForFarmers`, EF-translatable): `Status == Active`; not
+  `InactiveProposal` Terminated ("to be terminated") or NotTraceable; `IsDealer` and `DealerType` null or
+  Dealer (no Department / Institution registrations); a firm name; and a Create New Dealer registration
+  (`IsNewDealerRegistration`) only after its final AVP approval gave it a code (`AVPApproved == true` and a
+  `DealerCode`), because its `Status` is the enum default Active while it is still in the approval flow
+  (the controller sets Active at the final AVP approval). Existing / bulk-loaded dealers are trading dealers,
+  so their Status alone decides (their RM / SM / AVP flags describe a later credit-limit review).
+- **Public fields only**: the dealer query projects firm name, shop / street, sub-village, village, taluk,
+  district, pincode, official contact number, WhatsApp number, map URL and GPS. PAN, bank, GST, Aadhaar,
+  owner and credit data never leave the database. Numbers are normalised (`FarmerContactLinks`: a mobile as
+  10 digits, a landline with its STD code; junk gives no button); a map URL must be absolute http(s).
+- **Fallback chain**: GPS and a dealer within the radius (bounding box in SQL, exact haversine in memory) ->
+  Nearby, nearest first; else the district (address `DistrictId`), nearest first with GPS (dealers without
+  GPS last) or by name; else the state (`DealerStateId`, else the business `StateId`); else None.
+  `FarmerDealerRules.Select` is the in-memory form of the same chain.
+- **Team** (`FarmerTeamRules.Resolve`): listable dealers in the farmer's district -> their `HQ` and
+  `Region` ids (a dealer without a Region takes its Headquarter's region) -> active `Employeelogins` (login
+  and user account both active) with role JMDO / MDO whose `HeadquartersId` or `HeadquartersIds` match, and
+  RM / RMD whose `RegionId` or `RegionIds` match. No dealer in the district: the nearest listable dealer with
+  GPS within 100 km of the farmer's saved location. Nobody found: the RM / RMD logins of the farmer's
+  state. Ordered JMDO, MDO, RM, RMD, then by how many of the area's dealers their HQ / region serves, then
+  name; one card per person; at most 8. MO is not on the list (the brief names JMDO / MDO / RM / RMD).
+  Names come from `EmployeeInformation.Name`, else the account name. Phones, when shown, are the
+  **official** number only (never the personal one).
+- **Requests** (`FarmerContactRequestRules`): the topic must be one of the six, message max 500 (required
+  for Other), preferred time one of the four keys, at most 3 **Open** requests from one farmer to one
+  officer (counted and inserted under a PostgreSQL advisory lock on farmer + officer), the officer must be on
+  the farmer's resolved team at that moment, staff note max 500.
+
+### Config keys
+
+| Key | Meaning |
+|---|---|
+| `FarmerPortal:ShowStaffPhoneNumbers` | `true` shows the officers' official numbers (Call / WhatsApp) on My SPIC team; default `false` (placeholder in `SpicAPI/appsettings.json`) |
+
+### Table (migration `V35_FarmerPortalConnect`)
+
+- `FarmerContactRequests` (Id, FarmerUserId, StaffUserId, StaffRole (text, the role when asked), Topic
+  (text), Message varchar(500), PreferredTime varchar(40)?, Status (text: Open / Contacted / Closed),
+  StaffNote varchar(500)?, CreatedAtUtc, UpdatedAtUtc); indexes (FarmerUserId, CreatedAtUtc) and
+  (StaffUserId, Status, CreatedAtUtc). No foreign keys, like the Task 1 tables.
+
+### Tests and tools
+
+- Harness: `FarmerPortalConnectTests` (haversine, bounding box, listable dealer rule, radius / paging,
+  fallback chain, links, card address, team resolution with fallbacks / multi-assignment / cap, request and
+  update validation, routes and menu for every role, IST times, scope / basis notes, home preview) and the
+  updated tile expectations in `FarmerPortalUiTests`.
+- Local data: `tools/farmer-portal-check/seed_task2_local.sql` (refuses any database but `spicone_dev`)
+  adds nine "Demo ..." dealers around Kovilpatti / Thoothukudi / Tirunelveli (three that must never be
+  listed), "Demo ..." employee records for the QA staff logins, a JMDO login for `qa.jmdo`, and activates
+  the QA users it needs; `cleanup_task2_local.sql` undoes it.
+- Smoke: `python tools/farmer-portal-check/smoke_task2.py` (local API only: scopes, exclusions, no private
+  fields, the cap, staff scoping, Admin read-only, 401 / 403s).
+- Screenshots: `python tools/farmer-portal-check/shoot_task2.py --out .superpowers/sdd/<plan>/shots/task-2`
+  (fakes the device location at Kovilpatti; sends one "[demo]" request).
+
+### Left / for the owner
+
+- Decide `FarmerPortal__ShowStaffPhoneNumbers` (off by default; the design call says owner to confirm).
+- Prod migration `V35_FarmerPortalConnect` (owner runs prod).
+- Data quality decides how useful this is: dealers need `DistrictId`, GPS and the official / WhatsApp
+  numbers filled; staff logins need the right HQ / Region (and an `EmployeeInformation` name / official
+  number). Bulk-loaded dealers have no address or GPS, so they show only in district / state lists.
+- No notification to the officer when a request arrives (they see it on Farmer Call-backs); a push / SMS
+  could follow.
