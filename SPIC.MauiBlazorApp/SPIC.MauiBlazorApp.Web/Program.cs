@@ -96,6 +96,11 @@ builder.Services.AddSingleton(new ClientInfo(TelemetryApp.Web,
 builder.Services.AddSingleton<TelemetryCircuitRegistry>();
 builder.Services.AddScoped<ClientTelemetry>();
 builder.Services.AddScoped<CircuitHandler, TelemetryCircuitHandler>();
+// Farmer portal OTP: pass each browser's IP to the API (Services/FarmerClientIp.cs) so its per-IP
+// limit is per farmer rather than one bucket for the whole web portal.
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<BrowserClientIp>();
+builder.Services.AddScoped<CircuitHandler, BrowserClientIpCircuitHandler>();
 builder.Logging.Services.AddSingleton<ILoggerProvider>(sp =>
 {
     var config = sp.GetRequiredService<IConfiguration>();
@@ -126,7 +131,11 @@ builder.Services.AddScoped(sp =>
         httpClientHandler.ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator;
     }
     var handler = sp.GetRequiredService<AuthHttpMessageHandler>();
-    handler.InnerHandler = httpClientHandler;
+    // Farmer OTP request only: adds the browser IP + FarmerPortal:TrustedClientKey (no-op when the key is empty).
+    handler.InnerHandler = new FarmerClientIpHandler(sp.GetRequiredService<BrowserClientIp>(), config["FarmerPortal:TrustedClientKey"])
+    {
+        InnerHandler = httpClientHandler
+    };
     //var baseUrl = config["ApiBaseUrl"] ?? "https://previewspicapi.apmiot.com/";
     // var baseUrl = config["ApiBaseUrl"] ?? "https://localhost:7032/";
     return new HttpClient(handler)

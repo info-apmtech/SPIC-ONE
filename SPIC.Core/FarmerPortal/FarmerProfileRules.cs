@@ -41,7 +41,7 @@ public static partial class FarmerProfileRules
         "Pulses", "Turmeric", "Chilli", "Onion", "Tomato", "Vegetables", "Wheat"
     };
 
-    [GeneratedRegex(@"^\d{6}$")]
+    [GeneratedRegex(@"^[0-9]{6}$")]
     private static partial Regex PinPattern();
 
     public static bool IsKnownLanguage(string? code) =>

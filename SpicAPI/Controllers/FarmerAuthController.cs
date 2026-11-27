@@ -16,14 +16,17 @@ namespace SpicAPI.Controllers
     /// Farmer portal sign-in with a mobile number and a one-time code (docs/farmer-portal.md).
     ///
     ///   POST api/FarmerAuth/otp/request  { phone }        -> sends a 6-digit code (limits: 30 s per
-    ///                                                        number, 5 per number per hour, 20 per IP per hour)
+    ///                                                        number, 5 per number per hour, per IP per hour
+    ///                                                        FarmerPortal:OtpPerIpHourlyCap (20), all numbers
+    ///                                                        per hour FarmerPortal:OtpGlobalHourlyCap (500))
     ///   POST api/FarmerAuth/otp/verify   { phone, code }  -> the normal login response + profileComplete / isNewUser
     ///
     /// The first verified code creates the farmer's account (Role = Farmer, UserName = "f" + mobile,
     /// a random password nobody knows) and links an unlinked SAS farmer record with the same mobile.
     /// Numbers that belong to staff or dealer accounts are refused: those users use the normal login.
     /// All rules live in SPIC.Core.FarmerPortal.FarmerOtpRules (pinned by the regression harness).
-    /// Phone numbers are only ever logged masked (98xxxxxx21).
+    /// Phone numbers are only ever logged masked (98xxxxxx21). The client IP is the SPIC web host's
+    /// X-Spic-Client-Ip when it carries the right FarmerPortal:TrustedClientKey, else the proxy chain.
     /// </summary>
     [AllowAnonymous]
     [ApiController]
@@ -68,56 +71,95 @@ namespace SpicAPI.Controllers
             if (_env.IsProduction() && !_sms.DeliversRealSms)
                 return StatusCode(StatusCodes.Status503ServiceUnavailable, Error("SMS is not set up yet. Please try later."));
 
-            if (await BelongsToNonFarmerAsync(phone))
-                return Conflict(Error(StaffNumberMessage));
-
             var now = DateTime.UtcNow;
-            var ip = FarmerOtpRules.ClientIp(Request.Headers["X-Forwarded-For"].ToString(),
+            var ip = FarmerOtpRules.ClientIp(
+                Request.Headers[FarmerOtpRules.ClientIpHeader].ToString(),
+                Request.Headers[FarmerOtpRules.ClientKeyHeader].ToString(),
+                _config["FarmerPortal:TrustedClientKey"],
+                Request.Headers["X-Forwarded-For"].ToString(),
                 HttpContext.Connection.RemoteIpAddress?.ToString());
+            var limits = OtpLimits.From(_config["FarmerPortal:OtpPerIpHourlyCap"], _config["FarmerPortal:OtpGlobalHourlyCap"]);
 
             // Old challenges no longer count for any limit; drop them so phone numbers are not kept.
             var retentionCutoff = now - FarmerOtpRules.Retention;
             await _db.FarmerOtpChallenges.Where(c => c.CreatedAtUtc < retentionCutoff).ExecuteDeleteAsync();
 
-            var windowStart = now - FarmerOtpRules.LimitWindow;
-            var phoneSends = await _db.FarmerOtpChallenges.AsNoTracking()
-                .Where(c => c.Phone == phone && c.CreatedAtUtc > windowStart)
-                .Select(c => c.CreatedAtUtc)
-                .ToListAsync();
-            var ipSends = ip is null
-                ? 0
-                : await _db.FarmerOtpChallenges.CountAsync(c => c.RequestIp == ip && c.CreatedAtUtc > windowStart);
-
-            var decision = FarmerOtpRules.DecideSend(now, phoneSends, ipSends);
-            if (!decision.Allowed)
+            // Count and insert under PostgreSQL advisory locks (per number, per IP, then the global
+            // counter - always in that order), held until the transaction ends. Parallel requests,
+            // also from another API replica, therefore wait for each other and see each other's
+            // rows, so the caps hold exactly. The SMS goes out only after the commit.
+            string? code = null;
+            await using (var tx = await _db.Database.BeginTransactionAsync())
             {
-                _logger.LogInformation("Farmer OTP for {Phone} refused: {Outcome}", FarmerPhone.Mask(phone), decision.Outcome);
-                Response.Headers.RetryAfter = decision.RetryAfterSeconds.ToString();
-                return StatusCode(StatusCodes.Status429TooManyRequests, new FarmerAuthError
+                await LockAsync("farmer-otp:phone:" + phone);
+                if (ip is not null) await LockAsync("farmer-otp:ip:" + ip);
+                await LockAsync("farmer-otp:global");
+
+                var windowStart = now - FarmerOtpRules.LimitWindow;
+                var phoneSends = await _db.FarmerOtpChallenges.AsNoTracking()
+                    .Where(c => c.Phone == phone && c.CreatedAtUtc > windowStart)
+                    .Select(c => c.CreatedAtUtc)
+                    .ToListAsync();
+                // Staff-number probes (below) count for the IP limit, not for the global SMS count.
+                var ipSends = ip is null
+                    ? 0
+                    : await _db.FarmerOtpChallenges.CountAsync(c => c.RequestIp == ip && c.CreatedAtUtc > windowStart);
+                var globalSends = await _db.FarmerOtpChallenges
+                    .CountAsync(c => c.CreatedAtUtc > windowStart && c.CodeHash != ProbeHash);
+
+                var decision = FarmerOtpRules.DecideSend(now, phoneSends, ipSends, globalSends, limits);
+                if (!decision.Allowed)
                 {
-                    Message = decision.Outcome switch
+                    _logger.LogInformation("Farmer OTP for {Phone} refused: {Outcome}", FarmerPhone.Mask(phone), decision.Outcome);
+                    if (decision.Outcome == OtpSendOutcome.GlobalHourLimit)
+                        _logger.LogWarning("Farmer OTP global hourly cap ({Cap}) reached: sign-in codes are paused.", limits.GlobalHourly);
+                    Response.Headers.RetryAfter = decision.RetryAfterSeconds.ToString();
+                    return StatusCode(StatusCodes.Status429TooManyRequests, new FarmerAuthError
                     {
-                        OtpSendOutcome.Cooldown => $"Please wait {decision.RetryAfterSeconds} seconds before asking for a new code.",
-                        OtpSendOutcome.PhoneHourLimit => $"Too many codes were sent to this number. Please try again in about {Math.Max(1, (decision.RetryAfterSeconds + 59) / 60)} minutes.",
-                        _ => "Too many sign-in codes were asked for from this network. Please try again later."
-                    },
-                    RetryAfterSeconds = decision.RetryAfterSeconds
+                        Message = decision.Outcome switch
+                        {
+                            OtpSendOutcome.Cooldown => $"Please wait {decision.RetryAfterSeconds} seconds before asking for a new code.",
+                            OtpSendOutcome.PhoneHourLimit => $"Too many codes were sent to this number. Please try again in about {Math.Max(1, (decision.RetryAfterSeconds + 59) / 60)} minutes.",
+                            OtpSendOutcome.GlobalHourLimit => "Many farmers are signing in right now. Please try again in a little while.",
+                            _ => "Too many sign-in codes were asked for from this network. Please try again later."
+                        },
+                        RetryAfterSeconds = decision.RetryAfterSeconds
+                    });
+                }
+
+                if (await BelongsToNonFarmerAsync(phone))
+                {
+                    // Counted against the client IP (a dead row with no number and no code), so this
+                    // answer cannot be used freely to find which numbers belong to staff or dealers.
+                    _db.FarmerOtpChallenges.Add(new FarmerOtpChallenge
+                    {
+                        Phone = string.Empty,
+                        CodeHash = ProbeHash,
+                        CreatedAtUtc = now,
+                        ExpiresAtUtc = now,
+                        ConsumedAtUtc = now,
+                        RequestIp = ip
+                    });
+                    await _db.SaveChangesAsync();
+                    await tx.CommitAsync();
+                    return Conflict(Error(StaffNumberMessage));
+                }
+
+                code = FarmerOtpRules.GenerateCode();
+                _db.FarmerOtpChallenges.Add(new FarmerOtpChallenge
+                {
+                    Phone = phone,
+                    CodeHash = FarmerOtpRules.HashCode(code, phone, Pepper()),
+                    CreatedAtUtc = now,
+                    ExpiresAtUtc = now + FarmerOtpRules.CodeLifetime,
+                    RequestIp = ip
                 });
+                await _db.SaveChangesAsync();
+                await tx.CommitAsync();
             }
 
-            var code = FarmerOtpRules.GenerateCode();
-            _db.FarmerOtpChallenges.Add(new FarmerOtpChallenge
-            {
-                Phone = phone,
-                CodeHash = FarmerOtpRules.HashCode(code, phone, Pepper()),
-                CreatedAtUtc = now,
-                ExpiresAtUtc = now + FarmerOtpRules.CodeLifetime,
-                RequestIp = ip
-            });
-            await _db.SaveChangesAsync();
-
             // The row stays even when sending fails, so a failing provider cannot be hammered past the limits.
-            var sent = await _sms.SendOtpAsync(phone, code, HttpContext.RequestAborted);
+            var sent = await _sms.SendOtpAsync(phone, code!, HttpContext.RequestAborted);
             if (!sent.Success)
                 return StatusCode(StatusCodes.Status502BadGateway, Error("We could not send the SMS right now. Please try again in a minute."));
 
@@ -141,9 +183,6 @@ namespace SpicAPI.Controllers
             var code = dto?.Code?.Trim();
             if (!FarmerOtpRules.IsWellFormedCode(code))
                 return BadRequest(Error("Please enter the 6-digit code from the SMS."));
-
-            if (await BelongsToNonFarmerAsync(phone))
-                return Conflict(Error(StaffNumberMessage));
 
             var now = DateTime.UtcNow;
             var challenge = await _db.FarmerOtpChallenges.AsNoTracking()
@@ -178,6 +217,11 @@ namespace SpicAPI.Controllers
                 }
             }
 
+            // Only reachable with a live code (request refuses staff numbers), so this is no free
+            // staff-number oracle; it covers a number that became a staff number after the code went out.
+            if (await BelongsToNonFarmerAsync(phone))
+                return Conflict(Error(StaffNumberMessage));
+
             // Single use: only the request that flips ConsumedAtUtc gets a session.
             var consumed = await _db.FarmerOtpChallenges
                 .Where(c => c.Id == challenge!.Id && c.ConsumedAtUtc == null && c.Attempts < FarmerOtpRules.MaxAttempts)
@@ -208,6 +252,13 @@ namespace SpicAPI.Controllers
 
         private static FarmerAuthError Error(string message) => new() { Message = message };
 
+        /// <summary>CodeHash of a staff-number probe row: it only counts for the per-IP limit.</summary>
+        private const string ProbeHash = "";
+
+        /// <summary>A transaction-scoped PostgreSQL advisory lock on a text key.</summary>
+        private Task LockAsync(string key) =>
+            _db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({key}, 0))");
+
         /// <summary>FarmerPortal:OtpPepper, or the JWT signing key when it is not set.</summary>
         private string Pepper()
         {
@@ -231,7 +282,17 @@ namespace SpicAPI.Controllers
         private async Task<(UserInfo? User, bool IsNew)> FindOrCreateFarmerAsync(string phone)
         {
             var existing = await FindFarmerAsync(phone);
-            if (existing is not null) return (existing, false);
+            if (existing is not null)
+            {
+                // The OTP just proved the number (an admin-made Farmer account may not say so yet).
+                if (!existing.PhoneNumberConfirmed || string.IsNullOrEmpty(existing.PhoneNumber))
+                {
+                    existing.PhoneNumber ??= phone;
+                    existing.PhoneNumberConfirmed = true;
+                    await _db.SaveChangesAsync();
+                }
+                return (existing, false);
+            }
 
             var now = DateTime.UtcNow;
             var user = new UserInfo

@@ -8,7 +8,7 @@ namespace SPIC.Core.FarmerPortal;
 /// </summary>
 public static partial class FarmerPhone
 {
-    [GeneratedRegex(@"^[6-9]\d{9}$")]
+    [GeneratedRegex(@"^[6-9][0-9]{9}$")]
     private static partial Regex ValidPattern();
 
     /// <summary>

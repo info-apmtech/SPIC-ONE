@@ -21,6 +21,8 @@ internal static class FarmerPortalAuthTests
 		Verify();
 		SendLimits();
 		ClientIp();
+		TrustedClientIp();
+		Caps();
 		Profile();
 	}
 
@@ -41,6 +43,8 @@ internal static class FarmerPortalAuthTests
 		Check.That("phone: 11 digits invalid", !FarmerPhone.IsValid("98765432101"));
 		Check.That("phone: letters invalid", !FarmerPhone.IsValid("98765abc10"));
 		Check.That("phone: empty invalid", !FarmerPhone.IsValid(""));
+		Check.That("phone: Devanagari digits invalid (ASCII only)", !FarmerPhone.IsValid("9८७६५४३२१०"));
+		Check.That("phone: Tamil digits invalid (ASCII only)", !FarmerPhone.IsValid("9௮௭௬௫௪௩௨௧௦"));
 
 		Check.Equal("phone: masked for logs", "98xxxxxx21", FarmerPhone.Mask("9876543221"));
 		Check.Equal("phone: user name", "f9876543210", FarmerPhone.UserNameFor("9876543210"));
@@ -96,29 +100,71 @@ internal static class FarmerPortalAuthTests
 	private static void SendLimits()
 	{
 		var none = Array.Empty<DateTime>();
-		Check.Equal("send: first code allowed", OtpSendOutcome.Allowed, FarmerOtpRules.DecideSend(Now, none, 0).Outcome);
+		Check.Equal("send: first code allowed", OtpSendOutcome.Allowed, Send(none, 0).Outcome);
 
-		var cooldown = FarmerOtpRules.DecideSend(Now, new[] { Now.AddSeconds(-10) }, 1);
+		var cooldown = Send(new[] { Now.AddSeconds(-10) }, 1);
 		Check.Equal("send: 10 s after the last code is cooldown", OtpSendOutcome.Cooldown, cooldown.Outcome);
 		Check.Equal("send: cooldown says 20 s left", 20, cooldown.RetryAfterSeconds);
 		Check.Equal("send: 30 s after the last code is allowed", OtpSendOutcome.Allowed,
-			FarmerOtpRules.DecideSend(Now, new[] { Now.AddSeconds(-30) }, 1).Outcome);
+			Send(new[] { Now.AddSeconds(-30) }, 1).Outcome);
 
 		var fourInHour = Enumerable.Range(1, 4).Select(i => Now.AddMinutes(-10 * i)).ToList();
-		Check.Equal("send: 5th code in the hour allowed", OtpSendOutcome.Allowed, FarmerOtpRules.DecideSend(Now, fourInHour, 4).Outcome);
+		Check.Equal("send: 5th code in the hour allowed", OtpSendOutcome.Allowed, Send(fourInHour, 4).Outcome);
 
 		var fiveInHour = Enumerable.Range(1, 5).Select(i => Now.AddMinutes(-10 * i)).ToList(); // -10 .. -50 min
-		var limited = FarmerOtpRules.DecideSend(Now, fiveInHour, 5);
+		var limited = Send(fiveInHour, 5);
 		Check.Equal("send: 6th code in the hour refused", OtpSendOutcome.PhoneHourLimit, limited.Outcome);
 		Check.Equal("send: free again when the oldest send leaves the hour (10 min)", 600, limited.RetryAfterSeconds);
 
 		var oldOnes = Enumerable.Range(1, 5).Select(i => Now.AddMinutes(-61 - i)).ToList();
-		Check.Equal("send: sends older than an hour do not count", OtpSendOutcome.Allowed, FarmerOtpRules.DecideSend(Now, oldOnes, 0).Outcome);
+		Check.Equal("send: sends older than an hour do not count", OtpSendOutcome.Allowed, Send(oldOnes, 0).Outcome);
 
-		Check.Equal("send: 20 from one IP in the hour refused", OtpSendOutcome.IpHourLimit, FarmerOtpRules.DecideSend(Now, none, 20).Outcome);
-		Check.Equal("send: 19 from one IP allowed", OtpSendOutcome.Allowed, FarmerOtpRules.DecideSend(Now, none, 19).Outcome);
+		Check.Equal("send: 20 from one IP in the hour refused", OtpSendOutcome.IpHourLimit, Send(none, 20).Outcome);
+		Check.Equal("send: 19 from one IP allowed", OtpSendOutcome.Allowed, Send(none, 19).Outcome);
 		Check.Equal("send: cooldown wins over the hour limit", OtpSendOutcome.Cooldown,
-			FarmerOtpRules.DecideSend(Now, fiveInHour.Append(Now.AddSeconds(-5)), 20).Outcome);
+			Send(fiveInHour.Append(Now.AddSeconds(-5)), 20).Outcome);
+	}
+
+	private static OtpSendDecision Send(IEnumerable<DateTime> phoneSends, int ipSends, int globalSends = 0, OtpLimits? limits = null) =>
+		FarmerOtpRules.DecideSend(Now, phoneSends, ipSends, globalSends, limits ?? OtpLimits.Default);
+
+	private static void Caps()
+	{
+		var none = Array.Empty<DateTime>();
+		Check.Equal("caps: defaults 20 per IP, 500 in total", new OtpLimits(20, 500), OtpLimits.From(null, ""));
+		Check.Equal("caps: configured values used", new OtpLimits(50, 2000), OtpLimits.From("50", "2000"));
+		Check.Equal("caps: zero / negative / junk fall back to defaults", new OtpLimits(20, 500), OtpLimits.From("0", "-5"));
+		Check.Equal("caps: junk falls back to the default", 20, OtpLimits.From("lots", null).PerIpHourly);
+
+		Check.Equal("global: 499 sends this hour still allowed", OtpSendOutcome.Allowed, Send(none, 0, 499).Outcome);
+		var global = Send(none, 0, 500);
+		Check.Equal("global: the 501st send in the hour refused", OtpSendOutcome.GlobalHourLimit, global.Outcome);
+		Check.That("global: refusal carries a wait", global.RetryAfterSeconds > 0);
+		Check.Equal("global: configured cap of 2 refuses the 3rd", OtpSendOutcome.GlobalHourLimit, Send(none, 0, 2, new OtpLimits(20, 2)).Outcome);
+		Check.Equal("ip: configured cap of 50 allows the 21st", OtpSendOutcome.Allowed, Send(none, 20, 0, new OtpLimits(50, 500)).Outcome);
+		Check.Equal("ip: configured cap of 3 refuses the 4th", OtpSendOutcome.IpHourLimit, Send(none, 3, 0, new OtpLimits(3, 500)).Outcome);
+		Check.Equal("ip: the per-IP limit is checked before the global one", OtpSendOutcome.IpHourLimit, Send(none, 20, 500).Outcome);
+	}
+
+	private static void TrustedClientIp()
+	{
+		const string key = "s3cret-key";
+		Check.Equal("trusted ip: accepted with the exact key", "198.51.100.7",
+			FarmerOtpRules.ClientIp("198.51.100.7", key, key, "10.9.9.9", "10.0.0.5"));
+		Check.Equal("trusted ip: IPv6 accepted with the key", "2001:db8::1",
+			FarmerOtpRules.ClientIp(" 2001:db8::1 ", key, key, null, "10.0.0.5"));
+		Check.Equal("trusted ip: wrong key ignored (proxy chain used)", "10.9.9.9",
+			FarmerOtpRules.ClientIp("198.51.100.7", "s3cret-kez", key, "10.9.9.9", "10.0.0.5"));
+		Check.Equal("trusted ip: key prefix ignored", "10.0.0.5",
+			FarmerOtpRules.ClientIp("198.51.100.7", "s3cret", key, null, "10.0.0.5"));
+		Check.Equal("trusted ip: missing key ignored", "10.0.0.5",
+			FarmerOtpRules.ClientIp("198.51.100.7", "", key, null, "10.0.0.5"));
+		Check.Equal("trusted ip: not trusted when no key is configured", "10.0.0.5",
+			FarmerOtpRules.ClientIp("198.51.100.7", "", "", null, "10.0.0.5"));
+		Check.Equal("trusted ip: empty configured key never matches an empty header", "10.0.0.5",
+			FarmerOtpRules.ClientIp("198.51.100.7", null, null, null, "10.0.0.5"));
+		Check.Equal("trusted ip: a non-IP value is ignored even with the key", "10.0.0.5",
+			FarmerOtpRules.ClientIp("not-an-ip; drop table", key, key, null, "10.0.0.5"));
 	}
 
 	private static void ClientIp()
@@ -159,6 +205,7 @@ internal static class FarmerPortalAuthTests
 		Expect("profile: missing village refused", d => d.Village = " ", "village");
 		Expect("profile: 5-digit pincode refused", d => d.PinCode = "62850", "pinCode");
 		Expect("profile: letters in pincode refused", d => d.PinCode = "62850a", "pinCode");
+		Expect("profile: Devanagari digits in pincode refused", d => d.PinCode = "०१२३४५", "pinCode");
 		Expect("profile: negative land refused", d => d.LandAcres = -1, "landAcres");
 		Expect("profile: land above 10000 acres refused", d => d.LandAcres = 10000.5m, "landAcres");
 		Expect("profile: latitude without longitude refused", d => d.Latitude = 9.1, "latitude");

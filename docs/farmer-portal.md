@@ -21,6 +21,8 @@ plan: `docs/superpowers/plans/2026-11-27-farmer-portal.md`. Each task appends it
 - **Staff / dealer numbers are refused** (409, "This number is registered to a SPIC staff or dealer
   account. Please use the normal login."). Matching checks `PhoneNumber` in the spellings `98..`,
   `098..`, `9198..`, `+9198..`, `+91 98..`, `+91-98..` and a `UserName` equal to the number.
+  Each such answer counts against the caller's per-IP limit (a dead "probe" row), so it cannot be
+  used freely to find staff and dealer numbers; verify gives the 409 only for a number with a live code.
 - **Onboarding** `/farmer/onboarding` (first time) and **My profile** `/farmer/profile`: one form
   (`Components/FarmerPortal/FarmerProfileForm.razor`). Required: name, state, district, village,
   pincode. Optional: email, taluk, GPS ("Use my location"), crops (chips + "Another crop"), land in
@@ -46,21 +48,34 @@ plan: `docs/superpowers/plans/2026-11-27-farmer-portal.md`. Each task appends it
 | POST | `api/FarmerAuth/otp/request` `{ phone }` | anonymous | 200 `{ success, expiresInSeconds: 300, resendInSeconds: 30, devCode? }`; 400 bad number; 409 staff number; 429 `{ message, retryAfterSeconds }`; 502 SMS failed; 503 Production with `Sms:Provider = Log` |
 | POST | `api/FarmerAuth/otp/verify` `{ phone, code }` | anonymous | 200 = normal `LoginResponseModel` + `profileComplete`, `isNewUser`; 400 wrong / expired / too many tries; 403 inactive; 409 staff number |
 | GET | `api/Farmer/profile` | Farmer | 200 `FarmerProfileDto` (with `stateName`, `districtName`, `profileComplete`, `sasLinked`) or 404 `{ profileComplete: false, sasLinked, phone }` |
-| PUT | `api/Farmer/profile` | Farmer | validates, saves, copies Name / Email to the Identity user; 400 `{ message, errors: { field: text } }` |
+| PUT | `api/Farmer/profile` | Farmer | validates, saves, copies the Name (never the email) to the Identity user; 400 `{ message, errors: { field: text } }` |
 
 Contracts: `SPIC.Core/DTOs/FarmerPortalDtos.cs`. `devCode` is returned ONLY in the Development
 environment with the Log provider.
 
 ### OTP rules (`SPIC.Core/FarmerPortal/FarmerOtpRules.cs`, pinned by the harness)
 
-Indian mobiles only (`^[6-9]\d{9}$` after stripping spaces, `+91` / `0091` / `91` (12 digits),
-leading `0`). 6-digit code from `RandomNumberGenerator`; stored as hex SHA-256 of
+Indian mobiles only (`^[6-9][0-9]{9}$`, ASCII digits only, after stripping spaces, `+91` / `0091` /
+`91` (12 digits), leading `0`). 6-digit code from `RandomNumberGenerator`; stored as hex SHA-256 of
 `code:phone:pepper`; constant-time compare; 5 minute expiry; single use; 5 wrong tries kill the
 code ("Too many tries, request a new code"); 30 s resend cooldown; 5 codes per number per rolling
-hour; 20 per client IP per hour (IP = the LAST `X-Forwarded-For` entry, i.e. the one the ingress
-appended, else the socket address). Attempts and consumption are updated with conditional
-`ExecuteUpdate` so parallel guesses cannot pass the limit. Challenge rows older than a day are
-deleted by the next request. Phones are logged only masked (`98xxxxxx21`).
+hour; `FarmerPortal:OtpPerIpHourlyCap` (default 20) codes and staff-number probes per client IP per
+hour; `FarmerPortal:OtpGlobalHourlyCap` (default 500) codes per hour across ALL numbers (429 "Many
+farmers are signing in right now", logged as a warning). Attempts and consumption are updated with
+conditional `ExecuteUpdate`. The send limits are counted and the new row inserted inside one
+transaction holding PostgreSQL advisory locks (`pg_advisory_xact_lock(hashtextextended(key, 0))` on
+the number, then the IP, then a global key), so parallel requests and both API replicas wait for
+each other and the caps hold exactly; the SMS goes out after the commit. Challenge rows older than
+a day are deleted by the next request. Phones are logged only masked (`98xxxxxx21`).
+
+**Client IP.** The web host is Blazor Server, so every web farmer reaches the API from the web
+container. The web host therefore sends the browser's IP (taken from the hub connection: last
+`X-Forwarded-For` entry, else the socket) in `X-Spic-Client-Ip` with `X-Spic-Client-Key` =
+`FarmerPortal:TrustedClientKey`, on `otp/request` only (`SPIC.MauiBlazorApp.Web/Services/FarmerClientIp.cs`).
+The API trusts that header only when its own `FarmerPortal:TrustedClientKey` is non-empty, the key
+matches exactly (constant-time) and the value is a valid IP. Otherwise the IP is the LAST
+`X-Forwarded-For` entry (the one the ingress appended), else the socket address. The MAUI app calls
+the API directly, so its farmers are bucketed by their own (often carrier-shared) public IP.
 
 ### Config keys (placeholders in `SpicAPI/appsettings.json`, values from env / Key Vault)
 
@@ -71,6 +86,9 @@ deleted by the next request. Phones are logged only masked (`98xxxxxx21`).
 | `Sms:Msg91:TemplateId` | DLT-approved flow template; its OTP variable must be named `otp` (`##otp##`) |
 | `Sms:Msg91:SenderId` | optional DLT sender id |
 | `FarmerPortal:OtpPepper` | mixed into every OTP hash; falls back to `Jwt:Key` when empty |
+| `FarmerPortal:TrustedClientKey` | shared secret, the SAME value on the API and the web host (both appsettings have an empty placeholder); empty = the web host's browser-IP header is never sent / trusted |
+| `FarmerPortal:OtpPerIpHourlyCap` | codes + staff-number probes per client IP per hour; empty = 20 |
+| `FarmerPortal:OtpGlobalHourlyCap` | codes per hour across all numbers (SMS pumping backstop); empty = 500 |
 
 MSG91 is called through the Flow API (`POST https://control.msg91.com/api/v5/flow`, JSON body, 10 s
 timeout); the code never appears in a URL or a log line.
@@ -92,15 +110,25 @@ timeout); the code never appears in a URL or a log line.
 ### Tests
 
 - Harness: `FarmerPortalAuthTests` (phone, codes, hash / compare, attempts / expiry, send limits,
-  client IP, profile validation) and `FarmerPortalRouteTests` (routes, landing page, shell tabs,
+  configurable per-IP and global caps, client IP and the trusted web-host header, profile validation) and `FarmerPortalRouteTests` (routes, landing page, shell tabs,
   SAS-link flag lifetime).
 - Smoke: `python tools/farmer-portal-check/smoke_task1.py` against the local API (Development,
-  local `spicone_dev` only; refuses non-localhost URLs).
+  local `spicone_dev` only; refuses non-localhost URLs). With the API started with
+  `FarmerPortal__TrustedClientKey=local-smoke-key FarmerPortal__OtpPerIpHourlyCap=5`, run it with
+  `--client-key local-smoke-key --ip-cap 5` to also check parallel requests against the locks and
+  the trusted-header acceptance / rejection; `--staff-phone` checks the 409 and that probes count.
 
 ### Left / for the owner
 
 - Production needs `Sms__Provider=Msg91`, `Sms__Msg91__AuthKey`, `Sms__Msg91__TemplateId` (DLT
   template with variable `otp`) and ideally `FarmerPortal__OtpPepper` before farmers can sign in;
   until then the request answers 503 "SMS is not set up yet".
+- **Before go-live:** set `FarmerPortal__TrustedClientKey` (a long random secret from Key Vault) to the
+  SAME value on the API and the web host. Without it every web farmer shares the web host's IP, i.e.
+  one per-IP bucket (`OtpPerIpHourlyCap`, default 20 per hour) for the whole web portal. Review
+  `FarmerPortal__OtpPerIpHourlyCap` (carrier NAT puts many app users behind one IP) and
+  `FarmerPortal__OtpGlobalHourlyCap` (default 500/hour) against the expected sign-up rate and the
+  MSG91 budget, and confirm nothing (CDN / Front Door) sits in front of the API ingress, which would
+  change which `X-Forwarded-For` entry is the client.
 - Prod migration `V34_FarmerPortalAuth` (owner runs prod).
 - Task 1b restyles these screens with the shared `Fp*` components (six-box OTP input, steps).

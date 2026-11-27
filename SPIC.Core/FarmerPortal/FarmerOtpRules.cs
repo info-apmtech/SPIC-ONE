@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Net;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -10,8 +12,29 @@ public enum OtpSendOutcome
     Cooldown,
     /// <summary><see cref="FarmerOtpRules.MaxSendsPerPhonePerHour"/> codes already went to this number in the rolling hour.</summary>
     PhoneHourLimit,
-    /// <summary><see cref="FarmerOtpRules.MaxSendsPerIpPerHour"/> codes already went out from this client IP in the rolling hour.</summary>
-    IpHourLimit
+    /// <summary><see cref="OtpLimits.PerIpHourly"/> codes (and staff-number probes) already came from this client IP in the rolling hour.</summary>
+    IpHourLimit,
+    /// <summary><see cref="OtpLimits.GlobalHourly"/> codes already went out across ALL numbers in the rolling hour
+    /// (backstop against SMS pumping when per-number / per-IP limits are dodged).</summary>
+    GlobalHourLimit
+}
+
+/// <summary>
+/// The configurable send caps: FarmerPortal:OtpPerIpHourlyCap (default 20) and
+/// FarmerPortal:OtpGlobalHourlyCap (default 500). Empty, invalid or non-positive values use the default.
+/// </summary>
+public sealed record OtpLimits(int PerIpHourly, int GlobalHourly)
+{
+    public const int DefaultPerIpHourly = 20;
+    public const int DefaultGlobalHourly = 500;
+
+    public static OtpLimits Default { get; } = new(DefaultPerIpHourly, DefaultGlobalHourly);
+
+    public static OtpLimits From(string? perIpHourly, string? globalHourly) =>
+        new(Positive(perIpHourly, DefaultPerIpHourly), Positive(globalHourly, DefaultGlobalHourly));
+
+    private static int Positive(string? value, int fallback) =>
+        int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var n) && n > 0 ? n : fallback;
 }
 
 public sealed record OtpSendDecision(OtpSendOutcome Outcome, int RetryAfterSeconds)
@@ -38,7 +61,6 @@ public static class FarmerOtpRules
     public const int CodeLength = 6;
     public const int MaxAttempts = 5;
     public const int MaxSendsPerPhonePerHour = 5;
-    public const int MaxSendsPerIpPerHour = 20;
 
     public static readonly TimeSpan CodeLifetime = TimeSpan.FromMinutes(5);
     public static readonly TimeSpan ResendCooldown = TimeSpan.FromSeconds(30);
@@ -49,10 +71,13 @@ public static class FarmerOtpRules
     /// <summary>
     /// May another code be sent? <paramref name="phoneSendsUtc"/> are the creation times of this
     /// number's challenges (any order, older ones are ignored); <paramref name="ipSendsInWindow"/>
-    /// counts the challenges created from the client IP in the last hour. The cooldown is checked
-    /// first so the farmer sees the shortest wait.
+    /// counts the challenges and staff-number probes from the client IP in the last hour;
+    /// <paramref name="globalSendsInWindow"/> counts every code sent in the last hour. The cooldown
+    /// is checked first so the farmer sees the shortest wait. The caller must count and insert
+    /// under one lock (FarmerAuthController uses PostgreSQL advisory locks) for the caps to hold.
     /// </summary>
-    public static OtpSendDecision DecideSend(DateTime nowUtc, IEnumerable<DateTime> phoneSendsUtc, int ipSendsInWindow)
+    public static OtpSendDecision DecideSend(DateTime nowUtc, IEnumerable<DateTime> phoneSendsUtc, int ipSendsInWindow,
+        int globalSendsInWindow, OtpLimits limits)
     {
         var windowStart = nowUtc - LimitWindow;
         var recent = phoneSendsUtc.Where(t => t > windowStart).OrderBy(t => t).ToList();
@@ -71,8 +96,11 @@ public static class FarmerOtpRules
             return new(OtpSendOutcome.PhoneHourLimit, SecondsUntil(freeAt - nowUtc));
         }
 
-        if (ipSendsInWindow >= MaxSendsPerIpPerHour)
+        if (ipSendsInWindow >= limits.PerIpHourly)
             return new(OtpSendOutcome.IpHourLimit, (int)LimitWindow.TotalSeconds);
+
+        if (globalSendsInWindow >= limits.GlobalHourly)
+            return new(OtpSendOutcome.GlobalHourLimit, (int)LimitWindow.TotalSeconds);
 
         return new(OtpSendOutcome.Allowed, 0);
     }
@@ -109,10 +137,35 @@ public static class FarmerOtpRules
     public static bool HashesMatch(string a, string b) =>
         CryptographicOperations.FixedTimeEquals(Encoding.ASCII.GetBytes(a ?? string.Empty), Encoding.ASCII.GetBytes(b ?? string.Empty));
 
+    /// <summary>Header the SPIC web host (Blazor Server) uses to pass the browser's IP to the API.</summary>
+    public const string ClientIpHeader = "X-Spic-Client-Ip";
+
+    /// <summary>Shared secret proving the call comes from the SPIC web host (FarmerPortal:TrustedClientKey).</summary>
+    public const string ClientKeyHeader = "X-Spic-Client-Key";
+
     /// <summary>
-    /// The client IP used for the per-IP limit: the LAST X-Forwarded-For entry (the one the
-    /// nearest proxy appended - a client can prepend anything it likes, but cannot change what
-    /// the ingress adds), else the socket address.
+    /// The client IP for the per-IP limit. The web host runs Blazor Server, so every web farmer
+    /// reaches the API from the web container; it forwards the browser's IP in
+    /// <see cref="ClientIpHeader"/>, trusted ONLY when <paramref name="providedKey"/> equals the
+    /// configured non-empty key (constant-time) and the value is a real IP address. Otherwise the
+    /// header is ignored and <see cref="ClientIp(string?, string?)"/> decides.
+    /// </summary>
+    public static string? ClientIp(string? trustedClientIp, string? providedKey, string? configuredKey,
+        string? forwardedFor, string? remoteAddress)
+    {
+        if (!string.IsNullOrEmpty(configuredKey) && !string.IsNullOrEmpty(providedKey)
+            && CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(providedKey), Encoding.UTF8.GetBytes(configuredKey))
+            && IPAddress.TryParse(trustedClientIp?.Trim(), out var address))
+        {
+            return address.ToString();
+        }
+        return ClientIp(forwardedFor, remoteAddress);
+    }
+
+    /// <summary>
+    /// The client IP from the proxy chain: the LAST X-Forwarded-For entry (the one the nearest
+    /// proxy appended - a client can prepend anything it likes, but cannot change what the
+    /// ingress adds), else the socket address.
     /// </summary>
     public static string? ClientIp(string? forwardedFor, string? remoteAddress)
     {
