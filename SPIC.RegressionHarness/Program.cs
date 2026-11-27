@@ -39,6 +39,10 @@ internal static class Program
 		GuestHouseReceptionistScopeTests.Run();
 		Console.WriteLine();
 
+		// Room number is shown only once assigned at check-in (Booking Preview, My Bookings, Booking Details).
+		GuestHouseRoomNumberDisplayTests.Run();
+		Console.WriteLine();
+
 		// One booking = one room = one bill: real controller actions on an InMemory database
 		// with a stubbed Razorpay service (no real payment, no real database).
 		GuestHouseSingleRoomBookingTests.Run();

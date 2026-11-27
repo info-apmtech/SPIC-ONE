@@ -1720,7 +1720,13 @@ namespace SpicAPI.Controllers
 		// Room No shown to the customer (My Bookings / Booking Details). A single-record booking
 		// shows its record's RoomNumber, exactly as before. A multi-record booking shows every room
 		// it holds: its reservation / allocation rows while active, the Check-Out snapshot after.
-		private static string? CustomerRoomNumber(GuestHouseBooking booking)
+		//
+		// A physical room is only assigned at Front Office Check-In. Before that, GuestHouseRoom.RoomNumber
+		// is merely the first number of the room-type record, not this guest's room, so a booking that is
+		// not yet CheckedIn / Completed shows no room number (null). Once in the stay, the actual
+		// allocation rows win, then the Check-Out snapshot; the record's base number is only a last
+		// fallback for legacy stays that have neither.
+		internal static string? CustomerRoomNumber(GuestHouseBooking booking)
 		{
 			if (GuestHouseRoomInventory.IsMultiRecordBooking(booking.GuestHouseRoomId, booking.RoomAllocations))
 			{
@@ -1730,15 +1736,21 @@ namespace SpicAPI.Controllers
 					.OrderBy(n => n));
 			}
 
-			// After Check-Out the rows are gone; a snapshot holding a number the primary record does
-			// not own can only come from a multi-record booking.
-			if (!string.IsNullOrWhiteSpace(booking.AllocatedRoomNumber) && booking.GuestHouseRoom != null)
-			{
-				var own = GuestHouseRoomInventory.EnumeratePhysicalRoomNumbers(booking.GuestHouseRoom, booking.GuestHouseRoom.AvailableQuantity);
-				var snapshot = booking.AllocatedRoomNumber.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-				if (snapshot.Any(n => !GuestHouseRoomInventory.ContainsNumber(own, n)))
-					return booking.AllocatedRoomNumber;
-			}
+			if (booking.BookingStatus != GuestHouseBookingStatus.CheckedIn
+				&& booking.BookingStatus != GuestHouseBookingStatus.Completed)
+				return null;
+
+			var allocated = booking.RoomAllocations?
+				.Select(a => a.RoomNumber)
+				.Where(n => !string.IsNullOrWhiteSpace(n))
+				.Distinct(StringComparer.OrdinalIgnoreCase)
+				.OrderBy(n => n)
+				.ToList();
+			if (allocated is { Count: > 0 })
+				return string.Join(", ", allocated);
+
+			if (!string.IsNullOrWhiteSpace(booking.AllocatedRoomNumber))
+				return booking.AllocatedRoomNumber;
 
 			return booking.GuestHouseRoom?.RoomNumber;
 		}
