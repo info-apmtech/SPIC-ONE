@@ -217,9 +217,11 @@ namespace SpicAPI.Controllers
 					query = query.Where(p => p.Status == CommunityDiscussionStatus.ExpertAnswer);
 					break;
 				case "near":
-					// Farmer portal Task 3: authors near the caller (district, else state; CommunityNearRules).
-					var (_, nearIds) = await NearAuthorIdsAsync(HttpContext.RequestAborted);
-					query = query.Where(p => nearIds.Contains(p.AuthorUserId));
+					// Farmer portal Task 3: authors near the caller (district, else state; CommunityNearRules),
+					// as a SQL sub-query so counting and paging stay in the database.
+					var (_, _, nearPosts, _) = await NearAsync(HttpContext.RequestAborted);
+					var nearPostIds = nearPosts.Select(n => n.Id);
+					query = query.Where(p => nearPostIds.Contains(p.Id));
 					break;
 			}
 
@@ -256,7 +258,7 @@ namespace SpicAPI.Controllers
 			if (pageSize > 50) pageSize = 50;
 
 			var ct = HttpContext.RequestAborted;
-			var (area, scope, ids) = await NearAsync(ct);
+			var (area, scope, nearPosts, total) = await NearAsync(ct);
 			var result = new CommunityNearPageDto
 			{
 				Scope = scope,
@@ -264,13 +266,13 @@ namespace SpicAPI.Controllers
 				Page = page,
 				PageSize = pageSize
 			};
-			if (ids.Count == 0) return Ok(result);
+			if (scope == SPIC.Core.DTOs.FarmerAreaScope.None) return Ok(result);
 
-			var query = _db.CommunityPosts.AsNoTracking()
-				.Where(p => !p.IsDeleted && ids.Contains(p.AuthorUserId))
-				.OrderByDescending(p => p.LastActivityAt).ThenByDescending(p => p.Id);
+			// The total is the scope count NearPostsAsync already ran; one more query reads the page.
+			// The "near" test is a SQL sub-query, so ordering and paging run in the database.
+			var query = nearPosts.OrderByDescending(p => p.LastActivityAt).ThenByDescending(p => p.Id);
 
-			result.Total = await query.CountAsync(ct);
+			result.Total = total;
 			var posts = await query.Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(ct);
 			result.Items = await BuildSummariesAsync(posts);
 			return Ok(result);
@@ -1334,18 +1336,11 @@ namespace SpicAPI.Controllers
 
 		// ---------------------------------------------------------------- near me (farmer portal Task 3)
 
-		private async Task<(SpicAPI.Services.CommunityArea Area, SPIC.Core.DTOs.FarmerAreaScope Scope, List<string> Ids)> NearAsync(CancellationToken ct)
+		private async Task<(SpicAPI.Services.CommunityArea Area, SPIC.Core.DTOs.FarmerAreaScope Scope, IQueryable<CommunityPost> Posts, int Total)> NearAsync(CancellationToken ct)
 		{
 			var area = await _near.CallerAreaAsync(CurrentUserId(), CurrentRole(), ClaimInt("spic:state_id"), ct);
-			var authors = await _near.AuthorsAsync(area, ct);
-			var scope = SPIC.Core.FarmerPortal.CommunityNearRules.ChooseScope(authors);
-			return (area, scope, SPIC.Core.FarmerPortal.CommunityNearRules.For(authors, scope).ToList());
-		}
-
-		private async Task<(SPIC.Core.DTOs.FarmerAreaScope Scope, List<string> Ids)> NearAuthorIdsAsync(CancellationToken ct)
-		{
-			var (_, scope, ids) = await NearAsync(ct);
-			return (scope, ids);
+			var (scope, posts, total) = await _near.NearPostsAsync(area, null, ct);
+			return (area, scope, posts, total);
 		}
 
 		/// <summary>An OTP farmer's profile name and "Village, District" (null when they have no farmer profile).</summary>

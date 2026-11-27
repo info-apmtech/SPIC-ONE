@@ -390,18 +390,25 @@ Contracts: `SPIC.Core/DTOs/FarmerConnectDtos.cs`. Enums travel as numbers like t
 ### What "near" means (no migration)
 
 Discussions have no location column and none was added. A discussion is near when its **author** is
-(`SPIC.Core/FarmerPortal/CommunityNearRules.cs`, fed by `SpicAPI/Services/CommunityNearResolver.cs`):
+(`SpicAPI/Services/CommunityNearResolver.NearPosts`, scope choice in `SPIC.Core/FarmerPortal/CommunityNearRules.cs`):
 
 - a farmer whose farmer profile (else linked `SasFarmers` record) is in the district;
 - an active SPIC staff login (`Employeelogins`) whose headquarter (`HeadquartersId` or `HeadquartersIds`) is
   one of the headquarters of the listable SPIC dealers registered in the district (the "My SPIC team"
   mapping); a login without any headquarter matches by region;
-- fallback: when no author of the district wrote anything, every farmer and staff login of the state.
+- state level: also every farmer and staff login of the state.
+
+**Scope:** the district when it has at least 3 near discussions (`CommunityNearRules.MinDistrictPosts`),
+else the state (which includes the district's), else nothing; `scope` / `areaName` in the answer say which
+applied, and the page shows a note when it is the state. "Talked about near you" uses the same rule on the
+discussions active in the 90-day window.
 
 The caller's area is the farmer profile (district + state); for staff it is the `spic:state_id` claim (state
-only). Only the authors of live discussions are looked up, so the cost grows with the number of authors, not
-posts. Old discussions count too (matched by their author's current place). Dealer accounts are not linked to
-a dealer registration, so dealers' posts never count as near.
+only). The author test is a SQL sub-query (`AuthorUserId IN (profiles ...) OR IN (SAS farmers ...) OR IN
+(staff logins ...)`, array overlap `&&` for multi-HQ / multi-region logins), so counting, ordering and paging
+run in the database: per request one small dealer-HQ lookup, at most two COUNTs and the page query; nothing
+is loaded into memory per author (fix round 1). Old discussions count too (matched by their author's current
+place). Dealer accounts are not linked to a dealer registration, so dealers' posts never count as near.
 
 ### Endpoints
 
@@ -419,8 +426,8 @@ Contracts: `SPIC.Core/DTOs/FarmerTrendsDtos.cs`. Client: `Services/FarmerAreaApi
 | Card | Source | Rule |
 |---|---|---|
 | What farmers near you grow | `FarmerProfiles.PrimaryCrops` (all profiles of the area) + `SampleItems.Crop1/Crop2` of SAS samples collected in the last 90 days (not Draft) | one count per farmer (account user id, else SAS farmer id); district if it has >= 5 farmers with crops, else state, else hidden; a crop is listed only when >= 2 farmers grow it; top 6 |
-| Soil problems near you | `LabReports` (Soil, generated in the last 90 days) -> `SampleItems` -> `SasFarmers` (district / state) -> `SampleLabResults` for N, P, K, Zn, Organic Carbon, S, Fe, B, Mn, Cu with a value | the lab's own `Status` (`Deficient` = Low); one result per sample and nutrient; district if it has >= 5 samples, else state, else hidden; a nutrient tested on < 5 samples is hidden (counted in `hiddenForFewSamples`); nutrients with no Low sample are not listed; top 6 by Low share |
-| Talked about near you | `CommunityPosts` active in the last 90 days by "near" authors + their `CommunityPostReplies` of the window | score = recent replies x 3 + likes + views / 10; discussions with no activity left out; top 5; district authors first, else state |
+| Soil problems near you | `LabReports` (Soil, generated in the last 90 days) -> `SampleBatches` -> `SampleItems` -> `SampleCollections` -> `SasFarmers` (district / state; deleted batches, samples, collections and farmers excluded) -> `SampleLabResults` for N, P, K, Zn, Organic Carbon, S, Fe, B, Mn, Cu with a value | the lab's own `Status` (`Deficient` = Low); one result per sample and nutrient; district if it has >= 5 samples, else state, else hidden; a nutrient tested on < 5 samples is hidden (counted in `hiddenForFewSamples`); nutrients with no Low sample are not listed; top 6 by Low share |
+| Talked about near you | `CommunityPosts` active in the last 90 days by "near" authors + their `CommunityPostReplies` of the window | score = recent replies x 3 + likes + views / 10; discussions with no activity left out; scored, ordered and limited in SQL; top 5; the district when it has >= 3 such discussions, else the state |
 | SPIC dealers | `DealerRegistrations` with `FarmerDealerRules.ListableForFarmers` | count in the district, else in the state (`DealerStateId ?? StateId`), else none |
 
 Only these totals leave the API: never a farmer's name, phone, village, GPS or user id.

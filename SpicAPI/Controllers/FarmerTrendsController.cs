@@ -151,14 +151,21 @@ namespace SpicAPI.Controllers
         private async Task<List<TrendSoilResult>> SoilResultsAsync(CommunityArea area, List<int> stateDistricts, DateTime since, CancellationToken ct)
         {
             var nutrients = FarmerTrendRules.NutrientParameters.ToList();
+            // Deleted samples, collections, batches and farmers never count (LabReport and
+            // SampleLabResult have no IsDeleted flag of their own).
             var rows = await (
                 from report in _db.LabReports.AsNoTracking()
+                join batch in _db.SampleBatches.AsNoTracking() on report.BatchId equals batch.Id
                 join item in _db.SampleItems.AsNoTracking() on report.SampleItemId equals item.Id
+                join collection in _db.SampleCollections.AsNoTracking() on item.CollectionId equals collection.Id
                 join farmer in _db.SasFarmers.AsNoTracking() on item.FarmerId equals farmer.Id
                 join result in _db.SampleLabResults.AsNoTracking() on item.Id equals result.SampleItemId
                 where report.SampleType == SampleType.Soil
                       && report.GeneratedAt >= since
+                      && !batch.IsDeleted
                       && !item.IsDeleted
+                      && !collection.IsDeleted
+                      && !farmer.IsDeleted
                       && nutrients.Contains(result.Parameter)
                       && result.EnteredValue != null && result.EnteredValue != ""
                       && ((area.StateId > 0 && farmer.StateId == area.StateId)
@@ -169,41 +176,37 @@ namespace SpicAPI.Controllers
             return rows.Select(r => new TrendSoilResult(r.SampleId, r.DistrictId, r.Parameter, r.Status)).ToList();
         }
 
-        /// <summary>"Talked about near you": discussions active in the window by authors of the district, else the state.</summary>
+        /// <summary>
+        /// "Talked about near you": discussions active in the window by authors of the district (when it has
+        /// at least <see cref="CommunityNearRules.MinDistrictPosts"/> of them), else of the state. Scored,
+        /// ordered and limited in SQL (recent replies are a correlated COUNT); only 20 rows are read.
+        /// </summary>
         private async Task<FarmerTalkedTrendDto> TalkedAsync(CommunityArea area, DateTime since, CancellationToken ct)
         {
-            var authors = await _near.AuthorsAsync(area, ct);
-            var stateAuthors = authors.State.ToList();
-            if (stateAuthors.Count == 0) return new FarmerTalkedTrendDto();
+            var (scope, near, _) = await _near.NearPostsAsync(area, p => p.LastActivityAt >= since, ct);
+            if (scope == FarmerAreaScope.None) return new FarmerTalkedTrendDto();
 
-            var posts = await _db.CommunityPosts.AsNoTracking()
-                .Where(p => !p.IsDeleted && p.LastActivityAt >= since && stateAuthors.Contains(p.AuthorUserId))
-                .Select(p => new { p.Id, p.Title, p.Crop, p.Category, p.Status, p.ReplyCount, p.Views, p.LikeCount, p.LastActivityAt, p.AuthorUserId })
+            var rows = await near
+                .Select(p => new
+                {
+                    p.Id, p.Title, p.Crop, p.Category, p.Status, p.ReplyCount, p.Views, p.LikeCount, p.LastActivityAt,
+                    Recent = _db.CommunityPostReplies.Count(r => r.PostId == p.Id && !r.IsDeleted && r.CreatedAt >= since)
+                })
+                .OrderByDescending(x => x.Recent * 3 + x.LikeCount + x.Views / 10)
+                .ThenByDescending(x => x.LastActivityAt)
+                .Take(20)
                 .ToListAsync(ct);
-            if (posts.Count == 0) return new FarmerTalkedTrendDto();
 
-            var ids = posts.Select(p => p.Id).ToList();
-            var recent = await _db.CommunityPostReplies.AsNoTracking()
-                .Where(r => !r.IsDeleted && r.CreatedAt >= since && ids.Contains(r.PostId))
-                .GroupBy(r => r.PostId)
-                .Select(g => new { PostId = g.Key, Count = g.Count() })
-                .ToDictionaryAsync(x => x.PostId, x => x.Count, ct);
-
-            var all = posts.Select(p => new
-            {
-                p.AuthorUserId,
-                Post = new TrendPost(p.Id, p.Title, p.Crop, p.Category, p.Status, p.ReplyCount,
-                    recent.TryGetValue(p.Id, out var n) ? n : 0, p.Views, p.LikeCount, p.LastActivityAt)
-            }).ToList();
-
-            var inDistrict = FarmerTrendRules.TopTalked(all.Where(x => authors.District.Contains(x.AuthorUserId)).Select(x => x.Post));
-            if (inDistrict.Count > 0)
-                return new FarmerTalkedTrendDto { Scope = FarmerAreaScope.District, AreaName = area.DistrictName, Items = inDistrict };
-
-            var inState = FarmerTrendRules.TopTalked(all.Select(x => x.Post));
-            return inState.Count > 0
-                ? new FarmerTalkedTrendDto { Scope = FarmerAreaScope.State, AreaName = area.StateName, Items = inState }
-                : new FarmerTalkedTrendDto();
+            var top = FarmerTrendRules.TopTalked(rows.Select(p =>
+                new TrendPost(p.Id, p.Title, p.Crop, p.Category, p.Status, p.ReplyCount, p.Recent, p.Views, p.LikeCount, p.LastActivityAt)));
+            return top.Count == 0
+                ? new FarmerTalkedTrendDto()
+                : new FarmerTalkedTrendDto
+                {
+                    Scope = scope,
+                    AreaName = FarmerTrendRules.AreaName(scope, area.DistrictName, area.StateName),
+                    Items = top
+                };
         }
 
         /// <summary>Listable SPIC dealers (<see cref="FarmerDealerRules.ListableForFarmers"/>) in the district, else the state.</summary>

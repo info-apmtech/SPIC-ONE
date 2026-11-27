@@ -140,7 +140,12 @@ def main():
         check("talked: at most 5", len(talked["items"]) <= 5, len(talked["items"]))
         check("talked: busiest first (2 recent replies x3 + 9 likes + 120 views / 10)", talked["items"] and talked["items"][0]["title"].startswith("Zinc shortage"),
               [i["title"] for i in talked["items"]])
-        check("dealers: 5 listable demo dealers in Thoothukudi", t["dealers"] == {"scope": 0, "areaName": "Thoothukudi", "count": 5}, t["dealers"])
+        # Same listable rule as Task 2's dealer list (no GPS = the district list).
+        _, dl, _ = call(base, "GET", "api/Farmer/dealers?pageSize=1", token=farmer)
+        check("dealers: count equals the district dealer list (Task 2 listable rule)",
+              t["dealers"]["scope"] == 0 and t["dealers"]["areaName"] == "Thoothukudi" and t["dealers"]["count"] == dl.get("total") and dl.get("scope") == 1,
+              (t["dealers"], dl.get("scope"), dl.get("total")))
+        print(f"    (scopes: crops {crops['scope']}, soil {soil['scope']}, talked {talked['scope']}, dealers {t['dealers']['scope']}; 0 = district, 1 = state)")
         leaked = [p for p, k in walk_keys(t) if k in PERSONAL_KEYS]
         check("trends carry no personal field (phone, user id, GPS, village, name)", not leaked, leaked)
         st2, t2, secs2 = call(base, "GET", "api/Farmer/trends", token=farmer)
@@ -152,7 +157,7 @@ def main():
     st, near, _ = call(base, "GET", "api/Community/near?page=1&pageSize=3", token=farmer)
     check("near 200", st == 200, near)
     if st == 200:
-        check("near: district scope", near["scope"] == 0 and near["areaName"] == "Thoothukudi", near)
+        check("near: district scope (5 district discussions >= the 3 threshold)", near["scope"] == 0 and near["areaName"] == "Thoothukudi", near)
         check("near: paging (3 of 5)", len(near["items"]) == 3 and near["total"] == 5 and near["hasMore"], near)
         authors = {i["author"]["name"] for i in near["items"]}
         check("near: authors are the local farmers / Madurai HQ staff",

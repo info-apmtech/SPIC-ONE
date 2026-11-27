@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Employeelogin = SPIC.Core.Entities.EmployeeRegistration.Employeelogin;
 using SPIC.Core.DTOs;
 using SPIC.Core.Entities;
 using SPIC.Core.FarmerPortal;
@@ -234,37 +235,57 @@ internal static class FarmerPortalTrendsTests
 			FarmerTrendRules.TopTalked(new[] { P(8, 0, 0, 9, replies: 2) }).Count == 1);
 	}
 
+	private static CommunityNearResolver.NearSources NearData()
+	{
+		FarmerProfile Profile(string user, int district, int state) => new()
+			{ UserId = user, Name = user, Phone = "6000000000", DistrictId = district, StateId = state, Village = "V", PinCode = "600000" };
+		var profiles = new List<FarmerProfile> { Profile("f-d", 1, 10), Profile("f-s", 2, 10), Profile("f-x", 5, 20) };
+		var sas = new List<SasFarmer> {
+			new SasFarmer { Name = "sas", Mobile = "1", UserId = "sas-d", DistrictId = 1, StateId = 10 },          // linked SAS farmer, no profile
+			new SasFarmer { Name = "sas", Mobile = "2", UserId = "f-x", DistrictId = 1, StateId = 10 },            // has a profile elsewhere: the profile wins
+			new SasFarmer { Name = "sas", Mobile = "3", UserId = "sas-del", DistrictId = 1, StateId = 10, IsDeleted = true } };
+		Employeelogin Login(string user, int state, int region, int hq, int[]? regions = null, int[]? hqs = null, bool active = true) => new()
+			{ UserId = user, Role = AppRole.MDO, StateId = state, RegionId = region, HeadquartersId = hq, RegionIds = regions, HeadquartersIds = hqs, IsActive = active };
+		var logins = new List<Employeelogin> {
+			Login("s-hq", 10, 0, 100),                          // HQ 100 serves the district
+			Login("s-hqs", 10, 0, 0, hqs: new[] { 7, 101 }),     // multi-HQ login
+			Login("s-rm", 10, 50, 0),                           // RM of region 50, no HQ
+			Login("s-other-hq", 10, 50, 999),                   // an HQ elsewhere: its region does not count
+			Login("s-far", 20, 60, 600),
+			Login("s-off", 10, 0, 100, active: false) };
+		var posts = new List<CommunityPost>();
+		var n = 0;
+		foreach (var author in new[] { "f-d", "f-s", "f-x", "sas-d", "sas-del", "s-hq", "s-hqs", "s-rm", "s-other-hq", "s-far", "s-off", "dealer" })
+			posts.Add(new CommunityPost { Id = ++n, Title = author, Body = "b", AuthorUserId = author });
+		posts.Add(new CommunityPost { Id = ++n, Title = "deleted", Body = "b", AuthorUserId = "f-d", IsDeleted = true });
+		return new CommunityNearResolver.NearSources(posts.AsQueryable(), profiles.AsQueryable(), sas.AsQueryable(), logins.AsQueryable());
+	}
+
+	private static string Titles(IQueryable<CommunityPost> q) => string.Join(",", q.Select(p => p.Title).ToList().OrderBy(t => t, StringComparer.Ordinal));
+
 	private static void Near()
 	{
-		var farmers = new[]
-		{
-			new NearFarmerAuthor("f-d", 1, 10),     // in the district
-			new NearFarmerAuthor("f-s", 2, 10),     // same state, other district
-			new NearFarmerAuthor("f-x", 5, 20)      // other state
-		};
-		var staff = new[]
-		{
-			new NearStaffAuthor("s-hq", 10, 0, 100, null, null),               // HQ 100 serves the district
-			new NearStaffAuthor("s-hqs", 10, 0, 0, null, new[] { 7, 101 }),    // multi-HQ login
-			new NearStaffAuthor("s-rm", 10, 50, 0, null, null),                // RM of region 50, no HQ
-			new NearStaffAuthor("s-other-hq", 10, 50, 999, null, null),        // has an HQ elsewhere: region does not count
-			new NearStaffAuthor("s-far", 20, 60, 600, null, null)
-		};
-		var hqs = new HashSet<int> { 100, 101 };
-		var regions = new HashSet<int> { 50 };
-		var near = CommunityNearRules.Authors(1, 10, farmers, staff, hqs, regions);
-		Check.Equal("near: district authors", "f-d,s-hq,s-hqs,s-rm", string.Join(",", near.District.OrderBy(x => x)));
-		Check.That("near: the state includes the district and the rest of the state",
-			near.State.SetEquals(new[] { "f-d", "f-s", "s-hq", "s-hqs", "s-rm", "s-other-hq" }));
-		Check.That("near: other states never count", !near.State.Contains("f-x") && !near.State.Contains("s-far"));
-		Check.Equal("near: scope is the district when it has authors", FarmerAreaScope.District, CommunityNearRules.ChooseScope(near));
+		var db = NearData();
+		var area = new CommunityArea(1, 10, "Thoothukudi", "Tamil Nadu");
+		var hqs = new[] { 100, 101 };
+		var regions = new[] { 50 };
+		Check.Equal("near: district authors (profile, linked SAS, HQ, multi-HQ, region without HQ)",
+			"f-d,s-hq,s-hqs,s-rm,sas-d", Titles(CommunityNearResolver.NearPosts(db, area, FarmerAreaScope.District, hqs, regions)));
+		Check.Equal("near: the state adds the rest of the state, never other states, inactive logins, deleted posts or dealers",
+			"f-d,f-s,s-hq,s-hqs,s-other-hq,s-rm,sas-d", Titles(CommunityNearResolver.NearPosts(db, area, FarmerAreaScope.State, hqs, regions)));
+		Check.Equal("near: a district no dealer HQ serves has only its farmers",
+			"f-d,sas-d", Titles(CommunityNearResolver.NearPosts(db, area, FarmerAreaScope.District, Array.Empty<int>(), Array.Empty<int>())));
+		Check.Equal("near: staff caller (state only, no district)",
+			"f-d,f-s,s-hq,s-hqs,s-other-hq,s-rm,sas-d", Titles(CommunityNearResolver.NearPosts(db, new CommunityArea(0, 10, null, "TN"), FarmerAreaScope.State, hqs, regions)));
+		Check.Equal("near: no area gives nothing", "", Titles(CommunityNearResolver.NearPosts(db, new CommunityArea(0, 0, null, null), FarmerAreaScope.State, hqs, regions)));
+		Check.Equal("near: scope None gives nothing", "", Titles(CommunityNearResolver.NearPosts(db, area, FarmerAreaScope.None, hqs, regions)));
 
-		var stateOnly = CommunityNearRules.Authors(3, 10, farmers, staff, new HashSet<int>(), new HashSet<int>());
-		Check.Equal("near: no author in the district falls back to the state", FarmerAreaScope.State, CommunityNearRules.ChooseScope(stateOnly));
-		Check.Equal("near: staff caller (state only)", FarmerAreaScope.State,
-			CommunityNearRules.ChooseScope(CommunityNearRules.Authors(0, 10, farmers, staff, hqs, regions)));
-		var nobody = CommunityNearRules.Authors(0, 0, farmers, staff, hqs, regions);
-		Check.That("near: no area gives nobody", CommunityNearRules.ChooseScope(nobody) == FarmerAreaScope.None && CommunityNearRules.For(nobody, FarmerAreaScope.None).Count == 0);
+		Check.Equal("near scope: 3 district posts show the district", FarmerAreaScope.District, CommunityNearRules.ChooseScope(3, 9));
+		Check.Equal("near scope: 2 district posts fall back to the richer state", FarmerAreaScope.State, CommunityNearRules.ChooseScope(2, 9));
+		Check.Equal("near scope: 1 district post, state known: the state", FarmerAreaScope.State, CommunityNearRules.ChooseScope(1, 1));
+		Check.Equal("near scope: no state known keeps the thin district", FarmerAreaScope.District, CommunityNearRules.ChooseScope(1, 0));
+		Check.Equal("near scope: nothing anywhere", FarmerAreaScope.None, CommunityNearRules.ChooseScope(0, 0));
+		Check.Equal("near scope: threshold is 3", 3, CommunityNearRules.MinDistrictPosts);
 	}
 
 	private static void RoutesAndMenu()
