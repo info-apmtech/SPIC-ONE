@@ -50,7 +50,8 @@ internal static class FarmerPortalRouteTests
 		// Shell: Home | (My Samples | My Reports when linked) | Profile; staff never get farmer tabs.
 		Check.Equal("tabs: farmer without SAS link", "farmer,FarmerProfile", Keys(ShellNavigation.GetPhoneTabs(farmer)));
 		Check.Equal("tabs: farmer tablet rail is the farmer list only", "farmer,FarmerProfile", Keys(ShellNavigation.GetRailItems(farmer)));
-		Check.Equal("tabs: farmer More sheet offers no staff pages", "", Keys(ShellNavigation.MoreItems(farmer)));
+		// Task 3 adds Trends in my area and Community near me to the farmer More sheet (still no staff pages).
+		Check.Equal("tabs: farmer More sheet offers no staff pages", "FarmerTrends,FarmerCommunity", Keys(ShellNavigation.MoreItems(farmer)));
 		var linked = TestLogin.As(AppRole.Farmer, "");
 		linked.SetFarmerSasLinked(true);
 		Check.Equal("tabs: farmer with a linked SAS record", "farmer,SasMySamples,SasMyReports,FarmerProfile", Keys(ShellNavigation.GetPhoneTabs(linked)));

@@ -209,6 +209,17 @@ public static class ShellNavigation
             ShortLabel = "Profile",
             Rule = s => s.UserRole == AppRole.Farmer
         },
+        // Farmer portal Task 3: More sheet entries (the farmer tab bar / rail stay their priority list).
+        new(FarmerTrendsKey, "Trends in my area", "bi-cloud-sun", "/farmer/trends", FarmerHomeKey)
+        {
+            ShortLabel = "Trends",
+            Rule = s => s.UserRole == AppRole.Farmer
+        },
+        new(FarmerCommunityKey, "Community near me", "bi-chat-square-text", "/farmer/community", FarmerHomeKey)
+        {
+            ShortLabel = "Community",
+            Rule = s => s.UserRole == AppRole.Farmer
+        },
 
         // Farmer pages (v1 SampleCollection key; the API scopes to the farmer's own samples).
         // The `UserRole == AppRole.Farmer` term is KEPT deliberately: it is a true business
@@ -556,6 +567,8 @@ public static class ShellNavigation
         SPIC.Core.FarmerPortal.FarmerContactRequestRules.CanUseStaffPage(s.UserRole)
         && RouteAccess.CanOpen(s, "/" + FarmerRequestsKey, null);
     public const string FarmerProfileKey = "FarmerProfile";
+    public const string FarmerTrendsKey = "FarmerTrends";
+    public const string FarmerCommunityKey = "FarmerCommunity";
 
     public static IReadOnlyList<string> GetRolePriority(AppRole? role) => role switch
     {
@@ -605,7 +618,7 @@ public static class ShellNavigation
     // no designation through (e.g. CSR-1 Create's `!IsAdmin`): only these keys, each still checked.
     private static readonly HashSet<string> FarmerShellKeys = new(StringComparer.OrdinalIgnoreCase)
     {
-        FarmerHomeKey, FarmerProfileKey, "SasMySamples", "SasMyReports", "SasMyPayments", "Help"
+        FarmerHomeKey, FarmerProfileKey, FarmerTrendsKey, FarmerCommunityKey, "SasMySamples", "SasMyReports", "SasMyPayments", "Help"
     };
 
     /// <summary>Every accessible destination NOT already in the phone tab bar, in Candidate order.</summary>

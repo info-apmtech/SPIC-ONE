@@ -67,6 +67,8 @@ namespace SPIC.MauiBlazorApp.Shared.Services
 
         internal const string FarmerSegment = "farmer";
 
+        internal const string CommunitySegment = "Community";
+
         /// <summary>The staff page for farmer call-back requests (/farmer-requests).</summary>
         public const string FarmerRequestsSegment = "farmer-requests";
 
@@ -90,6 +92,12 @@ namespace SPIC.MauiBlazorApp.Shared.Services
             if (firstSegment.Equals("Sas", StringComparison.OrdinalIgnoreCase)
                 && (secondSegment.Equals("MySamples", StringComparison.OrdinalIgnoreCase)
                     || secondSegment.Equals("MyReports", StringComparison.OrdinalIgnoreCase)))
+                return Allow;
+
+            // The Knowledge Community is open to every signed-in user (product decision 2026-09-20,
+            // PageAuthorization.OpenAccessPages); a farmer reaches it from "Community near me"
+            // (farmer portal Task 3): the list, a discussion, asking a question, the posted page.
+            if (firstSegment.Equals(CommunitySegment, StringComparison.OrdinalIgnoreCase))
                 return Allow;
 
             // A farmer with no designation never sees the staff Welcome / dashboard pages: anything

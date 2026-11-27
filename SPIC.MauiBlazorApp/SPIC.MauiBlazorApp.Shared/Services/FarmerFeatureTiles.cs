@@ -38,6 +38,11 @@ public static class FarmerFeatureTiles
             "bi-shop", FpHue.Gold, "/farmer/dealers", Always),
         new("team", "My SPIC team", "Your local officers call you back",
             "bi-people-fill", FpHue.Teal, "/farmer/team", Always),
+        // Task 3
+        new("trends", "Trends in my area", "Weather, crops and soil near you",
+            "bi-cloud-sun", FpHue.Sky, "/farmer/trends", Always),
+        new("community", "Community near me", "Ask farmers and SPIC experts",
+            "bi-chat-square-text", FpHue.Violet, "/farmer/community", Always),
         // SAS v1: shown only to farmers with soil tests.
         new("soil-reports", "My soil reports", "Download your soil test reports",
             "bi-file-earmark-text", FpHue.Green, "/Sas/MyReports", HasSoilTests),

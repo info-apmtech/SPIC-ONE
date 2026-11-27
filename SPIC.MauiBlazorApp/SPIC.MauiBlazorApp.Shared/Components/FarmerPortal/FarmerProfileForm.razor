@@ -170,7 +170,7 @@
                 </div>
             </div>
 
-            <div class="fp-field">
+            <div class="fp-field" id="fpf-location">
                 <span class="fp-label">Farm location <span class="fp-optional">(optional)</span></span>
                 <div class="fpf-location @(_latitude is not null ? "is-set" : null)">
                     <span class="fp-icon-circle fp-icon-circle--sm fp-hue-sky" aria-hidden="true">
@@ -269,6 +269,11 @@
     /// <summary>Raised with the saved profile from the API.</summary>
     [Parameter] public EventCallback<FarmerProfileDto> OnSaved { get; set; }
 
+    /// <summary>Scroll to "Farm location" once it is on screen (Task 3: "Add your location to see weather").</summary>
+    [Parameter] public bool FocusLocation { get; set; }
+
+    private bool _locationFocused;
+
     private static readonly string[] StepTitles = { "About you", "Your farm", "Your village" };
     private const int LastStep = 2;
 
@@ -350,6 +355,12 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (FocusLocation && !_locationFocused && !Stepped && _states is not null)
+        {
+            _locationFocused = true;
+            try { await JS.InvokeVoidAsync("scrollToElementId", "fpf-location"); }
+            catch (Exception) { /* prerender / disconnected circuit: the page simply stays at the top */ }
+        }
         if (!_focusStep) return;
         _focusStep = false;
         if (_cards[_step] is { } card) await card.FocusTitleAsync();

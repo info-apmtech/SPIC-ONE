@@ -1,0 +1,164 @@
+@page "/farmer/community"
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
+@inject FarmerSession Farmer
+@inject FarmerAreaApi Api
+@inject LoginState LoginState
+
+@*
+    Community near me (farmer portal Task 3): Knowledge Community discussions whose authors are near the
+    farmer (api/Community/near: the farmer's district, else the state; CommunityNearRules). Cards open the
+    existing discussion page; "Ask a question" opens the existing new-discussion page and "All
+    discussions" the full list (RouteAccess opens /Community/* to farmers).
+*@
+
+<div class="fp fp-page fpcm">
+    <FpHero Title="Community near me" Compact="true" BackHref="@LoginState.FarmerLandingPath" BackLabel="Back to home"
+            Subtitle="Questions and answers from farmers and SPIC experts around you.">
+        @if (_page is { Scope: not FarmerAreaScope.None } near)
+        {
+            <FpChip Icon="bi-geo-alt-fill" Text="@near.AreaName" />
+        }
+        else if (Farmer.Profile is { } p)
+        {
+            <FpChip Icon="bi-geo-alt-fill" Text="@FarmerTrendsUi.Place(p.DistrictName, p.StateName)" />
+        }
+    </FpHero>
+
+    @if (LoginState.UserRole != AppRole.Farmer)
+    {
+        <FpEmpty Art="FpArtKind.Team" Title="You are viewing as support staff"
+                 Message="Farmers see the discussions near their village here. Support staff have no farmer profile." />
+    }
+    else
+    {
+        <div class="fpcm-actions fp-fade-up-2">
+            <a class="fp-btn fp-btn--primary" href="/Community/new"><i class="bi bi-pencil-square" aria-hidden="true"></i> Ask a question</a>
+            <a class="fp-btn fp-btn--secondary" href="/Community/discussions"><i class="bi bi-collection" aria-hidden="true"></i> All discussions</a>
+        </div>
+
+        @if (_loading)
+        {
+            <FpSkeleton Variant="FpSkeletonVariant.Cards" Count="3" LoadingText="Finding discussions near you..." />
+        }
+        else if (_error is not null)
+        {
+            <FpError Title="We could not load the discussions" Message="@_error" OnRetry="ReloadAsync" />
+        }
+        else if (_page is null || _items.Count == 0)
+        {
+            <FpEmpty Art="FpArtKind.Team" Title="No discussions near you yet"
+                     Message="Be the first: ask a question about your crop, soil or fertilizer. Farmers and SPIC experts near you will answer.">
+                <a class="fp-btn fp-btn--primary" href="/Community/new"><i class="bi bi-pencil-square" aria-hidden="true"></i> Ask a question</a>
+                <a class="fp-btn fp-btn--secondary" href="/Community/discussions">See all discussions</a>
+            </FpEmpty>
+        }
+        else
+        {
+            <section class="fp-section" aria-labelledby="fpcm-title">
+                <div class="fp-section-head">
+                    <div>
+                        <h2 id="fpcm-title" class="fp-section-title">@FarmerTrendsUi.Count(_page.Total, "discussion") @FarmerTrendsUi.InArea(_page.AreaName)</h2>
+                        <p class="fp-section-sub">Started by farmers and SPIC officers of your area. Newest activity first.</p>
+                    </div>
+                </div>
+
+                @if (FarmerTrendsUi.ScopeNote(_page.Scope, Farmer.Profile?.DistrictName, Farmer.Profile?.StateName, "discussions") is { } note)
+                {
+                    <p class="fp-alert fp-alert--info" role="note"><i class="bi bi-info-circle-fill" aria-hidden="true"></i> @note</p>
+                }
+
+                <div class="fpcm-list">
+                    @foreach (var item in _items)
+                    {
+                        <FarmerDiscussionCard @key="item.Id" Item="@item" />
+                    }
+                </div>
+
+                @if (_page.HasMore)
+                {
+                    <div class="fpcm-more">
+                        <button type="button" class="fp-btn fp-btn--secondary" @onclick="MoreAsync" disabled="@_loadingMore">
+                            @if (_loadingMore)
+                            {
+                                <span class="fp-spinner" aria-hidden="true"></span>
+                                <span>Loading...</span>
+                            }
+                            else
+                            {
+                                <span>Show more</span>
+                            }
+                        </button>
+                    </div>
+                }
+                @if (_moreError is not null)
+                {
+                    <p class="fp-alert fp-alert--error" role="alert"><i class="bi bi-exclamation-circle-fill" aria-hidden="true"></i> @_moreError</p>
+                }
+            </section>
+        }
+    }
+</div>
+
+@code {
+    private const int PageSize = 10;
+
+    private bool _loading = true;
+    private bool _loadingMore;
+    private string? _error;
+    private string? _moreError;
+    private CommunityNearPageDto? _page;
+    private readonly List<DiscussionSummaryDto> _items = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (LoginState.UserRole != AppRole.Farmer)
+        {
+            _loading = false;
+            return;
+        }
+        // The hero chip and the fallback note use the profile (loaded once per session).
+        await Farmer.EnsureLoadedAsync(false);
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        _loading = true;
+        _error = null;
+        StateHasChanged();
+        var result = await Api.CommunityNearAsync(1, PageSize);
+        _loading = false;
+        if (result.Value is { } page)
+        {
+            _page = page;
+            _items.Clear();
+            _items.AddRange(page.Items);
+        }
+        else
+        {
+            _error = result.Message ?? "Please try again.";
+        }
+    }
+
+    private async Task MoreAsync()
+    {
+        if (_page is null || _loadingMore) return;
+        _loadingMore = true;
+        _moreError = null;
+        var next = _page.Page + 1;
+        var result = await Api.CommunityNearAsync(next, PageSize);
+        _loadingMore = false;
+        if (result.Value is { } page)
+        {
+            _page = page;
+            // A discussion that moved up between pages must not show twice.
+            foreach (var item in page.Items)
+                if (_items.All(i => i.Id != item.Id)) _items.Add(item);
+        }
+        else
+        {
+            _moreError = result.Message ?? "Please try again.";
+        }
+    }
+}

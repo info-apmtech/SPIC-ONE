@@ -1,0 +1,91 @@
+@namespace SPIC.MauiBlazorApp.Shared.Components.FarmerPortal
+@using SPIC.Core.DTOs
+@using SPIC.Core.FarmerPortal
+
+@*
+    FarmerWeatherStrip (farmer portal Task 3): the 7-day forecast as a row of day pills, drawn white on
+    the green FpHero (home and /farmer/trends). States:
+      Loading      - shimmer pills
+      Ok           - Today / Tmrw / Mon ... with icon, max / min, rain; ShowAdvice adds the top advisory
+      NoLocation   - "Add your location to see weather" linking to the profile's "Use my location"
+      Unavailable  - renders nothing (the forecast service failed; the section is left out)
+    Weather is null while nothing was asked yet (renders nothing).
+*@
+
+@if (Loading)
+{
+    <div class="fpw fpw--loading" role="status" aria-label="Loading the weather">
+        <div class="fpw-days">
+            @for (var i = 0; i < 7; i++)
+            {
+                <span class="fpw-day fpw-day--skel" aria-hidden="true"></span>
+            }
+        </div>
+    </div>
+}
+else if (Weather is { Status: FarmerWeatherStatus.NoLocation })
+{
+    <div class="fpw fpw--prompt">
+        <span class="fpw-prompt__icon" aria-hidden="true"><i class="bi bi-cloud-sun"></i></span>
+        <span class="fpw-prompt__text">
+            <strong>Add your location to see weather</strong>
+            <span>Rain and temperature for your farm for the next 7 days.</span>
+        </span>
+        <a class="fp-btn fp-btn--light fp-btn--sm fpw-prompt__btn" href="@FarmerTrendsUi.AddLocationHref">
+            <i class="bi bi-crosshair" aria-hidden="true"></i> Use my location
+        </a>
+    </div>
+}
+else if (Weather is { Status: FarmerWeatherStatus.Ok } w && w.Days.Count > 0)
+{
+    var now = DateTime.UtcNow;
+    <div class="fpw">
+        <div class="fpw-head">
+            <span class="fpw-head__title"><i class="bi bi-cloud-sun" aria-hidden="true"></i> Weather this week</span>
+            @if (!string.IsNullOrWhiteSpace(Href))
+            {
+                <a class="fpw-head__link" href="@Href">@LinkText <i class="bi bi-chevron-right" aria-hidden="true"></i></a>
+            }
+        </div>
+        <ol class="fpw-days" aria-label="7-day forecast">
+            @foreach (var day in w.Days)
+            {
+                var (label, icon) = FarmerWeatherRules.Describe(day.WeatherCode);
+                var dayName = FarmerTrendsUi.DayLabel(day.Date, now);
+                <li class="fpw-day @(dayName == "Today" ? "is-today" : null)"
+                    aria-label="@($"{dayName}: {label}, high {FarmerTrendsUi.Temp(day.MaxTempC)}, low {FarmerTrendsUi.Temp(day.MinTempC)}, {FarmerTrendsUi.Rain(day.RainMm)}")">
+                    <span class="fpw-day__name" aria-hidden="true">@FarmerTrendsUi.ShortDayLabel(day.Date, now)</span>
+                    <i class="bi @icon fpw-day__icon" aria-hidden="true" title="@label"></i>
+                    <span class="fpw-day__temp fp-num" aria-hidden="true">
+                        <strong>@FarmerTrendsUi.Temp(day.MaxTempC)</strong>
+                        <span>@FarmerTrendsUi.Temp(day.MinTempC)</span>
+                    </span>
+                    <span class="fpw-day__rain fp-num @(day.RainMm is > 0.05 ? "is-wet" : null)" aria-hidden="true">
+                        <i class="bi bi-droplet-fill"></i>@(day.RainMm is > 0.05 ? FarmerTrendsUi.Rain(day.RainMm) : "0 mm")
+                    </span>
+                </li>
+            }
+        </ol>
+        @if (ShowAdvice && FarmerTrendsUi.TopAdvice(w) is { } advice)
+        {
+            <a class="fpw-advice fpw-advice--@advice.Level.ToString().ToLowerInvariant()" href="@(Href ?? "/farmer/trends")">
+                <i class="bi @advice.Icon" aria-hidden="true"></i>
+                <span><strong>@advice.Title.</strong> @advice.Text</span>
+            </a>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public FarmerWeatherDto? Weather { get; set; }
+
+    [Parameter] public bool Loading { get; set; }
+
+    /// <summary>"See farm advice" link target in the strip's header (none when null).</summary>
+    [Parameter] public string? Href { get; set; }
+
+    [Parameter] public string LinkText { get; set; } = "Farm advice";
+
+    /// <summary>Show the most important advisory under the days (home).</summary>
+    [Parameter] public bool ShowAdvice { get; set; }
+}

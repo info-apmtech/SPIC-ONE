@@ -1,0 +1,248 @@
+@page "/farmer/trends"
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
+@inject FarmerSession Farmer
+@inject FarmerAreaApi Api
+@inject LoginState LoginState
+
+@*
+    Trends in my area (farmer portal Task 3, api/Farmer/trends): the 7-day weather (Open-Meteo, from the
+    farm GPS on the profile) with simple farm advice, then area totals from SPIC ONE data of the last 90
+    days in the farmer's district (state as the fallback): crops farmers grow, soil problems from SAS lab
+    reports (hidden below 5 samples), the most talked-about community discussions and the dealer count.
+    Never a single farmer's data.
+*@
+
+<div class="fp fp-page fptr">
+    <FpHero Title="Trends in my area" Compact="true" BackHref="@LoginState.FarmerLandingPath" BackLabel="Back to home"
+            Subtitle="Weather, crops, soil and what farmers are talking about around you.">
+        @if (_trends is { } t && !string.IsNullOrWhiteSpace(t.DistrictName ?? t.StateName))
+        {
+            <FpChip Icon="bi-geo-alt-fill" Text="@FarmerTrendsUi.Place(t.DistrictName, t.StateName)" />
+        }
+        <FarmerWeatherStrip Weather="@_trends?.Weather" Loading="@_loading" />
+    </FpHero>
+
+    @if (LoginState.UserRole != AppRole.Farmer)
+    {
+        <FpEmpty Art="FpArtKind.Field" Title="You are viewing as support staff"
+                 Message="Farmers see the weather and the totals for their district here. Support staff have no farmer profile." />
+    }
+    else if (_loading)
+    {
+        <FpSkeleton Variant="FpSkeletonVariant.Cards" Count="4" LoadingText="Gathering the numbers for your area..." />
+    }
+    else if (_error is not null)
+    {
+        <FpError Title="We could not load the trends" Message="@_error" OnRetry="LoadAsync" />
+    }
+    else if (_trends is { } trends)
+    {
+        @if (trends.Weather is { Status: FarmerWeatherStatus.Ok, Advisories.Count: > 0 } weather)
+        {
+            <FpCard Title="Farm advice for this week" Subtitle="From the weather forecast for your farm" Icon="bi-clipboard2-check"
+                    Hue="FpHue.Sky" CssClass="fp-fade-up-2">
+                <ul class="fptr-advice">
+                    @foreach (var a in weather.Advisories)
+                    {
+                        <li class="fptr-advice__item fptr-advice__item--@a.Level.ToString().ToLowerInvariant()">
+                            <span class="fp-icon-circle fp-icon-circle--sm @FarmerTrendsUi.AdviceHue(a.Level)" aria-hidden="true"><i class="bi @a.Icon"></i></span>
+                            <span>
+                                <strong>@a.Title</strong>
+                                <span class="fp-text fp-muted">@a.Text</span>
+                            </span>
+                        </li>
+                    }
+                </ul>
+                <FpDisclaimer Text="Forecast from Open-Meteo for your farm's area. Weather can change, so check again before you spray or apply fertilizer." />
+            </FpCard>
+        }
+
+        <div class="fptr-grid">
+            @* ---- What farmers near you grow ---- *@
+            <FpCard Title="What farmers near you grow" Icon="bi-flower1" Hue="FpHue.Green" CssClass="fp-fade-up-2"
+                    Subtitle="@CropsSubtitle(trends)">
+                @if (trends.Crops.Scope == FarmerAreaScope.None || trends.Crops.Items.Count == 0)
+                {
+                    <FpEmpty Art="FpArtKind.Field" Compact="true" Card="false" Title="Not enough farmers here yet"
+                             Message="@CropsEmpty(trends)" />
+                }
+                else
+                {
+                    <FarmerTrendNote Text="@FarmerTrendsUi.ScopeNote(trends.Crops.Scope, trends.DistrictName, trends.StateName, "farmers")" />
+                    <ul class="fptr-bars" aria-label="Crops and the share of farmers growing them">
+                        @foreach (var c in trends.Crops.Items)
+                        {
+                            <li class="fptr-bar">
+                                <span class="fptr-bar__label">
+                                    <span class="fptr-bar__emoji" aria-hidden="true">@(FpUi.CropEmoji(c.Crop) ?? "\U0001F331")</span>
+                                    <strong>@c.Crop</strong>
+                                </span>
+                                <span class="fptr-bar__track" aria-hidden="true">
+                                    <span class="fptr-bar__fill fptr-bar__fill--green" style="width: @(FarmerTrendsUi.BarWidth(c.SharePct))%"></span>
+                                </span>
+                                <span class="fptr-bar__value fp-num">@c.SharePct%<span class="fp-sr-only"> of farmers (@c.Farmers)</span></span>
+                            </li>
+                        }
+                    </ul>
+                }
+            </FpCard>
+
+            @* ---- Soil problems near you ---- *@
+            <FpCard Title="Soil problems near you" Icon="bi-moisture" Hue="FpHue.Soil" CssClass="fp-fade-up-2"
+                    Subtitle="@SoilSubtitle(trends)">
+                @if (trends.Soil.Scope == FarmerAreaScope.None)
+                {
+                    <FpEmpty Art="FpArtKind.Sprout" Compact="true" Card="false" Title="Not enough soil tests near you yet"
+                             Message="@SoilEmpty(trends)" />
+                }
+                else if (trends.Soil.Items.Count == 0)
+                {
+                    <FpEmpty Art="FpArtKind.Sprout" Compact="true" Card="false" Title="No common shortage found"
+                             Message="Recent soil tests in your area were not low in the main nutrients. Your own field can still differ: a soil test tells you for sure." />
+                }
+                else
+                {
+                    <FarmerTrendNote Text="@FarmerTrendsUi.ScopeNote(trends.Soil.Scope, trends.DistrictName, trends.StateName, "soil tests")" />
+                    <ul class="fptr-bars" aria-label="Nutrients and the share of soil samples low in them">
+                        @foreach (var s in trends.Soil.Items)
+                        {
+                            <li class="fptr-bar fptr-bar--soil">
+                                <span class="fptr-bar__label">
+                                    <span class="fptr-bar__badge" aria-hidden="true">@s.Short</span>
+                                    <span class="fptr-bar__text">
+                                        <strong>@s.Label</strong>
+                                        <span class="fp-caption">@FarmerTrendsUi.SoilCaption(s)</span>
+                                    </span>
+                                </span>
+                                <span class="fptr-bar__track" aria-hidden="true">
+                                    <span class="fptr-bar__fill fptr-bar__fill--low" style="width: @(FarmerTrendsUi.BarWidth(s.LowPct))%"></span>
+                                </span>
+                                <span class="fptr-bar__value fptr-bar__value--low fp-num">@s.LowPct%<span class="fp-sr-only"> low</span></span>
+                            </li>
+                        }
+                    </ul>
+                    <p class="fp-caption fptr-foot">
+                        @if (trends.Soil.HiddenForFewSamples > 0)
+                        {
+                            <text>Some nutrients are hidden because fewer than @trends.Soil.MinSamples samples were tested for them. </text>
+                        }
+                        A soil test of your own field shows exactly what it needs.
+                    </p>
+                }
+                @if (FarmerFeatureTiles.HasSoilTests(LoginState))
+                {
+                    <a class="fp-btn fp-btn--secondary fp-btn--sm fptr-card-btn" href="/Sas/MyReports"><i class="bi bi-file-earmark-text" aria-hidden="true"></i> My soil reports</a>
+                }
+            </FpCard>
+
+            @* ---- Talked about near you ---- *@
+            <FpCard Title="Talked about near you" Icon="bi-chat-square-text" Hue="FpHue.Violet" CssClass="fp-fade-up-3"
+                    Subtitle="@TalkedSubtitle(trends)">
+                @if (trends.Talked.Items.Count == 0)
+                {
+                    <FpEmpty Art="FpArtKind.Team" Compact="true" Card="false" Title="No discussions near you yet"
+                             Message="Ask a question and farmers and SPIC experts near you will answer.">
+                        <a class="fp-btn fp-btn--secondary fp-btn--sm" href="/Community/new"><i class="bi bi-pencil-square" aria-hidden="true"></i> Ask a question</a>
+                    </FpEmpty>
+                }
+                else
+                {
+                    <FarmerTrendNote Text="@FarmerTrendsUi.ScopeNote(trends.Talked.Scope, trends.DistrictName, trends.StateName, "discussions")" />
+                    <ol class="fptr-talk">
+                        @foreach (var d in trends.Talked.Items)
+                        {
+                            <li>
+                                <a class="fptr-talk__item" href="@($"/Community/discussion/{d.Id}")">
+                                    <span class="fptr-talk__title">@d.Title</span>
+                                    <span class="fptr-talk__meta fp-num">
+                                        <i class="bi bi-chat-dots" aria-hidden="true"></i> @FarmerTrendsUi.TalkLine(d.ReplyCount, d.Views)
+                                        @if (!string.IsNullOrWhiteSpace(d.Crop))
+                                        {
+                                            <text> · @d.Crop</text>
+                                        }
+                                    </span>
+                                    <i class="bi bi-chevron-right fptr-talk__chevron" aria-hidden="true"></i>
+                                </a>
+                            </li>
+                        }
+                    </ol>
+                    <a class="fp-btn fp-btn--secondary fp-btn--sm fptr-card-btn" href="/farmer/community"><i class="bi bi-people" aria-hidden="true"></i> Community near me</a>
+                }
+            </FpCard>
+
+            @* ---- SPIC dealers ---- *@
+            <FpCard Title="SPIC dealers" Icon="bi-shop" Hue="FpHue.Gold" CssClass="fp-fade-up-3"
+                    Subtitle="Shops where you can buy SPIC fertilizer">
+                @if (trends.Dealers.Scope == FarmerAreaScope.None)
+                {
+                    <FpEmpty Art="FpArtKind.Search" Compact="true" Card="false" Title="No SPIC dealer is listed for your area yet"
+                             Message="We are adding dealers to every district." />
+                }
+                else
+                {
+                    <FpBigNumber Label="@DealersLabel(trends)" Value="@DealersValue(trends)" Unit="@DealersUnit(trends)"
+                                 Caption="@FarmerTrendsUi.InArea(trends.Dealers.AreaName)" />
+                    <FarmerTrendNote Text="@FarmerTrendsUi.ScopeNote(trends.Dealers.Scope, trends.DistrictName, trends.StateName, "dealers")" />
+                }
+                <a class="fp-btn fp-btn--primary fp-btn--sm fptr-card-btn" href="/farmer/dealers"><i class="bi bi-geo-alt" aria-hidden="true"></i> Dealers near me</a>
+            </FpCard>
+        </div>
+
+        <FpDisclaimer CssClass="fp-fade-up-3">
+            These are totals for your area from SPIC ONE records of the last @trends.WindowDays days. We never show
+            a single farmer's details, and we hide soil numbers that rest on fewer than @trends.Soil.MinSamples samples.
+            Updated every hour.
+        </FpDisclaimer>
+    }
+</div>
+
+@code {
+    private bool _loading = true;
+    private string? _error;
+    private FarmerTrendsDto? _trends;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private static string CropsSubtitle(FarmerTrendsDto t) => t.Crops.Scope == FarmerAreaScope.None
+        ? "Main crops of farmers in your area"
+        : $"Main crops of {FarmerTrendsUi.Count(t.Crops.FarmerCount, "farmer")} {FarmerTrendsUi.InArea(t.Crops.AreaName)}";
+
+    private static string CropsEmpty(FarmerTrendsDto t) =>
+        $"We show this when at least {t.Crops.MinFarmers} farmers of your area have shared their crops.";
+
+    private static string SoilSubtitle(FarmerTrendsDto t) => t.Soil.Scope == FarmerAreaScope.None
+        ? "From SPIC soil tests in your area"
+        : $"Share of soil tests that were low, from {FarmerTrendsUi.Count(t.Soil.SampleCount, "sample")} {FarmerTrendsUi.InArea(t.Soil.AreaName)}";
+
+    private static string SoilEmpty(FarmerTrendsDto t) =>
+        $"We show this when at least {t.Soil.MinSamples} soil samples from your area were tested.";
+
+    private static string TalkedSubtitle(FarmerTrendsDto t) => t.Talked.Scope == FarmerAreaScope.None
+        ? "Busy community discussions in your area"
+        : $"Busiest community discussions {FarmerTrendsUi.InArea(t.Talked.AreaName)}";
+
+    private static string DealersLabel(FarmerTrendsDto t) =>
+        t.Dealers.Scope == FarmerAreaScope.District ? "In your district" : "In your state";
+
+    private static string DealersValue(FarmerTrendsDto t) => t.Dealers.Count.ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
+
+    private static string DealersUnit(FarmerTrendsDto t) => t.Dealers.Count == 1 ? "dealer" : "dealers";
+
+    private async Task LoadAsync()
+    {
+        if (LoginState.UserRole != AppRole.Farmer)
+        {
+            _loading = false;
+            return;
+        }
+
+        _loading = true;
+        _error = null;
+        StateHasChanged();
+        var result = await Api.TrendsAsync();
+        _loading = false;
+        if (result.Value is { } trends) _trends = trends;
+        else _error = result.Message ?? "Please try again.";
+    }
+}

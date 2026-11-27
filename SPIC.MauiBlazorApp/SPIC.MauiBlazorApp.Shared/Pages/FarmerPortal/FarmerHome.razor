@@ -4,12 +4,15 @@
 @inject LoginState LoginState
 @inject NavigationManager Nav
 @inject FarmerConnectApi Api
+@inject FarmerAreaApi AreaApi
 
 @*
     Farmer home. Task 1b: greeting hero (IST time of day), highlight card and the tile grid from
     Services/FarmerFeatureTiles (only features that exist; each later task adds its own tile).
     Task 2: the "Your SPIC team" block (up to 3 people from api/Farmer/contacts, loaded after the
-    page so the home never waits for it) with Request call back. Sends a farmer whose profile is not
+    page so the home never waits for it) with Request call back.
+    Task 3: the weather strip in the hero (api/Farmer/weather, loaded after the page like the team;
+    "Add your location" when the profile has no GPS; left out when the forecast is unavailable). Sends a farmer whose profile is not
     complete to /farmer/onboarding.
     Admin / SuperAdmin may open it for support (RouteAccess) but have no farmer profile of their own.
 *@
@@ -49,6 +52,7 @@
                 {
                     <FpChip Emoji="@FpUi.CropEmoji(crop)" Icon="bi-flower1" Text="@crop" />
                 }
+                <FarmerWeatherStrip Weather="@_weather" Loading="@_weatherLoading" Href="/farmer/trends" ShowAdvice="true" />
             </ChildContent>
         </FpHero>
 
@@ -139,6 +143,8 @@
     private SPIC.Core.DTOs.FarmerTeamDto? _team;
     private SPIC.Core.DTOs.FarmerContactDto? _asking;
     private bool _sheetOpen;
+    private bool _weatherLoading = true;
+    private SPIC.Core.DTOs.FarmerWeatherDto? _weather;
 
     protected override Task OnInitializedAsync() => LoadAsync(force: false);
 
@@ -169,7 +175,17 @@
 
         _soilTests = FarmerFeatureTiles.HasSoilTests(LoginState);
         _tiles = FarmerFeatureTiles.For(LoginState);
-        await LoadTeamAsync();
+        await Task.WhenAll(LoadTeamAsync(), LoadWeatherAsync());
+    }
+
+    private async Task LoadWeatherAsync()
+    {
+        _weatherLoading = true;
+        var result = await AreaApi.WeatherAsync();
+        _weatherLoading = false;
+        // No forecast (offline, service down) = no strip; the rest of the home is unaffected.
+        _weather = result.Value;
+        StateHasChanged();
     }
 
     private async Task LoadTeamAsync()

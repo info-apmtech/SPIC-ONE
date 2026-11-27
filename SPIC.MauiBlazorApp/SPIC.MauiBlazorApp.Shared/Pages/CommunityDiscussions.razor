@@ -5,6 +5,7 @@
 @inject ToastService Toast
 @inject CommunityApi Api
 @inject LoadingService Loading
+@inject LoginState LoginState
 @implements IDisposable
 
 @*
@@ -62,7 +63,7 @@
 
     <!-- ---------- tabs ---------- -->
     <div class="cmd-tabs" role="tablist" aria-label="Discussion filters" data-help="cm-list-tabs">
-        @foreach (var (key, label) in Tabs)
+        @foreach (var (key, label) in VisibleTabs)
         {
             <button type="button" role="tab"
                     class="cmd-tab @(Tab == key ? "active" : "")"
@@ -277,6 +278,12 @@
         ("expert", "Expert Answers"),
     };
 
+    // Farmer portal Task 3: farmers also get "Near Me" (authors near their district; ?tab=near).
+    private IEnumerable<(string Key, string Label)> VisibleTabs =>
+        LoginState.UserRole == SPIC.Core.Entities.AppRole.Farmer
+            ? Tabs.Take(1).Append(("near", "Near Me")).Concat(Tabs.Skip(1))
+            : Tabs;
+
     // ---- query state ----
     [SupplyParameterFromQuery(Name = "tab")] public string? TabQuery { get; set; }
     [SupplyParameterFromQuery(Name = "category")] public string? CategoryQuery { get; set; }
@@ -339,7 +346,7 @@
 
     protected override async Task OnParametersSetAsync()
     {
-        Tab = Tabs.Any(t => t.Key == TabQuery) ? TabQuery! : "all";
+        Tab = VisibleTabs.Any(t => t.Key == TabQuery) ? TabQuery! : "all";
         Sort = SortQuery is "replies" or "views" or "oldest" ? SortQuery : "latest";
         Query = SearchQuery ?? "";
         PageSize = SizeQuery is 10 or 20 or 50 ? SizeQuery.Value : 10;

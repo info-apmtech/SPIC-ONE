@@ -1,0 +1,55 @@
+@namespace SPIC.MauiBlazorApp.Shared.Components.FarmerPortal
+@using SPIC.Core.DTOs
+
+@*
+    One Knowledge Community discussion on "Community near me" (farmer portal Task 3). The whole card
+    links to the existing discussion page (/Community/discussion/{id}). Shows the author's name, role
+    and village / district (the API sets those from the farmer profile for OTP farmers).
+*@
+
+<a class="fpdc fp-fade-up" href="@($"/Community/discussion/{Item.Id}")">
+    <div class="fpdc-author">
+        <span class="fp-avatar fpdc-avatar @FpUi.HueCss(FarmerTrendsUi.RoleHue(Item.Author.Role))" aria-hidden="true">@FpUi.Initials(Item.Author.Name)</span>
+        <span class="fpdc-author__text">
+            <span class="fpdc-author__name">
+                <strong>@(string.IsNullOrWhiteSpace(Item.Author.Name) ? "SPIC member" : Item.Author.Name)</strong>
+                <FpChip Small="true" Hue="@FarmerTrendsUi.RoleHue(Item.Author.Role)" Text="@FarmerTrendsUi.RoleLabel(Item.Author.Role)" />
+            </span>
+            <span class="fp-caption">
+                @if (!string.IsNullOrWhiteSpace(Item.Author.Location))
+                {
+                    <i class="bi bi-geo-alt" aria-hidden="true"></i> @Item.Author.Location<text> · </text>
+                }
+                @FarmerTrendsUi.Active(Item.LastActivityAt)
+            </span>
+        </span>
+    </div>
+
+    <h3 class="fpdc-title">@Item.Title</h3>
+    @if (!string.IsNullOrWhiteSpace(Item.Excerpt))
+    {
+        <p class="fpdc-excerpt">@Item.Excerpt</p>
+    }
+
+    <div class="fpdc-foot">
+        <span class="fpdc-tags">
+            @if (FarmerTrendsUi.StatusChip(Item.Status) is { } status)
+            {
+                <FpChip Small="true" Hue="@status.Hue" Icon="@status.Icon" Text="@status.Text" />
+            }
+            @if (!string.IsNullOrWhiteSpace(Item.Crop))
+            {
+                <FpChip Small="true" Emoji="@FpUi.CropEmoji(Item.Crop)" Icon="bi-flower1" Text="@Item.Crop" />
+            }
+        </span>
+        <span class="fpdc-stats fp-num">
+            <span title="Replies"><i class="bi bi-chat-dots" aria-hidden="true"></i> @Item.ReplyCount<span class="fp-sr-only"> replies</span></span>
+            <span title="Views"><i class="bi bi-eye" aria-hidden="true"></i> @Item.Views<span class="fp-sr-only"> views</span></span>
+            <span title="Likes"><i class="bi bi-hand-thumbs-up" aria-hidden="true"></i> @Item.LikeCount<span class="fp-sr-only"> likes</span></span>
+        </span>
+    </div>
+</a>
+
+@code {
+    [Parameter, EditorRequired] public DiscussionSummaryDto Item { get; set; } = new();
+}
