@@ -5,55 +5,95 @@
 @inject NavigationManager Nav
 
 @*
-    Farmer home (placeholder for Task 1; Task 2 builds the real home). Sends a farmer whose profile
-    is not complete to /farmer/onboarding. Admin / SuperAdmin may open it for support (RouteAccess)
-    but have no farmer profile of their own.
+    Farmer home. Task 1b: greeting hero (IST time of day), highlight card, the feature tile grid from
+    Services/FarmerFeatureTiles (later tasks flip their tile to Ready), and the "Your SPIC team"
+    preview (Task 2 fills it). Sends a farmer whose profile is not complete to /farmer/onboarding.
+    Admin / SuperAdmin may open it for support (RouteAccess) but have no farmer profile of their own.
 *@
 
 <div class="fp fp-page fph">
-    <PageHeader Title="Home" Subtitle="SPIC ONE for farmers" ShowBack="false" CssClass="fph-header" />
-
     @if (LoginState.UserRole != AppRole.Farmer)
     {
-        <EmptyState Icon="bi-person-badge" Title="Farmer portal"
-                    Message="You are looking at the farmer portal as support staff. Farmers see their own home here after they sign in with their mobile number." />
+        <FpHero Title="Farmer portal" Subtitle="What farmers see after they sign in with their mobile number." />
+        <FpEmpty Art="FpArtKind.Team" Title="You are viewing as support staff"
+                 Message="Farmers see their own home here. Support staff have no farmer profile, so there is nothing to show." />
     }
     else if (_loading)
     {
-        <Skeleton Rows="4" Height="18px" LoadingText="Loading your home..." />
+        <PageTitle>Home · SPIC ONE</PageTitle>
+        <FpSkeleton Variant="home" LoadingText="Loading your home..." />
     }
     else if (_error is not null)
     {
-        <EmptyState Icon="bi-wifi-off" Title="We could not load your home" Message="@_error">
-            <button type="button" class="btn btn-success" @onclick="() => LoadAsync(force: true)">Try again</button>
-        </EmptyState>
+        <PageTitle>Home · SPIC ONE</PageTitle>
+        <FpError Title="We could not load your home" Message="@_error" OnRetry="() => LoadAsync(force: true)" />
     }
     else if (Farmer.Profile is { } profile)
     {
-        <section class="fph-hero" aria-labelledby="fph-welcome">
-            <h2 id="fph-welcome" class="fph-welcome">Welcome, @profile.Name</h2>
-            <p class="fph-place">
-                <i class="bi bi-geo-alt-fill" aria-hidden="true"></i>
-                @Place(profile)
-            </p>
-            <a class="fph-edit" href="/farmer/profile"><i class="bi bi-pencil" aria-hidden="true"></i> Edit my profile</a>
-        </section>
+        var now = DateTime.UtcNow;
+        <FpHero Eyebrow="@FpUi.IstDateLine(now)" Title="@($"{FpUi.Greeting(now)}, {FpUi.ShortName(profile.Name)}")"
+                DocumentTitle="Home" Subtitle="Here is everything SPIC ONE has for your farm.">
+            <Aside>
+                <a class="fp-avatar fph-avatar" href="/farmer/profile" aria-label="My profile" title="My profile">@FpUi.Initials(profile.Name)</a>
+            </Aside>
+            <ChildContent>
+                <FpChip Icon="bi-geo-alt-fill" Text="@Place(profile)" />
+                @if (profile.LandAcres is { } acres)
+                {
+                    <FpChip Icon="bi-bounding-box" Text="@($"{acres:0.##} acres")" />
+                }
+                @foreach (var crop in profile.PrimaryCrops.Take(3))
+                {
+                    <FpChip Emoji="@FpUi.CropEmoji(crop)" Icon="bi-flower1" Text="@crop" />
+                }
+            </ChildContent>
+        </FpHero>
 
-        @if (_showSas)
+        @if (_soilTests)
         {
-            <section class="fph-card" aria-labelledby="fph-soil">
-                <h3 id="fph-soil" class="fph-card-title"><i class="bi bi-moisture" aria-hidden="true"></i> Your soil tests</h3>
-                <p class="fph-card-text">See the samples your SPIC officer collected and download your soil reports.</p>
-                <div class="fph-links">
-                    <a class="fph-link" href="/Sas/MySamples"><i class="bi bi-droplet-half" aria-hidden="true"></i> My samples</a>
-                    <a class="fph-link" href="/Sas/MyReports"><i class="bi bi-file-earmark-text" aria-hidden="true"></i> My reports</a>
+            <FpCard Variant="highlight" Title="Your soil tests" Subtitle="Samples your SPIC officer collected and your soil reports"
+                    Icon="bi-moisture" Hue="soil" CssClass="fp-fade-up-2 fph-highlight">
+                <div class="fp-row">
+                    <a class="fp-btn fp-btn--primary fph-cta" href="/Sas/MyReports"><i class="bi bi-file-earmark-text" aria-hidden="true"></i> My soil reports</a>
+                    <a class="fp-btn fp-btn--secondary fph-cta" href="/Sas/MySamples"><i class="bi bi-moisture" aria-hidden="true"></i> My samples</a>
                 </div>
-            </section>
+                <FpArt Kind="FpArtKind.Sprout" CssClass="fph-highlight-art" />
+            </FpCard>
+        }
+        else
+        {
+            <FpCard Variant="highlight" Title="Know your soil" Icon="bi-moisture" Hue="gold" CssClass="fp-fade-up-2 fph-highlight"
+                    Subtitle="A soil test shows what your field needs, so you buy only the fertilizer that helps.">
+                <p class="fp-text fp-muted">Ask your SPIC field officer to collect a soil sample. Your report will appear here.</p>
+                <FpArt Kind="FpArtKind.Sprout" CssClass="fph-highlight-art" />
+            </FpCard>
         }
 
-        <section class="fph-card fph-soon" aria-labelledby="fph-soon">
-            <h3 id="fph-soon" class="fph-card-title"><i class="bi bi-stars" aria-hidden="true"></i> Coming soon</h3>
-            <p class="fph-card-text">SPIC dealers near you, your SPIC field team, fertilizer advice, SPIC AI answers, leaf check and harvest forecast will appear here.</p>
+        <section class="fp-section fp-fade-up-2" aria-labelledby="fph-services">
+            <div class="fp-section-head">
+                <div>
+                    <h2 id="fph-services" class="fp-section-title">Services for your farm</h2>
+                    @if (_tiles.Any(t => !t.Ready))
+                    {
+                        <p class="fp-section-sub">Tiles marked Soon open as each service gets ready.</p>
+                    }
+                </div>
+            </div>
+            <div class="fp-tile-grid">
+                @foreach (var tile in _tiles)
+                {
+                    <FpTile Title="@tile.Title" Description="@tile.Description" Icon="@tile.Icon" Hue="@tile.Hue"
+                            Href="@(tile.Ready ? tile.Route : null)" Soon="@(!tile.Ready)" Badge="@tile.Badge" />
+                }
+            </div>
+        </section>
+
+        <section class="fp-section fp-fade-up-3" aria-labelledby="fph-team">
+            <div class="fp-section-head">
+                <h2 id="fph-team" class="fp-section-title">Your SPIC team</h2>
+            </div>
+            <FpEmpty Art="FpArtKind.Team" Compact="true" Title="Your field team will appear here"
+                     Message="Soon you will see your SPIC field officer here, with a button to call them or ask for a call back." />
         </section>
     }
 </div>
@@ -61,7 +101,8 @@
 @code {
     private bool _loading = true;
     private string? _error;
-    private bool _showSas;
+    private bool _soilTests;
+    private IReadOnlyList<FarmerFeatureTile> _tiles = Array.Empty<FarmerFeatureTile>();
 
     protected override Task OnInitializedAsync() => LoadAsync(force: false);
 
@@ -90,9 +131,11 @@
             return;
         }
 
-        _showSas = LoginState.FarmerSasLinked || LoginState.CanSeeMenu(nameof(PagePermission.SampleCollection));
+        _soilTests = FarmerFeatureTiles.HasSoilTests(LoginState);
+        // Ready services first (registry order), then the ones still to come.
+        _tiles = FarmerFeatureTiles.For(LoginState).OrderBy(t => t.Ready ? 0 : 1).ToList();
     }
 
     private static string Place(SPIC.Core.DTOs.FarmerProfileDto p) =>
-        string.Join(", ", new[] { p.Village, p.DistrictName, p.StateName }.Where(x => !string.IsNullOrWhiteSpace(x)));
+        string.Join(", ", new[] { p.Village, p.DistrictName }.Where(x => !string.IsNullOrWhiteSpace(x)));
 }

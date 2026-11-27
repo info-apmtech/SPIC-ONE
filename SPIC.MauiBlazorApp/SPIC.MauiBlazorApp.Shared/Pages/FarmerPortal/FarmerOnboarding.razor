@@ -6,30 +6,29 @@
 @inject NavigationManager Nav
 @inject ToastService Toast
 
-@* First-time farmer profile (docs/farmer-portal.md). Saving goes to the farmer home. *@
+@* First-time farmer profile in three steps (docs/farmer-portal.md). Saving goes to the farmer home. *@
 
 <div class="fp fp-page fpo">
-    <PageHeader Title="Welcome to SPIC ONE" Subtitle="Tell us a little about you and your farm. It takes a minute." ShowBack="false" />
+    <FpHero Title="Welcome to SPIC ONE" Eyebrow="Set up your account" DocumentTitle="Welcome"
+            Subtitle="Three quick steps about you, your farm and your village. It takes a minute." />
 
     @if (LoginState.UserRole != AppRole.Farmer)
     {
-        <EmptyState Icon="bi-person-badge" Title="Farmer onboarding"
-                    Message="Farmers fill this form the first time they sign in. Support staff have no farmer profile." />
+        <FpEmpty Art="FpArtKind.Team" Title="Farmer onboarding"
+                 Message="Farmers fill this form the first time they sign in. Support staff have no farmer profile." />
     }
     else if (_loading)
     {
-        <Skeleton Rows="6" Height="18px" LoadingText="Loading..." />
+        <FpSkeleton Variant="form" Count="4" LoadingText="Loading..." CssClass="fpo-skel" />
     }
     else if (_error is not null)
     {
-        <EmptyState Icon="bi-wifi-off" Title="We could not open the form" Message="@_error">
-            <button type="button" class="btn btn-success" @onclick="LoadAsync">Try again</button>
-        </EmptyState>
+        <FpError Title="We could not open the form" Message="@_error" OnRetry="LoadAsync" />
     }
     else
     {
-        <p class="fpo-note"><i class="bi bi-asterisk" aria-hidden="true"></i> Fields marked * are needed. You can change everything later in My Profile.</p>
-        <FarmerProfileForm Initial="@Farmer.Profile" Phone="@Farmer.Phone" SubmitLabel="Save and continue" OnSaved="SavedAsync" />
+        <FarmerProfileForm Stepped="true" Initial="@Farmer.Profile" Phone="@Farmer.Phone" SubmitLabel="Save and continue" OnSaved="SavedAsync" />
+        <p class="fp-caption fpo-note"><i class="bi bi-shield-check" aria-hidden="true"></i> <span>Fields marked <span class="fp-req">*</span> are needed. You can change everything later in My profile.</span></p>
     }
 </div>
 

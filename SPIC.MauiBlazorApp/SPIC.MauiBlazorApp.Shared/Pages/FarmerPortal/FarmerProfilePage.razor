@@ -5,25 +5,47 @@
 @inject LoginState LoginState
 @inject ToastService Toast
 
-@* The farmer's own profile: the same form as onboarding, filled in. *@
+@* The farmer's own profile: a summary in the hero, then the same form as onboarding, filled in. *@
 
 <div class="fp fp-page fpp">
-    <PageHeader Title="My profile" Subtitle="Your details help SPIC give advice for your village and crops." BackHref="@LoginState.FarmerLandingPath" />
+    @if (Farmer.Profile is { } p && LoginState.UserRole == AppRole.Farmer && !_loading)
+    {
+        <FpHero Title="My profile" Subtitle="Your details help SPIC give advice for your village and crops."
+                BackHref="@LoginState.FarmerLandingPath" BackLabel="Back to home">
+            <ChildContent>
+                <div class="fpp-who">
+                    <span class="fp-avatar fpp-avatar" aria-hidden="true">@FpUi.Initials(p.Name)</span>
+                    <span class="fpp-who__text">
+                        <strong>@p.Name</strong>
+                        <span class="fp-num">+91 @(Farmer.Phone ?? p.Phone)</span>
+                    </span>
+                </div>
+                <FpChip Icon="bi-geo-alt-fill" Text="@Place(p)" />
+                @if (p.SasLinked)
+                {
+                    <FpChip Icon="bi-patch-check-fill" Text="Soil tests linked" />
+                }
+            </ChildContent>
+        </FpHero>
+    }
+    else
+    {
+        <FpHero Title="My profile" Subtitle="Your details help SPIC give advice for your village and crops."
+                BackHref="@LoginState.FarmerLandingPath" BackLabel="Back to home" />
+    }
 
     @if (LoginState.UserRole != AppRole.Farmer)
     {
-        <EmptyState Icon="bi-person-badge" Title="Farmer profile"
-                    Message="This is where a farmer edits their own details. Support staff have no farmer profile." />
+        <FpEmpty Art="FpArtKind.Team" Title="Farmer profile"
+                 Message="This is where a farmer edits their own details. Support staff have no farmer profile." />
     }
     else if (_loading)
     {
-        <Skeleton Rows="6" Height="18px" LoadingText="Loading your profile..." />
+        <FpSkeleton Variant="form" Count="5" LoadingText="Loading your profile..." CssClass="fpp-skel" />
     }
     else if (_error is not null)
     {
-        <EmptyState Icon="bi-wifi-off" Title="We could not load your profile" Message="@_error">
-            <button type="button" class="btn btn-success" @onclick="LoadAsync">Try again</button>
-        </EmptyState>
+        <FpError Title="We could not load your profile" Message="@_error" OnRetry="LoadAsync" />
     }
     else
     {
@@ -56,4 +78,7 @@
         Farmer.Update(profile);
         Toast.Success("Your changes are saved.");
     }
+
+    private static string Place(FarmerProfileDto p) =>
+        string.Join(", ", new[] { p.Village, p.DistrictName, p.StateName }.Where(x => !string.IsNullOrWhiteSpace(x)));
 }

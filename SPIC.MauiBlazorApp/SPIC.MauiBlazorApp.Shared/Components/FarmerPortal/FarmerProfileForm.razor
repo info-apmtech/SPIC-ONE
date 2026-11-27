@@ -10,200 +10,247 @@
     The farmer profile form, shared by /farmer/onboarding (first time) and /farmer/profile (edit).
 
         <FarmerProfileForm Initial="@Session.Profile" Phone="@Session.Phone" SubmitLabel="Save" OnSaved="Saved" />
+        <FarmerProfileForm Stepped="true" ... />   one group per step (About you, Your farm, Your village)
 
     Required: name, state, district, village, pincode. Everything else is optional. Rules come from
     SPIC.Core.FarmerPortal.FarmerProfileRules (the API checks the same rules, plus that the
     district belongs to the state). The pincode fills state / district when they are still empty.
+    Stepped: "Next" checks only that step's fields; nothing is saved until the last step's submit;
+    a server error on an earlier step's field jumps back to that step.
 *@
 
 <form class="fpf" @onsubmit="SubmitAsync" @onsubmit:preventDefault novalidate>
 
-    <section class="fpf-group" aria-labelledby="fpf-about">
-        <h2 id="fpf-about" class="fpf-group-title"><i class="bi bi-person" aria-hidden="true"></i> About you</h2>
+    @if (Stepped)
+    {
+        <FpSteps Steps="@StepTitles" Current="@_step" OnSelect="GoToStepAsync" AriaLabel="Profile steps" CssClass="fpf-steps" />
+    }
 
-        <div class="fpf-field">
-            <label for="fpf-name">Your name <span class="fpf-req">*</span></label>
-            <input id="fpf-name" class="fpf-input @Invalid("name")" @bind="_name" maxlength="@FarmerProfileRules.NameMax"
-                   autocomplete="name" placeholder="For example: Murugan K" />
-            <FpFieldError Text="@ErrorFor("name")" />
-        </div>
-
-        @if (!string.IsNullOrWhiteSpace(Phone))
-        {
-            <div class="fpf-field">
-                <label for="fpf-phone">Mobile number</label>
-                <input id="fpf-phone" class="fpf-input" value="@($"+91 {Phone}")" readonly aria-readonly="true" />
-                <p class="fpf-hint">This is the number you signed in with.</p>
+    @if (Show(0))
+    {
+        <FpCard @ref="_cards[0]" Title="About you" Subtitle="@(Stepped ? "So your SPIC team knows who you are." : null)" Icon="bi-person" Hue="green">
+            <div class="fp-field">
+                <label for="fpf-name" class="fp-label">Your name <span class="fp-req">*</span></label>
+                <input id="fpf-name" class="fp-input @Invalid("name")" @bind="_name" maxlength="@FarmerProfileRules.NameMax"
+                       autocomplete="name" placeholder="For example: Murugan K" aria-invalid="@Aria("name")" />
+                <FpFieldError Text="@ErrorFor("name")" />
             </div>
-        }
 
-        <div class="fpf-field">
-            <label for="fpf-email">Email <span class="fpf-optional">(optional)</span></label>
-            <input id="fpf-email" type="email" inputmode="email" class="fpf-input @Invalid("email")" @bind="_email"
-                   maxlength="@FarmerProfileRules.EmailMax" autocomplete="email" />
-            <FpFieldError Text="@ErrorFor("email")" />
-        </div>
-
-        <div class="fpf-field">
-            <label for="fpf-lang">Language for SPIC AI answers</label>
-            <select id="fpf-lang" class="fpf-input @Invalid("preferredLanguage")" @bind="_language">
-                @foreach (var (langCode, langName) in FarmerProfileRules.Languages)
+            <div class="fp-form-row">
+                @if (!string.IsNullOrWhiteSpace(Phone))
                 {
-                    <option value="@langCode">@langName</option>
+                    <div class="fp-field">
+                        <label for="fpf-phone" class="fp-label">Mobile number</label>
+                        <div class="fp-input-group">
+                            <span class="fp-input-addon" aria-hidden="true"><i class="bi bi-patch-check-fill"></i></span>
+                            <input id="fpf-phone" class="fp-input fp-num" value="@($"+91 {Phone}")" readonly aria-readonly="true" aria-describedby="fpf-phone-hint" />
+                        </div>
+                        <p id="fpf-phone-hint" class="fp-hint">Verified. This is the number you signed in with.</p>
+                    </div>
                 }
-            </select>
-            <FpFieldError Text="@ErrorFor("preferredLanguage")" />
-        </div>
-    </section>
 
-    <section class="fpf-group" aria-labelledby="fpf-village">
-        <h2 id="fpf-village" class="fpf-group-title"><i class="bi bi-geo-alt" aria-hidden="true"></i> Your village</h2>
+                <div class="fp-field">
+                    <label for="fpf-email" class="fp-label">Email <span class="fp-optional">(optional)</span></label>
+                    <input id="fpf-email" type="email" inputmode="email" class="fp-input @Invalid("email")" @bind="_email"
+                           maxlength="@FarmerProfileRules.EmailMax" autocomplete="email" aria-invalid="@Aria("email")" />
+                    <FpFieldError Text="@ErrorFor("email")" />
+                </div>
+            </div>
 
-        <div class="fpf-field">
-            <label for="fpf-pin">Pincode <span class="fpf-req">*</span></label>
-            <input id="fpf-pin" class="fpf-input fpf-input--short @Invalid("pinCode")" value="@_pinCode"
-                   @oninput="OnPinInputAsync" inputmode="numeric" maxlength="6" autocomplete="postal-code" placeholder="6 digits" />
-            @if (_pinHint is not null)
-            {
-                <p class="fpf-hint fpf-hint--ok"><i class="bi bi-check-circle" aria-hidden="true"></i> @_pinHint</p>
-            }
-            <FpFieldError Text="@ErrorFor("pinCode")" />
-        </div>
-
-        <div class="fpf-row">
-            <div class="fpf-field">
-                <label for="fpf-state">State <span class="fpf-req">*</span></label>
-                <select id="fpf-state" class="fpf-input @Invalid("stateId")" value="@_stateId" @onchange="OnStateChangedAsync"
-                        disabled="@(_states is null)">
-                    <option value="0">@(_states is null ? "Loading..." : "Choose your state")</option>
-                    @foreach (var s in _states ?? new())
+            <div class="fp-field">
+                <label for="fpf-lang" class="fp-label">Language for SPIC AI answers</label>
+                <select id="fpf-lang" class="fp-input @Invalid("preferredLanguage")" @bind="_language">
+                    @foreach (var (langCode, langName) in FarmerProfileRules.Languages)
                     {
-                        <option value="@s.Id">@s.Name</option>
+                        <option value="@langCode">@langName</option>
                     }
                 </select>
-                <FpFieldError Text="@(ErrorFor("stateId") ?? _listError)" />
+                <FpFieldError Text="@ErrorFor("preferredLanguage")" />
             </div>
+        </FpCard>
+    }
 
-            <div class="fpf-field">
-                <label for="fpf-district">District <span class="fpf-req">*</span></label>
-                <select id="fpf-district" class="fpf-input @Invalid("districtId")" @bind="_districtId"
-                        disabled="@(_stateId == 0 || _districts is null)">
-                    <option value="0">@(_stateId == 0 ? "Choose the state first" : _districts is null ? "Loading..." : "Choose your district")</option>
-                    @foreach (var d in _districts ?? new())
+    @if (Show(1))
+    {
+        <FpCard @ref="_cards[1]" Title="Your farm" Subtitle="@(Stepped ? "Helps us give advice for your crops. You can skip this." : null)" Icon="bi-flower1" Hue="gold">
+            <div class="fp-field">
+                <span class="fp-label" id="fpf-crops-label">Main crops <span class="fp-optional">(tap all that you grow)</span></span>
+                <div class="fp-chips" role="group" aria-labelledby="fpf-crops-label">
+                    @foreach (var crop in CropChoices)
                     {
-                        <option value="@d.Id">@d.Name</option>
+                        var c = crop;
+                        <FpChip Text="@c" Emoji="@FpUi.CropEmoji(c)" Selected="@IsSelected(c)" OnClick="() => ToggleCrop(c)" CssClass="fp-crop-chip" />
                     }
-                </select>
-                <FpFieldError Text="@ErrorFor("districtId")" />
+                </div>
+                <div class="fpf-addcrop">
+                    @* form="..." takes this box out of the profile form, so Enter adds the crop instead of saving. *@
+                    <input class="fp-input" form="fpf-crop-entry" @bind="_otherCrop" @bind:event="oninput" maxlength="@FarmerProfileRules.CropMax"
+                           placeholder="Another crop" aria-label="Another crop" @onkeydown="OnOtherCropKey" />
+                    <button type="button" class="fp-btn fp-btn--secondary" @onclick="AddOtherCrop" disabled="@string.IsNullOrWhiteSpace(_otherCrop)">
+                        <i class="bi bi-plus-lg" aria-hidden="true"></i> Add
+                    </button>
+                </div>
+                <FpFieldError Text="@ErrorFor("primaryCrops")" />
             </div>
-        </div>
 
-        <div class="fpf-row">
-            <div class="fpf-field">
-                <label for="fpf-villagename">Village <span class="fpf-req">*</span></label>
-                <input id="fpf-villagename" class="fpf-input @Invalid("village")" @bind="_village" maxlength="@FarmerProfileRules.VillageMax" />
-                <FpFieldError Text="@ErrorFor("village")" />
+            <div class="fp-form-row">
+                <div class="fp-field">
+                    <label for="fpf-land" class="fp-label">Land <span class="fp-optional">(acres, optional)</span></label>
+                    <input id="fpf-land" class="fp-input @Invalid("landAcres")" @bind="_land" inputmode="decimal" placeholder="e.g. 2.5" aria-invalid="@Aria("landAcres")" />
+                    <FpFieldError Text="@ErrorFor("landAcres")" />
+                </div>
+                <div class="fp-field">
+                    <label for="fpf-water" class="fp-label">Water source <span class="fp-optional">(optional)</span></label>
+                    <select id="fpf-water" class="fp-input @Invalid("irrigationType")" @bind="_irrigation">
+                        <option value="">Choose</option>
+                        @foreach (var (value, label) in IrrigationChoices)
+                        {
+                            <option value="@value">@label</option>
+                        }
+                    </select>
+                    <FpFieldError Text="@ErrorFor("irrigationType")" />
+                </div>
             </div>
-            <div class="fpf-field">
-                <label for="fpf-taluk">Taluk <span class="fpf-optional">(optional)</span></label>
-                <input id="fpf-taluk" class="fpf-input @Invalid("taluk")" @bind="_taluk" maxlength="@FarmerProfileRules.TalukMax" />
-                <FpFieldError Text="@ErrorFor("taluk")" />
-            </div>
-        </div>
+        </FpCard>
+    }
 
-        <div class="fpf-field">
-            <span class="fpf-label">Farm location <span class="fpf-optional">(optional)</span></span>
-            <div class="fpf-location">
-                <button type="button" class="fpf-btn fpf-btn--outline" @onclick="UseMyLocationAsync" disabled="@_locating">
-                    <i class="bi @(_locating ? "bi-hourglass-split" : "bi-crosshair")" aria-hidden="true"></i>
-                    @(_locating ? "Finding you..." : "Use my location")
-                </button>
-                <span class="fpf-location-status" aria-live="polite">
-                    @if (_latitude is not null && _longitude is not null)
+    @if (Show(2))
+    {
+        <FpCard @ref="_cards[2]" Title="Your village" Subtitle="@(Stepped ? "For dealers, weather and your SPIC team near you." : null)" Icon="bi-geo-alt" Hue="sky">
+            <div class="fp-field">
+                <label for="fpf-pin" class="fp-label">Pincode <span class="fp-req">*</span></label>
+                <input id="fpf-pin" class="fp-input fp-input--short fp-num @Invalid("pinCode")" value="@_pinCode"
+                       @oninput="OnPinInputAsync" inputmode="numeric" maxlength="6" autocomplete="postal-code" placeholder="6 digits"
+                       aria-invalid="@Aria("pinCode")" />
+                @if (_pinHint is not null)
+                {
+                    <p class="fp-hint fp-hint--ok"><i class="bi bi-check-circle-fill" aria-hidden="true"></i> @_pinHint</p>
+                }
+                <FpFieldError Text="@ErrorFor("pinCode")" />
+            </div>
+
+            <div class="fp-form-row">
+                <div class="fp-field">
+                    <label for="fpf-state" class="fp-label">State <span class="fp-req">*</span></label>
+                    <select id="fpf-state" class="fp-input @Invalid("stateId")" value="@_stateId" @onchange="OnStateChangedAsync"
+                            disabled="@(_states is null)" aria-invalid="@Aria("stateId")">
+                        <option value="0">@(_states is null ? "Loading..." : "Choose your state")</option>
+                        @foreach (var s in _states ?? new())
+                        {
+                            <option value="@s.Id">@s.Name</option>
+                        }
+                    </select>
+                    <FpFieldError Text="@(ErrorFor("stateId") ?? _listError)" />
+                </div>
+
+                <div class="fp-field">
+                    <label for="fpf-district" class="fp-label">District <span class="fp-req">*</span></label>
+                    <select id="fpf-district" class="fp-input @Invalid("districtId")" @bind="_districtId"
+                            disabled="@(_stateId == 0 || _districts is null)" aria-invalid="@Aria("districtId")">
+                        <option value="0">@(_stateId == 0 ? "Choose the state first" : _districts is null ? "Loading..." : "Choose your district")</option>
+                        @foreach (var d in _districts ?? new())
+                        {
+                            <option value="@d.Id">@d.Name</option>
+                        }
+                    </select>
+                    <FpFieldError Text="@ErrorFor("districtId")" />
+                </div>
+            </div>
+
+            <div class="fp-form-row">
+                <div class="fp-field">
+                    <label for="fpf-villagename" class="fp-label">Village <span class="fp-req">*</span></label>
+                    <input id="fpf-villagename" class="fp-input @Invalid("village")" @bind="_village" maxlength="@FarmerProfileRules.VillageMax" aria-invalid="@Aria("village")" />
+                    <FpFieldError Text="@ErrorFor("village")" />
+                </div>
+                <div class="fp-field">
+                    <label for="fpf-taluk" class="fp-label">Taluk <span class="fp-optional">(optional)</span></label>
+                    <input id="fpf-taluk" class="fp-input @Invalid("taluk")" @bind="_taluk" maxlength="@FarmerProfileRules.TalukMax" />
+                    <FpFieldError Text="@ErrorFor("taluk")" />
+                </div>
+            </div>
+
+            <div class="fp-field">
+                <span class="fp-label">Farm location <span class="fp-optional">(optional)</span></span>
+                <div class="fpf-location @(_latitude is not null ? "is-set" : null)">
+                    <span class="fp-icon-circle fp-icon-circle--sm fp-hue-sky" aria-hidden="true">
+                        <i class="bi @(_latitude is not null ? "bi-geo-alt-fill" : "bi-crosshair")"></i>
+                    </span>
+                    <span class="fpf-location-status" aria-live="polite">
+                        @if (_latitude is not null && _longitude is not null)
+                        {
+                            <strong>Location saved</strong>
+                            <span class="fp-num">@_latitude.Value.ToString("0.0000", CultureInfo.InvariantCulture), @_longitude.Value.ToString("0.0000", CultureInfo.InvariantCulture)</span>
+                        }
+                        else if (_locationMessage is not null)
+                        {
+                            <strong>Not found</strong>
+                            <span>@_locationMessage</span>
+                        }
+                        else
+                        {
+                            <strong>Not added</strong>
+                            <span>Helps us show dealers and weather near your farm.</span>
+                        }
+                    </span>
+                    @if (_latitude is not null)
                     {
-                        <i class="bi bi-geo-alt-fill" aria-hidden="true"></i>
-                        <text>Saved: @_latitude.Value.ToString("0.0000", CultureInfo.InvariantCulture), @_longitude.Value.ToString("0.0000", CultureInfo.InvariantCulture)</text>
-                        <button type="button" class="fpf-link" @onclick="ClearLocation">Remove</button>
-                    }
-                    else if (_locationMessage is not null)
-                    {
-                        @_locationMessage
+                        <button type="button" class="fp-btn fp-btn--ghost fp-btn--sm" @onclick="ClearLocation">Remove</button>
                     }
                     else
                     {
-                        <text>Helps us show dealers and weather near your farm.</text>
+                        <button type="button" class="fp-btn fp-btn--secondary fp-btn--sm" @onclick="UseMyLocationAsync" disabled="@_locating">
+                            @if (_locating)
+                            {
+                                <span class="fp-spinner" aria-hidden="true"></span>
+                                <span>Finding you...</span>
+                            }
+                            else
+                            {
+                                <i class="bi bi-crosshair" aria-hidden="true"></i>
+                                <span>Use my location</span>
+                            }
+                        </button>
                     }
-                </span>
+                </div>
+                <FpFieldError Text="@ErrorFor("latitude")" />
             </div>
-            <FpFieldError Text="@ErrorFor("latitude")" />
-        </div>
-    </section>
-
-    <section class="fpf-group" aria-labelledby="fpf-farm">
-        <h2 id="fpf-farm" class="fpf-group-title"><i class="bi bi-flower1" aria-hidden="true"></i> Your farm</h2>
-
-        <div class="fpf-field">
-            <span class="fpf-label" id="fpf-crops-label">Main crops <span class="fpf-optional">(tap all that you grow)</span></span>
-            <div class="fpf-chips" role="group" aria-labelledby="fpf-crops-label">
-                @foreach (var crop in CropChoices)
-                {
-                    var selected = IsSelected(crop);
-                    <button type="button" class="fpf-chip @(selected ? "is-on" : null)" aria-pressed="@(selected ? "true" : "false")"
-                            @onclick="() => ToggleCrop(crop)">
-                        @if (selected)
-                        {
-                            <i class="bi bi-check-lg" aria-hidden="true"></i>
-                        }
-                        @crop
-                    </button>
-                }
-            </div>
-            <div class="fpf-addcrop">
-                @* form="..." takes this box out of the profile form, so Enter adds the crop instead of saving. *@
-                <input class="fpf-input" form="fpf-crop-entry" @bind="_otherCrop" @bind:event="oninput" maxlength="@FarmerProfileRules.CropMax"
-                       placeholder="Another crop" aria-label="Another crop" @onkeydown="OnOtherCropKey" />
-                <button type="button" class="fpf-btn fpf-btn--outline" @onclick="AddOtherCrop" disabled="@string.IsNullOrWhiteSpace(_otherCrop)">Add</button>
-            </div>
-            <FpFieldError Text="@ErrorFor("primaryCrops")" />
-        </div>
-
-        <div class="fpf-row">
-            <div class="fpf-field">
-                <label for="fpf-land">Land <span class="fpf-optional">(acres, optional)</span></label>
-                <input id="fpf-land" class="fpf-input fpf-input--short @Invalid("landAcres")" @bind="_land" inputmode="decimal" placeholder="e.g. 2.5" />
-                <FpFieldError Text="@ErrorFor("landAcres")" />
-            </div>
-            <div class="fpf-field">
-                <label for="fpf-water">Water source <span class="fpf-optional">(optional)</span></label>
-                <select id="fpf-water" class="fpf-input @Invalid("irrigationType")" @bind="_irrigation">
-                    <option value="">Choose</option>
-                    @foreach (var (value, label) in IrrigationChoices)
-                    {
-                        <option value="@value">@label</option>
-                    }
-                </select>
-                <FpFieldError Text="@ErrorFor("irrigationType")" />
-            </div>
-        </div>
-    </section>
+        </FpCard>
+    }
 
     @if (_formError is not null)
     {
-        <div class="fpf-alert" role="alert"><i class="bi bi-exclamation-circle" aria-hidden="true"></i> @_formError</div>
+        <div class="fp-alert fp-alert--error" role="alert"><i class="bi bi-exclamation-circle-fill" aria-hidden="true"></i> @_formError</div>
     }
 
-    <div class="fpf-actions">
-        <button type="submit" class="fpf-btn fpf-btn--primary" disabled="@_saving">
-            @if (_saving)
-            {
-                <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
-                <span>Saving...</span>
-            }
-            else
-            {
-                <span>@SubmitLabel</span>
-            }
-        </button>
+    <div class="fp-actionbar fpf-actions">
+        @if (Stepped && _step > 0)
+        {
+            <button type="button" class="fp-btn fp-btn--secondary fpf-back" @onclick="BackAsync" disabled="@_saving">
+                <i class="bi bi-arrow-left" aria-hidden="true"></i> Back
+            </button>
+        }
+        @if (Stepped && _step < LastStep)
+        {
+            <button type="submit" class="fp-btn fp-btn--primary fpf-submit" data-fp-next>
+                Next <i class="bi bi-arrow-right" aria-hidden="true"></i>
+            </button>
+        }
+        else
+        {
+            <button type="submit" class="fp-btn fp-btn--primary fpf-submit" disabled="@_saving">
+                @if (_saving)
+                {
+                    <span class="fp-spinner" aria-hidden="true"></span>
+                    <span>Saving...</span>
+                }
+                else
+                {
+                    <i class="bi bi-check2-circle" aria-hidden="true"></i>
+                    <span>@SubmitLabel</span>
+                }
+            </button>
+        }
     </div>
 </form>
 
@@ -216,8 +263,23 @@
 
     [Parameter] public string SubmitLabel { get; set; } = "Save";
 
+    /// <summary>One group per step with FpSteps, Back and Next (onboarding).</summary>
+    [Parameter] public bool Stepped { get; set; }
+
     /// <summary>Raised with the saved profile from the API.</summary>
     [Parameter] public EventCallback<FarmerProfileDto> OnSaved { get; set; }
+
+    private static readonly string[] StepTitles = { "About you", "Your farm", "Your village" };
+    private const int LastStep = 2;
+
+    // Which step each field (camelCase DTO key) lives on.
+    private static readonly Dictionary<string, int> FieldStep = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["name"] = 0, ["email"] = 0, ["preferredLanguage"] = 0,
+        ["primaryCrops"] = 1, ["landAcres"] = 1, ["irrigationType"] = 1,
+        ["pinCode"] = 2, ["stateId"] = 2, ["districtId"] = 2, ["village"] = 2, ["taluk"] = 2,
+        ["latitude"] = 2, ["longitude"] = 2
+    };
 
     private static readonly (FarmerIrrigationType Value, string Label)[] IrrigationChoices =
     {
@@ -228,6 +290,10 @@
         (FarmerIrrigationType.Sprinkler, "Sprinkler"),
         (FarmerIrrigationType.Mixed, "More than one")
     };
+
+    private readonly FpCard?[] _cards = new FpCard?[3];
+    private int _step;
+    private bool _focusStep;
 
     private string _name = "";
     private string _email = "";
@@ -258,6 +324,8 @@
 
     private IEnumerable<string> CropChoices => FarmerProfileRules.CommonCrops.Concat(_extraCrops);
 
+    private bool Show(int step) => !Stepped || _step == step;
+
     protected override async Task OnParametersSetAsync()
     {
         if (!ReferenceEquals(Initial, _appliedInitial))
@@ -278,6 +346,13 @@
 
         if (_stateId > 0 && _districts is null)
             await LoadDistrictsAsync(_stateId);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_focusStep) return;
+        _focusStep = false;
+        if (_cards[_step] is { } card) await card.FocusTitleAsync();
     }
 
     private void Apply(FarmerProfileDto? p)
@@ -381,7 +456,7 @@
             var position = await JS.InvokeAsync<GeoResult?>("getCurrentPosition");
             if (position is null || !string.IsNullOrWhiteSpace(position.Error) || (position.Latitude == 0 && position.Longitude == 0))
             {
-                _locationMessage = "We could not find your location. Please allow location access, or skip this.";
+                _locationMessage = "Please allow location access, or skip this.";
                 return;
             }
             _latitude = Math.Round(position.Latitude, 6);
@@ -451,18 +526,66 @@
         };
     }
 
+    /// <summary>All client-side errors (FarmerProfileRules + the land number check).</summary>
+    private Dictionary<string, string> ValidateAll(FarmerProfileUpsertDto dto)
+    {
+        var errors = FarmerProfileRules.Validate(dto);
+        if (!string.IsNullOrWhiteSpace(_land) && dto.LandAcres is null)
+            errors["landAcres"] = "Please write the land in numbers, for example 2.5.";
+        return errors;
+    }
+
+    private static int StepOf(string field) => FieldStep.TryGetValue(field, out var step) ? step : LastStep;
+
+    private void ShowStep(int step)
+    {
+        _step = Math.Clamp(step, 0, LastStep);
+        _focusStep = true;
+    }
+
+    private Task GoToStepAsync(int step)
+    {
+        if (step < _step)
+        {
+            _formError = null;
+            ShowStep(step);
+        }
+        return Task.CompletedTask;
+    }
+
+    private Task BackAsync()
+    {
+        _formError = null;
+        ShowStep(_step - 1);
+        return Task.CompletedTask;
+    }
+
     private async Task SubmitAsync()
     {
         if (_saving) return;
         _formError = null;
 
         var dto = BuildDto();
-        _errors = FarmerProfileRules.Validate(dto);
-        if (!string.IsNullOrWhiteSpace(_land) && dto.LandAcres is null)
-            _errors["landAcres"] = "Please write the land in numbers, for example 2.5.";
+        var errors = ValidateAll(dto);
+
+        // Stepped and not on the last step: "Next" checks only this step's fields.
+        if (Stepped && _step < LastStep)
+        {
+            _errors = errors.Where(kv => StepOf(kv.Key) == _step).ToDictionary(kv => kv.Key, kv => kv.Value);
+            if (_errors.Count > 0)
+            {
+                _formError = "Please check the fields marked in red.";
+                return;
+            }
+            ShowStep(_step + 1);
+            return;
+        }
+
+        _errors = errors;
         if (_errors.Count > 0)
         {
             _formError = "Please check the fields marked in red.";
+            if (Stepped) ShowStep(_errors.Keys.Min(StepOf));
             return;
         }
 
@@ -474,6 +597,7 @@
             {
                 _errors = result.Errors.ToDictionary(kv => kv.Key, kv => kv.Value);
                 _formError = result.Message ?? "We could not save your profile. Please try again.";
+                if (Stepped && _errors.Count > 0) ShowStep(_errors.Keys.Min(StepOf));
                 return;
             }
             _appliedInitial = result.Profile;
@@ -488,4 +612,6 @@
     private string? ErrorFor(string field) => _errors.TryGetValue(field, out var message) ? message : null;
 
     private string? Invalid(string field) => _errors.ContainsKey(field) ? "is-invalid" : null;
+
+    private string Aria(string field) => _errors.ContainsKey(field) ? "true" : "false";
 }
