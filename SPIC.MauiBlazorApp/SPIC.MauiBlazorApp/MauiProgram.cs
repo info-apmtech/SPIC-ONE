@@ -95,6 +95,7 @@ namespace SPIC.MauiBlazorApp
 			builder.Services.AddScoped<FarmerConnectApi>();
 			builder.Services.AddScoped<FarmerAreaApi>();
 			builder.Services.AddScoped<FarmerFertilizerApi>();
+			builder.Services.AddScoped<FarmerAssistantApi>();
 
 			// Usage + error telemetry (docs/metrics-telemetry-plan.md): the app / version header on
 			// every API call, page views and client errors, and anything the app logs at Error+.

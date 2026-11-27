@@ -100,6 +100,13 @@ namespace SPIC.MauiBlazorApp.Shared.Services
             if (firstSegment.Equals(CommunitySegment, StringComparison.OrdinalIgnoreCase))
                 return Allow;
 
+            // SPIC AI answers (farmer portal Task 5) link their Digital Library sources; published library
+            // content is readable by every signed-in user (the API checks it is published), so a farmer may
+            // open an item page. The rest of the library (lists, chat, add) keeps its rules.
+            if (firstSegment.Equals("DigitalLibrary", StringComparison.OrdinalIgnoreCase)
+                && secondSegment.Equals("view", StringComparison.OrdinalIgnoreCase))
+                return Allow;
+
             // A farmer with no designation never sees the staff Welcome / dashboard pages: anything
             // else goes to the farmer home. A farmer WITH a designation (older SAS accounts) keeps
             // the normal rules below; their LandingPage is the farmer home too.

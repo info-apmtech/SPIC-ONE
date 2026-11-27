@@ -1,0 +1,538 @@
+@page "/farmer/assistant"
+@page "/farmer/assistant/chats"
+@page "/farmer/assistant/{ConversationId:long}"
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
+@using SPIC.Core.FarmerPortal
+@inject FarmerAssistantApi Api
+@inject FarmerSession Farmer
+@inject LoginState LoginState
+@inject NavigationManager Nav
+@inject ToastService Toast
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+@*
+    Ask SPIC AI (farmer portal Task 5): a chat for farming questions, answered in the profile's language
+    from the SPIC Digital Library and the farmer's own crops / soil test / fertilizer advice
+    (api/Farmer/assistant). Desktop / tablet: "My chats" on the left, the chat on the right. Phone: the
+    chat; "My chats" opens /farmer/assistant/chats. The composer stays at the bottom above the tab bar.
+    The screen chrome is English; only the answers follow the farmer's language.
+*@
+
+<div class="fp fp-page fpai @(ShowList ? "fpai--list" : "fpai--chat")">
+    <FpHero Title="Ask SPIC AI" Compact="true" BackHref="/farmer" BackLabel="Back to home"
+            Subtitle="@($"Farming questions, answered in {_status?.LanguageName ?? "your language"}")">
+        @if (_status is { } s)
+        {
+            <div class="fp-chips">
+                <FpChip Icon="bi-translate" Text="@($"Answers in {s.LanguageName}")" Small="true" />
+                <FpChip Icon="bi-chat-dots" Text="@FarmerAssistantUi.LeftText(_left, s.DailyLimit)" Small="true" />
+            </div>
+        }
+    </FpHero>
+
+    @if (LoginState.UserRole != AppRole.Farmer)
+    {
+        <FpEmpty Art="FpArtKind.Field" Title="You are viewing as support staff" Message="Farmers ask SPIC AI their farming questions here." />
+    }
+    else if (_loading)
+    {
+        <FpSkeleton Variant="FpSkeletonVariant.Cards" Count="2" LoadingText="Opening SPIC AI..." />
+    }
+    else if (_loadError is not null)
+    {
+        <FpError Title="We could not open SPIC AI" Message="@_loadError" OnRetry="LoadAsync" />
+    }
+    else
+    {
+        <div class="fpai-layout">
+            @* ---------------------------------------------------------------- My chats *@
+            <aside class="fpai-side" aria-label="My chats">
+                <div class="fpai-side__head">
+                    <h2 class="fpai-side__title">My chats</h2>
+                    <button type="button" class="fp-btn fp-btn--primary fp-btn--sm" @onclick="NewChat">
+                        <i class="bi bi-plus-lg" aria-hidden="true"></i> New chat
+                    </button>
+                </div>
+                @if (_conversations.Count == 0)
+                {
+                    <div class="fpai-side__empty">
+                        <span class="fpai-side__empty-icon" aria-hidden="true"><i class="bi bi-chat-square-text"></i></span>
+                        <p class="fp-text">No chats yet</p>
+                        <p class="fp-caption">Your questions and SPIC AI's answers are kept here.</p>
+                    </div>
+                }
+                else
+                {
+                    @foreach (var group in _conversations.GroupBy(c => FarmerAssistantUi.Group(c.UpdatedAtUtc, _now)))
+                    {
+                        <p class="fpai-side__group">@group.Key</p>
+                        <ul class="fpai-convs">
+                            @foreach (var c in group)
+                            {
+                                <li class="fpai-conv @(c.Id == Current?.Id ? "is-active" : null)" @key="c.Id">
+                                    <a class="fpai-conv__link" href="@($"/farmer/assistant/{c.Id}")" aria-current="@(c.Id == Current?.Id ? "page" : null)">
+                                        <span class="fpai-conv__icon" aria-hidden="true"><i class="bi bi-chat-left-text"></i></span>
+                                        <span class="fpai-conv__body">
+                                            <span class="fpai-conv__title">@c.Title</span>
+                                            <span class="fp-caption">@FarmerAssistantUi.ListLine(c.QuestionCount, c.UpdatedAtUtc, _now)</span>
+                                        </span>
+                                    </a>
+                                    <button type="button" class="fpai-conv__delete" aria-label="@($"Delete chat {c.Title}")" title="Delete chat"
+                                            @onclick="() => DeleteAsync(c)">
+                                        <i class="bi bi-trash3" aria-hidden="true"></i>
+                                    </button>
+                                </li>
+                            }
+                        </ul>
+                    }
+                }
+            </aside>
+
+            @* ---------------------------------------------------------------- chat *@
+            <section class="fpai-chat" aria-label="Chat with SPIC AI">
+                <div class="fpai-chat__bar">
+                    <a class="fp-btn fp-btn--secondary fp-btn--sm fpai-chat__chats" href="/farmer/assistant/chats">
+                        <i class="bi bi-clock-history" aria-hidden="true"></i> My chats
+                    </a>
+                    <p class="fpai-chat__title">@(Current?.Title ?? "New chat")</p>
+                    @if (Current is not null)
+                    {
+                        <button type="button" class="fp-btn fp-btn--ghost fp-btn--sm" @onclick="NewChat">
+                            <i class="bi bi-plus-lg" aria-hidden="true"></i> New chat
+                        </button>
+                    }
+                </div>
+
+                <div class="fpai-thread" aria-live="polite">
+                    @if (_threadLoading)
+                    {
+                        <FpSkeleton Variant="FpSkeletonVariant.Cards" Count="2" LoadingText="Opening your chat..." />
+                    }
+                    else if (_threadError is not null)
+                    {
+                        <FpError Title="We could not open this chat" Message="@_threadError" OnRetry="LoadThreadAsync" Compact="true" />
+                    }
+                    else
+                    {
+                        @if (Current is null && _pending is null)
+                        {
+                            <div class="fpai-welcome fp-fade-up">
+                                <span class="fpai-welcome__avatar" aria-hidden="true">@LeafAvatar</span>
+                                <h2 class="fpai-welcome__title">Namaste! I am SPIC AI</h2>
+                                <p class="fpai-welcome__text">
+                                    Ask me about your crops, soil, fertilizer, pests or water.
+                                    I answer in @(_status?.LanguageName ?? "your language"), using SPIC's library and your farm details.
+                                </p>
+                                @if (_status is { FullAnswers: false })
+                                {
+                                    <p class="fpai-welcome__note"><i class="bi bi-info-circle" aria-hidden="true"></i> For now SPIC AI gives basic answers from the SPIC library, in English.</p>
+                                }
+                                @if (_status is { Starters.Count: > 0 })
+                                {
+                                    <p class="fpai-welcome__try">Try asking</p>
+                                    <div class="fpai-starters">
+                                        @foreach (var s in _status.Starters)
+                                        {
+                                            <button type="button" class="fpai-starter" disabled="@(_thinking || _capped)" @onclick="() => AskAsync(s)">
+                                                <i class="bi bi-stars" aria-hidden="true"></i>
+                                                <span>@s</span>
+                                            </button>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        }
+
+                        @if (Current is not null)
+                        {
+                            @foreach (var m in Current.Messages)
+                            {
+                                var mine = m.Role == "user";
+                                <div class="fpai-msg @(mine ? "fpai-msg--me" : "fpai-msg--ai")" @key="m.Id">
+                                    @if (!mine)
+                                    {
+                                        <span class="fpai-avatar" aria-hidden="true">@LeafAvatar</span>
+                                    }
+                                    <div class="fpai-msg__col">
+                                        <div class="fpai-bubble">
+                                            <span class="fp-sr-only">@(mine ? "You asked:" : "SPIC AI answered:")</span>
+                                            @if (!mine && FarmerAssistantUi.IsBasic(m.Provider))
+                                            {
+                                                <span class="fpai-basic"><i class="bi bi-book" aria-hidden="true"></i> Basic answer from the library</span>
+                                            }
+                                            @foreach (var p in FarmerAssistantUi.Paragraphs(m.Text))
+                                            {
+                                                <p>@p</p>
+                                            }
+                                            @if (!mine && m.Sources.Count > 0)
+                                            {
+                                                <div class="fpai-sources">
+                                                    <span class="fpai-sources__label">From the SPIC library</span>
+                                                    <div class="fpai-sources__list">
+                                                        @foreach (var src in m.Sources)
+                                                        {
+                                                            <a class="fpai-source" href="@FarmerAssistantUi.SourceHref(src.ContentId)">
+                                                                <i class="bi @FarmerAssistantUi.SourceIcon(src.Kind)" aria-hidden="true"></i>
+                                                                <span>@src.Title</span>
+                                                            </a>
+                                                        }
+                                                    </div>
+                                                </div>
+                                            }
+                                        </div>
+                                        <span class="fpai-time">@(mine ? "You" : "SPIC AI") · @FarmerAssistantUi.Time(m.CreatedAtUtc)</span>
+                                    </div>
+                                </div>
+                            }
+                        }
+
+                        @if (_pending is not null)
+                        {
+                            <div class="fpai-msg fpai-msg--me">
+                                <div class="fpai-msg__col">
+                                    <div class="fpai-bubble"><p>@_pending</p></div>
+                                    <span class="fpai-time">You · @FarmerAssistantUi.Time(DateTime.UtcNow)</span>
+                                </div>
+                            </div>
+                        }
+
+                        @if (_thinking)
+                        {
+                            <div class="fpai-msg fpai-msg--ai" role="status">
+                                <span class="fpai-avatar" aria-hidden="true">@LeafAvatar</span>
+                                <div class="fpai-msg__col">
+                                    <div class="fpai-bubble fpai-typing">
+                                        <span class="fpai-typing__dots" aria-hidden="true"><span></span><span></span><span></span></span>
+                                        <span class="fpai-typing__text">SPIC AI is writing...</span>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+
+                        @if (_askError is not null)
+                        {
+                            <div class="fp-alert fp-alert--error fpai-ask-error" role="alert">
+                                <i class="bi bi-exclamation-circle" aria-hidden="true"></i>
+                                <span>@_askError</span>
+                            </div>
+                        }
+
+                        @if (!_thinking && !_capped && FollowUps.Count > 0)
+                        {
+                            <div class="fpai-followups" aria-label="Ask next">
+                                @foreach (var f in FollowUps)
+                                {
+                                    <button type="button" class="fpai-followup" @onclick="() => AskAsync(f)">@f</button>
+                                }
+                            </div>
+                        }
+                    }
+                    <div class="fpai-end" @ref="_end"></div>
+                </div>
+
+                <div class="fpai-bottom">
+                    @if (_capped)
+                    {
+                        <div class="fpai-cap fp-fade-up" role="status">
+                            <span class="fpai-cap__icon" aria-hidden="true"><i class="bi bi-moon-stars"></i></span>
+                            <div class="fpai-cap__body">
+                                <p class="fpai-cap__title">That's all for today</p>
+                                <p class="fpai-cap__text">@(_capMessage ?? FarmerAssistantRules.CapMessage(_status?.DailyLimit ?? FarmerAssistantRules.DailyLimit))</p>
+                                <div class="fpai-cap__actions">
+                                    <a class="fp-btn fp-btn--primary fp-btn--sm" href="/farmer/team"><i class="bi bi-people-fill" aria-hidden="true"></i> Ask my SPIC team</a>
+                                    <a class="fp-btn fp-btn--secondary fp-btn--sm" href="/farmer/community"><i class="bi bi-chat-square-text" aria-hidden="true"></i> Community near me</a>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                    else
+                    {
+                        <form class="fpai-composer" @onsubmit="SendAsync" @onsubmit:preventDefault>
+                            <label class="fp-sr-only" for="fpai-input">Your question</label>
+                            <input id="fpai-input" class="fpai-composer__input" type="text" autocomplete="off" enterkeyhint="send"
+                                   maxlength="@FarmerAssistantRules.MaxQuestionChars" placeholder="Type your farming question..."
+                                   value="@_input" @oninput="e => _input = e.Value?.ToString() ?? string.Empty" disabled="@_thinking" @ref="_inputEl" />
+                            <button type="submit" class="fpai-composer__send" aria-label="Send question" title="Send"
+                                    disabled="@(_thinking || string.IsNullOrWhiteSpace(_input))">
+                                @if (_thinking)
+                                {
+                                    <span class="fp-spinner" aria-hidden="true"></span>
+                                }
+                                else
+                                {
+                                    <i class="bi bi-send-fill" aria-hidden="true"></i>
+                                }
+                            </button>
+                        </form>
+                        @if (_input.Length > FarmerAssistantRules.MaxQuestionChars - 200)
+                        {
+                            <p class="fp-caption fpai-count fp-num">@_input.Length / @FarmerAssistantRules.MaxQuestionChars letters</p>
+                        }
+                    }
+                    <FpDisclaimer CssClass="fpai-disclaimer">
+                        @FarmerAssistantRules.Disclaimer <a href="/farmer/team">My SPIC team</a>
+                    </FpDisclaimer>
+                </div>
+            </section>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public long? ConversationId { get; set; }
+
+    private static readonly RenderFragment LeafAvatar = b =>
+    {
+        b.AddMarkupContent(0,
+            "<svg viewBox=\"0 0 24 24\" width=\"20\" height=\"20\" focusable=\"false\">" +
+            "<path fill=\"currentColor\" d=\"M20.5 3.5c-7.6-.4-13.1 2.2-15 7.4-1 2.8-.5 5.5.9 7.3L4 20.6l1.4 1.4 2.4-2.4c1.8 1.4 4.6 1.9 7.4.9 5.2-1.9 7.8-7.4 7.4-15l-.1-1.9-2-.1zM9.2 17.2c2.7-4.4 5.6-7 8.3-8.6-3.4 2.6-5.6 5.6-6.9 9.4l-1.4-.8z\"/></svg>");
+    };
+
+    private FarmerAssistantStatusDto? _status;
+    private List<FarmerChatConversationDto> _conversations = new();
+    private FarmerChatDetailDto? Current { get; set; }
+
+    private bool _loading = true;
+    private string? _loadError;
+    private bool _threadLoading;
+    private string? _threadError;
+    private bool _thinking;
+    private string? _pending;
+    private string? _askError;
+    private bool _capped;
+    private string? _capMessage;
+    private int _left;
+    private string _input = "";
+    private long? _loadedId = -1;
+    private DateTime _now = DateTime.UtcNow;
+    private ElementReference _end;
+    private ElementReference _inputEl;
+    private int _renderedCount = -1;
+    private bool _scrollPending;
+    private IJSObjectReference? _module;
+    private readonly CancellationTokenSource _cts = new();
+
+    private bool ShowList => ConversationId is null &&
+        Nav.ToBaseRelativePath(Nav.Uri).Split('?', '#')[0].TrimEnd('/').EndsWith("assistant/chats", StringComparison.OrdinalIgnoreCase);
+
+    private List<string> FollowUps =>
+        Current?.Messages.LastOrDefault()?.Role == "assistant" ? Current.Messages[^1].Suggestions : new List<string>();
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loading || _loadError is not null) return;
+        if (_loadedId == ConversationId) return;
+        await LoadThreadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        if (LoginState.UserRole != AppRole.Farmer)
+        {
+            _loading = false;
+            return;
+        }
+
+        _loading = true;
+        _loadError = null;
+        StateHasChanged();
+        // The farmer shell (My Samples / My Reports tabs) reads the SAS link from the profile.
+        try { await Farmer.EnsureLoadedAsync(); } catch { /* the chat does not need it */ }
+
+        var statusTask = Api.StatusAsync(_cts.Token);
+        var listTask = Api.ConversationsAsync(_cts.Token);
+        var status = await statusTask;
+        var list = await listTask;
+        if (_cts.IsCancellationRequested) return;
+
+        if (status.Value is null)
+        {
+            _loading = false;
+            _loadError = status.Message ?? "Please try again.";
+            return;
+        }
+
+        _status = status.Value;
+        _left = _status.LeftToday;
+        _capped = _left <= 0;
+        _conversations = list.Value ?? new();
+        _now = DateTime.UtcNow;
+        _loading = false;
+        await LoadThreadAsync();
+    }
+
+    private async Task LoadThreadAsync()
+    {
+        _loadedId = ConversationId;
+        _threadError = null;
+        _askError = null;
+        if (ConversationId is not { } id)
+        {
+            Current = null;
+            return;
+        }
+        if (Current?.Id == id) return;
+
+        _threadLoading = true;
+        StateHasChanged();
+        var result = await Api.ConversationAsync(id, _cts.Token);
+        if (_cts.IsCancellationRequested || ConversationId != id) return;
+        _threadLoading = false;
+        if (result.Value is { } detail)
+        {
+            Current = detail;
+            _scrollPending = true;
+        }
+        else
+        {
+            Current = null;
+            _threadError = result.Message ?? "Please try again.";
+        }
+    }
+
+    private void NewChat()
+    {
+        _pending = null;
+        _askError = null;
+        Current = null;
+        _loadedId = null;
+        Nav.NavigateTo("/farmer/assistant");
+    }
+
+    private Task SendAsync()
+    {
+        var text = _input.Trim();
+        if (text.Length == 0 || _thinking) return Task.CompletedTask;
+        return AskAsync(text);
+    }
+
+    private async Task AskAsync(string question)
+    {
+        if (_thinking || _capped || string.IsNullOrWhiteSpace(question)) return;
+        var text = question.Trim();
+        var problem = FarmerAssistantRules.Validate(text);
+        if (problem is not null)
+        {
+            _askError = problem;
+            return;
+        }
+
+        _input = "";
+        _askError = null;
+        _pending = text;
+        _thinking = true;
+        _scrollPending = true;
+        StateHasChanged();
+
+        var askedIn = Current?.Id;
+        var result = await Api.AskAsync(new FarmerAskRequest { ConversationId = askedIn, Question = text }, _cts.Token);
+        if (_cts.IsCancellationRequested) return;
+        _thinking = false;
+        _pending = null;
+        _scrollPending = true;
+
+        if (result.Value is not { } response)
+        {
+            if (result.Capped)
+            {
+                _capped = true;
+                _capMessage = result.Message;
+                _left = 0;
+            }
+            else
+            {
+                _askError = result.Message ?? "SPIC AI could not answer just now. Please try again.";
+            }
+            _input = text; // nothing was lost: the question is back in the box
+            return;
+        }
+
+        _left = response.LeftToday;
+        _capped = _left <= 0;
+        _now = DateTime.UtcNow;
+
+        if (Current is null || Current.Id != response.ConversationId)
+        {
+            Current = new FarmerChatDetailDto
+            {
+                Id = response.ConversationId,
+                Title = response.ConversationTitle,
+                CreatedAtUtc = response.Question.CreatedAtUtc,
+                UpdatedAtUtc = response.Answer.CreatedAtUtc,
+                Messages = new List<FarmerChatMessageDto> { response.Question, response.Answer }
+            };
+            // The thread is already in hand, so the URL change must not reload it.
+            _loadedId = response.ConversationId;
+            Nav.NavigateTo($"/farmer/assistant/{response.ConversationId}");
+        }
+        else
+        {
+            Current.Messages.Add(response.Question);
+            Current.Messages.Add(response.Answer);
+            Current.UpdatedAtUtc = response.Answer.CreatedAtUtc;
+        }
+
+        // Move the conversation to the top of My chats without another round trip.
+        var row = _conversations.FirstOrDefault(c => c.Id == response.ConversationId);
+        if (row is null)
+        {
+            row = new FarmerChatConversationDto { Id = response.ConversationId, Title = response.ConversationTitle, CreatedAtUtc = response.Question.CreatedAtUtc };
+        }
+        else
+        {
+            _conversations.Remove(row);
+        }
+        row.UpdatedAtUtc = response.Answer.CreatedAtUtc;
+        row.QuestionCount = Current.Messages.Count(m => m.Role == "user");
+        _conversations.Insert(0, row);
+    }
+
+    private async Task DeleteAsync(FarmerChatConversationDto c)
+    {
+        if (!await Toast.ConfirmAsync("Delete this chat?", $"\"{c.Title}\" and its answers will be removed from My chats.", "Delete chat")) return;
+        var problem = await Api.DeleteAsync(c.Id, _cts.Token);
+        if (problem is not null)
+        {
+            Toast.Error(problem);
+            return;
+        }
+        _conversations.Remove(c);
+        Toast.Success("Chat deleted.");
+        if (Current?.Id == c.Id) NewChat();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // Keep the newest message in view when the thread grows. Never throws.
+        var count = (Current?.Messages.Count ?? 0) + (_pending is null ? 0 : 1) + (_thinking ? 1 : 0);
+        if (!_scrollPending && count == _renderedCount) return;
+        var smooth = _renderedCount >= 0 && count > _renderedCount;
+        _renderedCount = count;
+        _scrollPending = false;
+        if (count == 0) return;
+        try
+        {
+            _module ??= await JS.InvokeAsync<IJSObjectReference>("import", "./_content/SPIC.MauiBlazorApp.Shared/Pages/FarmerPortal/FarmerAssistant.razor.js");
+            await _module.InvokeVoidAsync("scrollToEnd", _end, smooth);
+        }
+        catch
+        {
+            // no JS (prerender, MAUI without the asset, a dropped circuit): the page still works
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _cts.Cancel();
+        try
+        {
+            if (_module is not null) await _module.DisposeAsync();
+        }
+        catch { /* circuit already gone */ }
+        _cts.Dispose();
+    }
+}

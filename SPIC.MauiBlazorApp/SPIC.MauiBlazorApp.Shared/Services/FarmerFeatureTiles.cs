@@ -36,6 +36,9 @@ public static class FarmerFeatureTiles
         // Task 4: the main tool, first on the home.
         new("fertilizer", "Fertilizer advice", "What to apply for your crop and soil",
             "bi-flower2", FpHue.Green, "/farmer/fertilizer", Always),
+        // Task 5
+        new("assistant", "Ask SPIC AI", "Farming questions in your language",
+            "bi-stars", FpHue.Rose, "/farmer/assistant", Always),
         // Task 2
         new("dealers", "Dealers near me", "Call or visit a SPIC dealer",
             "bi-shop", FpHue.Gold, "/farmer/dealers", Always),
