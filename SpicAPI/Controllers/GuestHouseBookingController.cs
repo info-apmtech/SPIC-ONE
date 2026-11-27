@@ -57,15 +57,27 @@ namespace SpicAPI.Controllers
 			_logger = logger;
 		}
 
+		// True unless the signed-in user is a Receptionist and the guest house is outside their state
+		// (GuestHouseReceptionistScope: null = unrestricted, so every other role is unaffected).
+		private async Task<bool> IsGuestHouseInScopeAsync(int guestHouseId)
+		{
+			var scope = await GuestHouseReceptionistScope.GetAllowedGuestHouseIdsAsync(_db, User);
+			return scope == null || scope.Contains(guestHouseId);
+		}
+
 		// GET /api/GuestHouseBooking/houses
 		// Active guest houses shown on the GuestHouse selection page.
 		[GuestHouseBookingAccess(PagePermission.GuestHouseBooking)]
 		[HttpGet("houses")]
 		public async Task<ActionResult<List<GuestHouseCardDto>>> GetHouses()
 		{
+			// Receptionist state scope (null = unrestricted): same rule as the Front Office.
+			var scope = await GuestHouseReceptionistScope.GetAllowedGuestHouseIdsAsync(_db, User);
+
 			var items = await _db.GuestHouses
 				.AsNoTracking()
 				.Where(h => h.IsActive)
+				.Where(h => scope == null || scope.Contains(h.Id))
 				.OrderBy(h => h.Name)
 				.Select(h => new GuestHouseCardDto
 				{
@@ -342,6 +354,10 @@ namespace SpicAPI.Controllers
 			if (checkOut.Date <= checkIn.Date)
 				return BadRequest(new { Success = false, Message = "Check-out must be after check-in." });
 
+			// A Receptionist's other-state guest house is "not found" (Front Office pattern).
+			if (!await IsGuestHouseInScopeAsync(guestHouseId))
+				return NotFound(new { Success = false, Message = "Guest House not found." });
+
 			var house = await _db.GuestHouses
 				.AsNoTracking()
 				.FirstOrDefaultAsync(h => h.Id == guestHouseId && h.IsActive);
@@ -447,7 +463,7 @@ namespace SpicAPI.Controllers
 				.AsNoTracking()
 				.Include(r => r.GuestHouse)
 				.FirstOrDefaultAsync(r => r.Id == roomId && r.IsActive);
-			if (room == null)
+			if (room == null || !await IsGuestHouseInScopeAsync(room.GuestHouseId))
 				return NotFound(new { Success = false, Message = "Room not found." });
 
 			return Ok(new RoomDetailDto
@@ -486,6 +502,10 @@ namespace SpicAPI.Controllers
             // Validate guest house and room.
             if (request.GuestHouseId <= 0 || request.RoomTypeId <= 0)
                 return BadRequest(new { Success = false, Message = "Guest House and Room are required." });
+
+            // Receptionist state scope: another state's guest house is "not found".
+            if (!await IsGuestHouseInScopeAsync(request.GuestHouseId))
+                return NotFound(new { Success = false, Message = "Guest House not found." });
 
             var house = await _db.GuestHouses.AsNoTracking().FirstOrDefaultAsync(h => h.Id == request.GuestHouseId && h.IsActive);
             if (house == null)

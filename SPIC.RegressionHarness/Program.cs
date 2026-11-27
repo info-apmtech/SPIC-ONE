@@ -35,6 +35,10 @@ internal static class Program
 		GuestHousePermissionTests.Run();
 		Console.WriteLine();
 
+		// Receptionist state scope on the booking API (houses / availability / rooms / book).
+		GuestHouseReceptionistScopeTests.Run();
+		Console.WriteLine();
+
 		// One booking = one room = one bill: real controller actions on an InMemory database
 		// with a stubbed Razorpay service (no real payment, no real database).
 		GuestHouseSingleRoomBookingTests.Run();
