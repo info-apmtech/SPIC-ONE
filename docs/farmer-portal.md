@@ -492,3 +492,105 @@ Only these totals leave the API: never a farmer's name, phone, village, GPS or u
 - The caches are per replica, so two replicas mean up to two forecast calls per point per hour.
 - Prod data decides how full the cards are: farmer profiles start near zero, so "What farmers near you grow"
   leans on SAS sample crops at first; staff logins need the right HQ for "near" to find staff posts.
+
+## 4. Fertilizer advice (Task 4, 2026-11-28)
+
+### What it does
+
+- **Fertilizer advice** `/farmer/fertilizer` (first home tile, first More sheet entry, desktop sidebar under My
+  Profile). Two input cards like the owner's sketch: **Soil test values** (Available Nitrogen / Phosphorus /
+  Potassium in kg/ha and soil pH on `FpZoneSlider`s with live Low / Medium / High chips; pH shows the lab's
+  Acidic / Neutral / Alkaline) and **Crop-wise recommendations** (crop, type chips, soil type, area in acres; number
+  of plants / palms for banana and coconut). Defaults N 100, P 5, K 50, pH 7.0; area from the profile (else 1);
+  crop from the profile crops when one has advice. Desktop: soil card left, crop card and the button right; phone:
+  stacked with the sticky button.
+- **Use my soil report** (farmers linked to a SAS farmer record): fills N / P / K / pH from the latest completed
+  SPIC soil report (`LabReports`, soil, not deleted), converting kg/acre or ppm to kg/ha if a row says so; the
+  run records the report id (checked against the caller's own reports). Changing a value afterwards drops the
+  link ("this advice uses your own numbers").
+- **Result** (`Components/FarmerPortal/FertilizerResultView.razor`): status and need (kg N / P2O5 / K2O per acre)
+  per nutrient with the adjustment ("+25 % because your soil is Low"), pH; **What to buy** for the whole area
+  (DAP route, or SSP instead), kg and bags (urea 45 kg, others 50 kg; "Sold as SPIC Urea / SPIC DAP"); **When to
+  apply** (each split with its days and products, grams per plant for banana / coconut); pH correction; **water,
+  soil and nutrient roadmap** (`FertilizerTipCard`, each tip with its TNAU source link); "How we worked this out"
+  (TNAU dose, your dose, the rule, the source); Ask my MDO / Find a SPIC dealer / My past advice; disclaimer
+  "General guidance from TNAU/ICAR norms. For exact advice take a SPIC soil test or ask your MDO." with a My SPIC
+  team link.
+- **My past fertilizer advice** `/farmer/fertilizer/history` (latest 20) and `/farmer/fertilizer/history/{id}` (one
+  saved run in full). `FpZoneSlider` gained optional `LowText` / `MediumText` / `HighText` (chip words).
+
+### Endpoints (`SpicAPI/Controllers/FarmerFertilizerController.cs`, Farmer role, scoped to the caller)
+
+| Method | Route | Notes |
+|---|---|---|
+| GET | `api/Farmer/fertilizer/options` | `FertilizerOptionsDto`: crops with variants (`normId`, `soilType` when the norm is soil-specific, water regime, basis, plants/ha, spacing), soil types, N / P / K / pH ranges (`lowBelow`, `highAbove`, labels, `fromLabMaster`), products |
+| GET | `api/Farmer/fertilizer/soil-report` | `FertilizerSoilReportDto`: `available`, `reportId`, `reportCode`, `generatedAt`, `n` / `p` / `k` (kg/ha), `ph`, `notes` (conversions, unreadable values); `message` when there is none |
+| POST | `api/Farmer/fertilizer/recommend` `{ normId, soilType, areaAcres, plantCount?, n, p, k, ph, soilReportId? }` | 200 `FertilizerRecommendationDto` (saved as a run, `runId`); 400 `{ message, errors }` |
+| GET | `api/Farmer/fertilizer/history` | latest 20 `FertilizerRunSummaryDto` |
+| GET | `api/Farmer/fertilizer/history/{id}` | one of the caller's runs in full; 404 for anyone else's |
+| GET | `api/Farmer/fertilizer/latest` | the caller's latest run in short, 204 when none. **For the chatbot context and the yield forecast NPK prefill**: `crop`, `variant`, `soilType`, `areaAcres`, `soilN/P/K/Ph`, `nStatus/pStatus/kStatus` (Low / Medium / High), `phBand`, `needN/P/KKgPerAcre` (after the soil test adjustment), `fromSoilReport`, `summary` (one line) |
+
+Contracts: `SPIC.Core/DTOs/FertilizerDtos.cs`. Client: `Services/FarmerFertilizerApi.cs` (no toasts).
+
+### Rules (`SPIC.Core/FarmerPortal/FertilizerAdvisor.cs`, pinned by the harness)
+
+- **Rating = the soil report's.** Thresholds come from the lab parameter master (`S-N`, `S-P`, `S-K` via
+  `Sas:Lab:NutrientParameters`, and `S-PH`) and are applied exactly like `LabAutoResultEngine`: below RangeMin Low
+  (Deficient), above RangeMax High (Excess), RangeMin..ModerateFrom Medium (Moderate) when set, else Medium (Normal).
+  Seeded master: N 280-560, **P 22-56, K 110-280** kg/ha, pH 6.5-7.5. The brief's numbers (N 280/560, P 11/22,
+  K 118/280) are only the fallback when a master row is missing.
+- **Adjustment = the soil report's dose factors** (`LabFertilizerSchedule.FactorFor`, `Sas:Lab:DoseFactors`):
+  Deficient 1.25, Moderate 1.10, Normal 1.00, Excess 0.75 by default (the soil-test rating approach: low +25 %,
+  high -25 %, ICAR Indian Farming 70(3) 2020). Every split is scaled by its nutrient's factor.
+- **Products per split:** DAP (18-46-0) for the P2O5 but never more DAP-N than the split's N; the rest of the P2O5
+  as SSP (16 % P2O5); urea (46 % N) for the N left; MOP (60 % K2O) for K2O. Alternative SSP route: SSP + urea +
+  MOP. Product kg rounded to whole kg (one decimal under 0.5 kg), bags to one decimal.
+- **pH bands:** < 5.5 strongly acidic (lime as per the lime requirement test), below the lab minimum (6.5) slightly
+  acidic, up to the lab maximum (7.5) neutral, up to 8.5 slightly alkaline (organic matter; gypsum only for a sodic
+  soil, as per the gypsum requirement test), > 8.5 strongly alkaline / sodic (TNAU reclamation). No lime or gypsum
+  dose is computed: TNAU ties both to a soil test.
+- **Units:** report values in kg/acre x 2.47105, ppm / mg/kg x 2.24 (0-15 cm plough layer); other units are not used.
+- **Area:** 1 ha = 2.47105 acres. Per-plant crops: plants = acres / 2.47105 x the source's plants per hectare
+  (banana 3,080 at 1.8 x 1.8 m, coconut 175 at 7.5 x 7.5 m) unless the farmer enters a count.
+- Validation: area 0.1-1000 acres, plants 1-500,000, N 0-2000, P 0-500, K 0-2000 kg/ha, pH 3-11, a known soil type,
+  a soil-specific norm only on its soil.
+
+### Tables (migration `V36_FertilizerAdvice`)
+
+- `FertilizerCropNorms` (Id, Crop, Variant, WaterRegime, SoilType?, Basis PerHectare / PerPlant, N, P2O5, K2O
+  numeric(10,2), PlantsPerHectare?, Spacing?, DurationDays?, Notes, Source, SourceUrl, SortOrder, IsActive): 27 rows.
+  `FertilizerNormSplits` (NormId, Seq, Stage, DayFrom?, DayTo?, DayBasis Sowing / Planting / Calendar = named stage,
+  N, P2O5, K2O; the splits add up to the norm): 65 rows. `CropSoilTips` (Crop?, SoilType?, WaterRegime, Category
+  Water / Soil / Nutrient, Text, Source, SourceUrl): 66 rows. Seed and sources: `Spic.Infrastructure/Data/FertilizerAdviceSeed.cs`.
+- `FertilizerRecommendationRuns` (Id bigint, FarmerUserId, NormId, Crop, Variant, SoilType, AreaAcres, SoilN/P/K/Ph,
+  N/P/KStatus, PhBand, NeedN/P/KKgPerAcre, FromSoilReport, SoilReportId, Summary, InputsJson, ResultJson,
+  CreatedAtUtc); index (FarmerUserId, CreatedAtUtc). No foreign keys, like the other farmer tables.
+
+Crops: Paddy (medium, long, short Cauvery delta / Coimbatore, short other areas), Cotton (irrigated varieties,
+irrigated hybrids, rainfed), Maize (irrigated varieties, irrigated hybrids, rainfed on black soil, rainfed on red
+soil), Groundnut (rainfed), Black gram and Green gram (rainfed, irrigated), Soybean (irrigated, rainfed), Wheat,
+Chilli, Tomato (varieties), Onion (small, Bellary), Turmeric, Banana (garden land: Robusta-type and Nendran, per
+plant), Coconut (from the 5th year, per palm). **Left out on purpose** (sources disagree or lack a schedule):
+sugarcane, irrigated groundnut, hybrid rice, hybrid tomato.
+
+### Tests and tools
+
+- Harness: `FarmerPortalFertilizerTests` (ratings at 279/280/560/561, 10.9/11/22/22.1, 117/118/280/281 and on the
+  lab master, Moderate, factors equal to the soil report's incl. configured ones, unit conversion, DAP-first
+  conversion incl. the N cap, SSP route, pH bands, seed integrity and the brief's doses, the sketch case end to
+  end, per-plant crops, validation, the soil report reader, slider ranges, UI helpers, tile / menu / routes);
+  updated tile and More-sheet expectations in `FarmerPortalUiTests` / `FarmerPortalRouteTests`.
+- Local data: `tools/farmer-portal-check/seed_task4_local.sql` (spicone_dev only) links a "Demo Task4 Murugan" SAS
+  farmer and a completed soil report `DEMO-T4-RPT-1` (N 180, P 18, K 95 kg/ha, pH 8.1) to the local test farmer
+  6777777703; `cleanup_task4_local.sql` removes it and the local test farmers' runs.
+- Smoke: `python tools/farmer-portal-check/smoke_task4.py [--phone 6777777703]` (local API only).
+- Screenshots: `python tools/farmer-portal-check/shoot_task4.py --out .superpowers/sdd/<plan>/shots/task-4 [--phone ...]`.
+
+### Left / for the owner
+
+- Prod migration `V36_FertilizerAdvice` (owner runs prod). No config keys: thresholds and factors are the lab's.
+- An agronomist (SPIC agri services) should sign off the seeded norms and tips before go-live; the doses are TNAU's
+  blanket recommendations, read from the TNAU Agritech pages named on every row.
+- Sugarcane, irrigated groundnut, hybrid rice and hybrid tomato need a confirmed source before they are added.
+- SPIC complex fertilizers (SPIC Jyoti, Sangamam ...) are not offered because no grade is recorded anywhere in the
+  code or the product master; add them when the master carries their grade.
