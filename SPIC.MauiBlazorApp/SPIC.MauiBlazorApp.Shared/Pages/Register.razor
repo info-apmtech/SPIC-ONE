@@ -289,8 +289,7 @@
                                             <div class="searchable-dropdown-item" @onmousedown='() => SelectDealer(0, "")'>
                                                 -- New Entry --
                                             </div>
-                                            @foreach (var dealer in _filteredDealers.Where(d => string.IsNullOrWhiteSpace(_dealerSearchText) ||
-                                                $"{d.DealerCode} - {d.FirmName}".Contains(_dealerSearchText, StringComparison.OrdinalIgnoreCase)))
+                                            @foreach (var dealer in RegistrationDealerOptions)
                                             {
                                                 <div class="searchable-dropdown-item" @onmousedown='() => SelectDealer(dealer.Id, $"{dealer.DealerCode} - {dealer.FirmName}")'>
                                                     @dealer.DealerCode - @dealer.FirmName
@@ -1592,6 +1591,23 @@
     private List<LocationItemDto> _filteredHeadquarters = new();
     private List<DealerItemDto> _filteredDealers = new();
 
+    private IEnumerable<DealerItemDto> RegistrationDealerOptions
+    {
+        get
+        {
+            var list = _filteredDealers.AsEnumerable();
+            if (LoginState.IsHQCreatorRole)
+            {
+                list = list.Where(d => !d.IsRegistrationStarted || d.Id == _dealerCodeId);
+            }
+            if (!string.IsNullOrWhiteSpace(_dealerSearchText))
+            {
+                list = list.Where(d => $"{d.DealerCode} - {d.FirmName}".Contains(_dealerSearchText, StringComparison.OrdinalIgnoreCase));
+            }
+            return list;
+        }
+    }
+
     private int _basicInfoStateId;
     private int _basicInfoRegionId;
     private int _basicInfoHqId;
@@ -2222,7 +2238,9 @@ void ToggleGreenStar()
     private void InitializeSearchTexts()
     {
         var dealer = _filteredDealers.FirstOrDefault(d => d.Id == _dealerCodeId);
-        _dealerSearchText = dealer != null ? $"{dealer.DealerCode} - {dealer.FirmName}" : "";
+        _dealerSearchText = dealer != null
+            ? $"{dealer.DealerCode} - {dealer.FirmName}"
+            : (!string.IsNullOrWhiteSpace(_model.DealerCode) ? $"{_model.DealerCode} - {_model.FirmName}" : "");
 
         var parentDealer = _filteredDealers.FirstOrDefault(d => d.Id == _parentDealerId);
         _parentDealerSearchText = parentDealer != null ? $"{parentDealer.DealerCode} - {parentDealer.FirmName}" : "";
@@ -2694,6 +2712,15 @@ void ToggleGreenStar()
 
                 ShowMessage(_isEditMode ? "Dealer updated successfully!" : "Dealer registered successfully!", false);
                 success = true;
+
+                if (dealerId > 0)
+                {
+                    var savedItem = _dealersAll.FirstOrDefault(d => d.Id == dealerId);
+                    if (savedItem != null)
+                    {
+                        savedItem.IsRegistrationStarted = true;
+                    }
+                }
             }
             else
             {
@@ -3840,6 +3867,7 @@ public string? GflTradeDepositFilePath { get; set; }
         public string DealerCode { get; set; } = "";
         public string FirmName { get; set; } = "";
         public int StateId { get; set; }
+        public bool IsRegistrationStarted { get; set; }
     }
 
    public class PincodeApiResponse

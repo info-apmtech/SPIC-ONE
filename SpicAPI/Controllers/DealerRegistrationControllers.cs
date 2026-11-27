@@ -302,7 +302,23 @@ namespace SpicAPI.Controllers
             }
 
             var lookup = await query
-                .Select(x => new { x.Id, x.DealerCode, x.FirmName, x.StateId })
+                .Select(x => new
+                {
+                    x.Id,
+                    x.DealerCode,
+                    x.FirmName,
+                    x.StateId,
+                    IsRegistrationStarted = x.IsNewDealerRegistration
+                        || (x.PinCode != null && x.PinCode != "")
+                        || x.Status == DealerStatus.Terminated
+                        || (x.Status == DealerStatus.InActive && x.InactiveProposal == FutureBusinessProposal.Terminated)
+                        || (x.Status == DealerStatus.InActive && x.InactiveProposal == FutureBusinessProposal.NotTraceable)
+                        || x.DealerType == RegistrationDealerType.Department
+                        || x.IsSubmittedForReview == true
+                        || x.RMApproved != null
+                        || x.SMApproved != null
+                        || x.AVPApproved != null
+                })
                 .ToListAsync();
 
             return Ok(lookup);
