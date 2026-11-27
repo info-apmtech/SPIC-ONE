@@ -12,6 +12,38 @@ public enum FpLevel
     High
 }
 
+/// <summary>Accent hue of an icon circle, tile, card header or chip (CSS class fp-hue-*).</summary>
+public enum FpHue
+{
+    Green,
+    Gold,
+    Soil,
+    Sky,
+    Violet,
+    Teal,
+    Rose,
+    Neutral
+}
+
+/// <summary>FpCard look: white (Default), warm gold (Highlight), green tint (Tinted), no padding (Flush).</summary>
+public enum FpCardVariant
+{
+    Default,
+    Highlight,
+    Tinted,
+    Flush
+}
+
+/// <summary>FpSkeleton shape.</summary>
+public enum FpSkeletonVariant
+{
+    Home,
+    Hero,
+    Tiles,
+    Cards,
+    Form
+}
+
 /// <summary>Inline SVG illustrations drawn by FpArt (empty, error and brand panels).</summary>
 public enum FpArtKind
 {
@@ -134,6 +166,9 @@ public static partial class FpUi
         FpLevel.High => "High",
         _ => "Not set"
     };
+
+    /// <summary>CSS class for a hue: FpHue.Soil gives "fp-hue-soil" (defined in farmer-portal.css).</summary>
+    public static string HueCss(FpHue hue) => "fp-hue-" + hue.ToString().ToLowerInvariant();
 
     /// <summary>CSS modifier for a level (fp-status--low ...).</summary>
     public static string LevelCss(FpLevel level) => level.ToString().ToLowerInvariant();

@@ -4,12 +4,12 @@
     FpCard - white rounded card with an optional header (tinted icon circle, title, subtitle,
     actions) and footer.
 
-        <FpCard Title="Your soil tests" Icon="bi-moisture" Hue="soil">
+        <FpCard Title="Your soil tests" Icon="bi-moisture" Hue="FpHue.Soil">
             <p class="fp-text">...</p>
         </FpCard>
 
-    Variant: "default" | "highlight" (warm gold, for the one thing to do next) | "tinted" (green
-    tint, no shadow) | "flush" (no padding: lists and maps).
+    Variant (FpCardVariant): Default | Highlight (warm gold, for the one thing to do next) | Tinted
+    (green tint, no shadow) | Flush (no padding: lists and maps). Hue: FpHue.
 *@
 
 <section class="fp-card @VariantCss @(Animate ? "fp-fade-up" : null) @CssClass" aria-labelledby="@(HasTitle ? _titleId : null)">
@@ -18,7 +18,7 @@
         <header class="fp-card__head">
             @if (!string.IsNullOrWhiteSpace(Icon))
             {
-                <span class="fp-icon-circle fp-hue-@Hue" aria-hidden="true"><i class="bi @Icon"></i></span>
+                <span class="fp-icon-circle @FpUi.HueCss(Hue)" aria-hidden="true"><i class="bi @Icon"></i></span>
             }
             <div class="fp-card__titles">
                 @if (HasTitle)
@@ -57,11 +57,9 @@
     /// <summary>Bootstrap icon for the header circle, e.g. "bi-moisture".</summary>
     [Parameter] public string? Icon { get; set; }
 
-    /// <summary>green | gold | soil | sky | violet | teal | rose | neutral.</summary>
-    [Parameter] public string Hue { get; set; } = "green";
+    [Parameter] public FpHue Hue { get; set; } = FpHue.Green;
 
-    /// <summary>default | highlight | tinted | flush.</summary>
-    [Parameter] public string Variant { get; set; } = "default";
+    [Parameter] public FpCardVariant Variant { get; set; } = FpCardVariant.Default;
 
     /// <summary>Fade up 8 px on first render (on by default).</summary>
     [Parameter] public bool Animate { get; set; } = true;
@@ -78,9 +76,9 @@
 
     private string? VariantCss => Variant switch
     {
-        "highlight" => "fp-card--highlight",
-        "tinted" => "fp-card--tinted",
-        "flush" => "fp-card--flush",
+        FpCardVariant.Highlight => "fp-card--highlight",
+        FpCardVariant.Tinted => "fp-card--tinted",
+        FpCardVariant.Flush => "fp-card--flush",
         _ => null
     };
 

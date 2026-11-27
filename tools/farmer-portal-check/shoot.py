@@ -27,7 +27,7 @@ from urllib.parse import urlparse
 from playwright.sync_api import sync_playwright
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-SIZES = {"phone": (375, 812, True), "desktop": (1280, 800, False)}
+SIZES = {"phone": (375, 812, True), "tablet": (768, 1024, False), "desktop": (1280, 800, False)}
 
 
 def refuse_non_local(base):

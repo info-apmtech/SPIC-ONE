@@ -5,9 +5,9 @@
 @inject NavigationManager Nav
 
 @*
-    Farmer home. Task 1b: greeting hero (IST time of day), highlight card, the feature tile grid from
-    Services/FarmerFeatureTiles (later tasks flip their tile to Ready), and the "Your SPIC team"
-    preview (Task 2 fills it). Sends a farmer whose profile is not complete to /farmer/onboarding.
+    Farmer home. Task 1b: greeting hero (IST time of day), highlight card and the tile grid from
+    Services/FarmerFeatureTiles (only features that exist; each later task adds its own tile and,
+    for Task 2, its "Your SPIC team" block). Sends a farmer whose profile is not complete to /farmer/onboarding.
     Admin / SuperAdmin may open it for support (RouteAccess) but have no farmer profile of their own.
 *@
 
@@ -21,7 +21,7 @@
     else if (_loading)
     {
         <PageTitle>Home · SPIC ONE</PageTitle>
-        <FpSkeleton Variant="home" LoadingText="Loading your home..." />
+        <FpSkeleton Variant="FpSkeletonVariant.Home" LoadingText="Loading your home..." />
     }
     else if (_error is not null)
     {
@@ -32,7 +32,7 @@
     {
         var now = DateTime.UtcNow;
         <FpHero Eyebrow="@FpUi.IstDateLine(now)" Title="@($"{FpUi.Greeting(now)}, {FpUi.ShortName(profile.Name)}")"
-                DocumentTitle="Home" Subtitle="Here is everything SPIC ONE has for your farm.">
+                DocumentTitle="Home" Subtitle="Your farm, your soil and your SPIC services in one place.">
             <Aside>
                 <a class="fp-avatar fph-avatar" href="/farmer/profile" aria-label="My profile" title="My profile">@FpUi.Initials(profile.Name)</a>
             </Aside>
@@ -51,8 +51,8 @@
 
         @if (_soilTests)
         {
-            <FpCard Variant="highlight" Title="Your soil tests" Subtitle="Samples your SPIC officer collected and your soil reports"
-                    Icon="bi-moisture" Hue="soil" CssClass="fp-fade-up-2 fph-highlight">
+            <FpCard Variant="FpCardVariant.Highlight" Title="Your soil tests" Subtitle="Samples your SPIC officer collected and your soil reports"
+                    Icon="bi-moisture" Hue="FpHue.Soil" CssClass="fp-fade-up-2 fph-highlight">
                 <div class="fp-row">
                     <a class="fp-btn fp-btn--primary fph-cta" href="/Sas/MyReports"><i class="bi bi-file-earmark-text" aria-hidden="true"></i> My soil reports</a>
                     <a class="fp-btn fp-btn--secondary fph-cta" href="/Sas/MySamples"><i class="bi bi-moisture" aria-hidden="true"></i> My samples</a>
@@ -62,7 +62,7 @@
         }
         else
         {
-            <FpCard Variant="highlight" Title="Know your soil" Icon="bi-moisture" Hue="gold" CssClass="fp-fade-up-2 fph-highlight"
+            <FpCard Variant="FpCardVariant.Highlight" Title="Know your soil" Icon="bi-moisture" Hue="FpHue.Gold" CssClass="fp-fade-up-2 fph-highlight"
                     Subtitle="A soil test shows what your field needs, so you buy only the fertilizer that helps.">
                 <p class="fp-text fp-muted">Ask your SPIC field officer to collect a soil sample. Your report will appear here.</p>
                 <FpArt Kind="FpArtKind.Sprout" CssClass="fph-highlight-art" />
@@ -73,27 +73,15 @@
             <div class="fp-section-head">
                 <div>
                     <h2 id="fph-services" class="fp-section-title">Services for your farm</h2>
-                    @if (_tiles.Any(t => !t.Ready))
-                    {
-                        <p class="fp-section-sub">Tiles marked Soon open as each service gets ready.</p>
-                    }
                 </div>
             </div>
             <div class="fp-tile-grid">
                 @foreach (var tile in _tiles)
                 {
                     <FpTile Title="@tile.Title" Description="@tile.Description" Icon="@tile.Icon" Hue="@tile.Hue"
-                            Href="@(tile.Ready ? tile.Route : null)" Soon="@(!tile.Ready)" Badge="@tile.Badge" />
+                            Href="@tile.Route" Badge="@tile.Badge" />
                 }
             </div>
-        </section>
-
-        <section class="fp-section fp-fade-up-3" aria-labelledby="fph-team">
-            <div class="fp-section-head">
-                <h2 id="fph-team" class="fp-section-title">Your SPIC team</h2>
-            </div>
-            <FpEmpty Art="FpArtKind.Team" Compact="true" Title="Your field team will appear here"
-                     Message="Soon you will see your SPIC field officer here, with a button to call them or ask for a call back." />
         </section>
     }
 </div>
@@ -132,8 +120,7 @@
         }
 
         _soilTests = FarmerFeatureTiles.HasSoilTests(LoginState);
-        // Ready services first (registry order), then the ones still to come.
-        _tiles = FarmerFeatureTiles.For(LoginState).OrderBy(t => t.Ready ? 0 : 1).ToList();
+        _tiles = FarmerFeatureTiles.For(LoginState);
     }
 
     private static string Place(SPIC.Core.DTOs.FarmerProfileDto p) =>

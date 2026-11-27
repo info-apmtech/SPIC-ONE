@@ -34,6 +34,7 @@ export function attach(input, length) {
         const data = e.clipboardData && e.clipboardData.getData("text");
         if (data == null) return;
         e.preventDefault();
+        if (input.readOnly || input.disabled) return; // code is being checked
         input.value = normalise(data, length);
         caretToEnd(input);
         input.dispatchEvent(new Event("input", { bubbles: true }));

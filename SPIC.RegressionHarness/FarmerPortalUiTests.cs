@@ -82,19 +82,25 @@ internal static class FarmerPortalUiTests
 		Check.That("tiles: ids are unique", ids.Distinct().Count() == ids.Count);
 		Check.That("tiles: every tile has a title, description, bi- icon and route",
 			FarmerFeatureTiles.All.All(t => t.Title.Length > 0 && t.Description.Length > 0 && t.Icon.StartsWith("bi-") && t.Route.StartsWith('/')));
-		var hues = new[] { "green", "gold", "soil", "sky", "violet", "teal", "rose" };
-		Check.That("tiles: every hue exists in farmer-portal.css", FarmerFeatureTiles.All.All(t => hues.Contains(t.Hue)));
+		Check.Equal("hue css class", "fp-hue-soil", FpUi.HueCss(FpHue.Soil));
 		var farmer = TestLogin.As(AppRole.Farmer, "");
-		Check.Equal("tiles: farmer without soil tests", "fertilizer,dealers,assistant,leaf-check,yield,team,community,profile",
+		Check.Equal("tiles: farmer without soil tests sees only existing features", "profile",
 			string.Join(",", FarmerFeatureTiles.For(farmer).Select(t => t.Id)));
 		var linked = TestLogin.As(AppRole.Farmer, "");
 		linked.SetFarmerSasLinked(true);
-		Check.That("tiles: linked farmer sees the soil sample and report tiles",
-			FarmerFeatureTiles.For(linked).Count(t => t.Id is "soil-samples" or "soil-reports") == 2);
-		Check.That("tiles: every Ready tile's route opens for a farmer",
-			FarmerFeatureTiles.For(linked).Where(t => t.Ready).All(t => RouteAccess.CanOpen(linked, t.Route, null)));
-		Check.That("tiles: planned routes live under /farmer",
-			FarmerFeatureTiles.All.Where(t => !t.Ready).All(t => t.Route.StartsWith("/farmer/", StringComparison.Ordinal)));
+		Check.Equal("tiles: linked farmer also sees the soil report and sample tiles", "soil-reports,soil-samples,profile",
+			string.Join(",", FarmerFeatureTiles.For(linked).Select(t => t.Id)));
+		Check.That("tiles: every tile's route opens for a (linked) farmer",
+			FarmerFeatureTiles.All.All(t => RouteAccess.CanOpen(linked, t.Route, null)));
+
+		// No placeholder tiles: every route must be a real @page in the app (an unbuilt feature has no tile).
+		var pages = typeof(FpUi).Assembly.GetTypes()
+			.SelectMany(t => t.GetCustomAttributes(typeof(Microsoft.AspNetCore.Components.RouteAttribute), false))
+			.Cast<Microsoft.AspNetCore.Components.RouteAttribute>()
+			.Select(r => r.Template.TrimEnd('/'))
+			.ToHashSet(StringComparer.OrdinalIgnoreCase);
+		foreach (var tile in FarmerFeatureTiles.All)
+			Check.That($"tiles: {tile.Id} route {tile.Route} is a real page", pages.Contains(tile.Route.TrimEnd('/')));
 	}
 
 	private static void Greet(string name, int y, int m, int d, int hh, int mm, string expected) =>
