@@ -57,6 +57,13 @@ namespace SPIC.MauiBlazorApp.Shared.Services
                     return response;
                 }
 
+                // Recheck residual N3 (Farmer role only): when the refresh call itself could not reach the API
+                // (offline, timeout, 5xx), keep the session; only an explicit refusal signs the farmer out. Staff as before.
+                if (_lastRefreshUnreachable && _loginState.UserRole == SPIC.Core.Entities.AppRole.Farmer)
+                {
+                    return response;
+                }
+
                 await HandleUnauthorized();
             }
 
@@ -70,8 +77,12 @@ namespace SPIC.MauiBlazorApp.Shared.Services
         // just returns that same instance - calling it again re-enters this handler's SendAsync
         // for the refresh call itself, which is safe (IsAnonymousEndpoint keeps it from recursing
         // into HandleUnauthorized even if the refresh call somehow also 401s).
+        /// <summary>The last refresh attempt failed without a refusal (no answer, timeout, 5xx; recheck residual N3).</summary>
+        private bool _lastRefreshUnreachable;
+
         private async Task<bool> TryRefreshAsync(CancellationToken cancellationToken)
         {
+            _lastRefreshUnreachable = false;
             var refreshToken = _loginState.RefreshToken;
             if (string.IsNullOrWhiteSpace(refreshToken))
             {
@@ -90,11 +101,17 @@ namespace SPIC.MauiBlazorApp.Shared.Services
                     cancellationToken);
 
                 if (!response.IsSuccessStatusCode)
+                {
+                    _lastRefreshUnreachable = !SessionPersistence.IsRefusal(response.StatusCode);
                     return false;
+                }
 
                 var result = await response.Content.ReadFromJsonAsync<RefreshTokenResponseDto>(cancellationToken: cancellationToken);
                 if (result is null || string.IsNullOrWhiteSpace(result.Token))
+                {
+                    _lastRefreshUnreachable = true;
                     return false;
+                }
 
                 var rawToken = result.Token.StartsWith("Bearer ", StringComparison.Ordinal)
                     ? result.Token["Bearer ".Length..]
@@ -106,26 +123,19 @@ namespace SPIC.MauiBlazorApp.Shared.Services
                 _loginState.Expiration = result.Expiration;
                 _loginState.RefreshToken = result.RefreshToken;
 
-                // ISessionStore has no "does a persistent copy exist" check, only Set/Remove, so
-                // this can't tell a "Remember me" login apart from a session-only one here - it
-                // writes both tiers on every silent refresh. Worst case for a session-only Web
-                // login, this leaves a copy in localStorage that outlives the browser tab a little
-                // longer than intended; it's still cleared on explicit logout (ISessionStore.
-                // ClearAsync wipes both tiers) and is no more exposed than the session copy already
-                // was, so this is a minor persistence-duration quirk, not a security regression.
-                await _session.SetAsync(SessionKeys.Token, rawToken);
-                await _session.SetAsync(SessionKeys.Expiration, result.Expiration.ToString("O"));
-                await _session.SetAsync(SessionKeys.RefreshToken, result.RefreshToken);
-                await _session.SetAsync(SessionKeys.ServerClockOffset, _loginState.Clock.SavedOffset);
-                await _session.SetPersistentAsync(SessionKeys.Token, rawToken);
-                await _session.SetPersistentAsync(SessionKeys.Expiration, result.Expiration.ToString("O"));
-                await _session.SetPersistentAsync(SessionKeys.RefreshToken, result.RefreshToken);
-                await _session.SetPersistentAsync(SessionKeys.ServerClockOffset, _loginState.Clock.SavedOffset);
+                // Staff: both tiers on every refresh, as before (a session-only staff login may leave a localStorage
+                // copy until logout; unchanged by ruling).
+                // Recheck residual N2: staff as before (both tiers); a farmer's refreshed session goes to persistent
+                // storage only when the sign-in ticked "Keep me signed in".
+                var persist = await SessionPersistence.PersistRefreshedAsync(_session, SessionPersistence.RoleOf(rawToken) ?? _loginState.UserRole);
+                await SessionPersistence.StoreRefreshedAsync(_session, _loginState, rawToken, result.Expiration, result.RefreshToken, persist);
 
                 return true;
             }
             catch
             {
+                // No answer, a timeout or bad JSON: not a refusal (recheck residual N3).
+                _lastRefreshUnreachable = true;
                 return false;
             }
         }

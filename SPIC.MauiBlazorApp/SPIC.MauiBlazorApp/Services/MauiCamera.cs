@@ -15,6 +15,15 @@ namespace SPIC.MauiBlazorApp.Services
         /// <summary>Largest photo read into memory (the server's own cap is 8 MB; a bigger photo gets a plain error).</summary>
         private const long MaxBytes = 12L * 1024 * 1024;
 
+        /// <summary>Longest side asked of the camera (recheck residual M1).</summary>
+        public const int CaptureSide = 2048;
+        /// <summary>JPEG quality asked of the camera (recheck residual M1).</summary>
+        public const int CaptureQuality = 85;
+
+        public const string CameraDenied = "The camera permission was not given. Allow the camera for SPIC ONE in your phone settings, or choose a photo from the gallery.";
+        public const string StorageDenied = "The storage permission was not given, and this Android version needs it to take a photo. Allow storage (files and media) for SPIC ONE in your phone settings, or choose a photo from the gallery.";
+        public const string CouldNotOpen = "We could not open the camera. Please try again, or choose a photo from the gallery.";
+
         public bool IsAvailable
         {
             get
@@ -40,9 +49,33 @@ namespace SPIC.MauiBlazorApp.Services
                     return status == PermissionStatus.Granted;
                 });
                 if (!granted)
-                    return NativePhoto.Failed("The camera permission was not given. Allow the camera for SPIC ONE in your phone settings, or choose a photo from the gallery.");
+                    return NativePhoto.Failed(CameraDenied);
 
-                var file = await MainThread.InvokeOnMainThreadAsync(() => MediaPicker.Default.CapturePhotoAsync(new MediaPickerOptions { Title = "Leaf photo" }));
+                // Recheck residual N1: below Android 13 MAUI's capture also needs StorageWrite (declared with
+                // maxSdkVersion 32 in the manifest); ask for it here so a refusal gets its own, correct message.
+                if (!OperatingSystem.IsAndroidVersionAtLeast(33))
+                {
+                    var storage = await MainThread.InvokeOnMainThreadAsync(async () =>
+                    {
+                        var status = await Permissions.CheckStatusAsync<Permissions.StorageWrite>();
+                        if (status != PermissionStatus.Granted) status = await Permissions.RequestAsync<Permissions.StorageWrite>();
+                        return status == PermissionStatus.Granted;
+                    });
+                    if (!storage)
+                        return NativePhoto.Failed(StorageDenied);
+                }
+
+                // Recheck residual M1: a downscaled, upright capture (about 2048 px, JPEG quality 85, no EXIF / GPS),
+                // so a 50-108 MP phone photo stays far under the 8 MB limit. The server shrinks to 1024 px anyway.
+                var file = await MainThread.InvokeOnMainThreadAsync(() => MediaPicker.Default.CapturePhotoAsync(new MediaPickerOptions
+                {
+                    Title = "Leaf photo",
+                    MaximumWidth = CaptureSide,
+                    MaximumHeight = CaptureSide,
+                    CompressionQuality = CaptureQuality,
+                    RotateImage = true,
+                    PreserveMetaData = false
+                }));
                 if (file is null) return null; // cancelled
 
                 await using var stream = await file.OpenReadAsync();
@@ -64,7 +97,10 @@ namespace SPIC.MauiBlazorApp.Services
             }
             catch (PermissionException)
             {
-                return NativePhoto.Failed("The camera permission was not given. Allow the camera for SPIC ONE in your phone settings, or choose a photo from the gallery.");
+                // Both permissions were granted above, so this is not the farmer's choice (for example a permission
+                // missing from the manifest): the generic message, not "allow the camera in settings".
+                System.Diagnostics.Debug.WriteLine("CapturePhoto failed: PermissionException after the permissions were granted");
+                return NativePhoto.Failed(CouldNotOpen);
             }
             catch (OperationCanceledException)
             {
@@ -73,7 +109,7 @@ namespace SPIC.MauiBlazorApp.Services
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"CapturePhoto failed: {ex.GetType().Name}");
-                return NativePhoto.Failed("We could not open the camera. Please try again, or choose a photo from the gallery.");
+                return NativePhoto.Failed(CouldNotOpen);
             }
 #else
             await Task.CompletedTask;

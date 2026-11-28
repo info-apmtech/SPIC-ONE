@@ -14,6 +14,14 @@ Checks:
      signed-out /farmer/fertilizer link opens /farmer/login.
   4. U1 failure: with the farmer's refresh tokens revoked (local DB), the session ends at expiry on /farmer/login.
 Writes nothing but the farmer's own refresh tokens (deleted in step 4 on the local DB).
+
+Recheck residual (--residual): run the web host through tools/farmer-portal-check/flaky_proxy.py
+(--ApiBaseUrl=http://127.0.0.1:5121/) so the refresh call can be made to fail on purpose:
+  N2. "Keep me signed in" unticked: after a refresh, localStorage holds no token or refresh token, and a new tab does not
+      restore the session; ticked: localStorage holds the refreshed pair.
+  N3. The refresh answering 503, or the connection dropping, on a cold start: the sign-in form is shown and the stored
+      tokens are kept; when the API answers again, a new tab is restored. In the app at expiry with the refresh failing:
+      no sign-out, the tokens are kept, and the session refreshes once the API answers again.
 """
 import argparse
 import os
@@ -51,9 +59,21 @@ def main():
     ap.add_argument("--base", default="http://localhost:5027")
     ap.add_argument("--phone", default="6777777703")
     ap.add_argument("--only-failure", action="store_true", help="run step 4 only")
+    ap.add_argument("--residual", action="store_true", help="run the recheck residual N2 / N3 steps only (needs the proxy)")
+    ap.add_argument("--proxy", default="http://127.0.0.1:5121", help="flaky_proxy.py control address")
     args = ap.parse_args()
     base = args.base.rstrip("/")
     refuse_non_local(base)
+    refuse_non_local(args.proxy)
+
+    if args.residual:
+        with sync_playwright() as p:
+            browser = p.chromium.launch()
+            residual_steps(browser, base, args)
+            browser.close()
+        print()
+        print("All checks passed." if not failures else f"{len(failures)} check(s) FAILED: {failures}")
+        sys.exit(1 if failures else 0)
 
     with sync_playwright() as p:
         browser = p.chromium.launch()
@@ -84,6 +104,129 @@ def main():
     print()
     print("All checks passed." if not failures else f"{len(failures)} check(s) FAILED: {failures}")
     sys.exit(1 if failures else 0)
+
+
+def local(page, key):
+    return page.evaluate("k => localStorage.getItem(k)", key)
+
+
+def session(page, key):
+    return page.evaluate("k => sessionStorage.getItem(k)", key)
+
+
+def proxy_mode(args, **mode):
+    import urllib.request
+    query = "&".join(f"{k}={v}" for k, v in mode.items())
+    with urllib.request.urlopen(args.proxy.rstrip("/") + "/__proxy/mode?" + query, timeout=10) as r:
+        return r.read().decode()
+
+
+def sign_in_farmer(page, base, phone, keep):
+    """farmer_sign_in with the "Keep me signed in" box set as asked."""
+    import re
+    local_sql(f"delete from \"FarmerOtpChallenges\" where \"Phone\" = '{phone}' and \"ConsumedAtUtc\" is not null")
+    page.goto(base + "/farmer/login")
+    settle(page)
+    page.fill("#fpl-phone", phone)
+    box = page.query_selector(".fpl-remember input")
+    if box is not None and box.is_checked() != keep:
+        box.click()
+    page.click("button[type=submit]")
+    page.wait_for_selector("[data-dev-code], .fpl-dev strong", timeout=15000)
+    el = page.query_selector("[data-dev-code]")
+    code = re.sub(r"\D", "", el.get_attribute("data-dev-code") if el else page.inner_text(".fpl-dev strong"))
+    first = page.query_selector(".fp-otp input") or page.query_selector("#fpl-code")
+    first.click()
+    page.keyboard.type(code, delay=60)
+    page.wait_for_url(lambda u: "/farmer/login" not in u, timeout=20000)
+    settle(page, 1200)
+
+
+def wait_for_new_token(page, first, minutes=4):
+    for _ in range(minutes * 12):
+        page.wait_for_timeout(5000)
+        now = session(page, "jwt_token")
+        if now and now != first:
+            return now
+    return None
+
+
+def residual_steps(browser, base, args):
+    proxy_mode(args, refresh="ok", all="ok")
+
+    # N2, unticked: the refreshed session stays in this tab only.
+    ctx = new_context(browser, "phone")
+    page = ctx.new_page()
+    sign_in_farmer(page, base, args.phone, keep=False)
+    check("N2: signed in with 'Keep me signed in' unticked", "/farmer" in page.url and local(page, "jwt_token") is None, page.url)
+    renewed = wait_for_new_token(page, session(page, "jwt_token"))
+    check("N2 (unticked): the session was refreshed in the tab", renewed is not None)
+    check("N2 (unticked): after the refresh localStorage has no auth token and no refresh token",
+          local(page, "jwt_token") is None and local(page, "spic_refresh_token") is None,
+          (local(page, "jwt_token") is not None, local(page, "spic_refresh_token") is not None))
+    other = ctx.new_page()  # a new tab: empty sessionStorage, the same localStorage (as after closing the browser)
+    other.goto(base + "/")
+    settle(other, 2500)
+    check("N2 (unticked): a new tab does not restore the session (sign-in form)", "/farmer/login" in other.url, other.url)
+    ctx.close()
+
+    # N2, ticked: the refreshed pair is kept in localStorage.
+    ctx = new_context(browser, "phone")
+    page = ctx.new_page()
+    sign_in_farmer(page, base, args.phone, keep=True)
+    renewed = wait_for_new_token(page, session(page, "jwt_token"))
+    check("N2 (ticked): the session was refreshed", renewed is not None)
+    check("N2 (ticked): localStorage holds the refreshed token and a refresh token",
+          renewed is not None and local(page, "jwt_token") == renewed and bool(local(page, "spic_refresh_token")))
+
+    # N3, cold start while the refresh fails (503, then a dropped connection): form shown, tokens kept.
+    page.evaluate("() => localStorage.setItem('jwt_expiration', '2020-01-01T00:00:00.0000000Z')")
+    kept_refresh = local(page, "spic_refresh_token")
+    for mode in ("503", "drop"):
+        proxy_mode(args, refresh=mode)
+        cold = ctx.new_page()
+        cold.goto(base + "/")
+        settle(cold, 4000)
+        check(f"N3 (cold start, refresh {mode}): the sign-in form is shown", "/farmer/login" in cold.url, cold.url)
+        check(f"N3 (cold start, refresh {mode}): the stored refresh token and JWT are kept",
+              local(cold, "spic_refresh_token") == kept_refresh and bool(local(cold, "jwt_token")))
+        cold.close()
+    proxy_mode(args, refresh="ok")
+    cold = ctx.new_page()
+    cold.goto(base + "/")
+    settle(cold, 4000)
+    check("N3 (cold start): once the API answers again, a new tab is restored through the kept refresh token",
+          "/farmer" in cold.url and "/farmer/login" not in cold.url, cold.url)
+    # That restore rotated the refresh token, so the first tab's copy is now (correctly) refused: carry on in the
+    # restored tab, which holds the current pair.
+    page.close()
+    page = cold
+
+    # N3, in the app at expiry while the refresh fails: no sign-out, tokens kept; refreshed when the API is back.
+    page.goto(base + "/farmer")
+    settle(page, 2000)
+    proxy_mode(args, refresh="503")
+    exp_text = session(page, "jwt_expiration")
+    tok = session(page, "jwt_token")
+    refresh = session(page, "spic_refresh_token")
+    print("  in-app expiry at", exp_text, "- waiting past it with the refresh failing")
+    from datetime import datetime, timezone
+    exp = datetime.fromisoformat(exp_text.replace("Z", "+00:00").split(".")[0] + "+00:00") if "." in exp_text else datetime.fromisoformat(exp_text.replace("Z", "+00:00"))
+    while datetime.now(timezone.utc) < exp:
+        page.wait_for_timeout(5000)
+    page.wait_for_timeout(40000)  # the expiry tick's last try and one 30 s retry, both failing
+    check("N3 (in app): past expiry with the refresh failing, the farmer is not signed out", "/farmer/login" not in page.url and "/login" not in page.url, page.url)
+    check("N3 (in app): the JWT and refresh token are kept", session(page, "jwt_token") == tok and session(page, "spic_refresh_token") == refresh)
+    proxy_mode(args, refresh="ok")
+    back = None
+    for _ in range(16):
+        page.wait_for_timeout(5000)
+        if session(page, "jwt_token") != tok:
+            back = session(page, "jwt_token")
+            break
+    check("N3 (in app): when the API answers again the session refreshes by itself", back is not None and "/farmer/login" not in page.url, page.url)
+    ctx.close()
+    proxy_mode(args, refresh="ok", all="ok")
 
 
 def steps_1_to_3(browser, ctx, page, base, args):

@@ -44,7 +44,14 @@ namespace SPIC.MauiBlazorApp.Shared.Services
         public const string RefreshToken = "spic_refresh_token";
         public const string ServerClockOffset = "spic_server_clock_offset";
 
-        public static readonly string[] All = { Token, Expiration, RoleAccess, DesignationName, RefreshToken, ServerClockOffset };
+        /// <summary>
+        /// "1" when the sign-in ticked "Keep me signed in" (written to both tiers), "0" (session tier only) when it did
+        /// not. Recheck residual N2: a refreshed farmer session goes back only where the sign-in put it, so a farmer who
+        /// chose not to be remembered never gets a token or refresh token in persistent (local) storage.
+        /// </summary>
+        public const string Remembered = "spic_remembered";
+
+        public static readonly string[] All = { Token, Expiration, RoleAccess, DesignationName, RefreshToken, ServerClockOffset, Remembered };
 
         /// <summary>
         /// "1" when the last sign-in on this device was a farmer (recheck fix U5). Persistent and deliberately NOT in

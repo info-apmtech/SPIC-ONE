@@ -284,6 +284,15 @@ internal static class FarmerPortalRecheckTests
 		}
 	}
 
+	private sealed class StallStub : HttpMessageHandler
+	{
+		protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+		{
+			await Task.Delay(TimeSpan.FromSeconds(30), cancellationToken);
+			return new HttpResponseMessage(System.Net.HttpStatusCode.OK);
+		}
+	}
+
 	private static void FarmerRestore()
 	{
 		var expired = DateTime.UtcNow.AddMinutes(-10);
@@ -337,6 +346,68 @@ internal static class FarmerPortalRecheckTests
 		var restored4 = SessionPersistence.TryRestoreAsync(store4, new LoginState(), new HttpClient(never4) { BaseAddress = new Uri("http://localhost/") }).GetAwaiter().GetResult();
 		Check.That("U1: a valid farmer session restores without a refresh call", restored4 && never4.Calls == 0);
 
+		// N3: a transient failure keeps the stored session; only a refusal forgets it.
+		foreach (var (label, answer) in new (string, Func<HttpResponseMessage>)[]
+		{
+			("a 503", () => new HttpResponseMessage(System.Net.HttpStatusCode.ServiceUnavailable)),
+			("a 500", () => new HttpResponseMessage(System.Net.HttpStatusCode.InternalServerError)),
+			("no connection", () => throw new HttpRequestException("offline")),
+		})
+		{
+			var st = new MemoryStore();
+			st.Session[SessionKeys.Token] = FakeJwt("Farmer", expired);
+			st.Session[SessionKeys.Expiration] = expired.ToString("O");
+			st.Session[SessionKeys.RefreshToken] = "kept-refresh";
+			st.Persistent[SessionKeys.RefreshToken] = "kept-refresh";
+			var stub = new RefreshStub(answer);
+			var r = SessionPersistence.TryRestoreAsync(st, new LoginState(), new HttpClient(stub) { BaseAddress = new Uri("http://localhost/") }).GetAwaiter().GetResult();
+			Check.That($"N3: {label} on a cold-start refresh shows the form and keeps the refresh token (both tiers)",
+				!r && stub.Calls == 1 && st.Session.GetValueOrDefault(SessionKeys.RefreshToken) == "kept-refresh"
+				&& st.Persistent.GetValueOrDefault(SessionKeys.RefreshToken) == "kept-refresh" && st.Session.ContainsKey(SessionKeys.Token));
+		}
+		foreach (var code in new[] { System.Net.HttpStatusCode.BadRequest, System.Net.HttpStatusCode.Unauthorized, System.Net.HttpStatusCode.Forbidden })
+			Check.That($"N3: {(int)code} from the refresh endpoint is a refusal", SessionPersistence.IsRefusal(code));
+		Check.That("N3: 5xx / 429 / 404 are not refusals", !SessionPersistence.IsRefusal(System.Net.HttpStatusCode.InternalServerError)
+			&& !SessionPersistence.IsRefusal(System.Net.HttpStatusCode.ServiceUnavailable) && !SessionPersistence.IsRefusal(System.Net.HttpStatusCode.TooManyRequests)
+			&& !SessionPersistence.IsRefusal(System.Net.HttpStatusCode.NotFound));
+		Check.Equal("N3: no stored refresh token counts as refused", RefreshOutcome.Refused,
+			SessionPersistence.TryRefreshAsync(new HttpClient(never4) { BaseAddress = new Uri("http://localhost/") }, new MemoryStore(), new LoginState()).GetAwaiter().GetResult());
+
+		// M4: a stalled refresh gives up after its own timeout and counts as Unreachable.
+		var stall = new StallStub();
+		var sw = System.Diagnostics.Stopwatch.StartNew();
+		var stalled = SessionPersistence.TryRefreshAsync(new HttpClient(stall) { BaseAddress = new Uri("http://localhost/") }, new MemoryStore(), new LoginState(),
+			"r", timeout: TimeSpan.FromMilliseconds(300)).GetAwaiter().GetResult();
+		Check.That("M4: a stalled refresh ends at its timeout as Unreachable", stalled == RefreshOutcome.Unreachable && sw.Elapsed < TimeSpan.FromSeconds(5), $"{stalled} {sw.Elapsed}");
+		Check.That("M4: the cold-start refresh timeout is short (10 s)", SessionPersistence.ColdStartRefreshTimeout == TimeSpan.FromSeconds(10));
+
+		// N2: a refreshed farmer session goes only where the sign-in put it.
+		HttpClient Ok() => new(new RefreshStub(() => new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+		{
+			Content = System.Net.Http.Json.JsonContent.Create(new RefreshTokenResponseDto { Token = fresh, Expiration = freshExp, RefreshToken = "new-refresh" })
+		})) { BaseAddress = new Uri("http://localhost/") };
+		var notKept = new MemoryStore();
+		var nkLogin = new LoginState();
+		SessionPersistence.StartAsync(Ok(), notKept, nkLogin, FakeJwt("Farmer", DateTime.UtcNow.AddMinutes(2)), DateTime.UtcNow.AddMinutes(2), "", "", "first-refresh", remember: false).GetAwaiter().GetResult();
+		var nk = SessionPersistence.TryRefreshAsync(Ok(), notKept, nkLogin).GetAwaiter().GetResult();
+		Check.That("N2: an unticked farmer's refresh writes no token or refresh token to persistent storage",
+			nk == RefreshOutcome.Refreshed && !notKept.Persistent.ContainsKey(SessionKeys.Token) && !notKept.Persistent.ContainsKey(SessionKeys.RefreshToken)
+			&& notKept.Session.GetValueOrDefault(SessionKeys.RefreshToken) == "new-refresh");
+		var kept = new MemoryStore();
+		var kLogin = new LoginState();
+		SessionPersistence.StartAsync(Ok(), kept, kLogin, FakeJwt("Farmer", DateTime.UtcNow.AddMinutes(2)), DateTime.UtcNow.AddMinutes(2), "", "", "first-refresh", remember: true).GetAwaiter().GetResult();
+		SessionPersistence.TryRefreshAsync(Ok(), kept, kLogin).GetAwaiter().GetResult();
+		Check.That("N2: a ticked farmer's refresh updates persistent storage",
+			kept.Persistent.GetValueOrDefault(SessionKeys.RefreshToken) == "new-refresh" && kept.Persistent.GetValueOrDefault(SessionKeys.Token) == fresh);
+		Check.That("N2: staff refreshes are stored as before (both tiers)",
+			SessionPersistence.PersistRefreshedAsync(new MemoryStore(), AppRole.MDO).GetAwaiter().GetResult());
+		Check.That("N2: the 'remembered' marker is cleared with the session", SessionKeys.All.Contains(SessionKeys.Remembered));
+		var coldNotKept = new MemoryStore();
+		foreach (var kv in notKept.Persistent) coldNotKept.Persistent[kv.Key] = kv.Value; // a new browser session: localStorage only
+		Check.That("N2: a cold start after an unticked sign-in finds no token to restore",
+			!SessionPersistence.TryRestoreAsync(coldNotKept, new LoginState(), Ok()).GetAwaiter().GetResult()
+			&& coldNotKept.GetAsync(SessionKeys.Token).GetAwaiter().GetResult() is null);
+
 		// U5: the sign-in remembers a farmer device; a staff sign-in clears it.
 		var store5 = new MemoryStore();
 		SessionPersistence.StartAsync(new HttpClient(never4), store5, new LoginState(), fresh, freshExp, "", "", "r", remember: false).GetAwaiter().GetResult();
@@ -359,10 +430,38 @@ internal static class FarmerPortalRecheckTests
 	{
 		var layout = Source("SPIC.MauiBlazorApp", "SPIC.MauiBlazorApp.Shared", "Layout", "MainLayout.razor");
 		Check.That("U1: the layout's expiry tick tries a silent farmer refresh before AutoLogout",
-			layout.Contains("if (await SessionPersistence.TryRefreshAsync(Http, SessionStore, LoginState))\n                    {\n                        _farmerRefreshedAtUtc = DateTime.UtcNow;\n                        return;") && layout.Contains("await InvokeAsync(ExpiryTickAsync)"));
+			layout.Contains("var outcome = await SessionPersistence.TryRefreshAsync(Http, SessionStore, LoginState);\n                    _farmerRefreshUnreachable = outcome == RefreshOutcome.Unreachable;")
+			&& layout.Contains("await InvokeAsync(ExpiryTickAsync)"));
+		var tick = layout[layout.IndexOf("private async Task ExpiryTickAsync()", StringComparison.Ordinal)..];
+		tick = tick[..tick.IndexOf("private async Task AutoLogout()", StringComparison.Ordinal)];
+		Check.That("N3: the expiry tick never AutoLogouts after an Unreachable farmer refresh (retries every 30 s)",
+			tick.IndexOf("if (_farmerRefreshUnreachable) return;", StringComparison.Ordinal) is > 0 and var i
+			&& i < tick.IndexOf("await AutoLogout();", StringComparison.Ordinal)
+			&& tick.Contains("_farmerNextTryUtc = DateTime.UtcNow + FarmerRetryAfterUnreachable;"));
+		Check.That("N3: a page refresh forgets the refresh token only when refused",
+			layout.Contains("else if (outcome == RefreshOutcome.Refused)\n                        await SessionPersistence.ForgetRefreshTokenAsync(SessionStore);"));
+		Check.That("N3: the expiry dialog does not leave a farmer's page at expiry (the layout decides)",
+			layout.Contains("LeaveOnExpiry=\"@(LoginState.UserRole != AppRole.Farmer)\""));
+		var dialog = Source("SPIC.MauiBlazorApp", "SPIC.MauiBlazorApp.Shared", "Components", "Feedback", "SessionExpiryDialog.razor");
+		Check.That("N3: the dialog's Continue signs a farmer out only on a refused refresh",
+			dialog.Contains("if (outcome == RefreshOutcome.Refused)\n            {\n                await SignOutNowAsync();") && dialog.Contains("if (LeaveOnExpiry) _ = HandleExpiredAsync();"));
+		var handler = Source("SPIC.MauiBlazorApp", "SPIC.MauiBlazorApp.Shared", "Services", "AuthHttpMessageHandler.cs");
+		Check.That("N2: the 401 handler stores a refreshed farmer session where the sign-in put it",
+			handler.Contains("SessionPersistence.PersistRefreshedAsync(") && !handler.Contains("SetPersistentAsync(SessionKeys.RefreshToken"));
+		var camera = Source("SPIC.MauiBlazorApp", "SPIC.MauiBlazorApp", "Services", "MauiCamera.cs");
+		Check.That("N1: the camera asks for StorageWrite below Android 13 before capture",
+			camera.IndexOf("Permissions.RequestAsync<Permissions.StorageWrite>()", StringComparison.Ordinal) is > 0 and var s
+			&& camera.Contains("if (!OperatingSystem.IsAndroidVersionAtLeast(33))")
+			&& s < camera.IndexOf("MediaPicker.Default.CapturePhotoAsync", StringComparison.Ordinal));
+		Check.That("N1: a storage refusal, a camera refusal and other failures have different messages",
+			camera.Contains("return NativePhoto.Failed(StorageDenied);") && camera.Contains("return NativePhoto.Failed(CameraDenied);")
+			&& camera.Contains("catch (PermissionException)\n            {") && System.Text.RegularExpressions.Regex.IsMatch(camera, @"catch \(PermissionException\)[^}]*Failed\(CouldNotOpen\)"));
+		Check.That("M1: the capture asks for a downscaled, upright photo without EXIF",
+			camera.Contains("MaximumWidth = CaptureSide,") && camera.Contains("MaximumHeight = CaptureSide,") && camera.Contains("public const int CaptureSide = 2048;")
+			&& camera.Contains("CompressionQuality = CaptureQuality,") && camera.Contains("RotateImage = true,") && camera.Contains("PreserveMetaData = false"));
 		Check.That("U5: the layout signs out to the role's sign-in page", layout.Contains("var loginPath = SessionPersistence.LoginPathFor(LoginState.UserRole);")
 			&& !layout.Contains("Navigation.NavigateTo(\n            \"/login\"\n        );"));
-		Check.That("U5: the expiry dialog gets the role's sign-in page", layout.Contains("<SessionExpiryDialog LoginPath=\"@SessionPersistence.LoginPathFor(LoginState.UserRole)\" />"));
+		Check.That("U5: the expiry dialog gets the role's sign-in page", layout.Contains("<SessionExpiryDialog LoginPath=\"@SessionPersistence.LoginPathFor(LoginState.UserRole)\""));
 		Check.That("U5: a 401 sends a farmer to the farmer sign-in", Source("SPIC.MauiBlazorApp", "SPIC.MauiBlazorApp.Shared", "Services", "AuthHttpMessageHandler.cs")
 			.Contains("_navigation.NavigateTo(loginPath, forceLoad: true);"));
 
@@ -374,6 +473,10 @@ internal static class FarmerPortalRecheckTests
 
 		var manifest = Source("SPIC.MauiBlazorApp", "SPIC.MauiBlazorApp", "Platforms", "Android", "AndroidManifest.xml");
 		Check.That("U2: the Android manifest asks for the camera", manifest.Contains("android.permission.CAMERA"));
+		Check.That("N1: the manifest declares WRITE_EXTERNAL_STORAGE up to API 32 (MAUI capture below Android 13)",
+			manifest.Contains("<uses-permission android:name=\"android.permission.WRITE_EXTERNAL_STORAGE\" android:maxSdkVersion=\"32\" />"));
+		Check.That("N1: and READ_EXTERNAL_STORAGE up to API 32",
+			manifest.Contains("<uses-permission android:name=\"android.permission.READ_EXTERNAL_STORAGE\" android:maxSdkVersion=\"32\" />"));
 		Check.That("U2: the Android manifest declares the IMAGE_CAPTURE query", manifest.Contains("android.media.action.IMAGE_CAPTURE"));
 		Check.That("U2: the camera is optional on the Play Store", manifest.Contains("android.hardware.camera\" android:required=\"false\""));
 		Check.That("U2: the MAUI host registers its camera", Source("SPIC.MauiBlazorApp", "SPIC.MauiBlazorApp", "MauiProgram.cs").Contains("AddSingleton<INativeCamera, SPIC.MauiBlazorApp.Services.MauiCamera>()"));

@@ -1266,10 +1266,10 @@ merge. Harness: `FarmerPortalRecheckTests`. Smoke: `smoke_final.py --group R` (p
 
 - **U1 farmer refresh token.** `SessionPersistence.TryRestoreAsync(store, login, http)` (Login.razor, FarmerLogin.razor):
   when the stored JWT is a **Farmer** JWT that is expired or has under a minute left and a refresh token is stored, it
-  calls `api/Authentication/refresh` before showing the form; the stored refresh token is cleared only after that attempt
-  fails. MainLayout restores a page refresh the same way, and its 5-second expiry tick refreshes a farmer session
+  calls `api/Authentication/refresh` before showing the form; the stored refresh token is cleared only when the API refuses
+  it (residual fix N3: offline / timeout / 5xx keep it). MainLayout restores a page refresh the same way, and its 5-second expiry tick refreshes a farmer session
   silently 3 minutes before expiry (`FarmerRefreshAhead`, at most once a minute, before the 2-minute warning) and tries
-  once more at expiry before AutoLogout. Ruling: Farmer role only; staff sessions behave as before (owner decides).
+  once more at expiry before AutoLogout (residual fix N3: AutoLogout only after a refusal; Unreachable retries every 30 s). Ruling: Farmer role only; staff sessions behave as before (owner decides).
   Checked with `tools/farmer-portal-check/verify_recheck_session.py` against an API run with `Jwt__ExpiryMinutes=4`.
 - **U2 Android camera.** `INativeCamera` (Shared) with `MauiCamera` (MAUI host, `MediaPicker.CapturePhotoAsync`,
   available on Android only) and `NoNativeCamera` (web host). On Android the leaf check's "Take a photo" / "Retake" are
@@ -1319,3 +1319,28 @@ test farmers' daily allowances and OTP rows so the Task 1-7 smoke scripts can ru
 Left for the owner: staff still read the whole `Uploads` tree through `Community/file` and `Library/file` (B2 ruling);
 staff sessions keep the old refresh behaviour (U1 ruling); the Android camera path is built but not tried on a device;
 B4 (teammate migration) is the owner's merge.
+
+### Recheck residual fix (after the re-review)
+
+- **N1 Android 7-12L camera.** MAUI's capture also needs StorageWrite below Android 13. The manifest declares
+  `WRITE_EXTERNAL_STORAGE` and `READ_EXTERNAL_STORAGE` with `android:maxSdkVersion="32"`, and `MauiCamera` asks for it
+  (below API 33 only) before the capture. A refused camera, a refused storage permission and any other failure each get
+  their own message (a `PermissionException` after both were granted is "We could not open the camera").
+- **M1 capture size.** The capture asks MediaPicker for at most 2048 px, JPEG quality 85, turned upright, without EXIF /
+  GPS (`MaximumWidth` / `MaximumHeight` / `CompressionQuality` / `RotateImage` / `PreserveMetaData`, MAUI 10.0.110).
+- **N2 "Keep me signed in".** The sign-in records `spic_remembered` ("1" in both tiers when ticked, "0" in the session
+  tier when not; cleared with the session). A refreshed farmer session (silent refresh, cold start, the expiry dialog,
+  the 401 handler) is written to persistent storage (localStorage on the web) only when the sign-in was ticked, so a farmer
+  who unticked it never gets a token or refresh token in localStorage and a new browser session restores nothing. Staff
+  refreshes are stored as before.
+- **N3 transient failures.** `SessionPersistence.TryRefreshAsync` returns `Refreshed` / `Refused` (400 / 401 / 403 from
+  `api/Authentication/refresh`, or no refresh token) / `Unreachable` (offline, timeout, 5xx, any other failure). Only
+  `Refused` forgets the refresh token or signs a farmer out. Unreachable: the cold start shows the sign-in form and keeps
+  the stored session (the next start retries); the layout keeps the farmer in the app past expiry and retries every 30 s
+  (`FarmerRetryAfterUnreachable`); the expiry dialog no longer leaves a farmer's page at expiry (`LeaveOnExpiry`), and its
+  Continue signs out only on a refusal; the 401 handler keeps a farmer's session when its own refresh call could not
+  reach the API. Staff behaviour is unchanged.
+- **M4 timeout.** Every farmer refresh has its own 10 s timeout (`ColdStartRefreshTimeout`), counted as Unreachable.
+- Tools: `tools/farmer-portal-check/flaky_proxy.py` (local proxy that can make the refresh call answer 503 or drop the
+  connection) and `verify_recheck_session.py --residual` (N2 / N3 in the browser, web host with
+  `--ApiBaseUrl=http://127.0.0.1:5121/`).
