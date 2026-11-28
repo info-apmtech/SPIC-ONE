@@ -102,6 +102,8 @@ builder.Services.AddSingleton<IFarmerWeatherService, FarmerWeatherService>();
 builder.Services.AddScoped<CommunityNearResolver>();
 builder.Services.AddScoped<FarmerAssistantContextLoader>();
 builder.Services.AddScoped<IFarmerAiBudget, FarmerAiBudget>();
+// Farmer portal Task 6: the leaf-photo check (Claude vision through the shared AnthropicMessagesClient).
+builder.Services.AddScoped<LeafVisionService>();
 builder.Services.AddScoped<IExcelBulkUploadService, ExcelBulkUploadService>();
 builder.Services.AddScoped<IIfmsAccountStore, IfmsAccountStore>();
 builder.Services.AddScoped<IIfmsRelayDeviceStore, IfmsRelayDeviceStore>();

@@ -29,8 +29,9 @@ public static class AnthropicContent
 }
 
 /// <summary>A Messages API request. <see cref="Model"/> null = Assistant:Model; <see cref="Effort"/> null = no
-/// output_config (the model's default effort).</summary>
-public sealed record AnthropicRequest(string System, IReadOnlyList<AnthropicMessage> Messages, int MaxTokens, string? Model = null, int TimeoutSeconds = 60, string? Effort = null);
+/// output_config.effort (the model's default effort); <see cref="OutputSchema"/> = a JSON schema for structured output
+/// (output_config.format, type json_schema; the leaf-photo check, Task 6), null = free text.</summary>
+public sealed record AnthropicRequest(string System, IReadOnlyList<AnthropicMessage> Messages, int MaxTokens, string? Model = null, int TimeoutSeconds = 60, string? Effort = null, object? OutputSchema = null);
 
 /// <summary>The text of a reply (thinking blocks are skipped) or why there is none.</summary>
 public sealed record AnthropicResult(bool Ok, string? Text, string? StopReason, string? Error)
@@ -40,7 +41,7 @@ public sealed record AnthropicResult(bool Ok, string? Text, string? StopReason, 
 
 /// <summary>
 /// The one place SPIC ONE calls the Anthropic Messages API (raw HTTP, as the library assistant always has):
-/// the SPIC AI library and farmer assistants and, next, the leaf-photo check. Reads Assistant:AnthropicApiKey
+/// the SPIC AI library and farmer assistants and the leaf-photo check (Task 6). Reads Assistant:AnthropicApiKey
 /// and Assistant:Model from <see cref="AssistantOptions"/>; never logs the key or the prompt. Never throws for
 /// an API problem: the result says what went wrong and callers fall back.
 /// </summary>
@@ -110,8 +111,11 @@ public class AnthropicMessagesClient
             ["system"] = request.System,
             ["messages"] = request.Messages.Select(m => new Dictionary<string, object?> { ["role"] = m.Role, ["content"] = m.Content }).ToList()
         };
-        if (!string.IsNullOrWhiteSpace(request.Effort))
-            body["output_config"] = new Dictionary<string, object?> { ["effort"] = request.Effort.Trim() };
+        var outputConfig = new Dictionary<string, object?>();
+        if (!string.IsNullOrWhiteSpace(request.Effort)) outputConfig["effort"] = request.Effort.Trim();
+        if (request.OutputSchema is not null)
+            outputConfig["format"] = new Dictionary<string, object?> { ["type"] = "json_schema", ["schema"] = request.OutputSchema };
+        if (outputConfig.Count > 0) body["output_config"] = outputConfig;
         return JsonSerializer.Serialize(body, WireJson);
     }
 

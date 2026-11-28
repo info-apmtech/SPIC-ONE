@@ -526,6 +526,33 @@ namespace Spic.Infrastructure.Data
                 entity.Property(x => x.FarmerUserId).HasMaxLength(450);
                 entity.HasIndex(x => new { x.CreatedAtUtc, x.Kind });
             });
+            // Farmer portal Task 6: the leaf-photo check (docs/farmer-portal.md). UTC times, soft delete.
+            builder.Entity<LeafDiagnosis>(entity =>
+            {
+                entity.Property(x => x.FarmerUserId).HasMaxLength(450);
+                entity.Property(x => x.Crop).HasMaxLength(40);
+                entity.Property(x => x.LeafAgeHint).HasMaxLength(10);
+                entity.Property(x => x.ImagePath).HasMaxLength(200);
+                entity.Property(x => x.Provider).HasMaxLength(10);
+                entity.Property(x => x.BasicReason).HasMaxLength(20);
+                entity.Property(x => x.Condition).HasMaxLength(30);
+                entity.Property(x => x.TopNutrient).HasMaxLength(4);
+                // History and the daily cap: one farmer's checks since IST midnight.
+                entity.HasIndex(x => new { x.FarmerUserId, x.CreatedAtUtc });
+            });
+            builder.Entity<NutrientCorrective>(entity =>
+            {
+                entity.Property(x => x.Nutrient).HasMaxLength(4);
+                entity.Property(x => x.Crop).HasMaxLength(40);
+                entity.Property(x => x.Product).HasMaxLength(120);
+                entity.Property(x => x.Method).HasMaxLength(10);
+                entity.Property(x => x.Dose).HasMaxLength(200);
+                entity.Property(x => x.Note).HasMaxLength(400);
+                entity.Property(x => x.Source).HasMaxLength(300);
+                entity.Property(x => x.SourceUrl).HasMaxLength(500);
+                entity.HasIndex(x => new { x.Nutrient, x.Crop });
+                entity.HasData(NutrientCorrectiveSeed.Rows);
+            });
 
             builder.Entity<SampleLabResult>(entity =>
             {
@@ -1258,6 +1285,8 @@ namespace Spic.Infrastructure.Data
         public DbSet<FarmerChatConversation> FarmerChatConversations { get; set; }
         public DbSet<FarmerChatMessage> FarmerChatMessages { get; set; }
         public DbSet<FarmerAiUsage> FarmerAiUsages { get; set; }
+        public DbSet<LeafDiagnosis> LeafDiagnoses { get; set; }
+        public DbSet<NutrientCorrective> NutrientCorrectives { get; set; }
 
         //// JMDO Task Allocation
         public DbSet<JmdoTaskAllocation> JmdoTaskAllocations { get; set; }

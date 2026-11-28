@@ -10316,6 +10316,84 @@ namespace Spic.Infrastructure.Migrations
                     b.ToTable("LabTranslations");
                 });
 
+            modelBuilder.Entity("SPIC.Core.Entities.LeafDiagnosis", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("BasicReason")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Condition")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<double?>("Confidence")
+                        .HasColumnType("double precision");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("Crop")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<DateTime?>("DeletedAtUtc")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("FarmerUserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
+                    b.Property<int>("ImageBytes")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ImageHeight")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ImagePath")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<int>("ImageWidth")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("LeafAgeHint")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<string>("MetricsJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Provider")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<string>("ResultJson")
+                        .HasColumnType("text");
+
+                    b.Property<string>("TopNutrient")
+                        .HasMaxLength(4)
+                        .HasColumnType("character varying(4)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FarmerUserId", "CreatedAtUtc");
+
+                    b.ToTable("LeafDiagnoses");
+                });
+
             modelBuilder.Entity("SPIC.Core.Entities.LibraryCategory", b =>
                 {
                     b.Property<int>("Id")
@@ -10656,6 +10734,741 @@ namespace Spic.Infrastructure.Migrations
                             Name = "Warehouse",
                             UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             UpdatedBy = "System"
+                        });
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.NutrientCorrective", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Crop")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("Dose")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Method")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(400)
+                        .HasColumnType("character varying(400)");
+
+                    b.Property<string>("Nutrient")
+                        .IsRequired()
+                        .HasMaxLength(4)
+                        .HasColumnType("character varying(4)");
+
+                    b.Property<string>("Product")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("SourceUrl")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Nutrient", "Crop");
+
+                    b.ToTable("NutrientCorrectives");
+
+                    b.HasData(
+                        new
+                        {
+                            Id = 1,
+                            Dose = "1-2 % spray: 10-20 g urea per litre of water",
+                            IsActive = true,
+                            Method = "Foliar",
+                            Note = "Repeat every week until the new leaves are green, then top-dress urea as in your fertilizer advice.",
+                            Nutrient = "N",
+                            Product = "Urea (46 % N)",
+                            SortOrder = 1,
+                            Source = "Task brief (urea 1-2 % spray); TNAU Paddy expert system sprays 1 % urea weekly until the symptoms go",
+                            SourceUrl = "https://agritech.tnau.ac.in/expert_system/paddy/nutrientmanagement.html"
+                        },
+                        new
+                        {
+                            Id = 2,
+                            Dose = "Top-dress the next urea split as in your Fertilizer advice",
+                            IsActive = true,
+                            Method = "Soil",
+                            Note = "Apply on moist soil, not just before heavy rain. Fertilizer advice gives the dose for your crop and soil.",
+                            Nutrient = "N",
+                            Product = "Urea (46 % N)",
+                            SortOrder = 2,
+                            Source = "SPIC ONE Fertilizer advice (TNAU crop norms, farmer portal Task 4)"
+                        },
+                        new
+                        {
+                            Id = 3,
+                            Dose = "2 % spray: 20 g DAP per litre of water (soak overnight, spray the clear liquid)",
+                            IsActive = true,
+                            Method = "Foliar",
+                            Note = "TNAU sprays 2 % DAP with 1 % potash (KCl) to improve yield.",
+                            Nutrient = "P",
+                            Product = "DAP (18-46-0)",
+                            SortOrder = 1,
+                            Source = "TNAU Agritech: Nutrient management, Cotton (nutritional disorders correction, updated 19.03.2013)",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_nutrientmgt_cotton.html"
+                        },
+                        new
+                        {
+                            Id = 4,
+                            Dose = "As basal for the next crop, as per your soil test (Fertilizer advice)",
+                            IsActive = true,
+                            Method = "Soil",
+                            Note = "Phosphorus works best at sowing or planting; in a standing crop use the spray.",
+                            Nutrient = "P",
+                            Product = "SSP or DAP",
+                            SortOrder = 2,
+                            Source = "TNAU Agritech: Rice main field, inorganic fertilizers and micronutrients (updated Jan 2023)",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_main_feild_%20InOrganic_biofertilizers_Rice.html"
+                        },
+                        new
+                        {
+                            Id = 5,
+                            Dose = "1 % spray: 10 g per litre of water",
+                            IsActive = true,
+                            Method = "Foliar",
+                            Nutrient = "K",
+                            Product = "Muriate of potash (KCl, 60 % K2O)",
+                            SortOrder = 1,
+                            Source = "TNAU Agritech Expert System for Paddy: nutritional disorders and corrective measures",
+                            SourceUrl = "https://agritech.tnau.ac.in/expert_system/paddy/nutrientmanagement.html"
+                        },
+                        new
+                        {
+                            Id = 6,
+                            Dose = "25 % more potash than the recommended dose",
+                            IsActive = true,
+                            Method = "Soil",
+                            Note = "In the next top-dressing and the next crop.",
+                            Nutrient = "K",
+                            Product = "Muriate of potash (KCl, 60 % K2O)",
+                            SortOrder = 2,
+                            Source = "TNAU Agritech Expert System for Paddy: nutritional disorders and corrective measures",
+                            SourceUrl = "https://agritech.tnau.ac.in/expert_system/paddy/nutrientmanagement.html"
+                        },
+                        new
+                        {
+                            Id = 7,
+                            Dose = "1 % spray: 10 g per litre of water",
+                            IsActive = true,
+                            Method = "Foliar",
+                            Note = "TNAU's cotton schedule uses a 2 % magnesium sulphate spray with 1 % urea at boll formation.",
+                            Nutrient = "Mg",
+                            Product = "Magnesium sulphate",
+                            SortOrder = 1,
+                            Source = "Task brief (MgSO4 1 % spray); TNAU Cotton uses 2 %",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_nutrientmgt_cotton.html"
+                        },
+                        new
+                        {
+                            Id = 8,
+                            Dose = "20 kg per hectare (about 8 kg per acre) as basal",
+                            IsActive = true,
+                            Method = "Soil",
+                            Note = "In magnesium-deficient areas.",
+                            Nutrient = "Mg",
+                            Product = "Magnesium sulphate",
+                            SortOrder = 2,
+                            Source = "TNAU Agritech: Nutrient management, Cotton (nutritional disorders correction, updated 19.03.2013)",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_nutrientmgt_cotton.html"
+                        },
+                        new
+                        {
+                            Id = 9,
+                            Dose = "25 kg per hectare (about 10 kg per acre), mixed with 50 kg dry sand",
+                            IsActive = true,
+                            Method = "Soil",
+                            Note = "Before sowing or transplanting.",
+                            Nutrient = "Zn",
+                            Product = "Zinc sulphate",
+                            SortOrder = 1,
+                            Source = "TNAU Agritech: Rice main field, inorganic fertilizers and micronutrients (updated Jan 2023)",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_main_feild_%20InOrganic_biofertilizers_Rice.html"
+                        },
+                        new
+                        {
+                            Id = 10,
+                            Dose = "0.5 % spray: 5 g per litre of water",
+                            IsActive = true,
+                            Method = "Foliar",
+                            Note = "Repeat every 7-15 days until the symptoms go.",
+                            Nutrient = "Zn",
+                            Product = "Zinc sulphate",
+                            SortOrder = 2,
+                            Source = "TNAU Agritech: Rice main field, inorganic fertilizers and micronutrients (updated Jan 2023)",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_main_feild_%20InOrganic_biofertilizers_Rice.html"
+                        },
+                        new
+                        {
+                            Id = 11,
+                            Dose = "0.5 % spray with 0.1 % citric acid: 5 g ferrous sulphate and 1 g citric acid per litre",
+                            IsActive = true,
+                            Method = "Foliar",
+                            Note = "Citric acid keeps the iron active in the spray. Spray 2-3 times, 10-15 days apart.",
+                            Nutrient = "Fe",
+                            Product = "Ferrous sulphate + citric acid",
+                            SortOrder = 1,
+                            Source = "Task brief (FeSO4 0.5 % + citric acid); TNAU Groundnut sprays 1 % FeSO4 at 30, 40 and 50 days",
+                            SourceUrl = "https://agritech.tnau.ac.in/govt_schemes_services/aas/groundnut.html"
+                        },
+                        new
+                        {
+                            Id = 12,
+                            Dose = "50 kg per hectare with 12.5 t farmyard manure",
+                            IsActive = true,
+                            Method = "Soil",
+                            Note = "When the soil is short of iron.",
+                            Nutrient = "Fe",
+                            Product = "Ferrous sulphate",
+                            SortOrder = 2,
+                            Source = "TNAU Agritech: Rice main field, inorganic fertilizers and micronutrients (updated Jan 2023)",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_main_feild_%20InOrganic_biofertilizers_Rice.html"
+                        },
+                        new
+                        {
+                            Id = 13,
+                            Dose = "500 kg per hectare (about 200 kg per acre) at the last ploughing",
+                            IsActive = true,
+                            Method = "Soil",
+                            Note = "Gypsum gives sulphur and calcium. SSP and ammonium sulphate also give sulphur.",
+                            Nutrient = "S",
+                            Product = "Gypsum",
+                            SortOrder = 1,
+                            Source = "TNAU Agritech: Rice main field, inorganic fertilizers and micronutrients (updated Jan 2023)",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_main_feild_%20InOrganic_biofertilizers_Rice.html"
+                        },
+                        new
+                        {
+                            Id = 14,
+                            Dose = "10 kg per hectare (about 4 kg per acre)",
+                            IsActive = true,
+                            Method = "Soil",
+                            Note = "Mix with sand or gypsum for even spreading.",
+                            Nutrient = "B",
+                            Product = "Borax",
+                            SortOrder = 1,
+                            Source = "TNAU Agritech: Groundnut crop production advisory (nutritional disorders, gypsum)",
+                            SourceUrl = "https://agritech.tnau.ac.in/govt_schemes_services/aas/groundnut.html"
+                        },
+                        new
+                        {
+                            Id = 15,
+                            Dose = "400 kg per hectare (about 160 kg per acre) beside the plants",
+                            IsActive = true,
+                            Method = "Soil",
+                            Note = "Not on calcareous soil. On acid soil, lime (as per a lime requirement test) gives calcium.",
+                            Nutrient = "Ca",
+                            Product = "Gypsum",
+                            SortOrder = 1,
+                            Source = "TNAU Agritech: Groundnut crop production advisory (nutritional disorders, gypsum)",
+                            SourceUrl = "https://agritech.tnau.ac.in/govt_schemes_services/aas/groundnut.html"
+                        },
+                        new
+                        {
+                            Id = 16,
+                            Dose = "A calcium chloride spray for quick correction of a severe shortage",
+                            IsActive = true,
+                            Method = "Foliar",
+                            Note = "Ask your SPIC officer for the strength for your crop.",
+                            Nutrient = "Ca",
+                            Product = "Calcium chloride",
+                            SortOrder = 2,
+                            Source = "TNAU Agritech Expert System for Paddy: nutritional disorders and corrective measures",
+                            SourceUrl = "https://agritech.tnau.ac.in/expert_system/paddy/nutrientmanagement.html"
+                        },
+                        new
+                        {
+                            Id = 17,
+                            Dose = "1-5 kg Mn per hectare in about 200 litres of water",
+                            IsActive = true,
+                            Method = "Foliar",
+                            Note = "On high-pH soil use ammonium sulphate instead of urea.",
+                            Nutrient = "Mn",
+                            Product = "Manganese sulphate",
+                            SortOrder = 1,
+                            Source = "TNAU Agritech Expert System for Paddy: nutritional disorders and corrective measures",
+                            SourceUrl = "https://agritech.tnau.ac.in/expert_system/paddy/nutrientmanagement.html"
+                        },
+                        new
+                        {
+                            Id = 20,
+                            Crop = "Paddy",
+                            Dose = "1 % spray: 10 g per litre of water, every week until the symptoms go",
+                            IsActive = true,
+                            Method = "Foliar",
+                            Note = "Top-dress when the leaf colour chart reads below 4 (3 for White Ponni): 35 kg N per hectare in the dry season, 30 kg in the wet season.",
+                            Nutrient = "N",
+                            Product = "Urea (46 % N)",
+                            SortOrder = 1,
+                            Source = "TNAU Agritech Expert System for Paddy: nutritional disorders and corrective measures",
+                            SourceUrl = "https://agritech.tnau.ac.in/expert_system/paddy/nutrientmanagement.html"
+                        },
+                        new
+                        {
+                            Id = 21,
+                            Crop = "Paddy",
+                            Dose = "25 % more nitrogen than the recommended dose",
+                            IsActive = true,
+                            Method = "Soil",
+                            Note = "Keep the field flooded; do not let water run off over the bunds just after applying.",
+                            Nutrient = "N",
+                            Product = "Urea (46 % N)",
+                            SortOrder = 2,
+                            Source = "TNAU Agritech Expert System for Paddy: nutritional disorders and corrective measures",
+                            SourceUrl = "https://agritech.tnau.ac.in/expert_system/paddy/nutrientmanagement.html"
+                        },
+                        new
+                        {
+                            Id = 22,
+                            Crop = "Paddy",
+                            Dose = "15-30 kg P per hectare",
+                            IsActive = true,
+                            Method = "Soil",
+                            Note = "Phosphobacteria as seed coating or seedling dip also helps.",
+                            Nutrient = "P",
+                            Product = "SSP or DAP",
+                            SortOrder = 1,
+                            Source = "TNAU Agritech Expert System for Paddy: nutritional disorders and corrective measures",
+                            SourceUrl = "https://agritech.tnau.ac.in/expert_system/paddy/nutrientmanagement.html"
+                        },
+                        new
+                        {
+                            Id = 23,
+                            Crop = "Paddy",
+                            Dose = "1 % spray: 10 g per litre of water",
+                            IsActive = true,
+                            Method = "Foliar",
+                            Nutrient = "K",
+                            Product = "Muriate of potash (KCl)",
+                            SortOrder = 1,
+                            Source = "TNAU Agritech Expert System for Paddy: nutritional disorders and corrective measures",
+                            SourceUrl = "https://agritech.tnau.ac.in/expert_system/paddy/nutrientmanagement.html"
+                        },
+                        new
+                        {
+                            Id = 24,
+                            Crop = "Paddy",
+                            Dose = "25 % more potash than the recommended dose",
+                            IsActive = true,
+                            Method = "Soil",
+                            Note = "Spread the straw back on the field instead of burning it.",
+                            Nutrient = "K",
+                            Product = "Muriate of potash (KCl)",
+                            SortOrder = 2,
+                            Source = "TNAU Agritech Expert System for Paddy: nutritional disorders and corrective measures",
+                            SourceUrl = "https://agritech.tnau.ac.in/expert_system/paddy/nutrientmanagement.html"
+                        },
+                        new
+                        {
+                            Id = 25,
+                            Crop = "Paddy",
+                            Dose = "25 kg per hectare (about 10 kg per acre) with 50 kg dry sand, just before transplanting",
+                            IsActive = true,
+                            Method = "Soil",
+                            Note = "12.5 kg per hectare is enough when green manure or enriched FYM is applied; 37.5 kg on saline or sodic soil.",
+                            Nutrient = "Zn",
+                            Product = "Zinc sulphate",
+                            SortOrder = 1,
+                            Source = "TNAU Agritech: Rice main field, inorganic fertilizers and micronutrients (updated Jan 2023)",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_main_feild_%20InOrganic_biofertilizers_Rice.html"
+                        },
+                        new
+                        {
+                            Id = 26,
+                            Crop = "Paddy",
+                            Dose = "0.5 % spray: 5 g per litre of water",
+                            IsActive = true,
+                            Method = "Foliar",
+                            Note = "Every 7-10 days (short duration) or 15 days (medium and long duration) until the symptoms go.",
+                            Nutrient = "Zn",
+                            Product = "Zinc sulphate",
+                            SortOrder = 2,
+                            Source = "TNAU Agritech: Rice main field, inorganic fertilizers and micronutrients (updated Jan 2023)",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_main_feild_%20InOrganic_biofertilizers_Rice.html"
+                        },
+                        new
+                        {
+                            Id = 27,
+                            Crop = "Paddy",
+                            Dose = "2-3 % spray: 20-30 g per litre of water, 2-3 sprays two weeks apart",
+                            IsActive = true,
+                            Method = "Foliar",
+                            Nutrient = "Fe",
+                            Product = "Ferrous sulphate",
+                            SortOrder = 1,
+                            Source = "TNAU Agritech Expert System for Paddy: nutritional disorders and corrective measures",
+                            SourceUrl = "https://agritech.tnau.ac.in/expert_system/paddy/nutrientmanagement.html"
+                        },
+                        new
+                        {
+                            Id = 28,
+                            Crop = "Paddy",
+                            Dose = "50 kg per hectare with 12.5 t farmyard manure",
+                            IsActive = true,
+                            Method = "Soil",
+                            Note = "When the soil is short of iron.",
+                            Nutrient = "Fe",
+                            Product = "Ferrous sulphate",
+                            SortOrder = 2,
+                            Source = "TNAU Agritech: Rice main field, inorganic fertilizers and micronutrients (updated Jan 2023)",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_main_feild_%20InOrganic_biofertilizers_Rice.html"
+                        },
+                        new
+                        {
+                            Id = 29,
+                            Crop = "Paddy",
+                            Dose = "500 kg per hectare (about 200 kg per acre) at the last ploughing",
+                            IsActive = true,
+                            Method = "Soil",
+                            Note = "Gives sulphur and calcium.",
+                            Nutrient = "S",
+                            Product = "Gypsum",
+                            SortOrder = 1,
+                            Source = "TNAU Agritech: Rice main field, inorganic fertilizers and micronutrients (updated Jan 2023)",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_main_feild_%20InOrganic_biofertilizers_Rice.html"
+                        },
+                        new
+                        {
+                            Id = 30,
+                            Crop = "Paddy",
+                            Dose = "2 % spray: 20 g per litre of water",
+                            IsActive = true,
+                            Method = "Foliar",
+                            Note = "Kieserite in the soil corrects it quickly too.",
+                            Nutrient = "Mg",
+                            Product = "Magnesium chloride",
+                            SortOrder = 1,
+                            Source = "TNAU Agritech Expert System for Paddy: nutritional disorders and corrective measures",
+                            SourceUrl = "https://agritech.tnau.ac.in/expert_system/paddy/nutrientmanagement.html"
+                        },
+                        new
+                        {
+                            Id = 31,
+                            Crop = "Paddy",
+                            Dose = "1-5 kg Mn per hectare in about 200 litres of water",
+                            IsActive = true,
+                            Method = "Foliar",
+                            Note = "Use ammonium sulphate instead of urea.",
+                            Nutrient = "Mn",
+                            Product = "Manganese sulphate",
+                            SortOrder = 1,
+                            Source = "TNAU Agritech Expert System for Paddy: nutritional disorders and corrective measures",
+                            SourceUrl = "https://agritech.tnau.ac.in/expert_system/paddy/nutrientmanagement.html"
+                        },
+                        new
+                        {
+                            Id = 32,
+                            Crop = "Paddy",
+                            Dose = "0.5-3 kg B per hectare, before planting or as a spray during growth",
+                            IsActive = true,
+                            Method = "Soil",
+                            Note = "Avoid too much water draining through the field.",
+                            Nutrient = "B",
+                            Product = "Borax",
+                            SortOrder = 1,
+                            Source = "TNAU Agritech Expert System for Paddy: nutritional disorders and corrective measures",
+                            SourceUrl = "https://agritech.tnau.ac.in/expert_system/paddy/nutrientmanagement.html"
+                        },
+                        new
+                        {
+                            Id = 33,
+                            Crop = "Paddy",
+                            Dose = "Gypsum on high-pH (sodic) soil; lime on acid soil",
+                            IsActive = true,
+                            Method = "Soil",
+                            Note = "A calcium chloride spray corrects a severe shortage quickly.",
+                            Nutrient = "Ca",
+                            Product = "Gypsum or lime",
+                            SortOrder = 1,
+                            Source = "TNAU Agritech Expert System for Paddy: nutritional disorders and corrective measures",
+                            SourceUrl = "https://agritech.tnau.ac.in/expert_system/paddy/nutrientmanagement.html"
+                        },
+                        new
+                        {
+                            Id = 40,
+                            Crop = "Cotton",
+                            Dose = "50 kg per hectare (about 20 kg per acre) as basal",
+                            IsActive = true,
+                            Method = "Soil",
+                            Nutrient = "Zn",
+                            Product = "Zinc sulphate",
+                            SortOrder = 1,
+                            Source = "TNAU Agritech: Nutrient management, Cotton (nutritional disorders correction, updated 19.03.2013)",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_nutrientmgt_cotton.html"
+                        },
+                        new
+                        {
+                            Id = 41,
+                            Crop = "Cotton",
+                            Dose = "0.5 % spray: 5 g per litre, three times at 45, 60 and 75 days",
+                            IsActive = true,
+                            Method = "Foliar",
+                            Nutrient = "Zn",
+                            Product = "Zinc sulphate",
+                            SortOrder = 2,
+                            Source = "TNAU Agritech: Nutrient management, Cotton (nutritional disorders correction, updated 19.03.2013)",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_nutrientmgt_cotton.html"
+                        },
+                        new
+                        {
+                            Id = 42,
+                            Crop = "Cotton",
+                            Dose = "2 % magnesium sulphate with 1 % urea: 20 g and 10 g per litre",
+                            IsActive = true,
+                            Method = "Foliar",
+                            Note = "At boll formation; also against leaf reddening.",
+                            Nutrient = "Mg",
+                            Product = "Magnesium sulphate + urea",
+                            SortOrder = 1,
+                            Source = "TNAU Agritech: Nutrient management, Cotton (nutritional disorders correction, updated 19.03.2013)",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_nutrientmgt_cotton.html"
+                        },
+                        new
+                        {
+                            Id = 43,
+                            Crop = "Cotton",
+                            Dose = "20 kg per hectare (about 8 kg per acre) as basal",
+                            IsActive = true,
+                            Method = "Soil",
+                            Note = "In magnesium-deficient areas, to prevent reddening.",
+                            Nutrient = "Mg",
+                            Product = "Magnesium sulphate",
+                            SortOrder = 2,
+                            Source = "TNAU Agritech: Nutrient management, Cotton (nutritional disorders correction, updated 19.03.2013)",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_nutrientmgt_cotton.html"
+                        },
+                        new
+                        {
+                            Id = 44,
+                            Crop = "Cotton",
+                            Dose = "0.5 % urea with 1 % KCl: 5 g and 10 g per litre, on the 45th and 65th day",
+                            IsActive = true,
+                            Method = "Foliar",
+                            Note = "When the soil has moisture.",
+                            Nutrient = "N",
+                            Product = "Urea + potash (KCl)",
+                            SortOrder = 1,
+                            Source = "TNAU Agritech: Nutrient management, Cotton (nutritional disorders correction, updated 19.03.2013)",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_nutrientmgt_cotton.html"
+                        },
+                        new
+                        {
+                            Id = 45,
+                            Crop = "Cotton",
+                            Dose = "1 % KCl with 0.5 % urea: 10 g and 5 g per litre, on the 45th and 65th day",
+                            IsActive = true,
+                            Method = "Foliar",
+                            Note = "When the soil has moisture.",
+                            Nutrient = "K",
+                            Product = "Potash (KCl) + urea",
+                            SortOrder = 1,
+                            Source = "TNAU Agritech: Nutrient management, Cotton (nutritional disorders correction, updated 19.03.2013)",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_nutrientmgt_cotton.html"
+                        },
+                        new
+                        {
+                            Id = 46,
+                            Crop = "Cotton",
+                            Dose = "2 % DAP with 1 % KCl: 20 g and 10 g per litre",
+                            IsActive = true,
+                            Method = "Foliar",
+                            Note = "Improves kapas yield.",
+                            Nutrient = "P",
+                            Product = "DAP + potash (KCl)",
+                            SortOrder = 1,
+                            Source = "TNAU Agritech: Nutrient management, Cotton (nutritional disorders correction, updated 19.03.2013)",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_nutrientmgt_cotton.html"
+                        },
+                        new
+                        {
+                            Id = 50,
+                            Crop = "Groundnut",
+                            Dose = "25 kg per hectare (about 10 kg per acre) as basal",
+                            IsActive = true,
+                            Method = "Soil",
+                            Note = "When the soil has less than 1.3 ppm zinc.",
+                            Nutrient = "Zn",
+                            Product = "Zinc sulphate",
+                            SortOrder = 1,
+                            Source = "TNAU Agritech: Groundnut crop production advisory (nutritional disorders, gypsum)",
+                            SourceUrl = "https://agritech.tnau.ac.in/govt_schemes_services/aas/groundnut.html"
+                        },
+                        new
+                        {
+                            Id = 51,
+                            Crop = "Groundnut",
+                            Dose = "0.5 % spray: 5 g per litre of water",
+                            IsActive = true,
+                            Method = "Foliar",
+                            Note = "For the standing crop.",
+                            Nutrient = "Zn",
+                            Product = "Zinc sulphate",
+                            SortOrder = 2,
+                            Source = "TNAU Agritech: Groundnut crop production advisory (nutritional disorders, gypsum)",
+                            SourceUrl = "https://agritech.tnau.ac.in/govt_schemes_services/aas/groundnut.html"
+                        },
+                        new
+                        {
+                            Id = 52,
+                            Crop = "Groundnut",
+                            Dose = "1 % spray: 10 g per litre, on the 30th, 40th and 50th day",
+                            IsActive = true,
+                            Method = "Foliar",
+                            Nutrient = "Fe",
+                            Product = "Ferrous sulphate",
+                            SortOrder = 1,
+                            Source = "TNAU Agritech: Groundnut crop production advisory (nutritional disorders, gypsum)",
+                            SourceUrl = "https://agritech.tnau.ac.in/govt_schemes_services/aas/groundnut.html"
+                        },
+                        new
+                        {
+                            Id = 53,
+                            Crop = "Groundnut",
+                            Dose = "Borax 10 kg per hectare with gypsum, on the 45th day",
+                            IsActive = true,
+                            Method = "Soil",
+                            Nutrient = "B",
+                            Product = "Borax + gypsum",
+                            SortOrder = 1,
+                            Source = "TNAU Agritech: Groundnut crop production advisory (nutritional disorders, gypsum)",
+                            SourceUrl = "https://agritech.tnau.ac.in/govt_schemes_services/aas/groundnut.html"
+                        },
+                        new
+                        {
+                            Id = 54,
+                            Crop = "Groundnut",
+                            Dose = "400 kg per hectare (about 160 kg per acre) beside the plants on the 40th-45th day",
+                            IsActive = true,
+                            Method = "Soil",
+                            Note = "Hoe it in and earth up. Not on calcareous soil.",
+                            Nutrient = "Ca",
+                            Product = "Gypsum",
+                            SortOrder = 1,
+                            Source = "TNAU Agritech: Groundnut crop production advisory (nutritional disorders, gypsum)",
+                            SourceUrl = "https://agritech.tnau.ac.in/govt_schemes_services/aas/groundnut.html"
+                        },
+                        new
+                        {
+                            Id = 55,
+                            Crop = "Groundnut",
+                            Dose = "400 kg per hectare (about 160 kg per acre) beside the plants on the 40th-45th day",
+                            IsActive = true,
+                            Method = "Soil",
+                            Note = "Gypsum gives calcium and sulphur and helps pod filling.",
+                            Nutrient = "S",
+                            Product = "Gypsum",
+                            SortOrder = 1,
+                            Source = "TNAU Agritech: Groundnut crop production advisory (nutritional disorders, gypsum)",
+                            SourceUrl = "https://agritech.tnau.ac.in/govt_schemes_services/aas/groundnut.html"
+                        },
+                        new
+                        {
+                            Id = 60,
+                            Crop = "Maize",
+                            Dose = "37.5 kg per hectare (about 15 kg per acre) for hybrid maize",
+                            IsActive = true,
+                            Method = "Soil",
+                            Note = "In zinc-deficient soil.",
+                            Nutrient = "Zn",
+                            Product = "Zinc sulphate",
+                            SortOrder = 1,
+                            Source = "TNAU Agritech: Nutrient management, Maize (micronutrients)",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_nutrientmgt_maize.html"
+                        },
+                        new
+                        {
+                            Id = 61,
+                            Crop = "Maize",
+                            Dose = "40 kg S with 5 kg Zn and 1.5 kg B per hectare",
+                            IsActive = true,
+                            Method = "Soil",
+                            Note = "In deficient soils.",
+                            Nutrient = "S",
+                            Product = "Sulphur with zinc and boron",
+                            SortOrder = 1,
+                            Source = "TNAU Agritech: Nutrient management, Maize (micronutrients)",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_nutrientmgt_maize.html"
+                        },
+                        new
+                        {
+                            Id = 62,
+                            Crop = "Maize",
+                            Dose = "1.5 kg B with 5 kg Zn and 40 kg S per hectare",
+                            IsActive = true,
+                            Method = "Soil",
+                            Note = "In deficient soils.",
+                            Nutrient = "B",
+                            Product = "Boron with zinc and sulphur",
+                            SortOrder = 1,
+                            Source = "TNAU Agritech: Nutrient management, Maize (micronutrients)",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_nutrientmgt_maize.html"
+                        },
+                        new
+                        {
+                            Id = 70,
+                            Crop = "Banana",
+                            Dose = "Zinc sulphate 0.5 % + ferrous sulphate 0.2 % + copper sulphate 0.2 % + boric acid 0.1 %",
+                            IsActive = true,
+                            Method = "Foliar",
+                            Note = "At 3, 5 and 7 months after planting.",
+                            Nutrient = "Zn",
+                            Product = "Micronutrient spray",
+                            SortOrder = 1,
+                            Source = "TNAU Agritech Horticulture: Banana (micronutrient spray)",
+                            SourceUrl = "https://agritech.tnau.ac.in/horticulture/horti_fruits_banana.html"
+                        },
+                        new
+                        {
+                            Id = 71,
+                            Crop = "Banana",
+                            Dose = "Zinc sulphate 0.5 % + ferrous sulphate 0.2 % + copper sulphate 0.2 % + boric acid 0.1 %",
+                            IsActive = true,
+                            Method = "Foliar",
+                            Note = "At 3, 5 and 7 months after planting.",
+                            Nutrient = "Fe",
+                            Product = "Micronutrient spray",
+                            SortOrder = 1,
+                            Source = "TNAU Agritech Horticulture: Banana (micronutrient spray)",
+                            SourceUrl = "https://agritech.tnau.ac.in/horticulture/horti_fruits_banana.html"
+                        },
+                        new
+                        {
+                            Id = 72,
+                            Crop = "Banana",
+                            Dose = "Zinc sulphate 0.5 % + ferrous sulphate 0.2 % + copper sulphate 0.2 % + boric acid 0.1 %",
+                            IsActive = true,
+                            Method = "Foliar",
+                            Note = "At 3, 5 and 7 months after planting.",
+                            Nutrient = "B",
+                            Product = "Micronutrient spray",
+                            SortOrder = 1,
+                            Source = "TNAU Agritech Horticulture: Banana (micronutrient spray)",
+                            SourceUrl = "https://agritech.tnau.ac.in/horticulture/horti_fruits_banana.html"
                         });
                 });
 
