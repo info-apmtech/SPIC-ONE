@@ -241,7 +241,6 @@ public static class LeafCheckRules
         r.Symptoms.Add($"Leaf colour score {LccLabel(m.LccScore)}");
         if (m.YellowShare >= 0.08) r.Symptoms.Add($"About {Pct(m.YellowShare)} of the leaf is yellow");
         if (m.BrownShare >= 0.05) r.Symptoms.Add($"About {Pct(m.BrownShare)} of the leaf is brown or dry");
-        if (m.Pattern != "none") r.Symptoms.Add(PatternLabel(m.Pattern));
 
         void Add(string code, double likelihood) => r.Nutrients.Add(new LeafNutrientGuess(code, likelihood));
 

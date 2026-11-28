@@ -7,8 +7,8 @@ namespace Spic.Infrastructure.Data;
 /// shortage. Crop rows were read on the TNAU Agritech page named in the row (fetched 2026-11-28 through the Internet
 /// Archive, web.archive.org/web/2024id_/..., because agritech.tnau.ac.in refused direct connections, as in Task 4).
 /// General rows (Crop null) are used when a crop has no row of its own for that nutrient. Three general values come
-/// from the task brief and say so in their Source (Mg 1 % spray, Fe 0.5 % + citric acid, urea 1-2 % spray): the TNAU
-/// pages give 2 % MgSO4 (cotton), 1 % FeSO4 (groundnut) / 2-3 % (paddy) and 1 % urea (paddy). An agronomist should
+/// from the task brief (Mg 1 % spray, Fe 0.5 % + citric acid, urea 1-2 % spray; their Source reads "General guidance;"
+/// and names the TNAU value): the TNAU pages give 2 % MgSO4 (cotton), 1 % FeSO4 (groundnut) / 2-3 % (paddy) and 1 % urea (paddy). An agronomist should
 /// sign these off before go-live (docs/farmer-portal.md, Task 6). Spray strengths also give grams per litre, which is
 /// how farmers mix them (1 % = 10 g per litre).
 /// </summary>
@@ -39,10 +39,10 @@ public static class NutrientCorrectiveSeed
         // ---- General rows (any crop without its own row) ----
         C(1, "N", null, "Urea (46 % N)", "Foliar", "1-2 % spray: 10-20 g urea per litre of water",
             "Repeat every week until the new leaves are green, then top-dress urea as in your fertilizer advice.",
-            "Task brief (urea 1-2 % spray); TNAU Paddy expert system sprays 1 % urea weekly until the symptoms go", PaddyExpertUrl, 1),
+            "General guidance; the TNAU Paddy expert system sprays 1 % urea weekly until the symptoms go", PaddyExpertUrl, 1),
         C(2, "N", null, "Urea (46 % N)", "Soil", "Top-dress the next urea split as in your Fertilizer advice",
             "Apply on moist soil, not just before heavy rain. Fertilizer advice gives the dose for your crop and soil.",
-            "SPIC ONE Fertilizer advice (TNAU crop norms, farmer portal Task 4)", null, 2),
+            "SPIC ONE Fertilizer advice (TNAU crop norms)", null, 2),
         C(3, "P", null, "DAP (18-46-0)", "Foliar", "2 % spray: 20 g DAP per litre of water (soak overnight, spray the clear liquid)",
             "TNAU sprays 2 % DAP with 1 % potash (KCl) to improve yield.", Cotton, CottonUrl, 1),
         C(4, "P", null, "SSP or DAP", "Soil", "As basal for the next crop, as per your soil test (Fertilizer advice)",
@@ -53,7 +53,7 @@ public static class NutrientCorrectiveSeed
             "In the next top-dressing and the next crop.", PaddyExpert, PaddyExpertUrl, 2),
         C(7, "Mg", null, "Magnesium sulphate", "Foliar", "1 % spray: 10 g per litre of water",
             "TNAU's cotton schedule uses a 2 % magnesium sulphate spray with 1 % urea at boll formation.",
-            "Task brief (MgSO4 1 % spray); TNAU Cotton uses 2 %", CottonUrl, 1),
+            "General guidance; TNAU Cotton sprays 2 % magnesium sulphate with 1 % urea", CottonUrl, 1),
         C(8, "Mg", null, "Magnesium sulphate", "Soil", "20 kg per hectare (about 8 kg per acre) as basal",
             "In magnesium-deficient areas.", Cotton, CottonUrl, 2),
         C(9, "Zn", null, "Zinc sulphate", "Soil", "25 kg per hectare (about 10 kg per acre), mixed with 50 kg dry sand",
@@ -62,7 +62,7 @@ public static class NutrientCorrectiveSeed
             "Repeat every 7-15 days until the symptoms go.", Rice, RiceUrl, 2),
         C(11, "Fe", null, "Ferrous sulphate + citric acid", "Foliar", "0.5 % spray with 0.1 % citric acid: 5 g ferrous sulphate and 1 g citric acid per litre",
             "Citric acid keeps the iron active in the spray. Spray 2-3 times, 10-15 days apart.",
-            "Task brief (FeSO4 0.5 % + citric acid); TNAU Groundnut sprays 1 % FeSO4 at 30, 40 and 50 days", GroundnutUrl, 1),
+            "General guidance; TNAU Groundnut sprays 1 % ferrous sulphate at 30, 40 and 50 days", GroundnutUrl, 1),
         C(12, "Fe", null, "Ferrous sulphate", "Soil", "50 kg per hectare with 12.5 t farmyard manure",
             "When the soil is short of iron.", Rice, RiceUrl, 2),
         C(13, "S", null, "Gypsum", "Soil", "500 kg per hectare (about 200 kg per acre) at the last ploughing",

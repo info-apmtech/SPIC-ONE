@@ -12,7 +12,7 @@ using Spic.Infrastructure.Data;
 namespace Spic.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20261128010057_V40_LeafCheck")]
+    [Migration("20261128013825_V40_LeafCheck")]
     partial class V40_LeafCheck
     {
         /// <inheritdoc />
@@ -10808,7 +10808,7 @@ namespace Spic.Infrastructure.Migrations
                             Nutrient = "N",
                             Product = "Urea (46 % N)",
                             SortOrder = 1,
-                            Source = "Task brief (urea 1-2 % spray); TNAU Paddy expert system sprays 1 % urea weekly until the symptoms go",
+                            Source = "General guidance; the TNAU Paddy expert system sprays 1 % urea weekly until the symptoms go",
                             SourceUrl = "https://agritech.tnau.ac.in/expert_system/paddy/nutrientmanagement.html"
                         },
                         new
@@ -10821,7 +10821,7 @@ namespace Spic.Infrastructure.Migrations
                             Nutrient = "N",
                             Product = "Urea (46 % N)",
                             SortOrder = 2,
-                            Source = "SPIC ONE Fertilizer advice (TNAU crop norms, farmer portal Task 4)"
+                            Source = "SPIC ONE Fertilizer advice (TNAU crop norms)"
                         },
                         new
                         {
@@ -10884,7 +10884,7 @@ namespace Spic.Infrastructure.Migrations
                             Nutrient = "Mg",
                             Product = "Magnesium sulphate",
                             SortOrder = 1,
-                            Source = "Task brief (MgSO4 1 % spray); TNAU Cotton uses 2 %",
+                            Source = "General guidance; TNAU Cotton sprays 2 % magnesium sulphate with 1 % urea",
                             SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_nutrientmgt_cotton.html"
                         },
                         new
@@ -10936,7 +10936,7 @@ namespace Spic.Infrastructure.Migrations
                             Nutrient = "Fe",
                             Product = "Ferrous sulphate + citric acid",
                             SortOrder = 1,
-                            Source = "Task brief (FeSO4 0.5 % + citric acid); TNAU Groundnut sprays 1 % FeSO4 at 30, 40 and 50 days",
+                            Source = "General guidance; TNAU Groundnut sprays 1 % ferrous sulphate at 30, 40 and 50 days",
                             SourceUrl = "https://agritech.tnau.ac.in/govt_schemes_services/aas/groundnut.html"
                         },
                         new
