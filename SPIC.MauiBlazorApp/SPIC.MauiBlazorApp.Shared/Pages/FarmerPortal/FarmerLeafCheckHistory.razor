@@ -7,6 +7,7 @@
 @inject LoginState LoginState
 @inject NavigationManager Nav
 @inject ToastService Toast
+@implements IDisposable
 
 @*
     My past leaf checks (farmer portal Task 6): the farmer's latest 30 checks with a small photo
@@ -114,6 +115,8 @@
     private string? _photoUrl;
     private bool _deleting;
     private long? _loadedFor = -1;
+    // Final fix wave (#45): leaving the page stops the thumbnail loads still queued.
+    private readonly CancellationTokenSource _cts = new();
 
     protected override async Task OnParametersSetAsync()
     {
@@ -149,8 +152,8 @@
             StateHasChanged();
             if (check.HasImage)
             {
-                var bytes = await Api.ImageAsync(id);
-                if (CheckId == id && bytes is not null) _photoUrl = LeafCheckUi.DataUrl("image/jpeg", bytes);
+                var bytes = await Api.ImageAsync(id, ct: _cts.Token);
+                if (!_cts.IsCancellationRequested && CheckId == id && bytes is not null) _photoUrl = LeafCheckUi.DataUrl("image/jpeg", bytes);
             }
             return;
         }
@@ -167,9 +170,10 @@
         // Small photos after the list is on screen, one by one (240 px each).
         foreach (var item in items.Where(i => i.HasImage).ToList())
         {
-            if (CheckId is not null) return;
+            if (CheckId is not null || _cts.IsCancellationRequested) return;
             if (_thumbs.ContainsKey(item.Id)) continue;
-            var bytes = await Api.ImageAsync(item.Id, thumb: true);
+            var bytes = await Api.ImageAsync(item.Id, thumb: true, ct: _cts.Token);
+            if (_cts.IsCancellationRequested) return;
             _thumbs[item.Id] = bytes is null ? null : LeafCheckUi.DataUrl("image/jpeg", bytes);
             StateHasChanged();
         }
@@ -189,5 +193,11 @@
         }
         Toast.Success("Leaf check deleted.");
         Nav.NavigateTo("/farmer/leaf-check/history");
+    }
+
+    public void Dispose()
+    {
+        _cts.Cancel();
+        _cts.Dispose();
     }
 }

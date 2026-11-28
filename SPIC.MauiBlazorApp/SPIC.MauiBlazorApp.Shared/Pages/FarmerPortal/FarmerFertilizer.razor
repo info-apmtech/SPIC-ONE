@@ -380,7 +380,18 @@
     /// <summary>The farmer set a value: a missing one is now theirs; a report value they change is no longer the report's.</summary>
     private void SoilEdited(string code)
     {
-        if (_missing.Remove(code)) return;
+        // Final fix wave (#28): the value is set now, so its field error goes; once nothing is missing the
+        // "not in your report" strip goes too.
+        ClearError(code.ToLowerInvariant());
+        if (_missing.Remove(code))
+        {
+            if (_missing.Count == 0 && _errors?.ContainsKey("missing") == true)
+            {
+                ClearError("missing");
+                _formError = null;
+            }
+            return;
+        }
         if (_reportId is not null && !_reportEdited)
         {
             _reportEdited = true;

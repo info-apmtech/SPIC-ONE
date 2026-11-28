@@ -20,7 +20,7 @@
     </div>
     <div class="fp-zone__body">
         <div class="fp-zone__slider">
-            <output class="fp-zone__bubble" for="@Id" aria-hidden="true">@(Value is null ? "Not set" : $"{Format(Value.Value)} {Unit}".Trim())</output>
+            <output class="fp-zone__bubble" for="@Id" aria-hidden="true">@(Value is null ? "Not set" : $"{ValueNumber(Value.Value)} {Unit}".Trim())</output>
             <input id="@Id" type="range" class="fp-zone__range"
                    min="@Inv(Min)" max="@Inv(Max)" step="@Inv(Step)" value="@Inv(Value ?? Min)"
                    disabled="@Disabled"
@@ -134,7 +134,11 @@
 
     private string ValueText => Value is null
         ? "Not set"
-        : $"{Format(Value.Value)} {Unit}, {LevelText ?? FpUi.LevelLabel(Level)}";
+        : $"{ValueNumber(Value.Value)} {Unit}, {LevelText ?? FpUi.LevelLabel(Level)}";
+
+    /// <summary>The value as the bubble shows it: the chip's zone decides how many decimals are needed (FpUi.ZoneNumber).</summary>
+    private string ValueNumber(double v) =>
+        FpUi.ZoneNumber(v, Digits, x => LevelOf?.Invoke(x) ?? FpUi.ZoneLevel(x, LowBelow, HighAbove));
 
     // Track colours: soft red to the Low threshold, green to the High threshold, violet after.
     private string StyleVars

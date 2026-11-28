@@ -205,6 +205,12 @@ namespace SpicAPI.Controllers
             if (uploadProblem is not null) return Problem400(new() { ["photo"] = uploadProblem });
 
             var (image, decodeError) = await LeafImageProcessor.ProcessAsync(bytes, ct);
+            if (image is null && decodeError == LeafImageProcessor.BusyMessage)
+            {
+                // The server is busy, not the photo's fault (final fix wave, #50): 503 with a retry hint.
+                Response.Headers.RetryAfter = "60";
+                return StatusCode(StatusCodes.Status503ServiceUnavailable, new LeafCheckErrorDto { Message = decodeError });
+            }
             if (image is null) return Problem400(new() { ["photo"] = decodeError ?? "We could not read this photo." });
             var metrics = LeafColorAnalyzer.Analyze(image.MetricsRgb, image.MetricsWidth, image.MetricsHeight);
 

@@ -14,6 +14,8 @@ using Spic.Infrastructure.Data;
 using SpicAPI.Controllers;
 using SpicAPI.Services;
 using SPIC.MauiBlazorApp.Shared.Services;
+using SPIC.MauiBlazorApp.Shared.Components.FarmerPortal;
+using SPIC.Core.DTOs;
 using Microsoft.Extensions.Configuration;
 
 namespace SPIC.RegressionHarness;
@@ -38,6 +40,7 @@ internal static class FarmerPortalHardeningTests
 		Caps();
 		Refresh();
 		Privacy();
+		Polish();
 	}
 
 	private static string RepoFile(params string[] parts)
@@ -439,5 +442,36 @@ internal static class FarmerPortalHardeningTests
 		}
 		Check.That("route: staff are still sent back from /farmer", !RouteAccess.CanOpen(mdo, "/farmer", null));
 		Check.That("route: staff are still sent back from /farmer/profile", !RouteAccess.CanOpen(mdo, "/farmer/profile", null));
+	}
+
+	// ---------------------------------------------------------------- Group D: polish
+
+	private static void Polish()
+	{
+		// #27: an omitted N / P / K / pH is a 400, never a silent 0.
+		var norm = new FertilizerCropNorm { Id = 1, Crop = "Paddy", Variant = "x", IsActive = true };
+		var omitted = System.Text.Json.JsonSerializer.Deserialize<FertilizerRecommendRequest>(
+			"{\"normId\":1,\"soilType\":\"Red Soil\",\"areaAcres\":1}", new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web))!;
+		var errs = FertilizerAdvisor.Validate(omitted, norm);
+		Check.That("#27: omitted n, p, k and ph are each an error", new[] { "n", "p", "k", "ph" }.All(errs.ContainsKey), string.Join(",", errs.Keys));
+		var sent = System.Text.Json.JsonSerializer.Deserialize<FertilizerRecommendRequest>(
+			"{\"normId\":1,\"soilType\":\"Red Soil\",\"areaAcres\":1,\"n\":0,\"p\":0,\"k\":0,\"ph\":7}", new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web))!;
+		Check.That("#27: a real 0 is still accepted", !FertilizerAdvisor.Validate(sent, norm).Keys.Any(k => k is "n" or "p" or "k" or "ph"));
+		var wire = System.Text.Json.JsonSerializer.Serialize(new FertilizerRecommendRequest { N = 120, P = 10, K = 150, Ph = 6.8m }, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web));
+		Check.That("#27: the client still sends n / p / k / ph", wire.Contains("\"n\":120") && wire.Contains("\"ph\":6.8") && !wire.Contains("NInput", StringComparison.OrdinalIgnoreCase), wire);
+
+		// #29: the slider bubble never rounds across a zone edge.
+		FpLevel Zone(double v) => FpUi.ZoneLevel(v, 11, 22);
+		Check.Equal("#29: 10.99 next to 'Low below 11' shows 10.99", "10.99", FpUi.ZoneNumber(10.99, 1, Zone));
+		Check.Equal("#29: 12.34 keeps one decimal", "12.3", FpUi.ZoneNumber(12.34, 1, Zone));
+		Check.Equal("#29: 22.04 (Medium up to 22) shows two decimals", "22.04", FpUi.ZoneNumber(22.04, 1, Zone));
+
+		// #35: the kill switch fails safe on a typo.
+		Check.That("#35: empty / true / 1 / on / yes = on", new[] { null, "", "true", "TRUE", "1", "on", " yes " }.All(FarmerAiBudgetRules.Enabled));
+		Check.That("#35: false / 0 / off / no = off", new[] { "false", "0", "off", "no" }.All(v => !FarmerAiBudgetRules.Enabled(v)));
+		Check.That("#35: a typo is OFF and flagged unreadable", !FarmerAiBudgetRules.Enabled("flase") && FarmerAiBudgetRules.IsUnreadable("flase") && !FarmerAiBudgetRules.IsUnreadable("false"));
+
+		// #50: busy is a server condition (503), not a photo error.
+		Check.That("#50: the busy message is a constant the controller recognises", LeafImageProcessor.BusyMessage.Contains("Many farmers"));
 	}
 }

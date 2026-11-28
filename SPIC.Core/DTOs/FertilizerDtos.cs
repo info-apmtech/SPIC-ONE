@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using SPIC.Core.Entities;
 
 namespace SPIC.Core.DTOs;
@@ -115,11 +116,18 @@ public class FertilizerRecommendRequest
     public decimal AreaAcres { get; set; }
     /// <summary>Per-plant crops: the farmer's own count; null = from the area at the source's spacing.</summary>
     public int? PlantCount { get; set; }
-    /// <summary>Available N, P and K in kg/ha as entered (P on <see cref="PBasis"/>, K on <see cref="KBasis"/>), and soil pH.</summary>
-    public decimal N { get; set; }
-    public decimal P { get; set; }
-    public decimal K { get; set; }
-    public decimal Ph { get; set; }
+    /// <summary>Available N, P and K in kg/ha as entered (P on <see cref="PBasis"/>, K on <see cref="KBasis"/>), and soil pH.
+    /// On the wire they are "n", "p", "k" and "ph" and may not be left out (final fix wave, #27): an omitted value stays
+    /// null in <see cref="NInput"/> etc. and <c>FertilizerAdvisor.Validate</c> answers 400 instead of reading it as 0.
+    /// Code uses N / P / K / Ph (0 when missing, but a request with a missing value never gets past Validate).</summary>
+    [JsonIgnore] public decimal N { get => NInput ?? 0; set => NInput = value; }
+    [JsonIgnore] public decimal P { get => PInput ?? 0; set => PInput = value; }
+    [JsonIgnore] public decimal K { get => KInput ?? 0; set => KInput = value; }
+    [JsonIgnore] public decimal Ph { get => PhInput ?? 0; set => PhInput = value; }
+    [JsonPropertyName("n")] public decimal? NInput { get; set; }
+    [JsonPropertyName("p")] public decimal? PInput { get; set; }
+    [JsonPropertyName("k")] public decimal? KInput { get; set; }
+    [JsonPropertyName("ph")] public decimal? PhInput { get; set; }
     /// <summary>"P" (default) or "P2O5": the basis <see cref="P"/> is entered on. Ratings always use P.</summary>
     public string? PBasis { get; set; }
     /// <summary>"K" (default) or "K2O": the basis <see cref="K"/> is entered on. Ratings always use K.</summary>

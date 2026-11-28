@@ -36,11 +36,25 @@ public static class FarmerAiBudgetRules
     /// <summary>Default AI answers per IST day across all farmers and kinds (FarmerPortal:AssistantGlobalDailyLimit).</summary>
     public const int DefaultGlobalDailyLimit = 2000;
 
-    /// <summary>FarmerPortal:AssistantEnabled: empty / unreadable = on; "false" / "0" / "off" / "no" = off.</summary>
-    public static bool Enabled(string? configured)
+    /// <summary>
+    /// FarmerPortal:AssistantEnabled (final fix wave, #35: strict). Empty = on (the default); "true" / "1" / "on" / "yes" =
+    /// on; "false" / "0" / "off" / "no" = off; anything else (a typo) = OFF, so a mistyped kill switch fails safe
+    /// (<see cref="IsUnreadable"/> lets the API log it once).
+    /// </summary>
+    public static bool Enabled(string? configured) => Parse(configured) ?? false;
+
+    /// <summary>True when the value is set but is none of the words <see cref="Enabled"/> understands.</summary>
+    public static bool IsUnreadable(string? configured) => Parse(configured) is null;
+
+    private static bool? Parse(string? configured)
     {
         var v = (configured ?? "").Trim().ToLowerInvariant();
-        return v is not ("false" or "0" or "off" or "no");
+        return v switch
+        {
+            "" or "true" or "1" or "on" or "yes" => true,
+            "false" or "0" or "off" or "no" => false,
+            _ => null
+        };
     }
 
     /// <summary>FarmerPortal:AssistantGlobalDailyLimit; empty / unreadable / negative = 2000. 0 is allowed: no AI answers.</summary>

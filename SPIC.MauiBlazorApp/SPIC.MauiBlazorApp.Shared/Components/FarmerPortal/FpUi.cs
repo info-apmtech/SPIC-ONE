@@ -147,6 +147,23 @@ public static partial class FpUi
         return FpLevel.Medium;
     }
 
+    /// <summary>
+    /// The slider bubble's number (final fix wave, #29): <paramref name="digits"/> decimals, or up to two more when the
+    /// rounded number would fall in another zone than the value itself (10.99 next to a "Low below 11" chip shows
+    /// "10.99", not "11.0"), so the bubble and the status chip always agree.
+    /// </summary>
+    public static string ZoneNumber(double value, int digits, Func<double, FpLevel> levelOf)
+    {
+        var level = levelOf(value);
+        for (var d = digits; d <= digits + 2; d++)
+        {
+            var rounded = Math.Round(value, d, MidpointRounding.AwayFromZero);
+            if (levelOf(rounded) == level || d == digits + 2)
+                return value.ToString("N" + d, CultureInfo.InvariantCulture);
+        }
+        return value.ToString("N" + digits, CultureInfo.InvariantCulture);
+    }
+
     /// <summary>Where <paramref name="value"/> sits between min and max, 0..1 (clamped; 0 when the range is empty).</summary>
     public static double Fraction(double value, double min, double max)
     {

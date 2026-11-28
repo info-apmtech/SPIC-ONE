@@ -6,7 +6,6 @@ using SPIC.Core.Interfaces;
 using SPIC.MauiBlazorApp.Shared.Components.FarmerPortal;
 using SPIC.MauiBlazorApp.Shared.Services;
 using Spic.Infrastructure.Services.Assistant;
-using SPIC.Core.FarmerPortal;
 using R = SPIC.Core.FarmerPortal.FarmerAssistantRules;
 
 namespace SPIC.RegressionHarness;

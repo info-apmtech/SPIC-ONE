@@ -115,7 +115,6 @@ public static class YieldUi
         "drip" => "bi-droplet-half",
         "canopy" => "bi-binoculars",
         "plan" => "bi-truck",
-        "soil" => "bi-moisture",
         _ => "bi-hand-thumbs-up"
     };
 

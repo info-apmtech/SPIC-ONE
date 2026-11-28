@@ -60,6 +60,9 @@ namespace SpicAPI.Services
         }
 
 
+        /// <summary>The answer when no decode slot frees up in 30 s (the controller turns it into 503, final fix wave #50).</summary>
+        public const string BusyMessage = "Many farmers are checking leaves right now. Please try again in a minute.";
+
         private static readonly SemaphoreSlim Gate = new(LeafCheckRules.MaxConcurrentDecodes, LeafCheckRules.MaxConcurrentDecodes);
 
         /// <summary>
@@ -70,7 +73,7 @@ namespace SpicAPI.Services
         public static async Task<(LeafImage? Image, string? Error)> ProcessAsync(byte[] data, CancellationToken ct)
         {
             if (!await Gate.WaitAsync(TimeSpan.FromSeconds(30), ct))
-                return (null, "Many farmers are checking leaves right now. Please try again in a minute.");
+                return (null, BusyMessage);
             try
             {
                 var image = Process(data, out var error);

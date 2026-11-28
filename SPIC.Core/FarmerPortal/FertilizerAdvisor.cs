@@ -372,10 +372,15 @@ public static class FertilizerAdvisor
             errors["soilType"] = $"This recommendation is for {only} only.";
         if (r.AreaAcres < MinAcres || r.AreaAcres > MaxAcres) errors["areaAcres"] = $"Enter your area in acres ({MinAcres.ToString(CultureInfo.InvariantCulture)} to {MaxAcres.ToString("0", CultureInfo.InvariantCulture)}).";
         if (r.PlantCount is { } pc && (pc < 1 || pc > MaxPlants)) errors["plantCount"] = "Enter the number of plants (1 to 5,00,000).";
-        if (r.N < 0 || r.N > 2000) errors["n"] = "Nitrogen must be between 0 and 2000 kg/ha.";
-        if (r.P < 0 || r.P > 500) errors["p"] = "Phosphorus must be between 0 and 500 kg/ha.";
-        if (r.K < 0 || r.K > 2000) errors["k"] = "Potassium must be between 0 and 2000 kg/ha.";
-        if (r.Ph < 3m || r.Ph > 11m) errors["ph"] = "Soil pH must be between 3 and 11.";
+        // Final fix wave (#27): a value left out of the request is an error, never a silent 0.
+        if (r.NInput is null) errors["n"] = "Please enter the nitrogen (N) value.";
+        else if (r.N < 0 || r.N > 2000) errors["n"] = "Nitrogen must be between 0 and 2000 kg/ha.";
+        if (r.PInput is null) errors["p"] = "Please enter the phosphorus (P) value.";
+        else if (r.P < 0 || r.P > 500) errors["p"] = "Phosphorus must be between 0 and 500 kg/ha.";
+        if (r.KInput is null) errors["k"] = "Please enter the potassium (K) value.";
+        else if (r.K < 0 || r.K > 2000) errors["k"] = "Potassium must be between 0 and 2000 kg/ha.";
+        if (r.PhInput is null) errors["ph"] = "Please enter the soil pH.";
+        else if (r.Ph < 3m || r.Ph > 11m) errors["ph"] = "Soil pH must be between 3 and 11.";
         if (!ValidBasis("P", r.PBasis)) errors["pBasis"] = "Phosphorus unit must be P or P2O5.";
         if (!ValidBasis("K", r.KBasis)) errors["kBasis"] = "Potassium unit must be K or K2O.";
         return errors;

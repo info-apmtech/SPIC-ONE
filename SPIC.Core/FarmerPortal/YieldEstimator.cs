@@ -424,7 +424,8 @@ public static class YieldEstimator
             {
                 Code = "drip",
                 GainT = Round2(gain),
-                Text = $"Drip irrigation usually gives about {Pct(DripFactor - 1)} more ({Amount(gain)}) and saves water."
+                // Final fix wave (#55): the 5 % is this estimator's assumption, so the tip says so.
+                Text = $"Drip irrigation saves water, and we assume it gives about {Pct(DripFactor - 1)} more ({Amount(gain)}). Ask your SPIC team whether it suits your field."
             });
         }
         var top = tips.Where(t => t.GainT >= 0.005).OrderByDescending(t => t.GainT).Take(3).ToList();
@@ -445,11 +446,12 @@ public static class YieldEstimator
 
     public const int MinTips = 2;
 
-    /// <summary>Non-gain tips used to make up 2 tips: check the canopy (when no NDVI value was given), plan the harvest
-    /// around the range, and a soil test.</summary>
+    /// <summary>Non-gain tips used to make up 2 tips: check the canopy (only when crop vigour was left at the default:
+    /// a farmer who picked a look or typed an NDVI already did; final fix wave #61), then plan the harvest around the range.
+    /// The soil-test tip was removed (#62): with "keep" or a gain tip always first, a third filler was never reached.</summary>
     private static IEnumerable<YieldTipDto> ExtraTips(YieldPredictionDto dto)
     {
-        if (dto.NdviSource != SourceValue)
+        if (dto.NdviSource == SourceDefault)
             yield return new YieldTipDto
             {
                 Code = "canopy",
@@ -459,13 +461,6 @@ public static class YieldEstimator
         {
             Code = "plan",
             Text = $"Plan around the range: arrange labour, bags and transport for up to {Tonnes(dto.HighT)} t, and agree sales only for about {Tonnes(dto.LowT)} t until the crop is in."
-        };
-        yield return new YieldTipDto
-        {
-            Code = "soil",
-            Text = "Take a SPIC soil test before next season, so the fertilizer dose fits your own field.",
-            Href = "/farmer/team",
-            LinkText = "Ask my SPIC team"
         };
     }
 

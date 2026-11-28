@@ -187,6 +187,29 @@ namespace SpicAPI.Controllers
             var (scope, near, _) = await _near.NearPostsAsync(area, p => p.LastActivityAt >= since, ct);
             if (scope == FarmerAreaScope.None) return new FarmerTalkedTrendDto();
 
+            var top = await TopTalkedAsync(near, since, ct);
+            // Final fix wave (#22): the district had enough posts but none scored; the state may have some.
+            if (top.Count == 0 && scope == FarmerAreaScope.District)
+            {
+                var (statePosts, stateCount) = await _near.StatePostsAsync(area, p => p.LastActivityAt >= since, ct);
+                if (stateCount > 0)
+                {
+                    top = await TopTalkedAsync(statePosts, since, ct);
+                    scope = FarmerAreaScope.State;
+                }
+            }
+            return top.Count == 0
+                ? new FarmerTalkedTrendDto()
+                : new FarmerTalkedTrendDto
+                {
+                    Scope = scope,
+                    AreaName = FarmerTrendRules.AreaName(scope, area.DistrictName, area.StateName),
+                    Items = top
+                };
+        }
+
+        private async Task<List<FarmerTalkedDto>> TopTalkedAsync(IQueryable<CommunityPost> near, DateTime since, CancellationToken ct)
+        {
             var rows = await near
                 .Select(p => new
                 {
@@ -198,16 +221,8 @@ namespace SpicAPI.Controllers
                 .Take(20)
                 .ToListAsync(ct);
 
-            var top = FarmerTrendRules.TopTalked(rows.Select(p =>
+            return FarmerTrendRules.TopTalked(rows.Select(p =>
                 new TrendPost(p.Id, p.Title, p.Crop, p.Category, p.Status, p.ReplyCount, p.Recent, p.Views, p.LikeCount, p.LastActivityAt)));
-            return top.Count == 0
-                ? new FarmerTalkedTrendDto()
-                : new FarmerTalkedTrendDto
-                {
-                    Scope = scope,
-                    AreaName = FarmerTrendRules.AreaName(scope, area.DistrictName, area.StateName),
-                    Items = top
-                };
         }
 
         /// <summary>Listable SPIC dealers (<see cref="FarmerDealerRules.ListableForFarmers"/>) in the district, else the state.</summary>

@@ -113,6 +113,20 @@ namespace SpicAPI.Services
         }
 
         /// <summary>
+        /// The state-scope posts only (final fix wave, deferred #22): used when the district scope was chosen but
+        /// gave nothing to show (for example "Talked about near you" with no scored discussion).
+        /// </summary>
+        public async Task<(IQueryable<CommunityPost> Posts, int Count)> StatePostsAsync(
+            CommunityArea area, Expression<Func<CommunityPost, bool>>? filter, CancellationToken ct)
+        {
+            if (area.StateId <= 0) return (_db.CommunityPosts.AsNoTracking().Where(p => false), 0);
+            var (hqIds, regionIds) = await DistrictServiceAsync(area.DistrictId, ct);
+            var state = NearPosts(Sources(), area, FarmerAreaScope.State, hqIds, regionIds);
+            if (filter is not null) state = state.Where(filter);
+            return (state, await state.CountAsync(ct));
+        }
+
+        /// <summary>
         /// The headquarters and regions that serve a district: those of its listable SPIC dealers (a dealer
         /// without a region takes its headquarter's region), as in "My SPIC team". Bounded by the dealers
         /// of one district.

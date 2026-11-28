@@ -44,7 +44,19 @@ namespace SpicAPI.Services
             _log = log;
         }
 
-        private bool Enabled => FarmerAiBudgetRules.Enabled(_config["FarmerPortal:AssistantEnabled"]);
+        private static int _unreadableLogged;
+
+        /// <summary>The kill switch; an unreadable value counts as OFF and is logged once per replica (#35).</summary>
+        private bool Enabled
+        {
+            get
+            {
+                var raw = _config["FarmerPortal:AssistantEnabled"];
+                if (FarmerAiBudgetRules.IsUnreadable(raw) && Interlocked.Exchange(ref _unreadableLogged, 1) == 0)
+                    _log.LogWarning("FarmerPortal:AssistantEnabled has an unreadable value; farmer AI answers are OFF until it is true or false");
+                return FarmerAiBudgetRules.Enabled(raw);
+            }
+        }
         private int GlobalLimit => FarmerAiBudgetRules.GlobalLimit(_config["FarmerPortal:AssistantGlobalDailyLimit"]);
         private int? KindLimit(FarmerAiKind kind) => FarmerAiBudgetRules.KindLimit(_config[$"FarmerPortal:AiKindDailyLimit:{kind}"]);
 

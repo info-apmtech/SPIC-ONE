@@ -686,7 +686,7 @@ and behaviour.
 | `Assistant:FarmerEffort` | `output_config.effort` for farmer answers, default `low` (keeps adaptive thinking short inside the 1500 tokens); empty = not sent (for a model without effort support) |
 | `Assistant:Endpoint` | optional Messages API URL (a gateway / proxy, or the local stub); empty = `https://api.anthropic.com/v1/messages`. The key is sent there, so it is used only when it is `https://`, or `http://` to this machine (the stub); anything else is ignored with a warning |
 | `FarmerPortal:AssistantDailyLimit` | questions per farmer per IST day; empty = 30 |
-| `FarmerPortal:AssistantEnabled` | kill switch, default `true`; `false` = Anthropic is never called for farmers, every answer is the labelled basic answer ("Full SPIC AI answers are paused just now ...") |
+| `FarmerPortal:AssistantEnabled` | kill switch, default `true`; `false` = Anthropic is never called for farmers, every answer is the labelled basic answer ("Full SPIC AI answers are paused just now ..."). Strict (final fix wave): only empty / `true` / `1` / `on` / `yes` mean on; a typo means OFF and is logged once |
 | `FarmerPortal:AssistantGlobalDailyLimit` | AI answers per IST day across ALL farmers and AI features, default 2000 (0 = none); above it farmers get the labelled basic answer until IST midnight |
 | `FarmerPortal:AiKindDailyLimit:Chat` / `:LeafCheck` | optional sub-limit per AI feature inside the global one (Task 6 sets its own); empty = none |
 
@@ -712,14 +712,15 @@ is made, even if Anthropic then fails or refuses (input tokens may already be bi
 | System prompt | ~650 tokens | ~650 |
 | Farmer context (crops, place, soil ratings, fertilizer summary) | ~150 | ~250 |
 | Library content (top 4 items; each field max 1500 characters) | ~1,500 (today's items are short) | ~6,000 |
-| History (last 10 messages; Tamil / Hindi script takes ~3-4x the tokens of English) | ~1,500 | ~6,000 |
-| Question (max 1000 characters) | ~100 | ~1,000 |
-| **Input** | **~4,000 tokens = $0.008** | **~14,000 tokens = $0.028** |
+| History (last 10 messages: 5 answers of up to 1,500 tokens each; Tamil / Hindi script takes ~3-4x the tokens of English) | ~1,500 | ~13,000 |
+| Question (max 1000 characters; Tamil script) | ~100 | ~1,500 |
+| **Input** | **~4,000 tokens = $0.008** | **~21,000 tokens = $0.042** |
 | Output (answer + low-effort thinking, capped at 1500) | ~500 = $0.005 | 1,500 = $0.015 |
-| **Per AI answer** | **~$0.013** | **~$0.043** |
+| **Per AI answer** | **~$0.013** | **~$0.06** |
 
-Per farmer (30 a day): ~$0.40 typical, ~$1.30 worst. **Whole portal per day at the default global limit (2000 AI
-answers): ~$26 typical, ~$86 worst (about $2,600 a month worst case).** Lower `FarmerPortal:AssistantGlobalDailyLimit`
+Per farmer (30 a day): ~$0.40 typical, ~$1.80 worst. **Whole portal per day at the default global limit (2000 AI
+answers): ~$26 typical, ~$120 worst (about $3,600 a month worst case).** (Final fix wave, #34: the worst case now counts
+a full-length Tamil history; it was ~$0.043 / ~$86.) Lower `FarmerPortal:AssistantGlobalDailyLimit`
 to spend less; `FarmerPortal:AssistantEnabled=false` stops all farmer AI calls at once (no redeploy, just the setting).
 
 ### Library assistant: what changed under it
@@ -765,7 +766,7 @@ scope filter.
 
 - Prod migration `V37_FarmerAssistant` (owner runs prod).
 - Set `Assistant__AnthropicApiKey` for full answers in the farmer's language; until then farmers get labelled basic
-  English answers from the library. Cost: see "Daily AI budget and kill switch" (~$26 a day typical, ~$86 worst at the
+  English answers from the library. Cost: see "Daily AI budget and kill switch" (~$26 a day typical, ~$120 worst at the
   default 2000 AI answers a day). **Also set a monthly spend limit on the Anthropic workspace / key used here** (Claude
   Console, workspace limits) as a second, independent brake.
 - Prod migration `V39_FarmerAiBudget` (after V38). `FarmerAiUsages` grows by at most the daily limit (2000 rows a day);
@@ -818,8 +819,10 @@ Contracts: `SPIC.Core/DTOs/LeafCheckDtos.cs`. Client: `Services/FarmerLeafCheckA
    added): at most 3 decodes at a time per replica (`ProcessAsync`, a static gate; fix round 1); size refused from the
    header before decoding (JPEG > 60 MP, PNG / WebP > 20 MP, PNG / WebP > 4 MP with < 10 KB per MP); big JPEGs decoded
    at a reduced scale near 2048 px; drawn once, upright from the EXIF orientation and on white, straight into the at most
-   1024 px result (no second full-size copy); re-encoded as JPEG quality 80 (no EXIF / GPS survives), plus a copy of at
-   most 256 px for the metrics.
+   1024 px result; re-encoded as JPEG quality 80 (no EXIF / GPS survives), plus a copy of at most 256 px for the
+   metrics. Memory (final fix wave, #46, corrected): the decoded image is one full-size bitmap besides the upload bytes
+   and the codec's own buffers, so the worst case is about 190 MB for one 20 MP PNG decode and about 0.6 GB per replica
+   with all 3 decode slots busy (the API container has 2 GiB in prod).
 3. Colour metrics (`SPIC.Core/FarmerPortal/LeafColorMetrics.cs`, pure; see below).
 4. The photo is written to `PrivateUploads/FarmerLeaf/{userId}/{guid}.jpg` (fix round 1: a private root next to, not
    inside, the shared `Uploads` tree, because `api/DealerFile/view`, `api/Sas/file`, `api/Community/file` and the guest
@@ -975,8 +978,9 @@ Contracts: `SPIC.Core/DTOs/YieldDtos.cs`. Client: `Services/FarmerYieldApi.cs` (
   (NDVI untouched) is +/- 20 %, Medium confidence (fix round 1).
 - **Factor loss** = expected / f - expected (the yield that factor costs on the whole area); tips are the largest gains
   (full NPK, fuller canopy, rain), drip for non-paddy crops on canal / borewell, or "close to the best" when nothing costs
-  yield. Always 2-3 tips: when fewer than two gain tips exist, plain ones are added in this order: check the canopy (when
-  NDVI was not entered), plan labour / bags / transport around the range, a SPIC soil test. The owner's sketch (Paddy,
+  yield. Always 2-3 tips: when fewer than two gain tips exist, plain ones are added in this order: check the canopy (only
+  when crop vigour was left at the default), plan labour / bags / transport around the range (final fix wave: the
+  never-reached soil-test filler was removed; the drip tip says its 5 % is an assumption). The owner's sketch (Paddy,
   3 acres, canal, 0.72, 850 mm, 90 %) gives 5.70 t/ha, **6.92 t (69 quintals)**: 5.53-8.30 t, medium confidence with the
   NDVI untouched; 6.09-7.75 t, high confidence with 0.72 entered.
 

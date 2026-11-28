@@ -136,7 +136,8 @@ public class YieldPredictionDto
     public decimal AreaAcres { get; set; }
     public double AreaHectares { get; set; }
     public double Ndvi { get; set; }
-    public string NdviSource { get; set; } = "value";
+    /// <summary>"value" / "look" / "default" as the estimator set it (final fix wave #60: the default is "default", like the request).</summary>
+    public string NdviSource { get; set; } = "default";
     public int RainfallMm { get; set; }
     public int NpkPercent { get; set; }
 

@@ -200,6 +200,9 @@ def group_c(base, leaves):
     st, opt, _ = call(base, "GET", "api/Farmer/fertilizer/options", token=tok)
     norm = opt["crops"][0]["variants"][0]
     body = {"normId": norm["normId"], "soilType": norm.get("soilType") or "Red Soil", "areaAcres": 1, "n": 250, "p": 15, "k": 150, "ph": 7.0}
+    omitted = {k: v for k, v in body.items() if k not in ("n", "ph")}
+    st, r, _ = call(base, "POST", "api/Farmer/fertilizer/recommend", omitted, token=tok)
+    check("fertilizer (#27): omitted n and ph -> 400 naming both", st == 400 and {"n", "ph"} <= set((r.get("errors") or {}).keys()), (st, r))
     st, r, _ = call(base, "POST", "api/Farmer/fertilizer/recommend", body, token=tok)
     check("fertilizer: recommend 200", st == 200, (st, str(r)[:200]))
     run_id = r.get("runId") if isinstance(r, dict) else None

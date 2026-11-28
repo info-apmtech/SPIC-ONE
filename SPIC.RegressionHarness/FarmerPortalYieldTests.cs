@@ -230,6 +230,14 @@ internal static class FarmerPortalYieldTests
 		Check.That("breakdown: best inputs have no loss and the keep-it-up tip, then the planning tip", best.BiggestLoss is null && best.Tips.Count == 2
 			&& best.Tips[0].Code == "keep" && best.Tips[1].Code == "plan" && best.Tips[1].Text.Contains($"{Y.Tonnes(best.HighT)} t"), string.Join(",", best.Tips.Select(t => t.Code)));
 		Check.That("breakdown: a measured NDVI gets no canopy-check tip", best.Tips.All(t => t.Code != "canopy"));
+		// Final fix wave: #61 a look pick gets no canopy tip either; #62 no soil tip any more; #55 drip worded as an assumption;
+		// #60 the response's NdviSource defaults to "default".
+		var looked = Run(Req(ndvi: 0.55, npk: 100, rain: 1000, source: Y.SourceLook));
+		Check.That("final: a look pick gets no canopy-check tip", looked.Tips.All(t => t.Code != "canopy"), string.Join(",", looked.Tips.Select(t => t.Code)));
+		Check.That("final: the soil-test filler is gone", CropYieldNormSeed.Rows.All(n => Y.Estimate(n, Req(n.Crop, n.IrrigationClass == Y.Rainfed ? Y.MethodRainfed : Y.MethodCanalBorewell, 2, 0.8, 900, 100)).Tips.All(t => t.Code != "soil")));
+		var canal = Run(Req("Maize", ndvi: 0.8, npk: 100, rain: 700));
+		Check.That("final: the drip tip says the gain is an assumption", canal.Tips.Single(t => t.Code == "drip").Text.Contains("we assume"));
+		Check.Equal("final: YieldPredictionDto.NdviSource defaults to default", Y.SourceDefault, new YieldPredictionDto().NdviSource);
 		var drip = Run(Req("Maize", Y.MethodDrip, ndvi: 0.8, npk: 100, rain: 700));
 		Check.That("breakdown: drip shows as an addition", drip.Factors.Single(f => f.Code == "irrigation").LossT < 0 && drip.BiggestLoss is null);
 		var canalMaize = Run(Req("Maize", ndvi: 0.8, npk: 100, rain: 700));
@@ -368,7 +376,7 @@ internal static class FarmerPortalYieldTests
 		var r = Run(Req());
 		Check.That("ui: formula line", YieldUi.Formula(r).StartsWith("5.8 t/ha x 1.00 vigour x 1.00 rain x 0.98 fertilizer x 1.00 irrigation = "), YieldUi.Formula(r));
 		Check.That("ui: the how-it-works card calls the rain band and curves model assumptions", YieldUi.AssumptionsLine.Contains("rain band") && YieldUi.AssumptionsLine.Contains("assumptions"));
-		Check.That("ui: every tip code has an icon", new[] { "npk", "ndvi", "rain", "drip", "canopy", "plan", "soil" }.All(c => YieldUi.TipIcon(c) != "bi-hand-thumbs-up"));
+		Check.That("ui: every tip code has an icon", new[] { "npk", "ndvi", "rain", "drip", "canopy", "plan" }.All(c => YieldUi.TipIcon(c) != "bi-hand-thumbs-up"));
 		Check.That("ui: disclaimer says it is a model estimate, not a guarantee", YieldUi.Disclaimer.StartsWith("Estimate from crop norms and your inputs, not a guarantee.") && YieldUi.Disclaimer.Contains("model estimate"));
 	}
 }
