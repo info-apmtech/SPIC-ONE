@@ -86,13 +86,7 @@
                 <div class="pub-card__head">
                     <h2 class="pub-h2">Reported Excess Stock</h2>
                     <div class="pub-actions-right">
-                        @if (!_d.Summary.ExcessVerified)
-                        {
-                            <button type="button" class="pub-btn pub-btn--primary" disabled="@_busy" @onclick="VerifyExcessAsync">
-                                <i class="bi bi-check2-circle"></i> Verify Excess Stock
-                            </button>
-                        }
-                        else
+                        @if (_d.Summary.ExcessVerified)
                         {
                             <PubPill Text="Verified &amp; Available" Tone="green" />
                         }
@@ -126,6 +120,10 @@
                     </table>
                 </div>
             </section>
+        }
+        else if (NoReplacementRequired)
+        {
+            <EmptyState Icon="bi-check2-circle" Title="No replacement required" Message="No replacement required for this request. Every product's reported shortage/damage is already fully covered." />
         }
         else
         {
@@ -161,9 +159,9 @@
                         @if (_d.Items.Count > 1)
                         {
                             <select class="pub-input" @onchange="OnProductChangedAsync">
-                                @foreach (var item in _d.Items)
+                                @foreach (var item in EligibleProducts)
                                 {
-                                    <option value="@item.Id" selected="@(_selectedProductItemId == item.Id)">@item.ProductName</option>
+                                    <option value="@item.RequestItemId" selected="@(_selectedProductItemId == item.RequestItemId)">@item.Product</option>
                                 }
                             </select>
                         }
@@ -178,7 +176,15 @@
 
                 @if (FilteredRows.Count == 0)
                 {
-                    <EmptyState Icon="bi-inbox" Title="No available excess stock" Message="No verified excess stock is available for the required products. You can re-dispatch the remaining quantity from the vendor." />
+                    @if (_pendingUnverifiedElsewhere)
+                    {
+                        <EmptyState Icon="bi-hourglass-split" Title="Matching excess pending verification"
+                            Message="Matching excess stock has been reported at another HQ but is pending verification. It will become available for transfer once ADMIN-MD-CS verifies it on the source request." />
+                    }
+                    else
+                    {
+                        <EmptyState Icon="bi-inbox" Title="No available excess stock" Message="No verified excess stock is available for the required products. You can re-dispatch the remaining quantity from the vendor." />
+                    }
                 }
                 else
                 {
@@ -297,7 +303,7 @@
                     </button>
                 }
             }
-            else
+            else if (!NoReplacementRequired)
             {
                 <button type="button" class="pub-btn pub-btn--primary" disabled="@(_busy || Selected.Count == 0)" @onclick="SubmitAsync">
                     Send Transfer Order <i class="bi bi-chevron-double-right"></i>
@@ -331,6 +337,10 @@
     private List<PubOption> _states = new(), _regions = new(), _hqs = new();
     private int? _filterStateId, _filterRegionId, _filterHqId;
     private int? _selectedProductItemId;
+    // Only ever consulted when _rows comes back empty - distinguishes "nothing matches anywhere" from
+    // "a matching excess genuinely exists at another HQ but ADMIN-MD-CS hasn't verified it yet" (see
+    // ExcessSourcesPending/VerifyExcess). Never itself a source of transferable stock.
+    private bool _pendingUnverifiedElsewhere;
     private string _search = "";
     private string? _remarks;
     private bool _busy;
@@ -363,6 +373,13 @@
     private int TotalExcess => _d is null ? 0 : _d.Items.Count > 1 ? ProductRows.Sum(r => r.Excess) : _d.Summary.Excess;
     private int TotalReplacementRequired => _d is null ? 0 : _d.Items.Count > 1 ? ProductRows.Sum(r => r.ReplacementRequired) : _d.Summary.Outstanding;
     private bool IsExcessOnly => TotalShortage == 0 && TotalDamaged == 0 && TotalExcess > 0 && TotalReplacementRequired == 0;
+
+    // Only products that STILL need a replacement - excludes excess-only products (ReplacementRequired
+    // already nets out damage and any active in-flight replacement dispatch, same formula CreateDispatch
+    // validates against server-side) - so the dropdown/transfer-required workflow never lists a product
+    // that has nothing left to receive, even if the request as a whole still shows a gross shortage.
+    private List<ProductReqRow> EligibleProducts => ProductRows.Where(r => r.ReplacementRequired > 0).ToList();
+    private bool NoReplacementRequired => _d is not null && _d.Items.Count > 1 && EligibleProducts.Count == 0;
 
     private List<ExcessRowVm> ExcessRows
     {
@@ -416,12 +433,15 @@
         {
             if (_d.Items.Count > 1)
             {
-                _selectedProductItemId = (ProductRows.FirstOrDefault(r => r.ReplacementRequired > 0) ?? ProductRows.FirstOrDefault())?.RequestItemId;
+                // Only ever auto-select from products that still need a replacement - never an
+                // excess-only product, and never anything at all when none do (NoReplacementRequired).
+                _selectedProductItemId = EligibleProducts.FirstOrDefault()?.RequestItemId;
                 await ReloadRowsForProductAsync();
             }
             else
             {
                 _rows = _d.ExcessSources.Select(r => new RowVm { Row = r }).ToList();
+                await RefreshPendingFlagAsync(_d.ProductId);
             }
             _remarks = $"Shortage resolution for {_d.Hq}";
 
@@ -466,11 +486,20 @@
 
     private async Task ReloadRowsForProductAsync()
     {
+        _pendingUnverifiedElsewhere = false;
         if (_d is null || _selectedProductItemId is not int itemId) { _rows = new(); return; }
         var item = _d.Items.FirstOrDefault(i => i.Id == itemId);
         if (item is null) { _rows = new(); return; }
         var sources = await Api.ExcessSourcesForProductAsync(Id, item.ProductId) ?? new();
         _rows = sources.Select(r => new RowVm { Row = r }).ToList();
+        await RefreshPendingFlagAsync(item.ProductId);
+    }
+
+    private async Task RefreshPendingFlagAsync(int productId)
+    {
+        if (_rows.Count > 0) { _pendingUnverifiedElsewhere = false; return; }
+        var result = await Api.ExcessSourcesPendingAsync(Id, productId);
+        _pendingUnverifiedElsewhere = result?.Pending ?? false;
     }
 
     private async Task OnProductChangedAsync(ChangeEventArgs e)

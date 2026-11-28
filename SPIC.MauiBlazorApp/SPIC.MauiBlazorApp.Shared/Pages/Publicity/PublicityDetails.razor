@@ -206,6 +206,9 @@
                     // Transfer cards below, so it is never mistaken for the transfer's own (separately
                     // tracked, independently Pending-until-acknowledged) status.
                     var anyAck = d.Dispatches.Any(x => x.Ack is { IsDraft: false });
+                    var isPartial = d.Summary.Outstanding > 0 && d.Dispatches.Any(x => x.Kind != PublicityDispatchKind.Original && x.Ack is { IsDraft: false });
+                    var isExcessPending = d.Status == PublicityStatus.ExcessVerificationPending || (d.Summary.Outstanding == 0 && d.Summary.Excess - d.Summary.TransferredOut > 0 && !d.Summary.ExcessVerified);
+                    var isResolved = d.Summary.ExceptionStatus == "Resolved" || d.Status is PublicityStatus.ExceptionResolved or PublicityStatus.Completed;
                     string icon, heading, message, tone;
                     if (d.Status == PublicityStatus.Completed)
                     {
@@ -214,16 +217,28 @@
                             ? "The material has been received and excess stock verified. It is now retained and available for future transfers."
                             : "The material has been successfully received and acknowledged. No shortage or damage was reported.";
                     }
+                    else if (isExcessPending)
+                    {
+                        (icon, heading, tone) = ("bi-shield-check", "Excess Verification Pending", "amber");
+                        message = "Shortage and damaged material fulfilled. Reported excess stock is awaiting verification by ADMIN-MD-CS.";
+                    }
+                    else if (isPartial)
+                    {
+                        (icon, heading, tone) = ("bi-hourglass-split", "Partially Resolved", "amber");
+                        message = $"Some products have been fulfilled via replacement, but {d.Summary.Outstanding} Nos remain outstanding.";
+                    }
                     else if (d.Summary.ExceptionStatus is "Raised" or "Reported" || d.Status == PublicityStatus.ExceptionRaised)
                     {
                         var isExcess = d.Summary.ExceptionType == "Excess";
                         (icon, heading, tone) = ("bi-exclamation-octagon-fill", isExcess ? "Excess Reported" : "Exception Raised", "red");
                         message = isExcess ? "Excess material was reported during acknowledgement." : "Shortage or damage was reported during acknowledgement.";
                     }
-                    else if (d.Summary.ExceptionStatus == "Resolved")
+                    else if (isResolved)
                     {
                         (icon, heading, tone) = ("bi-patch-check-fill", "Exception Resolved", "green");
-                        message = "The reported shortage or damage has been resolved.";
+                        message = d.Summary.ExcessVerified
+                            ? "The reported shortage/damage has been resolved and excess stock verified."
+                            : "The reported shortage or damage has been resolved.";
                     }
                     else if (anyAck)
                     {
@@ -246,6 +261,14 @@
                         @if (_ackTarget is not null)
                         {
                             <button type="button" class="pub-btn pub-btn--primary" @onclick="() => _tab = 2">Create Acknowledgement <i class="bi bi-arrow-right"></i></button>
+                        }
+                        else if (isExcessPending && d.CanResolve)
+                        {
+                            <a class="pub-btn pub-btn--primary" href="@($"/PublicityReview/{d.Id}/resolve-exception")">Verify Excess Stock <i class="bi bi-arrow-right"></i></a>
+                        }
+                        else if (isPartial && d.CanResolve)
+                        {
+                            <a class="pub-btn pub-btn--primary" href="@($"/PublicityReview/{d.Id}/resolve-exception")">Resolve Outstanding Items <i class="bi bi-arrow-right"></i></a>
                         }
                         else if (anyAck)
                         {
@@ -281,7 +304,7 @@
                             }
                             else
                             {
-                                <PubInfo Label="Product / Material" Value="@($"{d.Product} {d.Material}")" />
+                                <PubInfo Label="Product / Material" Value="@(!string.IsNullOrWhiteSpace(x.Product) ? x.Product : (x.Items.Count == 1 ? x.Items[0].ProductName : d.Product))" Sub="@(x.Material ?? d.Material)" />
                                 <PubInfo Label="Dispatch Quantity" Value="@($"{x.Quantity} Nos")" />
                             }
                             <PubInfo Label="Expected Delivery" Value="@PubText.Date(x.ExpectedDeliveryDate ?? x.DeliveredAt)" />
@@ -516,7 +539,7 @@
                                 }
                                 else
                                 {
-                                    <PubInfo Label="Product / Material" Tone="green" Value="@d.Product" Sub="@d.Material" />
+                                    <PubInfo Label="Product / Material" Tone="green" Value="@(!string.IsNullOrWhiteSpace(x.Product) ? x.Product : (x.Items.Count == 1 ? x.Items[0].ProductName : d.Product))" Sub="@(x.Material ?? d.Material)" />
                                 }
                                 <PubInfo Label="Dispatch Quantity" Value="@($"{x.Quantity} Nos")" Sub="@(x.Kind == PublicityDispatchKind.Original ? null : "(Replacement Quantity)")" />
                                 <PubInfo Label="Responsible Person" Value="@(x.ResponsibleName ?? x.CreatedByName)" Sub="@x.ResponsibleRole" />
@@ -625,27 +648,36 @@
                     </section>
                 }
 
-                @if (d.Summary.ExcessVerified)
+                @if (IsExcessPendingTab)
                 {
                     <section class="pub-card pub-card--flush">
-                        <div class="pub-card__band pub-band--green">
-                            <div><h2 class="pub-h2 pub-text-green">Excess Stock Verified</h2><span class="pub-muted">Reported excess stock verified by @(d.Summary.ExcessVerifiedByName ?? "ADMIN-MD-CS") on @PubText.DateTime(d.Summary.ExcessVerifiedAt). Material retained at @d.Hq and available for future transfers.</span></div>
-                            <PubPill Text="Verified &amp; Available" Tone="green" />
+                        <div class="pub-card__band pub-band--amber">
+                            <div class="pub-collapse__title">
+                                <h2 class="pub-h2 pub-text-amber">Excess Verification Pending</h2>
+                                <span class="pub-muted">Shortage and damaged material fulfilled. Reported excess stock is awaiting verification by ADMIN-MD-CS.</span>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <PubPill Text="Verification Required" Tone="amber" />
+                                @if (d.CanResolve)
+                                {
+                                    <a class="pub-btn pub-btn--primary" href="@($"/PublicityReview/{d.Id}/resolve-exception")">Verify Excess Stock <i class="bi bi-arrow-right"></i></a>
+                                }
+                            </div>
                         </div>
                         <div class="pub-grid pub-grid--3">
                             <PubInfo Label="Exception Type">
-                                <PubPill Text="Excess" Tone="green" />
+                                <PubPill Text="Excess" Tone="amber" />
                             </PubInfo>
-                            <PubInfo Label="Verified By" Tone="green" Value="@(d.Summary.ExcessVerifiedByName ?? "ADMIN-MD-CS")" />
-                            <PubInfo Label="Verified On" Value="@PubText.DateTime(d.Summary.ExcessVerifiedAt)" />
-                            <div class="pub-grid__wide"><span class="pub-info__label">Holding HQ</span><b class="pub-info__value pub-info__value--sm">@d.Hq (@d.Region, @d.State)</b></div>
+                            <PubInfo Label="Raised By" Tone="green" Value="@d.ExceptionRaisedBy" />
+                            <PubInfo Label="Raised On" Value="@PubText.DateTime(d.ExceptionRaisedAt)" />
+                            <div class="pub-grid__wide"><span class="pub-info__label">Remarks</span><b class="pub-info__value pub-info__value--sm">@(d.ExceptionRemarks ?? "-")</b></div>
                             @if (d.Items.Count > 1)
                             {
                                 var refs = ExceptionProductRefs().ToList();
                                 if (refs.Count > 0)
                                 {
                                     <div class="pub-grid__wide">
-                                        <span class="pub-info__label">Verified Products</span>
+                                        <span class="pub-info__label">Product Breakdown</span>
                                         @foreach (var r in refs)
                                         {
                                             <div class="pub-muted"><b>@r.Product</b> &ndash; @r.Label: @r.Qty Nos</div>
@@ -656,16 +688,115 @@
                         </div>
                     </section>
                 }
+                else if (IsPartialTab)
+                {
+                    <section class="pub-card pub-card--flush">
+                        <div class="pub-card__band pub-band--amber">
+                            <div class="pub-collapse__title">
+                                <h2 class="pub-h2 pub-text-amber">Exception Handling (Partially Resolved)</h2>
+                                <span class="pub-muted">Some products have been fulfilled via replacement, but @d.Summary.Outstanding Nos remain outstanding.</span>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <PubPill Text="Partially Resolved" Tone="amber" />
+                                @if (d.CanResolve && d.Summary.Outstanding > 0)
+                                {
+                                    <a class="pub-btn pub-btn--primary" href="@($"/PublicityReview/{d.Id}/resolve-exception")">Resolve Outstanding Items <i class="bi bi-arrow-right"></i></a>
+                                }
+                            </div>
+                        </div>
+                        <div class="pub-grid pub-grid--3">
+                            <PubInfo Label="Exception Type">
+                                @foreach (var t in d.Summary.ExceptionType.Split(" + ")) { <PubPill Text="@t" Tone="amber" /> }
+                            </PubInfo>
+                            <PubInfo Label="Raised By" Tone="green" Value="@d.ExceptionRaisedBy" />
+                            <PubInfo Label="Raised On" Value="@PubText.DateTime(d.ExceptionRaisedAt)" />
+                            <div class="pub-grid__wide"><span class="pub-info__label">Remarks</span><b class="pub-info__value pub-info__value--sm">@(d.ExceptionRemarks ?? "-")</b></div>
+                            @if (d.Items.Count > 1)
+                            {
+                                var refs = ExceptionProductRefs().ToList();
+                                if (refs.Count > 0)
+                                {
+                                    <div class="pub-grid__wide">
+                                        <span class="pub-info__label">Product Breakdown</span>
+                                        @foreach (var r in refs)
+                                        {
+                                            <div class="pub-muted"><b>@r.Product</b> &ndash; @r.Label: @r.Qty Nos</div>
+                                        }
+                                    </div>
+                                }
+                            }
+                        </div>
+                    </section>
+                }
+                else if (IsResolvedTab)
+                {
+                    <section class="pub-card pub-card--flush">
+                        <div class="pub-card__band pub-band--green">
+                            <div class="pub-collapse__title">
+                                <h2 class="pub-h2 pub-text-green">Exception Resolved</h2>
+                                <span class="pub-muted">All reported shortages and damages have been successfully fulfilled. Exception is resolved.</span>
+                            </div>
+                            <PubPill Text="Resolved" Tone="green" />
+                        </div>
+                        <div class="pub-grid pub-grid--3">
+                            <PubInfo Label="Exception Status">
+                                <PubPill Text="Resolved" Tone="green" />
+                            </PubInfo>
+                            <PubInfo Label="Raised By" Tone="pink" Value="@d.ExceptionRaisedBy" Sub="@PubText.DateTime(d.ExceptionRaisedAt)" />
+                            <PubInfo Label="Resolved On" Tone="green" Value="@PubText.DateTime(d.ExceptionResolvedAt ?? d.Summary.ExcessVerifiedAt ?? d.UpdatedAt ?? d.CreatedAt)" Sub="@(d.ExceptionResolvedBy ?? "ADMIN-MD CS")" />
+                            <div class="pub-grid__wide"><span class="pub-info__label">Resolution History</span><b class="pub-info__value pub-info__value--sm">@(d.ExceptionResolvedRemarks ?? d.ExceptionRemarks ?? "Resolved with replacement / stock transfer.")</b></div>
+                            @if (d.Items.Count > 1)
+                            {
+                                var refs = ExceptionProductRefs().ToList();
+                                if (refs.Count > 0)
+                                {
+                                    <div class="pub-grid__wide">
+                                        <span class="pub-info__label">Fulfilled Products</span>
+                                        @foreach (var r in refs)
+                                        {
+                                            <div class="pub-muted"><b>@r.Product</b> &ndash; @r.Label: @r.Qty Nos (Fulfilled)</div>
+                                        }
+                                    </div>
+                                }
+                            }
+                        </div>
+                    </section>
+                    @if (d.Summary.ExcessVerified)
+                    {
+                        <section class="pub-card pub-card--flush mt-3">
+                            <div class="pub-card__band pub-band--green">
+                                <div><h2 class="pub-h2 pub-text-green">Excess Stock Verified</h2><span class="pub-muted">Reported excess stock verified by @(d.Summary.ExcessVerifiedByName ?? "ADMIN-MD-CS") on @PubText.DateTime(d.Summary.ExcessVerifiedAt). Material retained at @d.Hq and available for future transfers.</span></div>
+                                <PubPill Text="Verified &amp; Available" Tone="green" />
+                            </div>
+                            <div class="pub-grid pub-grid--3">
+                                <PubInfo Label="Exception Type">
+                                    <PubPill Text="Excess" Tone="green" />
+                                </PubInfo>
+                                <PubInfo Label="Verified By" Tone="green" Value="@(d.Summary.ExcessVerifiedByName ?? "ADMIN-MD-CS")" />
+                                <PubInfo Label="Verified On" Value="@PubText.DateTime(d.Summary.ExcessVerifiedAt)" />
+                                <div class="pub-grid__wide"><span class="pub-info__label">Holding HQ</span><b class="pub-info__value pub-info__value--sm">@d.Hq (@d.Region, @d.State)</b></div>
+                            </div>
+                        </section>
+                    }
+                }
                 else if (d.Summary.ExceptionStatus is "Raised" or "Reported" || d.Status == PublicityStatus.ExceptionRaised)
                 {
                     <section class="pub-card pub-card--flush">
                         <div class="pub-card__band pub-band--red">
-                            <div><h2 class="pub-h2 pub-text-red">@(d.Summary.ExceptionType == "Excess" ? "Excess Reported" : "Exception Raised")</h2><span class="pub-muted">@d.Summary.ExceptionType reported in the acknowledgement.</span></div>
+                            <div class="pub-collapse__title">
+                                <h2 class="pub-h2 pub-text-red">@(d.Summary.ExceptionType == "Excess" ? "Excess Reported" : "Exception Raised")</h2>
+                                <span class="pub-muted">@d.Summary.ExceptionType reported in the acknowledgement.</span>
+                            </div>
                             @* A shortage/damage requirement (Outstanding) and a leftover excess-stock
                                transfer-out obligation are both resolved through this same page - once
                                the shortage side is fully replaced, the request can already read as
                                effectively complete (ExceptionResolved) while excess still needs acting on. *@
-                            @if (d.CanResolve && (d.Summary.Outstanding > 0 || (d.Summary.Excess - d.Summary.TransferredOut > 0 && !d.Summary.ExcessVerified))) { <a class="pub-btn pub-btn--primary" href="@($"/PublicityReview/{d.Id}/resolve-exception")">@(d.Summary.Outstanding == 0 && d.Summary.Excess > 0 ? "Verify Excess Stock" : "Resolve Exception") <i class="bi bi-arrow-right"></i></a> }
+                            @if (d.CanResolve && (d.Summary.Outstanding > 0 || (d.Summary.Excess - d.Summary.TransferredOut > 0 && !d.Summary.ExcessVerified)))
+                            {
+                                <a class="pub-btn pub-btn--primary" href="@($"/PublicityReview/{d.Id}/resolve-exception")">
+                                    @(d.Summary.Outstanding == 0 && d.Summary.Excess > 0 ? "Verify Excess Stock" : "Resolve Exception") <i class="bi bi-arrow-right"></i>
+                                </a>
+                            }
                         </div>
                         <div class="pub-grid pub-grid--3">
                             <PubInfo Label="Exception Type">
@@ -756,6 +887,10 @@
     // more than one PubDispatchDto.Items row (see PublicityController.DispatchDtoAsync), so this is
     // false for every one of them and they keep the original single-field form unchanged.
     private bool IsMultiItemAck => _ackTarget is { Items.Count: > 1 };
+    private bool IsExcessPendingTab => _d is not null && (_d.Status == PublicityStatus.ExcessVerificationPending || (_d.Summary.Outstanding == 0 && _d.Summary.Excess - _d.Summary.TransferredOut > 0 && !_d.Summary.ExcessVerified));
+    private bool IsPartialTab => _d is not null && _d.Summary.Outstanding > 0 && _d.Dispatches.Any(x => x.Kind != PublicityDispatchKind.Original && x.Ack is { IsDraft: false });
+    private bool IsResolvedTab => _d is not null && (_d.Summary.ExceptionStatus == "Resolved" || _d.Status is PublicityStatus.ExceptionResolved or PublicityStatus.Completed)
+        && (_d.ExceptionRaisedAt != null || _d.Summary.ExcessVerified || _d.Dispatches.Any(x => x.Ack?.ExceptionType != "None"));
     private int AckShortage => _ackTarget is null ? 0 : IsMultiItemAck ? _ackTarget.Items.Sum(i => i.ShortageQty) : Math.Max(0, _ackTarget.Quantity - _ack.ReceivedQty);
     private int AckExcess => _ackTarget is null ? 0 : IsMultiItemAck ? _ackTarget.Items.Sum(i => i.ExcessQty) : Math.Max(0, _ack.ReceivedQty - _ackTarget.Quantity);
     private int AckDamaged => IsMultiItemAck ? _ackTarget!.Items.Sum(i => i.DamagedQty) : (_ack.IsDamaged ? _ack.DamagedQty : 0);
@@ -956,6 +1091,20 @@
         {
             if (_ack.ReceivedQty < 0) { Toast.Error("Enter the received quantity."); return; }
             if (_ack.IsDamaged && (_ack.DamagedQty <= 0 || _ack.DamagedQty > _ack.ReceivedQty)) { Toast.Error("Damaged quantity must be between 1 and the received quantity."); return; }
+            if (_ackTarget.Items.Count == 1)
+            {
+                _ack.Items = new List<PubAckItemUpsertDto>
+                {
+                    new PubAckItemUpsertDto
+                    {
+                        RequestItemId = _ackTarget.Items[0].RequestItemId ?? 0,
+                        ReceivedQty = _ack.ReceivedQty,
+                        IsDamaged = _ack.IsDamaged,
+                        DamagedQty = _ack.IsDamaged ? _ack.DamagedQty : 0,
+                        Remarks = _ack.Remarks
+                    }
+                };
+            }
         }
         if (submit && !await Toast.ConfirmAsync("Submit acknowledgement", AckType.Length > 0
                 ? $"{AckType} will be raised as an exception to the ADMIN - MD CS. Submit?" : "Confirm that the material is received in good condition.", "Submit")) return;

@@ -107,6 +107,74 @@
                                 <PubInfo Label="Dispatch Status"><PubPill Text="@_detail.Status" Tone="blue" /></PubInfo>
                             }
                         </div>
+                        @if (_detail.Items is { Count: > 0 } items)
+                        {
+                            var affected = items.Where(i => i.ShortageQty > 0 || i.ExcessQty > 0 || i.DamagedQty > 0).ToList();
+                            @if (affected.Count > 0)
+                            {
+                                <div style="padding: 1rem 1.25rem 1.25rem; border-top: 1px solid #e2e8f0;">
+                                    <h4 class="pub-h3" style="margin-bottom: 0.75rem; color: #1e293b; font-size: 0.95rem; font-weight: 600;">Affected Products (@affected.Count)</h4>
+                                    <div class="pub-table-wrap">
+                                        <table class="pub-table">
+                                            <thead>
+                                                <tr>
+                                                    <th style="text-align: left;">Product Name</th>
+                                                    <th style="text-align: right;">Dispatched Quantity</th>
+                                                    <th style="text-align: right;">Received Quantity</th>
+                                                    <th style="text-align: right;">Shortage Quantity</th>
+                                                    <th style="text-align: right;">Excess Quantity</th>
+                                                    <th style="text-align: right;">Damaged Quantity</th>
+                                                    <th style="text-align: center;">Exception Type</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                @foreach (var it in affected)
+                                                {
+                                                    <tr>
+                                                        <td data-label="Product Name" style="text-align: left;"><b>@it.ProductName</b></td>
+                                                        <td data-label="Dispatched Quantity" style="text-align: right;">@($"{it.DispatchedQty} Nos")</td>
+                                                        <td data-label="Received Quantity" style="text-align: right;">@($"{it.ReceivedQty} Nos")</td>
+                                                        <td data-label="Shortage Quantity" style="text-align: right;">
+                                                            @if (it.ShortageQty > 0)
+                                                            {
+                                                                <span class="pub-text-red" style="font-weight: 600;">@($"{it.ShortageQty} Nos")</span>
+                                                            }
+                                                            else
+                                                            {
+                                                                <span class="pub-muted">-</span>
+                                                            }
+                                                        </td>
+                                                        <td data-label="Excess Quantity" style="text-align: right;">
+                                                            @if (it.ExcessQty > 0)
+                                                            {
+                                                                <span class="pub-text-green" style="font-weight: 600;">@($"{it.ExcessQty} Nos")</span>
+                                                            }
+                                                            else
+                                                            {
+                                                                <span class="pub-muted">-</span>
+                                                            }
+                                                        </td>
+                                                        <td data-label="Damaged Quantity" style="text-align: right;">
+                                                            @if (it.DamagedQty > 0)
+                                                            {
+                                                                <span class="pub-text-red" style="font-weight: 600;">@($"{it.DamagedQty} Nos")</span>
+                                                            }
+                                                            else
+                                                            {
+                                                                <span class="pub-muted">-</span>
+                                                            }
+                                                        </td>
+                                                        <td data-label="Exception Type" style="text-align: center;">
+                                                            <PubPill Text="@it.ExceptionType" Tone="@(it.ExceptionType.Contains("Shortage") || it.ExceptionType.Contains("Damage") ? "pink" : "green")" />
+                                                        </td>
+                                                    </tr>
+                                                }
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            }
+                        }
                     </section>
                 }
                 else if (_detail.IsTransfer)
@@ -114,40 +182,166 @@
                     <section class="pub-card pub-card--flush">
                         <div class="pub-card__band pub-band--green"><h2 class="pub-h2">Stock Transfer Order Details</h2></div>
                         <div class="pub-grid pub-grid--3">
-                            @if (!string.IsNullOrWhiteSpace(_detail.DestinationIndentNo))
+                            @if (!string.IsNullOrWhiteSpace(_detail.DispatchNo))
                             {
-                                <PubInfo Label="Destination Request ID" Hint="Shortage" Tone="pink" Value="@_detail.DestinationIndentNo" />
+                                <PubInfo Label="Transfer ID" Tone="violet" Value="@_detail.DispatchNo" />
                             }
+                            <PubInfo Label="Product / Material" Value="@($"{_detail.Product} {_detail.Material}".Trim())" />
+                            <PubInfo Label="Transfer Quantity" Value="@($"{_detail.TransferQty} Nos")" />
                             @if (!string.IsNullOrWhiteSpace(_detail.SourceHq))
                             {
-                                <PubInfo Label="From" Hint="Source HQ" Value="@_detail.SourceHq" />
+                                <PubInfo Label="Source HQ (From)" Value="@_detail.SourceHq" />
+                            }
+                            @if (!string.IsNullOrWhiteSpace(_detail.DestinationHq))
+                            {
+                                <PubInfo Label="Destination HQ (To)" Value="@_detail.DestinationHq" />
                             }
                             @if (!string.IsNullOrWhiteSpace(_detail.SourceIndentNo))
                             {
                                 <PubInfo Label="Source Request ID" Hint="Excess" Tone="pink" Value="@_detail.SourceIndentNo" />
                             }
-                            @if (!string.IsNullOrWhiteSpace(_detail.DestinationHq))
+                            @if (!string.IsNullOrWhiteSpace(_detail.DestinationIndentNo))
                             {
-                                <PubInfo Label="To" Hint="Destination HQ" Value="@_detail.DestinationHq" />
+                                <PubInfo Label="Destination Request ID" Hint="Shortage" Tone="pink" Value="@_detail.DestinationIndentNo" />
                             }
-                            <PubInfo Label="Product / Material" Value="@($"{_detail.Product} {_detail.Material}".Trim())" />
-                            <PubInfo Label="Transfer Quantity" Value="@($"{_detail.TransferQty} Nos")" />
-                            @if (!string.IsNullOrWhiteSpace(_detail.Status))
-                            {
-                                <PubInfo Label="Current Transfer Status"><PubPill Text="@_detail.Status" Tone="blue" /></PubInfo>
-                            }
+                            <PubInfo Label="Current Transfer Status"><PubPill Text="@(!string.IsNullOrWhiteSpace(_detail.Status) ? _detail.Status : "Transfer Order Received")" Tone="blue" /></PubInfo>
                         </div>
+                        @if (_detail.Items is { Count: > 1 })
+                        {
+                            <div class="pub-table-wrap mt-3" style="padding: 0 1rem 1rem;">
+                                <table class="pub-table">
+                                    <thead>
+                                        <tr>
+                                            <th style="width:60px">S.No</th>
+                                            <th>Product</th>
+                                            <th style="width:140px; text-align:right">Transfer Qty</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @for (var i = 0; i < _detail.Items.Count; i++)
+                                        {
+                                            var item = _detail.Items[i];
+                                            <tr>
+                                                <td>@(i + 1)</td>
+                                                <td><b>@item.ProductName</b></td>
+                                                <td style="text-align:right"><PubPill Text="@($"{item.DispatchedQty} Nos")" Tone="pink" /></td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        }
                     </section>
-                    @if (_detail.ReportedExcess > 0 || !string.IsNullOrWhiteSpace(_detail.SourceIndentNo))
+                    @if (Api.IsDispatcher)
+                    {
+                        @if (_detail.ReportedExcess > 0 || !string.IsNullOrWhiteSpace(_detail.SourceIndentNo) || _detail.SourceExcessItems.Count > 0)
+                        {
+                            <section class="pub-card pub-card--amber">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 8px;">
+                                    <h2 class="pub-h2 pub-text-amber" style="margin: 0;">Source Excess Reference</h2>
+                                    @if (!string.IsNullOrWhiteSpace(_detail.SourceIndentNo))
+                                    {
+                                        <span class="pub-muted">Linked Source Request: <b>@_detail.SourceIndentNo</b></span>
+                                    }
+                                </div>
+                                <div class="pub-grid pub-grid--4" style="margin-bottom: 1rem;">
+                                    <PubInfo Label="Total Reported Excess" Value="@($"{_detail.ReportedExcess} Nos")" />
+                                    <PubInfo Label="Total Verified Excess" Value="@($"{_detail.VerifiedExcess} Nos")" />
+                                    <PubInfo Label="Already Transferred / Reserved" Value="@($"{_detail.AlreadyTransferred} Nos")" />
+                                    <PubInfo Label="Current Transfer" Tone="green" Value="@($"{_detail.TransferQty} Nos")" Sub="@_detail.Product" />
+                                </div>
+
+                                @if (_detail.SourceExcessItems is { Count: > 0 })
+                                {
+                                    <div class="pub-table-wrap">
+                                        <table class="pub-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>Product Name</th>
+                                                    <th style="text-align:right">Reported Excess</th>
+                                                    <th style="text-align:right">Verified Excess</th>
+                                                    <th style="text-align:right">Already Transferred / Reserved</th>
+                                                    <th style="text-align:right">Remaining Available</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                @foreach (var p in _detail.SourceExcessItems)
+                                                {
+                                                    <tr style="@(p.IsCurrentTransfer ? "background-color: #f0fdf4;" : "")">
+                                                        <td>
+                                                            <div style="display: flex; align-items: center; gap: 8px;">
+                                                                <b class="@(p.IsCurrentTransfer ? "pub-text-green" : "")">@p.ProductName</b>
+                                                                @if (p.IsCurrentTransfer)
+                                                                {
+                                                                    <PubPill Text="@($"Current Transfer: {p.CurrentTransferQty} Nos")" Tone="green" />
+                                                                }
+                                                            </div>
+                                                        </td>
+                                                        <td style="text-align:right">@($"{p.ReportedExcess} Nos")</td>
+                                                        <td style="text-align:right">@($"{p.VerifiedExcess} Nos")</td>
+                                                        <td style="text-align:right">@($"{p.AlreadyTransferred} Nos")</td>
+                                                        <td style="text-align:right">
+                                                            <b class="pub-text-green">@($"{p.RemainingAvailable} Nos")</b>
+                                                        </td>
+                                                    </tr>
+                                                }
+                                            </tbody>
+                                            <tfoot>
+                                                <tr style="border-top: 2px solid #cbd5e1; font-weight: 700; background-color: #f8fafc;">
+                                                    <td><b>Total Reported Excess</b></td>
+                                                    <td style="text-align:right"><b>@($"{_detail.SourceExcessItems.Sum(x => x.ReportedExcess)} Nos")</b></td>
+                                                    <td style="text-align:right"><b>@($"{_detail.SourceExcessItems.Sum(x => x.VerifiedExcess)} Nos")</b></td>
+                                                    <td style="text-align:right"><b>@($"{_detail.SourceExcessItems.Sum(x => x.AlreadyTransferred)} Nos")</b></td>
+                                                    <td style="text-align:right"><b class="pub-text-green">@($"{_detail.SourceExcessItems.Sum(x => x.RemainingAvailable)} Nos")</b></td>
+                                                </tr>
+                                            </tfoot>
+                                        </table>
+                                    </div>
+                                }
+                            </section>
+                        }
+                    }
+                    else
                     {
                         <section class="pub-card pub-card--amber">
-                            <h2 class="pub-h2 pub-text-amber">Source Excess Reference</h2>
-                            <div class="pub-grid pub-grid--4">
-                                <PubInfo Label="Reported Excess" Value="@($"{_detail.ReportedExcess} Nos")" />
-                                <PubInfo Label="Already Transferred" Value="@($"{_detail.AlreadyTransferred} Nos")" />
-                                <PubInfo Label="Remaining Excess" Value="@($"{_detail.RemainingExcess} Nos")" />
-                                <PubInfo Label="Requested Now" Value="@($"{_detail.TransferQty} Nos")" />
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 8px;">
+                                <h2 class="pub-h2 pub-text-amber" style="margin: 0;">Transfer Stock Reference</h2>
+                                @if (_detail.IsVerified || _detail.VerifiedExcess > 0)
+                                {
+                                    <PubPill Text="Verified Stock" Tone="green" />
+                                }
                             </div>
+                            <div class="pub-grid pub-grid--4">
+                                <PubInfo Icon="bi-box-seam" Tone="pink" Label="Product / Material" Value="@($"{_detail.Product} {_detail.Material}".Trim())" />
+                                <PubInfo Icon="bi-123" Tone="green" Label="Transfer Quantity" Value="@($"{_detail.TransferQty} Nos")" />
+                                <PubInfo Icon="bi-shop" Tone="amber" Label="Source HQ" Value="@_detail.SourceHq" Sub="@(!string.IsNullOrWhiteSpace(_detail.SourceIndentNo) ? $"Request: {_detail.SourceIndentNo}" : null)" />
+                                <PubInfo Icon="bi-geo-alt" Tone="violet" Label="Destination HQ" Value="@_detail.DestinationHq" Sub="@(!string.IsNullOrWhiteSpace(_detail.DestinationIndentNo) ? $"Request: {_detail.DestinationIndentNo}" : null)" />
+                            </div>
+                            @if (_detail.Items is { Count: > 1 })
+                            {
+                                <div class="pub-table-wrap mt-3">
+                                    <table class="pub-table">
+                                        <thead>
+                                            <tr>
+                                                <th style="width:60px">S.No</th>
+                                                <th>Product</th>
+                                                <th style="width:140px; text-align:right">Transfer Qty</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @for (var i = 0; i < _detail.Items.Count; i++)
+                                            {
+                                                var item = _detail.Items[i];
+                                                <tr>
+                                                    <td>@(i + 1)</td>
+                                                    <td><b>@item.ProductName</b></td>
+                                                    <td style="text-align:right"><PubPill Text="@($"{item.DispatchedQty} Nos")" Tone="pink" /></td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                    </table>
+                                </div>
+                            }
                         </section>
                     }
                     @if (!string.IsNullOrWhiteSpace(_detail.Reason))
@@ -203,19 +397,27 @@
             @if (_detail is not null)
             {
                 <button type="button" class="pub-btn pub-btn--grey" @onclick="() => _open = false"><i class="bi bi-chevron-double-left"></i> Back to List</button>
-                <a class="pub-btn pub-btn--grey" href="@($"{Api.Home}/{_detail.Notice.RequestId}?tab=tracking")">View Details</a>
-                @if (_detail.CanDispatch)
-                {
-                    <a class="pub-btn pub-btn--primary" href="@($"/PublicityReview/{_detail.Notice.RequestId}/dispatch")">Create Dispatch <i class="bi bi-chevron-double-right"></i></a>
-                }
-                @if (_detail.IsTransfer && !Api.IsDispatcher && _detail.Notice.DispatchId is > 0)
-                {
-                    <a class="pub-btn pub-btn--primary" href="@($"/PublicityRequest/{_detail.Notice.RequestId}/transfer/{_detail.Notice.DispatchId}")">View Transfer <i class="bi bi-chevron-double-right"></i></a>
-                }
                 @if (_detail.Notice.Type == PublicityNotificationType.Exception)
                 {
-                    <a class="pub-btn pub-btn--line" href="@($"{Api.Home}/{_detail.Notice.RequestId}?tab=acknowledgement")">View Acknowledgement</a>
                     <a class="pub-btn pub-btn--primary" href="@($"{Api.Home}/{_detail.Notice.RequestId}?tab=exception")">View Exception <i class="bi bi-chevron-double-right"></i></a>
+                }
+                else
+                {
+                    @if (!_detail.IsTransfer)
+                    {
+                        <a class="pub-btn pub-btn--grey" href="@($"{Api.Home}/{_detail.Notice.RequestId}?tab=tracking")">View Details</a>
+                    }
+                    @if (_detail.CanDispatch)
+                    {
+                        <a class="pub-btn pub-btn--primary" href="@($"/PublicityReview/{_detail.Notice.RequestId}/dispatch")">Create Dispatch <i class="bi bi-chevron-double-right"></i></a>
+                    }
+                    @if (_detail.IsTransfer)
+                    {
+                        var transferHref = Api.IsDispatcher
+                            ? $"/PublicityReview/{_detail.Notice.RequestId}?tab=tracking"
+                            : $"/PublicityRequest/{_detail.Notice.RequestId}/transfer/{_detail.Notice.DispatchId}";
+                        <a class="pub-btn pub-btn--primary" href="@transferHref">View Transfer <i class="bi bi-chevron-double-right"></i></a>
+                    }
                 }
             }
         </Footer>
