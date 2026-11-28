@@ -25,7 +25,7 @@ public static class FarmerPrivacyRules
         "Your fertilizer plans and harvest forecasts",
         "Your leaf checks and the leaf photos you took",
         "Your questions and answers with SPIC AI",
-        "Your sign-in codes and saved sign-ins on every phone",
+        "Your saved sign-ins on every phone",
         "Call-back requests your SPIC officer has not answered yet",
         "Your Community discussions and replies (they are taken down) and your Community photo",
     };
@@ -35,9 +35,17 @@ public static class FarmerPrivacyRules
     {
         "Call-back requests an officer already handled stay in their work history, without your name or phone number",
         "Soil test samples and reports in the SPIC lab stay with the lab (they are not linked to this app any more)",
+        "Daily counts of SPIC AI answers and leaf checks stay, with no name or number, so the app's daily limits stay fair",
+        "Sign-in codes already sent stay until they are removed automatically after one day",
     };
 
     public const string CannotUndo = "This cannot be undone. You can sign up again later with the same number, as a new account.";
+
+    /// <summary>
+    /// The farmer id left on a deleted farmer's AI usage rows (residual fix R2). Not a user id (user ids are GUIDs),
+    /// so no per-farmer count ever matches it; the global ceiling still counts the rows.
+    /// </summary>
+    public const string DeletedUserTombstone = "deleted-account";
 
     /// <summary>The author name left on taken-down Community rows of a deleted farmer.</summary>
     public const string DeletedAuthorName = "Deleted account";

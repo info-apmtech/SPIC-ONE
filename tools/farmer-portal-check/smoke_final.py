@@ -19,6 +19,7 @@ import json
 import os
 import random
 import subprocess
+import time
 import sys
 import urllib.error
 import urllib.request
@@ -58,6 +59,21 @@ def group_a(base, phone):
         check(f"farmer: {method} {path.split('?')[0]} -> 403", st == 403, (st, msg))
     st, b, _ = call(base, "GET", "api/EmployeeRegistration", token=farmer)
     check("farmer: 403 body carries the plain message", isinstance(b, dict) and b.get("message") == FARMER_DENIED, b)
+
+    # Residual fix R1: [AllowAnonymous] endpoints that trust "any signed-in user" refuse a Farmer token too.
+    for method, path in (("GET", "api/IfmsAutomation/status"), ("GET", "api/IfmsAutomation/challenge/pending"),
+                         ("GET", "api/IfmsAutomation/alerts/email")):
+        st, b, _ = call(base, method, path, token=farmer)
+        check(f"farmer (R1): {method} {path} -> 403", st == 403 and isinstance(b, dict) and b.get("message") == FARMER_DENIED, (st, b))
+    st, b = multipart(base, "api/ExcelBulkUpload/import", farmer, [("dealers.xlsx", b"PK\x03\x04not-a-real-sheet", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")],
+                      field="file", fields={"categoryId": "1"})
+    check("farmer (R1): POST api/ExcelBulkUpload/import -> 403 before any file handling", st == 403 and isinstance(b, dict) and b.get("message") == FARMER_DENIED, (st, b))
+    st, _, _ = call(base, "GET", "api/IfmsAutomation/status")
+    check("anonymous (R1): IfmsAutomation/status without a token is not 403 (unchanged)", st != 403, st)
+    st, _, _ = call(base, "GET", "api/IfmsAutomation/status", token=mdo)
+    check("staff (R1): IfmsAutomation/status for MDO is not 403 (unchanged)", st != 403, st)
+    st, b, _ = call(base, "POST", "api/Telemetry/batch", {"app": 1, "pageViews": [], "errors": []}, token=farmer)
+    check("farmer (R1): the telemetry batch still answers (marked)", st == 202, (st, b))
 
     allowed = [
         ("GET", "api/Farmer/profile", (200,)),
@@ -287,8 +303,17 @@ def group_c(base, leaves):
     if leaves:
         check("deletion setup: the leaf photo folder exists", os.path.isdir(photo_dir), photo_dir)
 
+    # R2: a usage row the global AI ceiling counts (no AI key locally, so none is written by the API itself).
+    sql(f'insert into "FarmerAiUsages" ("Kind","FarmerUserId","CreatedAtUtc") values (\'Chat\', {q(uid)}, now() at time zone \'utc\')')
+    usage_today = 'select count(*) from "FarmerAiUsages" where "CreatedAtUtc" >= (now() at time zone \'utc\') - interval \'1 hour\''
+    usages_before = int(sql(usage_today))
+    otps_before = int(sql(f'select count(*) from "FarmerOtpChallenges" where "Phone" = {q(phone)}'))
+
     st, _, _ = call(base, "DELETE", "api/Farmer/profile", token=mdo)
     check("delete: staff calling DELETE api/Farmer/profile -> 403", st == 403, st)
+    # The request log is written in 2 s batches: let the farmer's earlier requests reach the table first, so the check
+    # below sees what the deletion anonymised (rows still queued at the moment of deletion keep the id: known limit).
+    time.sleep(3)
     st, b, _ = call(base, "DELETE", "api/Farmer/profile", token=tok)
     check("delete: DELETE api/Farmer/profile -> 204", st == 204, (st, b))
 
@@ -301,10 +326,16 @@ def group_c(base, leaves):
         f'(select count(*) from "LeafDiagnoses" where "FarmerUserId" = {q(uid)}) || \',\' || '
         f'(select count(*) from "FertilizerRecommendationRuns" where "FarmerUserId" = {q(uid)}) || \',\' || '
         f'(select count(*) from "YieldPredictions" where "FarmerUserId" = {q(uid)}) || \',\' || '
-        f'(select count(*) from "FarmerOtpChallenges" where "Phone" = {q(phone)}) || \',\' || '
         f'(select count(*) from "RefreshTokens" where "UserId" = {q(uid)})')
-    check("delete: user, profile, chats, messages, AI usage, leaf checks, fertilizer, yield, OTP and refresh tokens all gone",
-          counts == ",".join(["0"] * 10), counts)
+    check("delete: user, profile, chats, messages, AI usage link, leaf checks, fertilizer, yield and refresh tokens all gone",
+          counts == ",".join(["0"] * 9), counts)
+    # R2: the counters the global limits read are still there, without who it was.
+    check("delete (R2): the global AI ceiling still counts the farmer's usage (row kept, tombstoned)",
+          int(sql(usage_today)) == usages_before and int(sql('select count(*) from "FarmerAiUsages" where "FarmerUserId" = \'deleted-account\'')) >= 1,
+          (usages_before, sql(usage_today)))
+    otps_after = int(sql(f'select count(*) from "FarmerOtpChallenges" where "Phone" = {q(phone)}'))
+    check("delete (R2): the number's OTP challenges are kept for the send caps (one-day purge removes them)",
+          otps_before > 0 and otps_after == otps_before, (otps_before, otps_after))
     # The request log keeps its rows without who it was; only the DELETE call itself is logged after it ran.
     logs = sql(f'select count(*) from "AppRequestLogs" where "UserId" = {q(uid)}')
     check("delete: request log rows no longer name the farmer (only the DELETE call itself)", int(logs or 0) <= 1, logs)
@@ -324,6 +355,23 @@ def group_c(base, leaves):
     again = sign_in(base, phone)
     new_uid = sql(f'select "Id" from "AppUsers" where "UserName" = {q("f" + phone)}')
     check("delete: the same number signs up fresh as a new account", again.get("isNewUser") is True and new_uid and new_uid != uid, (again.get("isNewUser"), bool(new_uid)))
+    # R3: a farmer gets the anonymous telemetry batch rate (60 a minute), counted per farmer.
+    # The bucket is per clock minute, so a run that crosses a minute boundary starts a fresh bucket: post until the
+    # first 429 (at most 130 tries) and require that it comes only after 60 accepted batches in its minute.
+    statuses = []
+    for i in range(130):
+        st, _, _ = call(base, "POST", "api/Telemetry/batch",
+                        {"app": 1, "pageViews": [{"route": "/smoke-final-r3", "at": "2026-11-28T00:00:00Z"}], "errors": []}, token=again["token"])
+        statuses.append(st)
+        if st == 429:
+            break
+    check("telemetry (R3): a farmer's batches are capped (429 after 60 in a minute)",
+          statuses[-1] == 429 and len(statuses) >= 61 and all(x == 202 for x in statuses[:-1]), (len(statuses), statuses[-3:]))
+    st, _, _ = call(base, "POST", "api/Telemetry/batch",
+                    {"app": 1, "pageViews": [{"route": "/smoke-final-r3", "at": "2026-11-28T00:00:00Z"}], "errors": []}, token=mdo)
+    check("telemetry (R3): staff batches are not limited (202)", st == 202, st)
+    sql('delete from "AppPageViews" where "Route" = \'/smoke-final-r3\'')
+
     st, _, _ = call(base, "DELETE", "api/Farmer/profile", token=again["token"])
     check("delete: a farmer without a profile can delete too (204)", st == 204, st)
     check("delete: that account is gone as well", sql(f'select count(*) from "AppUsers" where "UserName" = {q("f" + phone)}') == "0")

@@ -117,6 +117,10 @@
     private long? _loadedFor = -1;
     // Final fix wave (#45): leaving the page stops the thumbnail loads still queued.
     private readonly CancellationTokenSource _cts = new();
+    private bool _disposed;
+
+    /// <summary>The load token, never read from a disposed source (residual fix R4: after an await the page may be gone).</summary>
+    private CancellationToken LoadToken => _disposed ? new CancellationToken(canceled: true) : _cts.Token;
 
     protected override async Task OnParametersSetAsync()
     {
@@ -150,9 +154,9 @@
             }
             _check = check;
             StateHasChanged();
-            if (check.HasImage)
+            if (check.HasImage && !_disposed)
             {
-                var bytes = await Api.ImageAsync(id, ct: _cts.Token);
+                var bytes = await Api.ImageAsync(id, ct: LoadToken);
                 if (!_cts.IsCancellationRequested && CheckId == id && bytes is not null) _photoUrl = LeafCheckUi.DataUrl("image/jpeg", bytes);
             }
             return;
@@ -172,7 +176,7 @@
         {
             if (CheckId is not null || _cts.IsCancellationRequested) return;
             if (_thumbs.ContainsKey(item.Id)) continue;
-            var bytes = await Api.ImageAsync(item.Id, thumb: true, ct: _cts.Token);
+            var bytes = await Api.ImageAsync(item.Id, thumb: true, ct: LoadToken);
             if (_cts.IsCancellationRequested) return;
             _thumbs[item.Id] = bytes is null ? null : LeafCheckUi.DataUrl("image/jpeg", bytes);
             StateHasChanged();
@@ -197,6 +201,7 @@
 
     public void Dispose()
     {
+        _disposed = true;
         _cts.Cancel();
         _cts.Dispose();
     }

@@ -13,6 +13,8 @@ namespace Spic.Infrastructure.Services.Telemetry;
 ///   bearer user     : page views + errors, attributed to the token's claims (body user fields ignored)
 ///   X-Telemetry-Key : server source (web host); body user fields and Source are trusted
 ///   anonymous       : errors only, at most 5 per batch, 60 batches / minute / IP
+///   Farmer bearer   : like a bearer user, but at most 60 batches / minute per farmer (self-registered public
+///                     accounts must not get unlimited batches; farmer portal residual fix R3)
 /// Every string is capped to the entity length, a batch to 200 page views + 50 errors, and an At more
 /// than 1 day ahead or 7 days back is replaced by the server time. Bad rows are dropped, never thrown.
 /// </summary>
@@ -61,6 +63,12 @@ public sealed class TelemetryIngestService
 
         var caller = Classify(context);
         if (caller == CallerKind.Anonymous && !AllowAnonymous(TelemetryHttp.IpOf(context) ?? "unknown"))
+        {
+            return new Result(0, offered, true);
+        }
+        // A public Farmer account gets the anonymous batch rate, counted per farmer (the web host posts every web
+        // farmer's batches from one IP, so a per-IP bucket would throttle them all together). Staff are unchanged.
+        if (caller == CallerKind.User && LimitedUserKey(context.User) is { } farmerKey && !AllowAnonymous(farmerKey))
         {
             return new Result(0, offered, true);
         }
@@ -166,6 +174,15 @@ public sealed class TelemetryIngestService
             _ => at
         };
         return utc > now.AddDays(1) || utc < now.AddDays(-7) ? now : utc;
+    }
+
+    /// <summary>The rate-limit key of a signed-in caller that gets the anonymous batch rate (Farmer role), else null.</summary>
+    public static string? LimitedUserKey(System.Security.Claims.ClaimsPrincipal? user)
+    {
+        var (userId, _, role) = TelemetryHttp.UserOf(user);
+        return string.Equals(role, nameof(AppRole.Farmer), StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(userId)
+            ? "farmer:" + userId
+            : null;
     }
 
     private bool AllowAnonymous(string ip)

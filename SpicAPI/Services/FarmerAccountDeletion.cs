@@ -9,19 +9,25 @@ namespace SpicAPI.Services
 {
     /// <summary>What one account deletion removed or changed (counts only; logged without any personal data).</summary>
     public sealed record FarmerDeletionResult(
-        int ChatMessages, int Conversations, int AiUsages, int LeafChecks, int FertilizerRuns, int YieldForecasts,
-        int OtpChallenges, int OpenRequestsDeleted, int RequestsKept, int CommunityPosts, int CommunityReplies,
+        int ChatMessages, int Conversations, int AiUsagesAnonymised, int LeafChecks, int FertilizerRuns, int YieldForecasts,
+        int OpenRequestsDeleted, int RequestsKept, int CommunityPosts, int CommunityReplies,
         int Reactions, int SasRecordsUnlinked, int RefreshTokens);
 
     /// <summary>
     /// "Delete my account" (final fix wave, review I4; DELETE api/Farmer/profile). One transaction for the database:
-    /// the farmer profile, chats and messages, AI usage rows, leaf checks, fertilizer runs, yield forecasts, OTP
-    /// challenges for the number, open call-back requests (handled ones stay for the officer's history: the staff view
+    /// the farmer profile, chats and messages, leaf checks, fertilizer runs, yield forecasts, open call-back requests (handled ones stay for the officer's history: the staff view
     /// reads the name and phone from the profile, which is gone, so it shows "Farmer" with no number), Community
     /// discussions and replies taken down (soft delete, author name and place cleared), reactions and product
     /// memberships, the SAS farmer record UNLINKED (lab data stays with the lab), refresh tokens deleted, the request
     /// log rows anonymised, and finally the Identity user deleted so the number can sign up fresh later. Files (leaf
     /// photos, the Community photo) are deleted only after the commit.
+    /// <para>
+    /// Residual fix R2: two kinds of rows are deliberately NOT deleted, because the global limits count them and a
+    /// sign-up / use / delete loop must not reset those limits. The AI usage rows (the 2000-a-day SPIC AI ceiling) are
+    /// kept with the farmer id replaced by <see cref="FarmerPrivacyRules.DeletedUserTombstone"/> (kind and time only).
+    /// The OTP challenges (the per-number / per-IP / global SMS caps) are left to the existing one-day purge in
+    /// FarmerAuthController (the privacy notice says sign-in codes are removed after one day).
+    /// </para>
     /// </summary>
     public sealed class FarmerAccountDeletion
     {
@@ -48,12 +54,6 @@ namespace SpicAPI.Services
             if (user is null || user.Role != AppRole.Farmer) return null;
 
             var profile = await _db.FarmerProfiles.FirstOrDefaultAsync(p => p.UserId == userId, ct);
-            var phones = new HashSet<string>(StringComparer.Ordinal);
-            foreach (var raw in new[] { profile?.Phone, user.PhoneNumber, user.UserName?.TrimStart('f') })
-            {
-                var n = FarmerPhone.Normalise(raw);
-                if (FarmerPhone.IsValid(n)) phones.Add(n);
-            }
 
             var npgsql = _db.Database.IsNpgsql();
             await using var tx = npgsql ? await _db.Database.BeginTransactionAsync(ct) : null;
@@ -62,18 +62,15 @@ namespace SpicAPI.Services
             _db.FarmerChatMessages.RemoveRange(messages);
             var conversations = await _db.FarmerChatConversations.Where(c => c.FarmerUserId == userId).ToListAsync(ct);
             _db.FarmerChatConversations.RemoveRange(conversations);
+            // Kept for the global AI ceiling, without who it was (R2).
             var usages = await _db.FarmerAiUsages.Where(u => u.FarmerUserId == userId).ToListAsync(ct);
-            _db.FarmerAiUsages.RemoveRange(usages);
+            foreach (var u in usages) u.FarmerUserId = FarmerPrivacyRules.DeletedUserTombstone;
             var leaves = await _db.LeafDiagnoses.Where(d => d.FarmerUserId == userId).ToListAsync(ct);
             _db.LeafDiagnoses.RemoveRange(leaves);
             var runs = await _db.FertilizerRecommendationRuns.Where(r => r.FarmerUserId == userId).ToListAsync(ct);
             _db.FertilizerRecommendationRuns.RemoveRange(runs);
             var forecasts = await _db.YieldPredictions.Where(p => p.FarmerUserId == userId).ToListAsync(ct);
             _db.YieldPredictions.RemoveRange(forecasts);
-            var phoneList = phones.ToList();
-            var otps = phoneList.Count == 0 ? new List<FarmerOtpChallenge>()
-                : await _db.FarmerOtpChallenges.Where(c => phoneList.Contains(c.Phone)).ToListAsync(ct);
-            _db.FarmerOtpChallenges.RemoveRange(otps);
 
             // Call-backs: unanswered ones go; handled ones stay for the officer (closed, no name or phone any more).
             var requests = await _db.FarmerContactRequests.Where(r => r.FarmerUserId == userId).ToListAsync(ct);
@@ -158,7 +155,7 @@ namespace SpicAPI.Services
             DeleteAvatar(userId);
 
             var result = new FarmerDeletionResult(messages.Count, conversations.Count, usages.Count, leaves.Count, runs.Count,
-                forecasts.Count, otps.Count, open.Count, requests.Count - open.Count, posts.Count, replies.Count, reactions.Count,
+                forecasts.Count, open.Count, requests.Count - open.Count, posts.Count, replies.Count, reactions.Count,
                 sas.Count, tokens.Count);
             _log.LogInformation("Farmer account deleted: {Counts}", result);
             return result;

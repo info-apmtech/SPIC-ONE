@@ -74,6 +74,10 @@ namespace SpicAPI.Controllers
 		{
 			var automated = HasAutomationKey();
 
+			// A self-registered Farmer is never an importer (residual fix R1; the global filter refuses it first).
+			if (FarmerDenyByDefaultFilter.IsFarmer(User))
+				return StatusCode(StatusCodes.Status403Forbidden, new { Success = false, Message = FarmerDenyByDefaultFilter.DeniedMessage });
+
 			if (User.Identity?.IsAuthenticated != true && !automated)
 			{
 				return Unauthorized(new

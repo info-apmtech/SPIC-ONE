@@ -1051,9 +1051,12 @@ gates), D (polish).
 ### Farmer deny-by-default (`SpicAPI/Controllers/FarmerAccessAttribute.cs`)
 
 `FarmerDenyByDefaultFilter` is registered globally (`AddControllers(o => o.Filters.Add<...>())`). It answers **403**
-`{ "message": "This is not available in the farmer app." }` when the caller's role claim is `Farmer`, the endpoint needs
-sign-in (an `[Authorize]` applies and there is no `[AllowAnonymous]`), and neither the action nor its controller carries
-`[FarmerAccess]`. Anonymous endpoints and every staff / dealer caller are untouched. A refusal is logged once at
+`{ "message": "This is not available in the farmer app." }` when the caller's role claim is `Farmer` and neither the action
+nor its controller carries `[FarmerAccess]`, whatever else the endpoint says. Since the residual fix (R1) that includes
+`[AllowAnonymous]` endpoints and endpoints without `[Authorize]`: several of them accept "any signed-in user" in their own
+code (the IFMS relay, the Excel import), which a public Farmer token must not be. A caller with no token is unaffected
+(still anonymous there), and so is every staff / dealer caller. `IfmsAutomationController` and `ExcelBulkUpload/import`
+also refuse the Farmer role in their own code (`FarmerDenyByDefaultFilter.IsSignedInStaff`). A refusal is logged at
 Information with the verb and route template only (no user id, phone or query string).
 
 `SPIC.RegressionHarness/FarmerPortalHardeningTests` walks every SpicAPI controller by reflection and pins the list
@@ -1065,7 +1068,8 @@ The Farmer allow-list (signed-in endpoints a Farmer token may call):
 
 | Area | Endpoints |
 |---|---|
-| Shell | `GET api/Authentication/permissions`, `POST api/Authentication/logout` (refresh, login and `api/FarmerAuth/*` are anonymous) |
+| Shell | `GET api/Authentication/permissions`, `POST api/Authentication/logout` |
+| Anonymous endpoints a signed-in farmer's app calls with its token (pinned separately) | `POST api/FarmerAuth/otp/request`, `POST api/FarmerAuth/otp/verify`, `POST api/Authentication/refresh`, `POST api/Telemetry/batch`; every other anonymous endpoint (staff login, IFMS relay, Excel import, Lab exports, ContactUs, seed-default-user) answers 403 to a Farmer token |
 | Farmer portal | every action of FarmerProfile (`GET/PUT/DELETE api/Farmer/profile`), FarmerConnect (dealers, contacts, contacts/requests, contacts/{id}/request), FarmerTrends (trends, weather), FarmerFertilizer (options, soil-report, recommend, history, history/{id}, latest), FarmerAssistant (status, conversations, conversations/{id} GET/DELETE, ask), FarmerLeafCheck (status, POST, history, {id} GET/DELETE, {id}/image), FarmerYield (options, predict, history, history/{id}) |
 | Community | stats, recent, discussions (GET, POST), near, discussions/{id} (GET, PUT, DELETE), discussions/similar, discussions/{id}/status, discussions/{id}/replies, replies/{id} (DELETE), discussions/{id}/like / save / follow, replies/{id}/like, discussions/{id}/attachments, replies/{id}/attachments, attachments/{id} (DELETE), file/{*path}, me, me/avatar (POST, DELETE), products, products/{name}/join, lookups |
 | Digital Library | `GET api/Library/{id}`, `GET api/Library/file/{*path}` (item pages linked from SPIC AI answers) |
@@ -1127,8 +1131,11 @@ delete your account"; sign-in codes one day), how to change or delete, and how t
   at a sign-in when the recorded version is older (a new farmer has no profile row until onboarding is saved).
 - **Delete my account** (My profile, "Your data" card, outlined button; confirm sheet with the list of what is removed and
   kept, "This cannot be undone", and an "I understand" box): `DELETE api/Farmer/profile` (Farmer, the caller only,
-  `SpicAPI/Services/FarmerAccountDeletion.cs`). In one transaction: profile, chats and messages, AI usage rows, leaf checks,
-  fertilizer runs, yield forecasts and OTP challenges for the number are deleted; open call-backs are deleted, handled ones
+  `SpicAPI/Services/FarmerAccountDeletion.cs`). In one transaction: profile, chats and messages, leaf checks, fertilizer
+  runs and yield forecasts are deleted; the AI usage rows are kept with the farmer id replaced by `deleted-account` (kind
+  and time only) and the number's OTP challenges are left to the existing one-day purge, because the global AI ceiling and
+  the OTP send caps count them (residual fix R2: otherwise sign-up, use, delete, sign-up would reset both limits; the
+  privacy notice and the deletion sheet say so); open call-backs are deleted, handled ones
   are kept (closed) for the officer, whose view shows "Farmer" with no phone once the profile is gone (the message text
   stays as staff history); the farmer's Community discussions and replies are soft-deleted with the author name set to
   "Deleted account" and the place cleared, reactions and product memberships deleted (like counts adjusted); the SAS farmer
@@ -1141,6 +1148,8 @@ delete your account"; sign-in codes one day), how to change or delete, and how t
   keeps working until it expires (`Jwt:ExpiryMinutes`, 480 in prod) but finds no profile or data.
 - Telemetry rows now keep a farmer's `f<mobile>` user name masked (`f98xxxxxx21`), so the notice's "your phone number is
   never written to these logs" holds (`TelemetryHttp.SafeUserName`).
+- `POST api/Telemetry/batch` from a Farmer token gets the anonymous batch rate, 60 batches a minute, counted per farmer
+  (residual fix R3; per farmer because the web host posts every web farmer's batches from one IP). Staff are unchanged.
 
 ### Corrective doses (migration `V42_FarmerPortalHardening`)
 

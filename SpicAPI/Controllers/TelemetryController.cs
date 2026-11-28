@@ -21,6 +21,7 @@ namespace SpicAPI.Controllers
 		public TelemetryController(TelemetryIngestService ingest) => _ingest = ingest;
 
 		[AllowAnonymous]
+		[FarmerAccess] // ClientTelemetry posts page views and client errors with the signed-in token (rate limited, R3)
 		[HttpPost("batch")]
 		[RequestSizeLimit(2_000_000)]
 		public IActionResult Batch([FromBody] ClientTelemetryBatchDto? batch)

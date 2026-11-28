@@ -24,11 +24,12 @@ namespace SpicAPI.Controllers
 	}
 
 	/// <summary>
-	/// Global MVC filter: deny by default for the Farmer role. A request is refused with 403 when ALL hold:
-	/// the caller is signed in, the caller's role claim is Farmer, the endpoint requires sign-in
-	/// (an <c>[Authorize]</c> applies and no <c>[AllowAnonymous]</c>), and neither the action nor its
-	/// controller carries <see cref="FarmerAccessAttribute"/>. Anonymous endpoints and every staff / dealer
-	/// caller are untouched.
+	/// Global MVC filter: deny by default for the Farmer role. A request is refused with 403 when the caller is
+	/// signed in with the Farmer role claim and neither the action nor its controller carries
+	/// <see cref="FarmerAccessAttribute"/>, whatever else the endpoint says. That includes <c>[AllowAnonymous]</c>
+	/// endpoints and endpoints without <c>[Authorize]</c> (residual fix R1): several of them authorize "any
+	/// signed-in user" in their own code (IFMS relay, Excel import). A caller with no token is unaffected (still
+	/// anonymous there), and so is every staff / dealer caller.
 	/// </summary>
 	public sealed class FarmerDenyByDefaultFilter : IAuthorizationFilter
 	{
@@ -66,18 +67,19 @@ namespace SpicAPI.Controllers
 		}
 
 		/// <summary>
-		/// The decision on an endpoint's metadata (controller + action attributes): anonymous endpoints
-		/// (no <c>[Authorize]</c>, or an <c>[AllowAnonymous]</c>) and endpoints marked
-		/// <see cref="FarmerAccessAttribute"/> are reachable; every other signed-in endpoint is not.
+		/// The decision on an endpoint's metadata (controller + action attributes): a Farmer token reaches only
+		/// endpoints marked <see cref="FarmerAccessAttribute"/>, anonymous ones included (residual fix R1).
 		/// Free of HTTP types so the harness can walk every controller by reflection with the same rule.
 		/// </summary>
-		public static bool IsReachableByFarmer(IEnumerable<object> metadata)
-		{
-			var list = metadata as IList<object> ?? metadata.ToList();
-			if (list.OfType<IAllowAnonymous>().Any()) return true;
-			if (!list.OfType<IAuthorizeData>().Any()) return true;
-			return list.OfType<FarmerAccessAttribute>().Any();
-		}
+		public static bool IsReachableByFarmer(IEnumerable<object> metadata) =>
+			metadata.OfType<FarmerAccessAttribute>().Any();
+
+		/// <summary>
+		/// A signed-in caller who is NOT a Farmer: for endpoints that are <c>[AllowAnonymous]</c> but accept
+		/// "any signed-in user" in their own code (defence in depth behind the filter, residual fix R1).
+		/// </summary>
+		public static bool IsSignedInStaff(ClaimsPrincipal? user) =>
+			user?.Identity?.IsAuthenticated == true && !IsFarmer(user);
 
 		/// <summary>True when the endpoint needs a signed-in caller (so the Farmer rule applies to it at all).</summary>
 		public static bool RequiresSignIn(IEnumerable<object> metadata)

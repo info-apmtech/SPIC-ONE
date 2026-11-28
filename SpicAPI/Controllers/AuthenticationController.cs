@@ -69,6 +69,7 @@ namespace SpicAPI.Controllers
         // easily outlive a single 60-minute JWT) keep working past token expiry without a full
         // re-login. AuthHttpMessageHandler also calls this once on any 401 before forcing logout.
         [AllowAnonymous]
+        [FarmerAccess] // AuthHttpMessageHandler / SessionExpiryDialog refresh with the expired token still attached
         [HttpPost("refresh")]
         public async Task<IActionResult> Refresh([FromBody] RefreshTokenRequestDto dto)
         {

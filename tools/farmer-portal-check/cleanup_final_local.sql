@@ -19,6 +19,9 @@ DELETE FROM "RefreshTokens" WHERE "UserId" IN (SELECT "Id" FROM smoke_final_user
 DELETE FROM "FarmerProfiles" WHERE "UserId" IN (SELECT "Id" FROM smoke_final_users);
 DELETE FROM "FarmerOtpChallenges" WHERE "Phone" LIKE '600%';
 DELETE FROM "SasFarmers" WHERE "Name" = '[smoke-final] SAS';
+-- Residual fix R2 / R3: the tombstoned AI usage rows of deleted throw-away farmers, and the R3 telemetry probe rows.
+DELETE FROM "FarmerAiUsages" WHERE "FarmerUserId" = 'deleted-account';
+DELETE FROM "AppPageViews" WHERE "Route" = '/smoke-final-r3';
 
 -- Community rows the script wrote (its own throw-away farmers' posts, and the seeded qa.mdo posts).
 DELETE FROM "CommunityPostAttachments" WHERE "PostId" IN (SELECT "Id" FROM "CommunityPosts" WHERE "Title" LIKE '[smoke-final]%');

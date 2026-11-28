@@ -171,14 +171,20 @@ internal static class FarmerPortalHardeningTests
 		Check.That("filter: 403 body is the plain farmer message",
 			RunFilter(Principal("Farmer"), authorize) is ObjectResult o && (o.Value?.ToString() ?? "").Contains(FarmerDenyByDefaultFilter.DeniedMessage));
 		Check.That("filter: farmer on a [FarmerAccess] endpoint passes", RunFilter(Principal("Farmer"), authorize, new FarmerAccessAttribute()) is null);
-		Check.That("filter: farmer on an [AllowAnonymous] endpoint passes", RunFilter(Principal("Farmer"), authorize, new AllowAnonymousAttribute()) is null);
-		Check.That("filter: farmer on an endpoint without [Authorize] passes (anonymous)", RunFilter(Principal("Farmer")) is null);
+		// Residual fix R1: a Farmer token is refused on anonymous endpoints too, unless they carry [FarmerAccess].
+		Check.That("filter (R1): farmer on an [AllowAnonymous] endpoint without the marker gets 403", Is403(RunFilter(Principal("Farmer"), authorize, new AllowAnonymousAttribute())));
+		Check.That("filter (R1): farmer on an endpoint without [Authorize] gets 403", Is403(RunFilter(Principal("Farmer"))));
+		Check.That("filter (R1): farmer on an [AllowAnonymous] + [FarmerAccess] endpoint passes", RunFilter(Principal("Farmer"), new AllowAnonymousAttribute(), new FarmerAccessAttribute()) is null);
+		Check.That("filter (R1): no token on an [AllowAnonymous] endpoint is untouched", RunFilter(Principal(null), new AllowAnonymousAttribute()) is null);
+		Check.That("filter (R1): staff on an [AllowAnonymous] endpoint is untouched", RunFilter(Principal("MDO"), new AllowAnonymousAttribute()) is null);
+		Check.That("filter (R1): IsSignedInStaff is false for a farmer and for no token, true for staff",
+			!FarmerDenyByDefaultFilter.IsSignedInStaff(Principal("Farmer")) && !FarmerDenyByDefaultFilter.IsSignedInStaff(Principal(null)) && FarmerDenyByDefaultFilter.IsSignedInStaff(Principal("Admin")));
 		Check.That("filter: role claim compared case-insensitively", Is403(RunFilter(Principal("farmer"), authorize)));
 		Check.That("filter: short 'role' claim type is also a Farmer", Is403(RunFilter(Principal("Farmer", "role"), authorize)));
 		foreach (var role in Enum.GetValues<AppRole>().Where(r => r != AppRole.Farmer))
 			Check.That($"filter: {role} on a bare [Authorize] endpoint is untouched", RunFilter(Principal(role.ToString()), authorize) is null);
 		Check.That("filter: an anonymous caller is untouched (the [Authorize] middleware answers 401)", RunFilter(Principal(null), authorize) is null);
-		Check.That("filter: IsReachableByFarmer(no metadata) is true (anonymous)", FarmerDenyByDefaultFilter.IsReachableByFarmer(Array.Empty<object>()));
+		Check.That("filter (R1): IsReachableByFarmer(no metadata) is false", !FarmerDenyByDefaultFilter.IsReachableByFarmer(Array.Empty<object>()));
 		Check.That("filter: RequiresSignIn is false under [AllowAnonymous]",
 			!FarmerDenyByDefaultFilter.RequiresSignIn(new object[] { authorize, new AllowAnonymousAttribute() }));
 	}
@@ -312,6 +318,18 @@ internal static class FarmerPortalHardeningTests
 		"GET api/Sas/payments/{id:int}/proof",
 	};
 
+	/// <summary>
+	/// Anonymous endpoints a Farmer token may reach (residual fix R1): those a signed-in farmer's app calls with its
+	/// token attached. Every other [AllowAnonymous] / unauthenticated endpoint answers 403 to a Farmer token.
+	/// </summary>
+	internal static readonly string[] ExpectedFarmerReachableAnonymous =
+	{
+		"POST api/Authentication/refresh",   // AuthHttpMessageHandler / SessionExpiryDialog, expired token attached
+		"POST api/FarmerAuth/otp/request",   // farmer sign-in (FarmerApi)
+		"POST api/FarmerAuth/otp/verify",
+		"POST api/Telemetry/batch",          // ClientTelemetry page views / errors (rate limited for farmers, R3)
+	};
+
 	private static void AllowList()
 	{
 		var actions = AllActions();
@@ -326,6 +344,27 @@ internal static class FarmerPortalHardeningTests
 		var missing = expected.Except(reachable).ToList();
 		Check.That("allow-list: no signed-in endpoint is open to a Farmer beyond the pinned list", extra.Count == 0, string.Join("; ", extra));
 		Check.That("allow-list: every pinned endpoint is still open to a Farmer", missing.Count == 0, string.Join("; ", missing));
+
+		// R1: the anonymous set, pinned both ways.
+		var anonReachable = actions
+			.Where(a => !FarmerDenyByDefaultFilter.RequiresSignIn(a.Metadata) && FarmerDenyByDefaultFilter.IsReachableByFarmer(a.Metadata))
+			.Select(a => a.Route).Distinct().OrderBy(r => r, StringComparer.Ordinal).ToList();
+		var anonExpected = ExpectedFarmerReachableAnonymous.OrderBy(r => r, StringComparer.Ordinal).ToList();
+		Check.That("allow-list (R1): no anonymous endpoint is open to a Farmer token beyond the pinned list",
+			!anonReachable.Except(anonExpected).Any(), string.Join("; ", anonReachable.Except(anonExpected)));
+		Check.That("allow-list (R1): every pinned anonymous endpoint is open to a Farmer token",
+			!anonExpected.Except(anonReachable).Any(), string.Join("; ", anonExpected.Except(anonReachable)));
+		var ifms = actions.Where(a => a.Controller == typeof(IfmsAutomationController)).ToList();
+		Check.That("allow-list (R1): every IfmsAutomation action exists and is closed to a Farmer token",
+			ifms.Count > 5 && ifms.All(a => !FarmerDenyByDefaultFilter.IsReachableByFarmer(a.Metadata)));
+		foreach (var closed in new[] { "POST api/ExcelBulkUpload/import", "POST api/Authentication/login", "POST api/ContactUs/enquiry",
+			"GET api/Lab/batches/{id:int}/samples/export", "GET api/Lab/batches/{id:int}/parameters/export", "GET api/User/seed-default-user" })
+		{
+			var found = actions.Where(a => a.Route == closed).ToList();
+			Check.That($"allow-list (R1): anonymous '{closed}' exists and is closed to a Farmer token",
+				found.Count > 0 && found.All(a => !FarmerDenyByDefaultFilter.RequiresSignIn(a.Metadata) && !FarmerDenyByDefaultFilter.IsReachableByFarmer(a.Metadata)),
+				found.Count == 0 ? "route not found" : null);
+		}
 
 		foreach (var staffOnly in new[]
 		{
@@ -425,6 +464,16 @@ internal static class FarmerPortalHardeningTests
 		foreach (var word in new[] { "phone", "gps", "crops", "fertilizer", "harvest", "leaf photos", "spic ai", "sign-in", "call-back", "community" })
 			Check.That($"privacy: the deletion list names '{word}'", removed.Contains(word));
 		Check.That("privacy: the deletion sheet says it cannot be undone", FarmerPrivacyRules.CannotUndo.StartsWith("This cannot be undone"));
+		// Residual fix R2: usage counters and sign-in codes are kept (no name or number), so a delete does not reset limits.
+		Check.That("R2: the tombstone is not a user id (never matches a per-farmer count)", !Guid.TryParse(FarmerPrivacyRules.DeletedUserTombstone, out _) && FarmerPrivacyRules.DeletedUserTombstone.Length <= 450);
+		Check.That("R2: the deletion list no longer promises to remove sign-in codes", !FarmerPrivacyRules.RemovedItems.Any(i => i.Contains("sign-in codes", StringComparison.OrdinalIgnoreCase)));
+		Check.That("R2: the kept list names the anonymous AI counts and the one-day code purge",
+			FarmerPrivacyRules.KeptItems.Any(i => i.Contains("no name or number")) && FarmerPrivacyRules.KeptItems.Any(i => i.Contains("one day")));
+		// Residual fix R3: Farmer telemetry gets the anonymous batch rate, per farmer; staff do not.
+		Check.Equal("R3: a farmer's telemetry rate key is per farmer", "farmer:u1", Spic.Infrastructure.Services.Telemetry.TelemetryIngestService.LimitedUserKey(Principal("Farmer")));
+		Check.That("R3: staff and anonymous callers have no farmer rate key",
+			Spic.Infrastructure.Services.Telemetry.TelemetryIngestService.LimitedUserKey(Principal("MDO")) is null
+			&& Spic.Infrastructure.Services.Telemetry.TelemetryIngestService.LimitedUserKey(Principal(null)) is null);
 		// The privacy notice says phone numbers never reach the request / error logs: a farmer's user name is "f" + mobile.
 		Check.Equal("logs: a farmer user name is masked", "f98xxxxxx21", Spic.Infrastructure.Services.Telemetry.TelemetryHttp.SafeUserName("f9876543221", "Farmer"));
 		Check.Equal("logs: staff user names are unchanged", "qa.mdo", Spic.Infrastructure.Services.Telemetry.TelemetryHttp.SafeUserName("qa.mdo", "MDO"));

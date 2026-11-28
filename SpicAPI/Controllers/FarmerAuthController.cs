@@ -29,6 +29,7 @@ namespace SpicAPI.Controllers
     /// X-Spic-Client-Ip when it carries the right FarmerPortal:TrustedClientKey, else the proxy chain.
     /// </summary>
     [AllowAnonymous]
+    [FarmerAccess] // OTP sign-in: a farmer may sign in again while an older token is still attached
     [ApiController]
     [Route("api/[controller]")]
     public class FarmerAuthController : ControllerBase

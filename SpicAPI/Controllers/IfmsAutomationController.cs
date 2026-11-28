@@ -95,9 +95,9 @@ namespace SpicAPI.Controllers
 			return _callingDevice is not null;
 		}
 
-		/// <summary>A signed-in portal user, or a paired phone.</summary>
+		/// <summary>A signed-in portal user (never a self-registered Farmer), or a paired phone.</summary>
 		private async Task<bool> IsCallerAllowedAsync(string action, CancellationToken cancellationToken) =>
-			User.Identity?.IsAuthenticated == true ||
+			FarmerDenyByDefaultFilter.IsSignedInStaff(User) ||
 			await IsKnownDeviceAsync(action, cancellationToken);
 
 		// ------------------------------------------------------------------ SMS
@@ -248,7 +248,7 @@ namespace SpicAPI.Controllers
 			[FromBody] IfmsRegisterDeviceDto dto,
 			CancellationToken cancellationToken)
 		{
-			if (!HasPairingKey() && User.Identity?.IsAuthenticated != true)
+			if (!HasPairingKey() && !FarmerDenyByDefaultFilter.IsSignedInStaff(User))
 				return Unauthorized(new { Success = false, Message = "Bad pairing key." });
 
 			if (string.IsNullOrWhiteSpace(dto.DeviceId))
