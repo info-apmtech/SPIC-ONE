@@ -1,0 +1,131 @@
+@page "/farmer/yield/history"
+@page "/farmer/yield/history/{ForecastId:long}"
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
+@inject FarmerYieldApi Api
+@inject FarmerSession Farmer
+@inject LoginState LoginState
+
+@*
+    My past harvest forecasts (farmer portal Task 7): the farmer's latest 20 forecasts (api/Farmer/yield/history),
+    and one saved forecast in full (history/{id}).
+*@
+
+<div class="fp fp-page fpyh">
+    @if (ForecastId is null)
+    {
+        <FpHero Title="My past forecasts" Compact="true" BackHref="/farmer/yield" BackLabel="Back to the harvest forecast"
+                Subtitle="Your last 20 harvest forecasts. Open one to see it in full again." />
+    }
+    else
+    {
+        <FpHero Title="Saved harvest forecast" Compact="true" BackHref="/farmer/yield/history" BackLabel="Back to my past forecasts"
+                Subtitle="@(_one is { } r ? $"{r.Crop} · {YieldUi.When(r.CreatedAtUtc)}" : "Your saved forecast")" />
+    }
+
+    @if (LoginState.UserRole != AppRole.Farmer)
+    {
+        <FpEmpty Art="FpArtKind.Field" Title="You are viewing as support staff" Message="Farmers see their own saved harvest forecasts here." />
+    }
+    else if (_loading)
+    {
+        <FpSkeleton Variant="FpSkeletonVariant.Cards" Count="3" LoadingText="Opening your forecasts..." />
+    }
+    else if (_error is not null)
+    {
+        <FpError Title="We could not open your forecasts" Message="@_error" OnRetry="LoadAsync" />
+    }
+    else if (ForecastId is not null && _one is { } one)
+    {
+        <YieldResultView Result="@one" SavedAt="@YieldUi.When(one.CreatedAtUtc)" />
+    }
+    else if (_items.Count == 0)
+    {
+        <FpEmpty Art="FpArtKind.Field" Card="true" Title="No forecasts yet"
+                 Message="Enter your crop, area and season to see your likely harvest. Each forecast is saved here so you can compare seasons.">
+            <a class="fp-btn fp-btn--primary" href="/farmer/yield"><i class="bi bi-graph-up-arrow" aria-hidden="true"></i> Predict my harvest</a>
+        </FpEmpty>
+    }
+    else
+    {
+        <ul class="fpyh-list">
+            @foreach (var item in _items)
+            {
+                <li>
+                    <a class="fpyh-item fp-fade-up" href="@($"/farmer/yield/history/{item.Id}")">
+                        <span class="fpyh-item__icon" aria-hidden="true">
+                            @if (FpUi.CropEmoji(item.Crop) is { } emoji)
+                            {
+                                @emoji
+                            }
+                            else
+                            {
+                                <i class="bi @YieldUi.CropIcon(item.Crop)"></i>
+                            }
+                        </span>
+                        <span class="fpyh-item__body">
+                            <span class="fpyh-item__title">@item.Crop</span>
+                            <span class="fp-caption">@YieldUi.When(item.CreatedAtUtc) · @YieldUi.Acres(item.AreaAcres) · @YieldUi.MethodLabel(item.Method)</span>
+                            <span class="fpyh-item__numbers">
+                                <strong class="fp-num">@YieldUi.Tonnes(item.ExpectedT) t</strong>
+                                <span class="fp-num fpyh-item__range">@YieldUi.Tonnes(item.LowT)-@YieldUi.Tonnes(item.HighT) t</span>
+                                <FpChip Text="@item.ConfidenceLabel" Hue="@YieldUi.ConfidenceHue(item.ConfidenceLabel)" Small="true" />
+                            </span>
+                        </span>
+                        <i class="bi bi-chevron-right fpyh-item__chevron" aria-hidden="true"></i>
+                    </a>
+                </li>
+            }
+        </ul>
+        <div class="fp-actionbar">
+            <a class="fp-btn fp-btn--primary" href="/farmer/yield"><i class="bi bi-plus-lg" aria-hidden="true"></i> New forecast</a>
+        </div>
+        <FpDisclaimer Text="@YieldUi.Disclaimer" />
+    }
+</div>
+
+@code {
+    [Parameter] public long? ForecastId { get; set; }
+
+    private bool _loading = true;
+    private string? _error;
+    private List<YieldPredictionSummaryDto> _items = new();
+    private YieldPredictionDto? _one;
+    private long? _loadedFor = -1;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedFor == ForecastId) return;
+        _loadedFor = ForecastId;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        if (LoginState.UserRole != AppRole.Farmer)
+        {
+            _loading = false;
+            return;
+        }
+
+        _loading = true;
+        _error = null;
+        _one = null;
+        StateHasChanged();
+        // The farmer shell (My Samples / My Reports tabs) reads the SAS link from the profile.
+        try { await Farmer.EnsureLoadedAsync(); } catch { /* the list does not need it */ }
+        if (ForecastId is { } id)
+        {
+            var result = await Api.OneAsync(id);
+            _loading = false;
+            if (result.Value is { } one) _one = one;
+            else _error = result.Message ?? "Please try again.";
+            return;
+        }
+
+        var list = await Api.HistoryAsync();
+        _loading = false;
+        if (list.Value is { } items) _items = items;
+        else _error = list.Message ?? "Please try again.";
+    }
+}

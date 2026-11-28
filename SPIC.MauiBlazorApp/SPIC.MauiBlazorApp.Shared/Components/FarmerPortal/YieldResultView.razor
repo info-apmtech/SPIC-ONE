@@ -1,0 +1,138 @@
+@namespace SPIC.MauiBlazorApp.Shared.Components.FarmerPortal
+@using System.Globalization
+@using SPIC.Core.DTOs
+
+@*
+    YieldResultView - one harvest forecast (farmer portal Task 7): the summary band (expected tonnes, quintals, the
+    low-expected-high range and the confidence ring), what shapes the yield (one bar per factor, the biggest loss
+    marked), how to get more (2-3 tips), how it was worked out (norm x factors, the sources), actions and the
+    disclaimer. Used by /farmer/yield and the saved forecasts in /farmer/yield/history/{id}.
+*@
+
+<section class="fpyr" aria-label="Your harvest forecast">
+    <FpCard @ref="_summaryCard" Title="Your expected harvest" Icon="bi-basket2-fill" Hue="FpHue.Gold" Variant="FpCardVariant.Highlight"
+            Subtitle="@YieldUi.Subtitle(Result)" CssClass="fpyr-summary">
+        <FpBigNumber Label="Expected harvest" Value="@YieldUi.Tonnes(Result.ExpectedT)" Unit="tonnes" Caption="@YieldUi.Caption(Result)"
+                     Low="@Result.LowT" Expected="@Result.ExpectedT" High="@Result.HighT" RangeUnit="t" RangeFormat="@RangeFormat"
+                     Confidence="@Result.ConfidenceScore" ConfidenceLabel="@Result.ConfidenceLabel" CssClass="fpyr-big" />
+        <div class="fpyr-facts">
+            <span class="fpyr-fact">
+                <span class="fpyr-fact__label">Range</span>
+                <strong class="fp-num">± @Result.RangePercent %</strong>
+            </span>
+            <span class="fpyr-fact">
+                <span class="fpyr-fact__label">Good management</span>
+                <strong class="fp-num">@YieldUi.Tonnes(Result.NormTPerHa) t/ha</strong>
+            </span>
+            @if (Result.StateAverageTPerHa is { } avg)
+            {
+                <span class="fpyr-fact">
+                    <span class="fpyr-fact__label">Tamil Nadu average</span>
+                    <strong class="fp-num">@YieldUi.Tonnes(avg) t/ha</strong>
+                </span>
+            }
+            <span class="fpyr-fact">
+                <span class="fpyr-fact__label">Your forecast</span>
+                <strong class="fp-num">@YieldUi.Tonnes(Result.PerHectareT) t/ha</strong>
+            </span>
+        </div>
+        <ul class="fpyr-reasons">
+            @foreach (var reason in Result.ConfidenceReasons)
+            {
+                <li><i class="bi bi-dot" aria-hidden="true"></i>@reason</li>
+            }
+        </ul>
+        @if (SavedAt is not null)
+        {
+            <p class="fp-caption fpyr-saved"><i class="bi bi-clock-history" aria-hidden="true"></i> Saved forecast from @SavedAt.</p>
+        }
+    </FpCard>
+
+    <div class="fpyr-grid">
+        @* ---- factors ---- *@
+        <FpCard Title="What shapes your yield" Icon="bi-bar-chart-line" Hue="FpHue.Sky" CssClass="fp-fade-up-2 fpyr-factors"
+                Subtitle="Each bar is 100 % when that input is at its best for this crop.">
+            <ul class="fpyr-bars">
+                @foreach (var f in Result.Factors)
+                {
+                    var biggest = f.Code == Result.BiggestLoss;
+                    <li class="fpyr-bar fpyr-bar--@YieldUi.FactorCss(f.Value) @(biggest ? "is-biggest" : null)">
+                        <div class="fpyr-bar__head">
+                            <span class="fpyr-bar__label">@f.Label</span>
+                            @if (biggest)
+                            {
+                                <span class="fpyr-bar__tag">Biggest loss</span>
+                            }
+                            <span class="fpyr-bar__pct fp-num">@YieldUi.Percent(f.Value) %</span>
+                        </div>
+                        <div class="fpyr-bar__track" role="img" aria-label="@($"{f.Label}: {YieldUi.Percent(f.Value)} percent, {YieldUi.LossText(f.LossT)}")">
+                            <span class="fpyr-bar__fill" style="width: @YieldUi.BarWidth(f.Value)"></span>
+                        </div>
+                        <p class="fp-caption fpyr-bar__note">@f.Note · <strong>@YieldUi.LossText(f.LossT)</strong></p>
+                    </li>
+                }
+            </ul>
+        </FpCard>
+
+        @* ---- tips ---- *@
+        <FpCard Title="How to get more" Icon="bi-lightbulb" Hue="FpHue.Green" CssClass="fp-fade-up-2 fpyr-tips">
+            @foreach (var w in Result.Warnings)
+            {
+                <div class="fp-alert fp-alert--info fpyr-warning" role="note">
+                    <i class="bi bi-exclamation-triangle-fill" aria-hidden="true"></i><span>@w</span>
+                </div>
+            }
+            <ol class="fpyr-tiplist">
+                @foreach (var tip in Result.Tips)
+                {
+                    <li class="fpyr-tip">
+                        <span class="fpyr-tip__icon fp-icon-circle fp-icon-circle--sm fp-hue-green" aria-hidden="true"><i class="bi @YieldUi.TipIcon(tip.Code)"></i></span>
+                        <span class="fpyr-tip__body">
+                            <span class="fpyr-tip__text">@tip.Text</span>
+                            @if (!string.IsNullOrEmpty(tip.Href))
+                            {
+                                <a class="fp-link-btn fpyr-tip__link" href="@tip.Href">@tip.LinkText <i class="bi bi-arrow-right" aria-hidden="true"></i></a>
+                            }
+                        </span>
+                    </li>
+                }
+            </ol>
+        </FpCard>
+    </div>
+
+    @* ---- how ---- *@
+    <FpCard Title="How we worked this out" Icon="bi-calculator" Hue="FpHue.Neutral" CssClass="fp-fade-up-3 fpyr-how">
+        <p class="fpyr-formula fp-num">@YieldUi.Formula(Result)</p>
+        <p class="fpyr-formula fp-num">@YieldUi.AreaFormula(Result)</p>
+        <p class="fp-caption">
+            @Result.Crop (@Result.IrrigationClass.ToLowerInvariant()) gives about @YieldUi.Tonnes(Result.NormTPerHa) t/ha with good management
+            (usual range @YieldUi.Tonnes(Result.NormLowTPerHa)-@YieldUi.Tonnes(Result.NormHighTPerHa) t/ha) when rain is
+            @Result.RainLowMm-@Result.RainHighMm mm. Each of your inputs scales it; the range is ± @Result.RangePercent %.
+        </p>
+        <p class="fp-caption fpyr-source">
+            <i class="bi bi-journal-text" aria-hidden="true"></i>
+            <span>Sources: @Result.Source. <a href="@Result.SourceUrl" target="_blank" rel="noopener">Main source page</a></span>
+        </p>
+    </FpCard>
+
+    <div class="fp-action-pills fpyr-actions">
+        <a class="fp-action-pill" href="/farmer/fertilizer"><i class="bi bi-flower2" aria-hidden="true"></i> Fertilizer advice</a>
+        <a class="fp-action-pill" href="/farmer/team"><i class="bi bi-person-badge" aria-hidden="true"></i> Ask my SPIC team</a>
+        <a class="fp-action-pill" href="/farmer/yield/history"><i class="bi bi-clock-history" aria-hidden="true"></i> My past forecasts</a>
+    </div>
+
+    <FpDisclaimer Text="@YieldUi.Disclaimer" />
+</section>
+
+@code {
+    [Parameter, EditorRequired] public YieldPredictionDto Result { get; set; } = new();
+
+    /// <summary>"28 Nov 2026, 3:05 pm" on a saved forecast (history); null on a new one.</summary>
+    [Parameter] public string? SavedAt { get; set; }
+
+    private FpCard? _summaryCard;
+
+    private string RangeFormat => Result.HighT < 10 ? "0.##" : Result.HighT < 100 ? "0.#" : "0";
+
+    public Task FocusAsync() => _summaryCard?.FocusTitleAsync() ?? Task.CompletedTask;
+}

@@ -42,6 +42,9 @@ public static class FarmerFeatureTiles
         // Task 6
         new("leaf-check", "Leaf check", "Photo of a leaf: what is it short of?",
             "bi-camera", FpHue.Teal, "/farmer/leaf-check", Always),
+        // Task 7
+        new("yield", "Harvest forecast", "How much will my crop give this season?",
+            "bi-graph-up-arrow", FpHue.Gold, "/farmer/yield", Always),
         // Task 2
         new("dealers", "Dealers near me", "Call or visit a SPIC dealer",
             "bi-shop", FpHue.Gold, "/farmer/dealers", Always),

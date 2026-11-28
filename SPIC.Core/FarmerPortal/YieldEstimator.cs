@@ -394,9 +394,9 @@ public static class YieldEstimator
             var gain = total / fRain - total;
             string text;
             if (dto.RainfallMm > norm.RainHighMm)
-                text = $"Heavy rain can cost about {Amount(gain)}: keep field drains open and watch for pests and disease.";
+                text = $"Heavy rain can cost {Amount(gain)}: keep field drains open and watch for pests and disease.";
             else if (norm.IrrigationClass == Rainfed)
-                text = $"Low rain costs about {Amount(gain)}. One protective irrigation at flowering, mulching or a farm pond helps most.";
+                text = $"Low rain costs {Amount(gain)}. One protective irrigation at flowering, mulching or a farm pond helps most.";
             else
                 text = $"Rain is below what {norm.Crop.ToLowerInvariant()} needs: keep irrigations on time, mainly at flowering and grain or fruit filling ({Amount(gain)} at stake).";
             tips.Add(new YieldTipDto { Code = "rain", GainT = Round2(gain), Text = text });

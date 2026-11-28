@@ -1,0 +1,324 @@
+@page "/farmer/yield"
+@using System.Globalization
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
+@using SPIC.Core.FarmerPortal
+@inject FarmerSession Farmer
+@inject FarmerYieldApi Api
+@inject LoginState LoginState
+
+@*
+    Harvest yield forecast (farmer portal Task 7, api/Farmer/yield/*). Inputs like the owner's sketch: crop, area,
+    irrigation ("Your crop and field") and canopy vigour (NDVI, or pick by look), season rainfall and NPK applied
+    ("This season"). The result (YieldResultView) appears below and is saved to My past forecasts. No AI call: the
+    estimate is the documented rule model (YieldEstimator) over the seeded crop norms.
+*@
+
+<div class="fp fp-page fpy">
+    <FpHero Title="AI Harvest Yield Prediction" Compact="true" BackHref="@LoginState.FarmerLandingPath" BackLabel="Back to home"
+            DocumentTitle="Harvest yield prediction"
+            Subtitle="Know your likely harvest before it comes in, to plan sales, storage and transport.">
+        <div class="fp-chips fpy-hero-chips">
+            <FpChip Icon="bi-graph-up-arrow" Text="Crop norms + your inputs" Small="true" />
+            <a class="fp-btn fp-btn--light fp-btn--sm" href="/farmer/yield/history"><i class="bi bi-clock-history" aria-hidden="true"></i> My past forecasts</a>
+        </div>
+    </FpHero>
+
+    @if (LoginState.UserRole != AppRole.Farmer)
+    {
+        <FpEmpty Art="FpArtKind.Field" Title="You are viewing as support staff"
+                 Message="Farmers forecast their harvest here. Support staff have no farmer profile, so nothing is saved." />
+    }
+    else if (_loading)
+    {
+        <FpSkeleton Variant="FpSkeletonVariant.Form" Count="2" LoadingText="Getting the crops and season ranges..." />
+    }
+    else if (_error is not null || _options is null)
+    {
+        <FpError Title="We could not open the harvest forecast" Message="@(_error ?? "Please try again.")" OnRetry="LoadAsync" />
+    }
+    else
+    {
+        <div class="fpy-inputs">
+            @* ---- crop and field ---- *@
+            <FpCard Title="Your crop and field" Icon="bi-flower1" Hue="FpHue.Green" CssClass="fpy-card fpy-card--crop"
+                    Subtitle="@(_fromProfile ? "Filled from your profile. Change anything that is different this season." : "Choose your crop, area and how you water it.")">
+                <div class="fp-field">
+                    <span class="fp-label" id="fpy-crop-label">Crop <span class="fp-req" aria-hidden="true">*</span></span>
+                    <div class="fp-chips fpy-crops" role="radiogroup" aria-labelledby="fpy-crop-label">
+                        @foreach (var c in _options.Crops)
+                        {
+                            <FpChip Text="@c.Crop" Emoji="@FpUi.CropEmoji(c.Crop)" Icon="@YieldUi.CropIcon(c.Crop)" Selected="@(c.Crop == _crop)"
+                                    OnClick="() => SelectCrop(c.Crop)" CssClass="fpy-crop" />
+                        }
+                    </div>
+                    @if (CropOption is { } co && Norm is { } nm)
+                    {
+                        <p class="fp-caption fpy-typical"><i class="bi bi-award" aria-hidden="true"></i> @YieldUi.TypicalLine(co, nm)</p>
+                    }
+                    <FpFieldError Text="@Err("crop")" />
+                </div>
+
+                <div class="fp-field">
+                    <label class="fp-label" for="fpy-acres">Cultivated area <span class="fp-optional">(acres)</span></label>
+                    <div class="fpy-area">
+                        <input id="fpy-acres" type="number" inputmode="decimal" min="0.1" max="1000" step="0.1"
+                               class="fp-input fp-input--short @(Err("areaAcres") is null ? null : "is-invalid")"
+                               value="@(_acres?.ToString(CultureInfo.InvariantCulture))" @onchange="AcresChanged" aria-describedby="fpy-acres-ha" />
+                        <span id="fpy-acres-ha" class="fpy-area__ha fp-num">@YieldUi.Hectares(_acres)</span>
+                    </div>
+                    <FpFieldError Text="@Err("areaAcres")" />
+                </div>
+
+                <div class="fp-field">
+                    <span class="fp-label" id="fpy-method-label">Irrigation method <span class="fp-req" aria-hidden="true">*</span></span>
+                    <div class="fpy-methods" role="radiogroup" aria-labelledby="fpy-method-label">
+                        @foreach (var m in _options.Methods)
+                        {
+                            var offered = YieldUi.Offers(CropOption, m.Code);
+                            <button type="button" class="fpy-method @(m.Code == _method ? "is-on" : null)" role="radio"
+                                    aria-checked="@(m.Code == _method ? "true" : "false")" disabled="@(!offered)" @onclick="() => SelectMethod(m.Code)">
+                                <i class="bi @m.Icon" aria-hidden="true"></i>
+                                <span>@m.Label</span>
+                            </button>
+                        }
+                    </div>
+                    @if (CropOption is { } crop && !YieldUi.Offers(crop, YieldEstimator.MethodRainfed))
+                    {
+                        <p class="fp-caption fpy-method-note"><i class="bi bi-info-circle" aria-hidden="true"></i> @crop.Crop is grown with irrigation here, so there is no rainfed forecast.</p>
+                    }
+                    <FpFieldError Text="@Err("method")" />
+                </div>
+            </FpCard>
+
+            @* ---- this season ---- *@
+            <FpCard Title="This season" Icon="bi-sliders" Hue="FpHue.Sky" CssClass="fpy-card fpy-card--season"
+                    Subtitle="How your crop looks, the rain and the fertilizer applied.">
+                <div class="fpy-sliders">
+                    <FpZoneSlider Id="fpy-ndvi" Label="Satellite canopy vigour (NDVI)" Min="@_options.Ndvi.Min" Max="@_options.Ndvi.Max" Step="@_options.Ndvi.Step" Decimals="2"
+                                  LowBelow="@_options.Ndvi.LowBelow" HighAbove="@_options.Ndvi.HighAbove"
+                                  LowText="@_options.Ndvi.LowLabel" MediumText="@_options.Ndvi.MediumLabel" HighText="@_options.Ndvi.HighLabel"
+                                  CssClass="@YieldUi.ScaleCss(_options.Ndvi.Min, _options.Ndvi.Max, _options.Ndvi.LowBelow, _options.Ndvi.HighAbove)"
+                                  @bind-Value="_ndvi" @bind-Value:after="NdviEdited"
+                                  Hint="Greenness of the crop from a satellite or drone app. 0.35 is sparse, 0.92 dense; 0.72-0.88 is a full, healthy crop.">
+                        <Footer>
+                            <div class="fpy-looks">
+                                <span class="fpy-looks__label" id="fpy-look-label">Not sure? Pick how your crop looks:</span>
+                                <div class="fpy-looks__row" role="radiogroup" aria-labelledby="fpy-look-label">
+                                    @foreach (var look in _options.Looks)
+                                    {
+                                        var on = _ndviSource == YieldEstimator.SourceLook && _look == look.Key;
+                                        <button type="button" class="fpy-look fpy-look--@look.Key @(on ? "is-on" : null)" role="radio" aria-checked="@(on ? "true" : "false")"
+                                                @onclick="() => PickLook(look)">
+                                            <span class="fpy-look__swatch" aria-hidden="true"></span>
+                                            <span class="fpy-look__text">
+                                                <strong>@look.Label</strong>
+                                                <span>@look.Hint</span>
+                                            </span>
+                                        </button>
+                                    }
+                                </div>
+                                @if (_ndviSource == YieldEstimator.SourceLook)
+                                {
+                                    <p class="fp-caption fpy-looks__note"><i class="bi bi-info-circle" aria-hidden="true"></i> Picked by look: the forecast range is wider. Move the slider if you have an NDVI value.</p>
+                                }
+                            </div>
+                        </Footer>
+                    </FpZoneSlider>
+                    <FpFieldError Text="@Err("ndvi")" />
+
+                    <FpZoneSlider Id="fpy-rain" Label="Seasonal rainfall" Unit="mm" Min="@_options.Rainfall.Min" Max="@_options.Rainfall.Max" Step="@_options.Rainfall.Step"
+                                  LowBelow="@(Norm?.RainLowMm ?? _options.Rainfall.LowBelow)" HighAbove="@(Norm?.RainHighMm ?? _options.Rainfall.HighAbove)"
+                                  LowText="@_options.Rainfall.LowLabel" MediumText="@_options.Rainfall.MediumLabel" HighText="@_options.Rainfall.HighLabel"
+                                  CssClass="@YieldUi.ScaleCss(_options.Rainfall.Min, _options.Rainfall.Max, Norm?.RainLowMm ?? _options.Rainfall.LowBelow, Norm?.RainHighMm ?? _options.Rainfall.HighAbove)"
+                                  @bind-Value="_rain" Hint="@YieldUi.RainHint(_crop ?? "", Norm)" />
+                    <FpFieldError Text="@Err("rainfallMm")" />
+
+                    <FpZoneSlider Id="fpy-npk" Label="Recommended NPK applied" Unit="%" Min="@_options.Npk.Min" Max="@_options.Npk.Max" Step="@_options.Npk.Step"
+                                  LowBelow="@_options.Npk.LowBelow" HighAbove="@_options.Npk.HighAbove"
+                                  LowText="@_options.Npk.LowLabel" MediumText="@_options.Npk.MediumLabel" HighText="@_options.Npk.HighLabel"
+                                  @bind-Value="_npk" Hint="@YieldUi.NpkHint(_options.Prefill.LastFertilizerCrop, _options.Prefill.LastFertilizerAtUtc)" />
+                    <FpFieldError Text="@Err("npkPercent")" />
+                </div>
+            </FpCard>
+
+            <div class="fp-actionbar fpy-actionbar">
+                @if (_formError is not null)
+                {
+                    <div class="fp-alert fp-alert--error fpy-formerror" role="alert"><i class="bi bi-exclamation-circle-fill" aria-hidden="true"></i><span>@_formError</span></div>
+                }
+                <button type="button" class="fp-btn fp-btn--primary" disabled="@(_submitting || Norm is null)" @onclick="SubmitAsync">
+                    @if (_submitting)
+                    {
+                        <span class="fp-spinner" aria-hidden="true"></span>
+                        <span>Working it out...</span>
+                    }
+                    else
+                    {
+                        <i class="bi bi-graph-up-arrow" aria-hidden="true"></i>
+                        <span>@(_result is null ? "Predict my harvest" : "Update my forecast")</span>
+                    }
+                </button>
+            </div>
+        </div>
+
+        @if (_result is { } result)
+        {
+            <YieldResultView @ref="_resultView" Result="@result" />
+        }
+    }
+</div>
+
+@code {
+    private bool _loading = true;
+    private string? _error;
+    private YieldOptionsDto? _options;
+
+    private string? _crop;
+    private string _method = YieldEstimator.MethodCanalBorewell;
+    private decimal? _acres;
+    private double? _ndvi, _rain, _npk;
+    private string _ndviSource = YieldEstimator.SourceValue;
+    private string? _look;
+    private bool _fromProfile;
+
+    private bool _submitting;
+    private string? _formError;
+    private IReadOnlyDictionary<string, string>? _errors;
+    private YieldPredictionDto? _result;
+    private bool _focusResult;
+    private YieldResultView? _resultView;
+
+    private YieldCropOptionDto? CropOption => _options?.Crops.FirstOrDefault(c => c.Crop == _crop);
+
+    private YieldNormOptionDto? Norm => YieldUi.NormFor(CropOption, _method);
+
+    private string? Err(string key) => _errors is not null && _errors.TryGetValue(key, out var v) ? v : null;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_focusResult || _resultView is null) return;
+        _focusResult = false;
+        try { await _resultView.FocusAsync(); } catch { /* never throw from here */ }
+    }
+
+    private async Task LoadAsync()
+    {
+        if (LoginState.UserRole != AppRole.Farmer)
+        {
+            _loading = false;
+            return;
+        }
+
+        _loading = true;
+        _error = null;
+        StateHasChanged();
+        // The farmer shell (My Samples / My Reports tabs) reads the SAS link from the profile.
+        try { await Farmer.EnsureLoadedAsync(); } catch { /* the server prefills from the profile itself */ }
+        var result = await Api.OptionsAsync();
+        _loading = false;
+        if (result.Value is not { } options)
+        {
+            _error = result.Message ?? "Please try again.";
+            return;
+        }
+
+        _options = options;
+        var p = options.Prefill;
+        _crop ??= p.Crop ?? options.Crops.FirstOrDefault()?.Crop;
+        _method = p.Method;
+        _acres ??= p.AreaAcres;
+        _ndvi ??= options.Ndvi.Default;
+        _rain ??= options.Rainfall.Default;
+        _npk ??= p.NpkPercent;
+        _fromProfile = p.CropFromProfile || p.AreaFromProfile || p.MethodFromProfile;
+    }
+
+    private void SelectCrop(string crop)
+    {
+        _crop = crop;
+        // Sugarcane and banana have no rainfed norm: switch to canal / borewell.
+        if (!YieldUi.Offers(CropOption, _method)) _method = YieldEstimator.MethodCanalBorewell;
+        ClearError("crop");
+        ClearError("method");
+    }
+
+    private void SelectMethod(string method)
+    {
+        _method = method;
+        ClearError("method");
+    }
+
+    private void AcresChanged(ChangeEventArgs e)
+    {
+        _acres = decimal.TryParse(e.Value?.ToString()?.Replace(',', '.'), NumberStyles.Number, CultureInfo.InvariantCulture, out var a) ? a : null;
+        ClearError("areaAcres");
+    }
+
+    /// <summary>The farmer moved the slider or typed a value: it counts as a measured NDVI again.</summary>
+    private void NdviEdited()
+    {
+        _ndviSource = YieldEstimator.SourceValue;
+        _look = null;
+        ClearError("ndvi");
+    }
+
+    private void PickLook(YieldLookOptionDto look)
+    {
+        _ndvi = look.Ndvi;
+        _ndviSource = YieldEstimator.SourceLook;
+        _look = look.Key;
+        ClearError("ndvi");
+    }
+
+    private async Task SubmitAsync()
+    {
+        _formError = null;
+        var errors = new Dictionary<string, string>();
+        if (CropOption is null) errors["crop"] = "Please choose your crop.";
+        else if (Norm is null) errors["method"] = "Please choose how you water the crop.";
+        if (_acres is not { } acres || acres < YieldEstimator.MinAcres || acres > YieldEstimator.MaxAcres) errors["areaAcres"] = "Enter your area in acres (0.1 to 1000).";
+        if (_ndvi is null) errors["ndvi"] = "Please set the crop vigour, or pick how your crop looks.";
+        if (_rain is null) errors["rainfallMm"] = "Please set the season rainfall.";
+        if (_npk is null) errors["npkPercent"] = "Please set how much fertilizer you applied.";
+        if (errors.Count > 0)
+        {
+            _errors = errors;
+            _formError = errors.Count == 1 ? errors.Values.First() : "Please check the marked fields.";
+            return;
+        }
+
+        _errors = null;
+        _submitting = true;
+        StateHasChanged();
+        var request = new YieldPredictRequest
+        {
+            Crop = _crop!,
+            Method = _method,
+            AreaAcres = _acres!.Value,
+            Ndvi = Math.Round(_ndvi!.Value, 2),
+            NdviSource = _ndviSource,
+            RainfallMm = (int)Math.Round(_rain!.Value),
+            NpkPercent = (int)Math.Round(_npk!.Value)
+        };
+        var result = await Api.PredictAsync(request);
+        _submitting = false;
+        if (result.Value is { } forecast)
+        {
+            _result = forecast;
+            _focusResult = true;
+            return;
+        }
+        _errors = result.Errors;
+        _formError = result.Message ?? "Please try again.";
+    }
+
+    private void ClearError(string key)
+    {
+        if (_errors is null || !_errors.ContainsKey(key)) return;
+        var copy = _errors.Where(e => e.Key != key).ToDictionary(e => e.Key, e => e.Value);
+        _errors = copy.Count == 0 ? null : copy;
+    }
+}
