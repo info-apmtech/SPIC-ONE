@@ -28,6 +28,14 @@ DELETE FROM "CommunityPostAttachments" WHERE "PostId" IN (SELECT "Id" FROM "Comm
 DELETE FROM "CommunityPostReplies" WHERE "Body" LIKE '[smoke-final]%' OR "PostId" IN (SELECT "Id" FROM "CommunityPosts" WHERE "Title" LIKE '[smoke-final]%');
 DELETE FROM "CommunityReactions" WHERE "UserId" IN (SELECT "Id" FROM smoke_final_users);
 DELETE FROM "CommunityPosts" WHERE "Title" LIKE '[smoke-final]%';
+-- Recheck fixes (smoke_final.py Group R): its taken-down posts and any SAS rows a failed run left.
+DELETE FROM "CommunityPostAttachments" WHERE "PostId" IN (SELECT "Id" FROM "CommunityPosts" WHERE "Title" LIKE '[smoke-recheck]%');
+DELETE FROM "CommunityPosts" WHERE "Title" LIKE '[smoke-recheck]%';
+DELETE FROM "SampleLabResults" WHERE "SampleItemId" IN (SELECT "Id" FROM "SampleItems" WHERE "Code" LIKE '[smoke-recheck]%');
+DELETE FROM "SampleItems" WHERE "Code" LIKE '[smoke-recheck]%';
+DELETE FROM "SampleCollections" WHERE "Code" LIKE '[smoke-recheck]%';
+DELETE FROM "SasFarmers" WHERE "Name" LIKE '[smoke-recheck]%';
+DELETE FROM "AppPageViews" WHERE "Route" = '/smoke-final-b7';
 
 DELETE FROM "AppUserRoles" WHERE "UserId" IN (SELECT "Id" FROM smoke_final_users);
 DELETE FROM "AppUsers" WHERE "Id" IN (SELECT "Id" FROM smoke_final_users);

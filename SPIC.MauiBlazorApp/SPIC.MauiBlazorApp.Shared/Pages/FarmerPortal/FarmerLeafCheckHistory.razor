@@ -129,8 +129,12 @@
         await LoadAsync();
     }
 
+    /// <summary>Recheck U9: list and detail share this page; only the newest load may touch its state.</summary>
+    private int _loadVersion;
+
     private async Task LoadAsync()
     {
+        var version = ++_loadVersion;
         if (LoginState.UserRole != AppRole.Farmer)
         {
             _loading = false;
@@ -142,10 +146,12 @@
         _photoUrl = null;
         StateHasChanged();
         try { await Farmer.EnsureLoadedAsync(); } catch { /* the shell tabs only */ }
+        if (version != _loadVersion) return;
 
         if (CheckId is { } id)
         {
             var result = await Api.GetAsync(id);
+            if (version != _loadVersion) return;
             _loading = false;
             if (result.Value is not { } check)
             {
@@ -157,12 +163,13 @@
             if (check.HasImage && !_disposed)
             {
                 var bytes = await Api.ImageAsync(id, ct: LoadToken);
-                if (!_cts.IsCancellationRequested && CheckId == id && bytes is not null) _photoUrl = LeafCheckUi.DataUrl("image/jpeg", bytes);
+                if (!_cts.IsCancellationRequested && version == _loadVersion && CheckId == id && bytes is not null) _photoUrl = LeafCheckUi.DataUrl("image/jpeg", bytes);
             }
             return;
         }
 
         var list = await Api.HistoryAsync();
+        if (version != _loadVersion) return;
         _loading = false;
         if (list.Value is not { } items)
         {
@@ -174,7 +181,7 @@
         // Small photos after the list is on screen, one by one (240 px each).
         foreach (var item in items.Where(i => i.HasImage).ToList())
         {
-            if (CheckId is not null || _cts.IsCancellationRequested) return;
+            if (CheckId is not null || _cts.IsCancellationRequested || version != _loadVersion) return;
             if (_thumbs.ContainsKey(item.Id)) continue;
             var bytes = await Api.ImageAsync(item.Id, thumb: true, ct: LoadToken);
             if (_cts.IsCancellationRequested) return;

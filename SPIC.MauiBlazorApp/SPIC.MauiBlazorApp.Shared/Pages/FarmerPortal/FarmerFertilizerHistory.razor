@@ -93,8 +93,12 @@
         await LoadAsync();
     }
 
+    /// <summary>Recheck U9: list and detail share this page; only the newest load may touch its state.</summary>
+    private int _loadVersion;
+
     private async Task LoadAsync()
     {
+        var version = ++_loadVersion;
         if (LoginState.UserRole != AppRole.Farmer)
         {
             _loading = false;
@@ -107,9 +111,11 @@
         StateHasChanged();
         // The farmer shell (My Samples / My Reports tabs) reads the SAS link from the profile.
         try { await Farmer.EnsureLoadedAsync(); } catch { /* the list does not need it */ }
+        if (version != _loadVersion) return;
         if (RunId is { } id)
         {
             var result = await Api.RunAsync(id);
+            if (version != _loadVersion) return;
             _loading = false;
             if (result.Value is { } run) _run = run;
             else _error = result.Message ?? "Please try again.";
@@ -117,6 +123,7 @@
         }
 
         var list = await Api.HistoryAsync();
+        if (version != _loadVersion) return;
         _loading = false;
         if (list.Value is { } items) _items = items;
         else _error = list.Message ?? "Please try again.";

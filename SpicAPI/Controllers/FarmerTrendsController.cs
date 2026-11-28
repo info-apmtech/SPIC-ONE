@@ -56,7 +56,7 @@ namespace SpicAPI.Controllers
         {
             var profile = await ProfileAsync(ct);
             if (profile is null) return NotFound(new FarmerAuthError { Message = NoProfileMessage });
-            return Ok(await _weather.ForecastAsync(profile.Latitude, profile.Longitude, ct));
+            return Ok(await _weather.ForecastAsync(profile.Latitude, profile.Longitude, profile.UserId, ct));
         }
 
         [HttpGet("trends")]
@@ -66,7 +66,7 @@ namespace SpicAPI.Controllers
             if (profile is null) return NotFound(new FarmerAuthError { Message = NoProfileMessage });
 
             // The forecast does not touch the database, so it runs while the area numbers load.
-            var weatherTask = _weather.ForecastAsync(profile.Latitude, profile.Longitude, ct);
+            var weatherTask = _weather.ForecastAsync(profile.Latitude, profile.Longitude, profile.UserId, ct);
 
             var area = await _near.NamedAreaAsync(profile.DistrictId, profile.StateId, ct);
             var key = $"fp:trends:area:{area.DistrictId}:{area.StateId}";
@@ -109,7 +109,8 @@ namespace SpicAPI.Controllers
                 : new List<int>();
             if (area.DistrictId > 0 && !stateDistricts.Contains(area.DistrictId)) stateDistricts.Add(area.DistrictId);
 
-            var crops = FarmerTrendRules.Crops(await CropFarmersAsync(area, stateDistricts, since, ct), area.DistrictId, area.DistrictName, area.StateName);
+            var (cropFarmers, cropGroups) = await CropFarmersAsync(area, stateDistricts, since, ct);
+            var crops = FarmerTrendRules.Crops(cropFarmers, cropGroups, area.DistrictId, area.DistrictName, area.StateName);
             var soil = FarmerTrendRules.SoilProblems(await SoilResultsAsync(area, stateDistricts, since, ct), area.DistrictId, area.DistrictName, area.StateName);
             var talked = await TalkedAsync(area, since, ct);
             var dealers = await DealerCountAsync(area, ct);
@@ -117,17 +118,13 @@ namespace SpicAPI.Controllers
         }
 
         /// <summary>Farmer profiles of the state (all: they hold the farmer's current crops) and SAS farmers
-        /// whose samples were collected in the window (their sample crops).</summary>
-        private async Task<List<TrendCropFarmer>> CropFarmersAsync(CommunityArea area, List<int> stateDistricts, DateTime since, CancellationToken ct)
+        /// whose samples were collected in the window (their sample crops). Recheck fix B8: the profiles are counted in
+        /// SQL (one row per district and stored crop list); only the profiles of SAS-linked farmers in the window are
+        /// read one by one, so their profile and sample crops still merge into one farmer.</summary>
+        private async Task<(List<TrendCropFarmer> Farmers, List<TrendCropGroup> Groups)> CropFarmersAsync(CommunityArea area,
+            List<int> stateDistricts, DateTime since, CancellationToken ct)
         {
             var list = new List<TrendCropFarmer>();
-
-            var profiles = await _db.FarmerProfiles.AsNoTracking()
-                .Where(p => (area.StateId > 0 && p.StateId == area.StateId) || p.DistrictId == area.DistrictId)
-                .Select(p => new { p.UserId, p.DistrictId, p.PrimaryCrops })
-                .ToListAsync(ct);
-            list.AddRange(profiles.Select(p => new TrendCropFarmer("u:" + p.UserId, p.DistrictId,
-                (p.PrimaryCrops ?? "").Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))));
 
             var samples = await (
                 from item in _db.SampleItems.AsNoTracking()
@@ -140,12 +137,34 @@ namespace SpicAPI.Controllers
                           || (farmer.DistrictId != null && stateDistricts.Contains(farmer.DistrictId.Value)))
                 select new { farmer.Id, farmer.UserId, farmer.DistrictId, item.Crop1, item.Crop2 })
                 .ToListAsync(ct);
+            var linkedUserIds = samples.Where(s => !string.IsNullOrWhiteSpace(s.UserId)).Select(s => s.UserId!).Distinct().ToList();
+
+            var areaProfiles = _db.FarmerProfiles.AsNoTracking()
+                .Where(p => (area.StateId > 0 && p.StateId == area.StateId) || p.DistrictId == area.DistrictId);
+
+            // Profiles first, so a linked farmer's profile district wins over the SAS record's (as before).
+            if (linkedUserIds.Count > 0)
+            {
+                var linkedProfiles = await areaProfiles
+                    .Where(p => linkedUserIds.Contains(p.UserId))
+                    .Select(p => new { p.UserId, p.DistrictId, p.PrimaryCrops })
+                    .ToListAsync(ct);
+                list.AddRange(linkedProfiles.Select(p => new TrendCropFarmer("u:" + p.UserId, p.DistrictId,
+                    (p.PrimaryCrops ?? "").Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))));
+            }
+
+            var groups = await areaProfiles
+                .Where(p => !linkedUserIds.Contains(p.UserId))
+                .GroupBy(p => new { p.DistrictId, p.PrimaryCrops })
+                .Select(g => new { g.Key.DistrictId, g.Key.PrimaryCrops, Farmers = g.Count() })
+                .ToListAsync(ct);
+
             list.AddRange(samples.Select(s => new TrendCropFarmer(
                 string.IsNullOrWhiteSpace(s.UserId) ? "s:" + s.Id : "u:" + s.UserId,
                 s.DistrictId,
                 new[] { s.Crop1 ?? "", s.Crop2 ?? "" })));
 
-            return list;
+            return (list, groups.Select(g => new TrendCropGroup(g.DistrictId, g.PrimaryCrops, g.Farmers)).ToList());
         }
 
         /// <summary>The lab's own status for the soil nutrients of every soil report generated in the window, in the state.</summary>

@@ -35,6 +35,173 @@ internal static class FarmerPortalRecheckTests
 		FarmerSessionRules();
 		FarmerRestore();
 		ShellSources();
+		MinorSources();
+		WeatherData();
+		WeatherCap();
+		CropGroups();
+	}
+
+	// ------------------------------------------------------------------ Group 3 UI (source)
+
+	private static void MinorSources()
+	{
+		string Page(string name) => Source("SPIC.MauiBlazorApp", "SPIC.MauiBlazorApp.Shared", "Pages", "FarmerPortal", name);
+		foreach (var page in new[] { "FarmerLeafCheck.razor", "FarmerFertilizer.razor", "FarmerYield.razor" })
+		{
+			var src = Page(page);
+			var body = src[src.IndexOf("private async Task SubmitAsync()", StringComparison.Ordinal)..];
+			var firstStatement = body.Split('\n').Skip(2).First(l => l.Trim().Length > 0 && !l.Trim().StartsWith("//")).Trim();
+			Check.Equal($"U4: {page} SubmitAsync ignores a second tap first", "if (_submitting) return;", firstStatement);
+		}
+
+		var assistant = Page("FarmerAssistant.razor");
+		Check.That("U7: the assistant marks itself disposed before cancelling", assistant.Contains("public async ValueTask DisposeAsync()\n    {\n        _disposed = true;\n        _cts.Cancel();"));
+		var delete = assistant[assistant.IndexOf("private async Task DeleteAsync(", StringComparison.Ordinal)..];
+		delete = delete[..delete.IndexOf("protected override", StringComparison.Ordinal)];
+		Check.That("U7: delete-chat checks the page is still there after the confirm and never reads _cts.Token",
+			delete.Contains("if (_disposed) return;") && delete.Contains("Api.DeleteAsync(c.Id, LoadToken)") && !delete.Contains("_cts.Token"));
+
+		Check.That("U8: the phone box takes a pasted '+91 98765 43210' / '0091 98765 43210'", Page("FarmerLogin.razor").Contains("maxlength=\"20\""));
+		Check.That("U8: both pasted forms fit 20 characters and normalise to a valid number",
+			new[] { "+91 98765 43210", "+91-98765-43210", "0091 98765 43210" }.All(p => p.Length <= 20 && FarmerPhone.IsValid(FarmerPhone.Normalise(p))));
+
+		foreach (var page in new[] { "FarmerFertilizerHistory.razor", "FarmerYieldHistory.razor", "FarmerLeafCheckHistory.razor" })
+		{
+			var src = Page(page);
+			var load = src[src.IndexOf("private async Task LoadAsync()", StringComparison.Ordinal)..];
+			Check.That($"U9: {page} starts each load with a new version", load.Contains("var version = ++_loadVersion;"));
+			Check.That($"U9: {page} ignores a stale answer after every await",
+				System.Text.RegularExpressions.Regex.Matches(load, @"if \(version != _loadVersion\) return;").Count >= 3);
+		}
+
+		var sidebar = Source("SPIC.MauiBlazorApp", "SPIC.MauiBlazorApp.Shared", "Components", "Shell", "MobileSidebar.razor");
+		var navMenu = Source("SPIC.MauiBlazorApp", "SPIC.MauiBlazorApp.Shared", "Layout", "NavMenu.razor");
+		var farmerBlock = navMenu[navMenu.IndexOf("@if (loginState.UserRole == AppRole.Farmer)", StringComparison.Ordinal)..];
+		farmerBlock = farmerBlock[..farmerBlock.IndexOf("My Samples", StringComparison.Ordinal)];
+		var navHrefs = System.Text.RegularExpressions.Regex.Matches(farmerBlock, "href=\"(/farmer[^\"]*)\"").Select(m => m.Groups[1].Value).ToList();
+		var drawer = SPIC.MauiBlazorApp.Shared.Components.Shell.MobileSidebar.FarmerMenu.Select(m => m.Href).ToList();
+		Check.That("U6: the drawer lists every farmer tool of the desktop menu", navHrefs.Count >= 10 && navHrefs.All(drawer.Contains), string.Join(",", navHrefs.Except(drawer)));
+		Check.That("U6: the drawer lists My call-back requests", drawer.Contains("/farmer/requests")
+			&& SPIC.MauiBlazorApp.Shared.Components.Shell.MobileSidebar.FarmerMenu.Any(m => m.Label == "My call-back requests"));
+		Check.That("U6: the drawer's farmer block is role-gated like the NavMenu", sidebar.Contains("@if (LoginState.UserRole == AppRole.Farmer)\n            {\n                @foreach (var item in FarmerMenu)"));
+	}
+
+	// ------------------------------------------------------------------ B5
+
+	private static FarmerWeatherDayDto Wx(double? rain = 0, int? chance = 0, double? wind = 10, double? max = 31) =>
+		new() { Date = "2026-11-28", RainMm = rain, RainChancePct = chance, WindKmh = wind, MaxTempC = max, MinTempC = 22, WeatherCode = 1 };
+
+	private static string Codes(IEnumerable<FarmerAdvisoryDto> a) => string.Join(",", a.Select(x => x.Code));
+
+	private static void WeatherData()
+	{
+		var dry = Enumerable.Range(0, 7).Select(_ => Wx(rain: 0.2, chance: 10)).ToList();
+		Check.Equal("B5: a full dry, calm week still gives dry week + good days", "dry-week,spray-window", Codes(FarmerWeatherRules.Advisories(dry)));
+		var noWind = Enumerable.Range(0, 7).Select(_ => Wx(rain: 0.2, chance: 10, wind: null)).ToList();
+		Check.Equal("B5: no wind values: no 'good days for spraying'", "dry-week", Codes(FarmerWeatherRules.Advisories(noWind)));
+		var noChance = Enumerable.Range(0, 7).Select(_ => Wx(rain: 0.2, chance: null)).ToList();
+		Check.Equal("B5: no rain-chance values: neither dry week nor good days", "", Codes(FarmerWeatherRules.Advisories(noChance)));
+		var oneGap = Enumerable.Range(0, 7).Select(i => Wx(rain: i == 5 ? null : 0.2, chance: 10)).ToList();
+		Check.Equal("B5: one missing rain amount later in the week: no dry week, good days still (days 1-2 complete)", "spray-window", Codes(FarmerWeatherRules.Advisories(oneGap)));
+		var tomorrowGap = Enumerable.Range(0, 7).Select(i => Wx(rain: 0.2, chance: i == 1 ? null : 10)).ToList();
+		Check.Equal("B5: tomorrow's chance missing: no good days", "", Codes(FarmerWeatherRules.Advisories(tomorrowGap)));
+		var heavyNoChance = new List<FarmerWeatherDayDto> { Wx(rain: 30, chance: null), Wx(rain: 30, chance: null), Wx(rain: 0, chance: null) };
+		Check.That("B5: heavy rain is still warned about when the chance is missing", Codes(FarmerWeatherRules.Advisories(heavyNoChance)).StartsWith("heavy-rain"));
+		Check.That("B5: a forecast with no rain amount or chance has no rain data",
+			!FarmerWeatherRules.HasRainData(Enumerable.Range(0, 7).Select(_ => Wx(rain: null, chance: null)).ToList()));
+		Check.That("B5: one rain chance is rain data", FarmerWeatherRules.HasRainData(new List<FarmerWeatherDayDto> { Wx(rain: null, chance: 40) }));
+	}
+
+	// ------------------------------------------------------------------ B5 / B6 (service)
+
+	private sealed class OpenMeteoStub : HttpMessageHandler
+	{
+		public int Calls;
+		public string Body = "";
+		protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+		{
+			Calls++;
+			return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK) { Content = new StringContent(Body) });
+		}
+	}
+
+	private sealed class StubFactory : IHttpClientFactory
+	{
+		private readonly HttpMessageHandler _handler;
+		public StubFactory(HttpMessageHandler handler) => _handler = handler;
+		public HttpClient CreateClient(string name) => new(_handler, disposeHandler: false);
+	}
+
+	private const string FullWeek = """
+		{"daily":{"time":["2026-11-28","2026-11-29","2026-11-30","2026-12-01","2026-12-02","2026-12-03","2026-12-04"],
+		"weather_code":[1,1,1,1,1,1,1],"temperature_2m_max":[31,31,31,31,31,31,31],"temperature_2m_min":[22,22,22,22,22,22,22],
+		"precipitation_sum":[0,0,0,0,0,0,0],"precipitation_probability_max":[5,5,5,5,5,5,5],"wind_speed_10m_max":[8,8,8,8,8,8,8]}}
+		""";
+
+	private const string NoRainValues = """
+		{"daily":{"time":["2026-11-28","2026-11-29","2026-11-30"],"weather_code":[1,1,1],"temperature_2m_max":[31,31,31],
+		"temperature_2m_min":[22,22,22],"precipitation_sum":[null,null,null],"precipitation_probability_max":[null,null,null],
+		"wind_speed_10m_max":[null,null,null]}}
+		""";
+
+	private static void WeatherCap()
+	{
+		var stub = new OpenMeteoStub { Body = NoRainValues };
+		var config = new ConfigurationBuilder().Build();
+		var svc = new FarmerWeatherService(new StubFactory(stub), config, NullLogger<FarmerWeatherService>.Instance);
+		var none = svc.ForecastAsync(9.17, 77.87, "farmer-x", CancellationToken.None).GetAwaiter().GetResult();
+		Check.Equal("B5: an Open-Meteo answer with no rain values at all is Unavailable", FarmerWeatherStatus.Unavailable, none.Status);
+		Check.That("B5: and gives no advice", none.Advisories.Count == 0);
+
+		stub = new OpenMeteoStub { Body = FullWeek };
+		svc = new FarmerWeatherService(new StubFactory(stub), config, NullLogger<FarmerWeatherService>.Instance);
+		var statuses = Enumerable.Range(0, FarmerWeatherRules.FetchesPerFarmerPerHour + 1)
+			.Select(i => svc.ForecastAsync(9.0 + i * 0.1, 77.8, "farmer-a", CancellationToken.None).GetAwaiter().GetResult().Status).ToList();
+		Check.That("B6: a farmer's first 10 new points are fetched", statuses.Take(FarmerWeatherRules.FetchesPerFarmerPerHour).All(s => s == FarmerWeatherStatus.Ok));
+		Check.Equal("B6: the 11th new point in the hour is refused without a call", FarmerWeatherStatus.Unavailable, statuses.Last());
+		Check.Equal("B6: exactly 10 Open-Meteo calls were made", FarmerWeatherRules.FetchesPerFarmerPerHour, stub.Calls);
+		Check.Equal("B6: a cached point still answers the capped farmer", FarmerWeatherStatus.Ok,
+			svc.ForecastAsync(9.0, 77.8, "farmer-a", CancellationToken.None).GetAwaiter().GetResult().Status);
+		Check.Equal("B6: the refused point was not cached as a failure for other farmers", FarmerWeatherStatus.Ok,
+			svc.ForecastAsync(9.0 + FarmerWeatherRules.FetchesPerFarmerPerHour * 0.1, 77.8, "farmer-b", CancellationToken.None).GetAwaiter().GetResult().Status);
+		Check.Equal("B6: cached answers make no call", FarmerWeatherRules.FetchesPerFarmerPerHour + 1, stub.Calls);
+		Check.That("B6: the cache has a size limit", FarmerWeatherRules.CacheEntryLimit is > 0 and <= 100_000);
+	}
+
+	// ------------------------------------------------------------------ B8
+
+	private static void CropGroups()
+	{
+		var rng = new Random(42);
+		string[] crops = { "Paddy", "paddy ", "Banana", "Maize", "Cotton", "Groundnut", "" };
+		var profiles = Enumerable.Range(0, 400).Select(i => (User: "p" + i, District: rng.Next(1, 4),
+			Crops: string.Join(",", Enumerable.Range(0, rng.Next(0, 3)).Select(_ => crops[rng.Next(crops.Length)])))).ToList();
+		// 30 of them also have SAS samples in the window (some in another district), plus 20 unlinked SAS farmers.
+		var linked = profiles.Take(30).Select(p => new TrendCropFarmer("u:" + p.User, rng.Next(1, 4), new[] { crops[rng.Next(crops.Length)], "" })).ToList();
+		var unlinked = Enumerable.Range(0, 20).Select(i => new TrendCropFarmer("s:" + i, rng.Next(1, 4), new[] { crops[rng.Next(crops.Length)] })).ToList();
+
+		TrendCropFarmer Row((string User, int District, string Crops) p) =>
+			new("u:" + p.User, p.District, p.Crops.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries));
+
+		// Old path: every profile one by one, then the SAS rows.
+		var old = profiles.Select(Row).Concat(linked).Concat(unlinked).ToList();
+		// New path: linked profiles one by one, the rest as SQL-style groups.
+		var linkedIds = linked.Select(l => l.FarmerKey).ToHashSet();
+		var individuals = profiles.Where(p => linkedIds.Contains("u:" + p.User)).Select(Row).Concat(linked).Concat(unlinked).ToList();
+		var groups = profiles.Where(p => !linkedIds.Contains("u:" + p.User))
+			.GroupBy(p => (p.District, p.Crops)).Select(g => new TrendCropGroup(g.Key.District, g.Key.Crops, g.Count())).ToList();
+
+		foreach (var district in new[] { 1, 2, 0 })
+		{
+			var a = FarmerTrendRules.Crops(old, district, "D", "S");
+			var b = FarmerTrendRules.Crops(individuals, groups, district, "D", "S");
+			string Show(FarmerCropTrendDto d) => $"{d.Scope}|{d.FarmerCount}|" + string.Join(";", d.Items.Select(x => $"{x.Crop}={x.Farmers}/{x.SharePct}"));
+			Check.Equal($"B8: SQL-grouped profiles give the same crop card (district {district})", Show(a), Show(b));
+		}
+		Check.That("B8: the groups are far fewer rows than the profiles", groups.Count < profiles.Count / 3, $"{groups.Count} groups");
+		var src = Source("SpicAPI", "Controllers", "FarmerTrendsController.cs");
+		Check.That("B8: the trends controller counts profiles in SQL (GroupBy + Count), not one row per profile",
+			src.Contains(".GroupBy(p => new { p.DistrictId, p.PrimaryCrops })") && src.Contains("Farmers = g.Count()"));
 	}
 
 	// ------------------------------------------------------------------ B3

@@ -1287,3 +1287,35 @@ merge. Harness: `FarmerPortalRecheckTests`. Smoke: `smoke_final.py --group R` (p
   before the session is cleared); staff still go to `/login`. A sign-in stores `spic_last_signin_farmer` (persistent, not
   cleared on sign-out, removed by a staff sign-in), so `/` and a signed-out link go to `/farmer/login` on a farmer's
   device; a signed-out `/farmer/*` link always does.
+
+### Group 3: minors
+
+- **U4** Leaf check, fertilizer and harvest forecast `SubmitAsync` return at once while a submit is running (a double
+  tap no longer costs two checks or saves two rows).
+- **U6** The phone / tablet Menu drawer (`MobileSidebar`, opened by the tablet rail's Menu button) lists the farmer tools
+  for the Farmer role, as the desktop menu does, plus **My call-back requests** (`MobileSidebar.FarmerMenu`).
+- **U7** SPIC AI: deleting a chat after the page was left (Android back with the confirm open) does nothing instead of
+  reading a disposed token (`LoadToken` / `_disposed`, as on the leaf-check history).
+- **U8** The sign-in phone box takes 20 characters, so a pasted "+91 98765 43210" or "0091 98765 43210" is not cut.
+- **U9** Fertilizer, harvest and leaf-check history: a load version, so a stale detail load never ends the list's loading
+  state or leaves its error behind.
+- **B5 weather data** A forecast without any rain amount or chance is `Unavailable`; "A dry week ahead" needs the rain
+  amount and chance of every day, and "Good days for field work" needs the rain, chance and wind of both days. Warnings
+  still use the values that are there. The harness check that pinned "missing values read as dry / calm" was changed on
+  purpose.
+- **B6 weather abuse** One farmer may cause `FarmerWeatherRules.FetchesPerFarmerPerHour` (10) uncached Open-Meteo fetches
+  an hour (then "weather unavailable" for a new point, nothing cached, cached points still answer). The forecast cache is
+  the service's own `MemoryCache` with `SizeLimit` = `CacheEntryLimit` (20,000 entries, size 1 each); the app-wide
+  `IMemoryCache` is untouched (its other users set no entry size).
+- **B8 trends** `CropFarmersAsync` counts farmer profiles in SQL (one row per district and stored crop list with a count,
+  `TrendCropGroup`); only the profiles of SAS-linked farmers with samples in the window are read one by one, so a person
+  with a profile and a SAS record is still counted once. The crop card is unchanged (harness: the grouped path gives the
+  same card as the old one on 400 generated farmers).
+
+Tools: `smoke_final.py --group R` (B1, B2, B3; Group C has the B7 checks), `verify_recheck_session.py` (U1 / U5, needs
+`Jwt__ExpiryMinutes=4` on the local API), `shoot_recheck.py` (screenshots), `reset_smoke_day_local.sql` (resets the shared
+test farmers' daily allowances and OTP rows so the Task 1-7 smoke scripts can run again on one day; local DB only).
+
+Left for the owner: staff still read the whole `Uploads` tree through `Community/file` and `Library/file` (B2 ruling);
+staff sessions keep the old refresh behaviour (U1 ruling); the Android camera path is built but not tried on a device;
+B4 (teammate migration) is the owner's merge.

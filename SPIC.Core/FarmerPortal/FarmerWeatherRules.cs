@@ -39,6 +39,26 @@ public static class FarmerWeatherRules
     public const int MaxAdvisories = 3;
 
     /// <summary>
+    /// Uncached Open-Meteo fetches one farmer may cause per hour (recheck fix B6). Changing the profile location in a
+    /// loop could otherwise make the API's shared egress IP hit Open-Meteo's limit for every farmer (or run up the
+    /// commercial bill). Over the cap the farmer gets "weather unavailable" for a new point; cached points still answer.
+    /// </summary>
+    public const int FetchesPerFarmerPerHour = 10;
+
+    /// <summary>Entries the forecast cache may hold (points plus per-farmer counters; recheck fix B6).</summary>
+    public const int CacheEntryLimit = 20_000;
+
+    /// <summary>True while a farmer who already caused <paramref name="fetchesThisHour"/> uncached fetches may cause one more.</summary>
+    public static bool MayFetch(int fetchesThisHour) => fetchesThisHour < FetchesPerFarmerPerHour;
+
+    /// <summary>
+    /// True when the forecast carries any rain value (amount or chance) at all (recheck fix B5). A forecast without one
+    /// is treated as unavailable: the advisories are mostly about rain, and "no data" must not read as "dry".
+    /// </summary>
+    public static bool HasRainData(IReadOnlyList<FarmerWeatherDayDto> days) =>
+        days is not null && days.Any(d => (d.RainMm is { } r && double.IsFinite(r)) || d.RainChancePct is not null);
+
+    /// <summary>
     /// The point sent to Open-Meteo: rounded to 0.1 degree (about 11 km). The same value is the cache key,
     /// so farmers of one village share one forecast.
     /// </summary>
@@ -63,8 +83,9 @@ public static class FarmerWeatherRules
 
     /// <summary>
     /// The farm advisories for a forecast (day 0 = today), most important first, at most
-    /// <see cref="MaxAdvisories"/>. Missing values count as 0 (no rain, no wind) except temperatures,
-    /// which are skipped.
+    /// <see cref="MaxAdvisories"/>. A missing value is no evidence: the warnings use the values that are there,
+    /// and the positive advice (dry week, good days for field work) is given only when every value it relies on is
+    /// present for the days it covers (recheck fix B5). Missing temperatures are skipped.
     /// </summary>
     public static List<FarmerAdvisoryDto> Advisories(IReadOnlyList<FarmerWeatherDayDto> days)
     {
@@ -74,6 +95,9 @@ public static class FarmerWeatherRules
         static double Rain(FarmerWeatherDayDto d) => d.RainMm is { } r && double.IsFinite(r) && r > 0 ? r : 0;
         static int Chance(FarmerWeatherDayDto d) => d.RainChancePct ?? 0;
         static double Wind(FarmerWeatherDayDto d) => d.WindKmh is { } w && double.IsFinite(w) ? w : 0;
+        static bool HasRain(FarmerWeatherDayDto d) => d.RainMm is { } r && double.IsFinite(r);
+        static bool HasChance(FarmerWeatherDayDto d) => d.RainChancePct is not null;
+        static bool HasWind(FarmerWeatherDayDto d) => d.WindKmh is { } w && double.IsFinite(w);
 
         var next3 = days.Take(3).ToList();
         var next2 = days.Take(2).ToList();
@@ -83,8 +107,10 @@ public static class FarmerWeatherRules
         var rainSoon = !heavy && next2.Any(d => Rain(d) >= RainSoonMm || Chance(d) >= RainSoonChancePct);
         var hot = next3.Any(d => d.MaxTempC is { } t && t >= HotDayC);
         var windy = next2.Any(d => Wind(d) >= StrongWindKmh);
-        var dryWeek = days.Sum(Rain) < DryWeekMm && days.All(d => Chance(d) < DryWeekMaxChancePct);
+        var dryWeek = days.All(d => HasRain(d) && HasChance(d))
+                      && days.Sum(Rain) < DryWeekMm && days.All(d => Chance(d) < DryWeekMaxChancePct);
         var calm = next2.Count == 2 && !heavy && !rainSoon && !windy
+                   && next2.All(d => HasRain(d) && HasChance(d) && HasWind(d))
                    && next2.All(d => Rain(d) < CalmDryMm && Chance(d) < CalmDryChancePct && Wind(d) < CalmWindKmh);
 
         if (heavy)

@@ -14,10 +14,16 @@ namespace SpicAPI.Services
     /// hour per rounded point, a failure for 5 minutes (so a broken service is not hammered). Any failure
     /// gives <see cref="FarmerWeatherStatus.Unavailable"/> and the page leaves the section out.
     /// Points are never logged.
+    /// <para>
+    /// Recheck fixes: a forecast without any rain value is Unavailable (B5); one farmer may cause at most
+    /// <see cref="FarmerWeatherRules.FetchesPerFarmerPerHour"/> uncached fetches an hour, and the service keeps its own
+    /// cache with a size limit of <see cref="FarmerWeatherRules.CacheEntryLimit"/> entries (B6).
+    /// </para>
     /// </summary>
     public interface IFarmerWeatherService
     {
-        Task<FarmerWeatherDto> ForecastAsync(double? lat, double? lng, CancellationToken ct);
+        /// <param name="farmerId">The caller's user id, for the per-farmer fetch cap (never sent or logged).</param>
+        Task<FarmerWeatherDto> ForecastAsync(double? lat, double? lng, string? farmerId, CancellationToken ct);
     }
 
     public sealed class FarmerWeatherService : IFarmerWeatherService
@@ -31,19 +37,22 @@ namespace SpicAPI.Services
         public static readonly TimeSpan FailureCacheFor = TimeSpan.FromMinutes(5);
 
         private readonly IHttpClientFactory _http;
-        private readonly IMemoryCache _cache;
+        // Its own cache (not the app-wide IMemoryCache, whose other users set no entry size): every entry has size 1.
+        private readonly MemoryCache _cache = new(new MemoryCacheOptions { SizeLimit = FarmerWeatherRules.CacheEntryLimit });
         private readonly IConfiguration _config;
         private readonly ILogger<FarmerWeatherService> _log;
 
-        public FarmerWeatherService(IHttpClientFactory http, IMemoryCache cache, IConfiguration config, ILogger<FarmerWeatherService> log)
+        public FarmerWeatherService(IHttpClientFactory http, IConfiguration config, ILogger<FarmerWeatherService> log)
         {
             _http = http;
-            _cache = cache;
             _config = config;
             _log = log;
         }
 
-        public async Task<FarmerWeatherDto> ForecastAsync(double? lat, double? lng, CancellationToken ct)
+        /// <summary>A farmer's uncached fetches in the current hour (the entry expires an hour after the first one).</summary>
+        private sealed class FetchCount { public int Count; }
+
+        public async Task<FarmerWeatherDto> ForecastAsync(double? lat, double? lng, string? farmerId, CancellationToken ct)
         {
             if (!FarmerGeo.IsValid(lat, lng))
                 return new FarmerWeatherDto { Status = FarmerWeatherStatus.NoLocation };
@@ -53,9 +62,38 @@ namespace SpicAPI.Services
             if (_cache.TryGetValue(key, out FarmerWeatherDto? cached) && cached is not null)
                 return Copy(cached);
 
+            if (!TryCountFetch(farmerId))
+            {
+                // Over the farmer's hourly cap: no call and nothing cached, so other farmers at this point are unaffected.
+                _log.LogInformation("Farmer weather fetch cap reached ({Cap} an hour)", FarmerWeatherRules.FetchesPerFarmerPerHour);
+                return Unavailable();
+            }
+
             var fresh = await FetchAsync(rLat, rLng, ct);
-            _cache.Set(key, fresh, fresh.Status == FarmerWeatherStatus.Ok ? CacheFor : FailureCacheFor);
+            _cache.Set(key, fresh, new MemoryCacheEntryOptions
+            {
+                Size = 1,
+                AbsoluteExpirationRelativeToNow = fresh.Status == FarmerWeatherStatus.Ok ? CacheFor : FailureCacheFor
+            });
             return Copy(fresh);
+        }
+
+        /// <summary>Counts one uncached fetch for the farmer; false when the hourly cap is already used up.</summary>
+        private bool TryCountFetch(string? farmerId)
+        {
+            if (string.IsNullOrWhiteSpace(farmerId)) return true;
+            var counter = _cache.GetOrCreate("fp:weather-fetches:" + farmerId, e =>
+            {
+                e.Size = 1;
+                e.AbsoluteExpirationRelativeToNow = TimeSpan.FromHours(1);
+                return new FetchCount();
+            })!;
+            lock (counter)
+            {
+                if (!FarmerWeatherRules.MayFetch(counter.Count)) return false;
+                counter.Count++;
+                return true;
+            }
         }
 
         private async Task<FarmerWeatherDto> FetchAsync(double lat, double lng, CancellationToken ct)
@@ -82,6 +120,12 @@ namespace SpicAPI.Services
                 if (days.Count == 0)
                 {
                     _log.LogWarning("Open-Meteo forecast had no daily rows");
+                    return Unavailable();
+                }
+                if (!FarmerWeatherRules.HasRainData(days))
+                {
+                    // Recheck B5: no rain amount or chance at all; never shown as a dry, calm week.
+                    _log.LogWarning("Open-Meteo forecast had no rain values");
                     return Unavailable();
                 }
 

@@ -106,8 +106,9 @@ internal static class FarmerPortalTrendsTests
 		Check.Equal("advice: at most 3, most important first", "heavy-rain,heat,wind", Codes(everything));
 
 		var nulls = new List<FarmerWeatherDayDto> { new() { Date = "2026-11-28" }, new() { Date = "2026-11-29" } };
-		Check.That("advice: missing values do not throw and read as dry / calm",
-			Codes(FarmerWeatherRules.Advisories(nulls)) == "dry-week,spray-window", Codes(FarmerWeatherRules.Advisories(nulls)));
+		// Recheck B5 (deliberate change): missing values used to read as a dry, calm week; now they give no positive advice.
+		Check.That("advice: missing values do not throw and give no dry-week / good-days advice",
+			Codes(FarmerWeatherRules.Advisories(nulls)) == "", Codes(FarmerWeatherRules.Advisories(nulls)));
 	}
 
 	private static void OpenMeteoParse()

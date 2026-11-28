@@ -8,6 +8,12 @@ namespace SPIC.Core.FarmerPortal;
 /// person is counted once.</param>
 public sealed record TrendCropFarmer(string FarmerKey, int? DistrictId, IReadOnlyList<string> Crops);
 
+/// <summary>
+/// Recheck fix B8: farmer profiles counted in SQL, one row per (district, stored crop list) with the number of
+/// profiles that have exactly that list, so a cache miss no longer reads every profile of the state.
+/// </summary>
+public sealed record TrendCropGroup(int? DistrictId, string? PrimaryCrops, int Farmers);
+
 /// <summary>One lab result for "Soil problems near you" (the lab's own status, one row per sample + parameter).</summary>
 public sealed record TrendSoilResult(int SampleId, int? DistrictId, string Parameter, LabResultStatus Status);
 
@@ -78,7 +84,17 @@ public static class FarmerTrendRules
     /// A farmer counts once per crop. Crops grown by fewer than <see cref="MinFarmersPerCrop"/> farmers
     /// are left out.
     /// </summary>
-    public static FarmerCropTrendDto Crops(IEnumerable<TrendCropFarmer> farmers, int districtId, string? districtName, string? stateName)
+    public static FarmerCropTrendDto Crops(IEnumerable<TrendCropFarmer> farmers, int districtId, string? districtName, string? stateName) =>
+        Crops(farmers, Array.Empty<TrendCropGroup>(), districtId, districtName, stateName);
+
+    /// <summary>
+    /// <see cref="Crops(IEnumerable{TrendCropFarmer}, int, string?, string?)"/> with part of the farmers already counted
+    /// in SQL (<paramref name="groups"/>, recheck fix B8): each group counts as that many farmers with that district and
+    /// those crops. The caller keeps the farmers that also have a SAS record in <paramref name="farmers"/>, so a person is
+    /// still counted once.
+    /// </summary>
+    public static FarmerCropTrendDto Crops(IEnumerable<TrendCropFarmer> farmers, IEnumerable<TrendCropGroup> groups,
+        int districtId, string? districtName, string? stateName)
     {
         // One entry per farmer (the same person may have a profile and a SAS record keyed alike).
         var merged = farmers
@@ -87,13 +103,21 @@ public static class FarmerTrendRules
             {
                 DistrictId = g.Select(x => x.DistrictId).FirstOrDefault(d => d is > 0),
                 Crops = g.SelectMany(x => x.Crops).Select(NormaliseCrop).Where(c => c.Length > 0)
-                         .Distinct(StringComparer.OrdinalIgnoreCase).ToList()
+                         .Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
+                Weight = 1
             })
+            .Concat(groups.Where(g => g.Farmers > 0).Select(g => new
+            {
+                DistrictId = g.DistrictId is > 0 ? g.DistrictId : null,
+                Crops = (g.PrimaryCrops ?? "").Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+                         .Select(NormaliseCrop).Where(c => c.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
+                Weight = g.Farmers
+            }))
             .Where(f => f.Crops.Count > 0)
             .ToList();
 
         var inDistrict = merged.Where(f => districtId > 0 && f.DistrictId == districtId).ToList();
-        var scope = ChooseScope(inDistrict.Count, merged.Count, MinFarmers);
+        var scope = ChooseScope(inDistrict.Sum(f => f.Weight), merged.Sum(f => f.Weight), MinFarmers);
         var dto = new FarmerCropTrendDto
         {
             Scope = scope,
@@ -103,15 +127,16 @@ public static class FarmerTrendRules
         if (scope == FarmerAreaScope.None) return dto;
 
         var pool = scope == FarmerAreaScope.District ? inDistrict : merged;
-        dto.FarmerCount = pool.Count;
+        var poolCount = pool.Sum(f => f.Weight);
+        dto.FarmerCount = poolCount;
         dto.Items = pool
-            .SelectMany(f => f.Crops)
-            .GroupBy(c => c, StringComparer.OrdinalIgnoreCase)
-            .Select(g => new { Crop = g.Key, Farmers = g.Count() })
+            .SelectMany(f => f.Crops.Select(c => (Crop: c, f.Weight)))
+            .GroupBy(x => x.Crop, StringComparer.OrdinalIgnoreCase)
+            .Select(g => new { Crop = g.First().Crop, Farmers = g.Sum(x => x.Weight) })
             .Where(x => x.Farmers >= MinFarmersPerCrop)
             .OrderByDescending(x => x.Farmers).ThenBy(x => x.Crop, StringComparer.OrdinalIgnoreCase)
             .Take(MaxCrops)
-            .Select(x => new FarmerCropShareDto { Crop = x.Crop, Farmers = x.Farmers, SharePct = Pct(x.Farmers, pool.Count) })
+            .Select(x => new FarmerCropShareDto { Crop = x.Crop, Farmers = x.Farmers, SharePct = Pct(x.Farmers, poolCount) })
             .ToList();
         return dto;
     }

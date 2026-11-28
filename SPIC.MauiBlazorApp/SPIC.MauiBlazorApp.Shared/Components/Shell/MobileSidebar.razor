@@ -55,6 +55,20 @@
 
         <nav class="nav nav-pills flex-column nav-section">
 
+            @* ================= FARMER TOOLS (recheck fix U6) =================
+               The tablet rail shows only Home / Profile (and the SAS pair) for a farmer, and its Menu button opens this
+               drawer: list the farmer tools here, as the desktop NavMenu farmer block does (role-gated the same way). *@
+            @if (LoginState.UserRole == AppRole.Farmer)
+            {
+                @foreach (var item in FarmerMenu)
+                {
+                    <NavLink class="nav-link" href="@item.Href" Match="@(item.Href == "/farmer" ? NavLinkMatch.All : NavLinkMatch.Prefix)">
+                        <i class="bi @item.Icon SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;" aria-hidden="true"></i>
+                        @item.Label
+                    </NavLink>
+                }
+            }
+
             @* ================= DASHBOARD ================= *@
             @* Designation decides. The old `UserRole != Dealer` term was MENU-only: PageGuard has
                no Dealer rule for /Dashboard, so a Dealer granted PagePermission.Dashboard could
@@ -1775,6 +1789,22 @@
         InvokeAsync(StateHasChanged);
     }
 
+
+    /// <summary>The farmer tools in the drawer (recheck fix U6), in the desktop NavMenu's order, plus My call-back requests.</summary>
+    public static readonly IReadOnlyList<(string Href, string Icon, string Label)> FarmerMenu = new[]
+    {
+        ("/farmer", "bi-house-door", "Home"),
+        ("/farmer/profile", "bi-person-circle", "My Profile"),
+        ("/farmer/fertilizer", "bi-flower2", "Fertilizer advice"),
+        ("/farmer/assistant", "bi-stars", "Ask SPIC AI"),
+        ("/farmer/leaf-check", "bi-camera", "Leaf check"),
+        ("/farmer/yield", "bi-graph-up-arrow", "Harvest forecast"),
+        ("/farmer/dealers", "bi-shop", "Dealers near me"),
+        ("/farmer/team", "bi-people-fill", "My SPIC team"),
+        ("/farmer/requests", "bi-clock-history", "My call-back requests"),
+        ("/farmer/trends", "bi-cloud-sun", "Trends in my area"),
+        ("/farmer/community", "bi-chat-square-text", "Community near me"),
+    };
 
     private void HandleLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
     {

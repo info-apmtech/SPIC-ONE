@@ -328,6 +328,10 @@
     private bool _scrollPending;
     private IJSObjectReference? _module;
     private readonly CancellationTokenSource _cts = new();
+    private bool _disposed;
+
+    /// <summary>The page's token, never read from a disposed source (recheck U7: a confirm dialog can outlive the page).</summary>
+    private CancellationToken LoadToken => _disposed ? new CancellationToken(canceled: true) : _cts.Token;
 
     private bool ShowList => ConversationId is null &&
         Nav.ToBaseRelativePath(Nav.Uri).Split('?', '#')[0].TrimEnd('/').EndsWith("assistant/chats", StringComparison.OrdinalIgnoreCase);
@@ -558,7 +562,10 @@
     private async Task DeleteAsync(FarmerChatConversationDto c)
     {
         if (!await Toast.ConfirmAsync("Delete this chat?", $"\"{c.Title}\" and its answers will be removed from My chats.", "Delete chat")) return;
-        var problem = await Api.DeleteAsync(c.Id, _cts.Token);
+        // The farmer may have left the page while the dialog was open (Android back): nothing to update then.
+        if (_disposed) return;
+        var problem = await Api.DeleteAsync(c.Id, LoadToken);
+        if (_disposed) return;
         if (problem is not null)
         {
             Toast.Error(problem);
@@ -591,6 +598,7 @@
 
     public async ValueTask DisposeAsync()
     {
+        _disposed = true;
         _cts.Cancel();
         try
         {
