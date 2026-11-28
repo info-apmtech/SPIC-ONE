@@ -1037,3 +1037,190 @@ Contracts: `SPIC.Core/DTOs/YieldDtos.cs`. Client: `Services/FarmerYieldApi.cs` (
   (from the profile's GPS) would narrow the range.
 - Crops without a confirmed norm (coconut, turmeric, chilli, onion, tomato, wheat, soybean) are not offered; add a seed row
   with its sources to offer one.
+
+## Hardening (final fix wave, 2026-11-28)
+
+The whole-branch review found that open phone sign-up gives anyone a Farmer JWT, and most staff APIs only check
+`[Authorize]`. This wave closes that and the go-live gaps. Commits: Group A (security), B (data and config), C (go-live
+gates), D (polish).
+
+### Farmer deny-by-default (`SpicAPI/Controllers/FarmerAccessAttribute.cs`)
+
+`FarmerDenyByDefaultFilter` is registered globally (`AddControllers(o => o.Filters.Add<...>())`). It answers **403**
+`{ "message": "This is not available in the farmer app." }` when the caller's role claim is `Farmer`, the endpoint needs
+sign-in (an `[Authorize]` applies and there is no `[AllowAnonymous]`), and neither the action nor its controller carries
+`[FarmerAccess]`. Anonymous endpoints and every staff / dealer caller are untouched. A refusal is logged once at
+Information with the verb and route template only (no user id, phone or query string).
+
+`SPIC.RegressionHarness/FarmerPortalHardeningTests` walks every SpicAPI controller by reflection and pins the list
+below exactly, so a new `[FarmerAccess]` (or a lost one) fails the harness until the list is changed on purpose. The list
+was built from the farmer pages, `Fp*` components, farmer services, the shell (MainLayout, AuthHttpMessageHandler) and the
+local request log (`AppRequestLogs` rows with role Farmer), then confirmed by `walk_final.py` (every farmer page, no 403).
+
+The Farmer allow-list (signed-in endpoints a Farmer token may call):
+
+| Area | Endpoints |
+|---|---|
+| Shell | `GET api/Authentication/permissions`, `POST api/Authentication/logout` (refresh, login and `api/FarmerAuth/*` are anonymous) |
+| Farmer portal | every action of FarmerProfile (`GET/PUT/DELETE api/Farmer/profile`), FarmerConnect (dealers, contacts, contacts/requests, contacts/{id}/request), FarmerTrends (trends, weather), FarmerFertilizer (options, soil-report, recommend, history, history/{id}, latest), FarmerAssistant (status, conversations, conversations/{id} GET/DELETE, ask), FarmerLeafCheck (status, POST, history, {id} GET/DELETE, {id}/image), FarmerYield (options, predict, history, history/{id}) |
+| Community | stats, recent, discussions (GET, POST), near, discussions/{id} (GET, PUT, DELETE), discussions/similar, discussions/{id}/status, discussions/{id}/replies, replies/{id} (DELETE), discussions/{id}/like / save / follow, replies/{id}/like, discussions/{id}/attachments, replies/{id}/attachments, attachments/{id} (DELETE), file/{*path}, me, me/avatar (POST, DELETE), products, products/{name}/join, lookups |
+| Digital Library | `GET api/Library/{id}`, `GET api/Library/file/{*path}` (item pages linked from SPIC AI answers) |
+| SAS lab reports | `GET api/Lab/languages`, `GET api/Lab/reports`, `GET api/Lab/reports/{id}`, `GET api/Lab/reports/{id}/pdf` |
+| SAS samples | `GET api/Sas/collections`, `GET api/Sas/collections/{id}`, `GET api/Sas/consignments/{id}`, `GET api/Sas/lookups`, `GET api/Sas/samples/{itemId}/results` (all scoped to the farmer by the API) |
+| SAS payments | `GET api/Sas/payments`, `/me`, `/stats`, `/{id}`, `/{id}/proof` (farmer read-only mode, scoped by the API) |
+| Lookups | `GET api/State`, `GET api/District/byState/{stateId}`, `GET api/Region/byState/{stateId}`, `GET api/PincodeLookup/{pincode}` |
+
+Closed to farmers on purpose (checked by the harness and `smoke_final.py`): `api/User/*`, `api/EmployeeRegistration`,
+`api/DealerFile/view`, `api/CSR2/*` (the farmer phone in `by-csr1`), **`api/Library/assistant/*`** (unbudgeted AI; farmers use
+SPIC AI with its budget), `api/FarmerRequests` (staff side), `api/Help/*`, `api/Metrics/*`, `api/Profile`, `api/Sas/file`,
+`api/Sas/farmers`, `api/Lab/reports/{id}/xlsx`, `POST api/Community/products/{name}/image`.
+
+Note for the owner: a Farmer account that also has a designation (older SAS accounts) keeps the staff page rules in the UI,
+but now gets 403 from any staff API outside this list. That is intended: the Farmer role is the public role.
+
+### UserController
+
+No page in this repository calls `api/User/create-user`, `update-user`, `delete-user/{id}` or `update-status/{id}` (git grep
+over every `.razor`, `.cs`, `.js`, `.py` and `.ps1`; no rows for them in the local request log). They now carry
+`[Authorize(Roles = "Admin,SuperAdmin,CorporateAdmin")]`, and a SuperAdmin or Farmer role can only be given by a SuperAdmin
+(403 otherwise, before anything is created). `seed-default-user` (anonymous, fixed password) is unchanged: owner item.
+
+### Daily caps (`SPIC.Core/FarmerPortal/FarmerDailyCapRules.cs`)
+
+Per farmer per IST day, counted and inserted under a per-farmer `pg_advisory_xact_lock` (`SpicAPI/Services/FarmerDailyLock.cs`),
+429 with a plain message the farmer screens show and a `Retry-After` header:
+
+| What | Cap | Config key |
+|---|---|---|
+| Community discussions | 5 (deleted ones count) | `FarmerPortal:CommunityDailyPosts` |
+| Community replies | 30 | `FarmerPortal:CommunityDailyReplies` |
+| Community attachment megabytes | 20 MB (on the farmer's own discussions and replies) | `FarmerPortal:CommunityDailyAttachmentMb` |
+| Fertilizer recommendations | 50 | `FarmerPortal:FertilizerDailyLimit` |
+| Harvest forecasts | 50 | `FarmerPortal:YieldDailyLimit` |
+| Call-back requests (across officers) | 10 (the 3-open-per-officer cap stays) | fixed |
+
+Farmers attach photos (JPG, PNG, WEBP) and PDFs only; staff keep DOC / DOCX. Staff and dealers have no Community caps.
+Moderation is unchanged: the author, Admin and CorporateAdmin can delete (soft delete) a discussion or reply; there is no new
+moderation screen (owner decision). Fertilizer and yield now save in one `SaveChanges`: the stored result has no id, and the
+history detail puts the row's id and time back.
+
+### Refresh tokens
+
+`FarmerPortal:RefreshExpiryDays` (default 30) is used for Farmer refresh tokens only, so a farmer who opens the app within a
+month needs no new SMS code. Every other role keeps `Jwt:RefreshExpiryDays` (default 2).
+
+### Privacy notice, consent and account deletion
+
+**The privacy notice wording is a DRAFT for SPIC legal review.** It lives on `/farmer/privacy` (public, before sign-in;
+`Pages/FarmerPortal/FarmerPrivacy.razor`): what is kept (phone, name, village / GPS, crops, soil values, leaf photos, chat
+text, call-backs, Community posts, page and error logs without the phone), why, who sees it (SPIC staff in the farmer's
+area for call-backs, the SPIC lab, Community members, service providers with only what they need), retention ("until you
+delete your account"; sign-in codes one day), how to change or delete, and how to ask (My SPIC team). Version
+`FarmerPrivacyRules.Version` = `2026-11-28`.
+
+- The login card says "By continuing you agree to the Privacy notice" with the link; the profile form says the same above Save.
+- Consent: `FarmerProfiles.PrivacyAcceptedAt` (UTC) and `PrivacyVersion` (migration V42) are set at the first profile save and
+  at a sign-in when the recorded version is older (a new farmer has no profile row until onboarding is saved).
+- **Delete my account** (My profile, "Your data" card, outlined button; confirm sheet with the list of what is removed and
+  kept, "This cannot be undone", and an "I understand" box): `DELETE api/Farmer/profile` (Farmer, the caller only,
+  `SpicAPI/Services/FarmerAccountDeletion.cs`). In one transaction: profile, chats and messages, AI usage rows, leaf checks,
+  fertilizer runs, yield forecasts and OTP challenges for the number are deleted; open call-backs are deleted, handled ones
+  are kept (closed) for the officer, whose view shows "Farmer" with no phone once the profile is gone (the message text
+  stays as staff history); the farmer's Community discussions and replies are soft-deleted with the author name set to
+  "Deleted account" and the place cleared, reactions and product memberships deleted (like counts adjusted); the SAS farmer
+  record is **unlinked**, never deleted; refresh tokens are deleted; `AppRequestLogs` / `AppErrorLogs` rows of the user keep
+  their numbers but lose the user id and name; finally the Identity user is deleted, so the number can sign up fresh. Leaf
+  photos (`PrivateUploads/FarmerLeaf/{userId}`) and the Community photo are deleted after the commit. The app then signs out.
+- `/farmer/delete-account`: public web page explaining in-app deletion and listing the same items (the Google Play
+  "delete account" link).
+- Known limits: attachments on taken-down Community posts stay on disk with the soft-deleted rows; a JWT already issued
+  keeps working until it expires (`Jwt:ExpiryMinutes`, 480 in prod) but finds no profile or data.
+- Telemetry rows now keep a farmer's `f<mobile>` user name masked (`f98xxxxxx21`), so the notice's "your phone number is
+  never written to these logs" holds (`TelemetryHttp.SafeUserName`).
+
+### Corrective doses (migration `V42_FarmerPortalHardening`)
+
+Every active corrective is product per litre or kg of product per hectare / acre. The manganese spray (was "1-5 kg Mn per
+hectare in about 200 litres", an ~8 % spray at the top) is now TNAU's **0.5 % MnSO4 spray, 5 g manganese sulphate per
+litre**, with a soil row of 5-10 kg MnSO4 per hectare (TNAU Agritech, Groundnut manganese deficiency:
+`https://agritech.tnau.ac.in/agriculture/plant_nutri/gnut_mangan.html`, read 2026-11-28 through the Internet Archive). TNAU's
+rice page gives manganese only as kg Mn per hectare, so the Paddy Mn row is inactive and paddy gets the general rows. The
+other kg-of-nutrient rows (Paddy P "15-30 kg P", Paddy B "0.5-3 kg B", Maize S and B) are inactive too; those crops get the
+general product rows. Banana's mixed spray also gives grams per litre (5 g + 2 g + 2 g + 1 g). The seed class is in step,
+so a fresh database gets the same values; the agronomist sign-off still applies.
+
+### Infra (`infra/azure/main.bicep`, `deploy/azure/common.ps1`)
+
+New optional parameters, all empty by default. Empty means the env entry and secret are not added at all, so a deploy without
+them produces exactly today's apps (what-if: only the new parameters, no resource change):
+
+| Parameter | Key Vault secret | Env (API) | Env (web) |
+|---|---|---|---|
+| `farmerTrustedClientKey` (secure) | `farmer-trusted-client-key` | `FarmerPortal__TrustedClientKey` | `FarmerPortal__TrustedClientKey` |
+| `farmerOtpPepper` (secure) | `farmer-otp-pepper` | `FarmerPortal__OtpPepper` | |
+| `smsProvider` | | `Sms__Provider` | |
+| `msg91AuthKey` (secure) | `msg91-auth-key` | `Sms__Msg91__AuthKey` | |
+| `msg91TemplateId` | | `Sms__Msg91__TemplateId` | |
+| `msg91SenderId` | | `Sms__Msg91__SenderId` | |
+| `anthropicApiKey` (secure) | `assistant-anthropic-key` | `Assistant__AnthropicApiKey` | |
+| `farmerWeatherApiKey` (secure) | `farmer-weather-key` | `FarmerPortal__WeatherApiKey` | |
+
+`Assistant__AnthropicApiKey` was not wired before: a value set by hand on the container app is wiped by the next infra deploy.
+`deploy/azure/common.ps1` reads the five secrets back from Key Vault on every deploy (like the IFMS secrets), so once stored
+they persist. The three plain values belong in `infra/azure/prod.parameters.json`.
+
+### Weather key
+
+`FarmerPortal:WeatherApiKey`: when set, the forecast uses `https://customer-api.open-meteo.com/v1/forecast` with
+`&apikey=` (escaped); `FarmerPortal:WeatherUrl` still wins when set. The `OpenMeteo` HTTP client has no HTTP loggers
+(`RemoveAllLoggers`), and failures log only the status code or exception type, so the key never reaches a log.
+
+### Leaf photo root
+
+At startup the API logs an ERROR and uses the default private root when `FarmerPortal:LeafPhotoRoot` resolves inside
+`Uploads` or `wwwroot` (both served by file routes), and in Production a WARNING when the root does not exist or is not
+writable (the `api-private` share is not mounted). `.dockerignore` excludes `SpicAPI/PrivateUploads/`.
+
+### New config keys (all optional)
+
+`FarmerPortal:RefreshExpiryDays` (30), `FarmerPortal:FertilizerDailyLimit` (50), `FarmerPortal:YieldDailyLimit` (50),
+`FarmerPortal:CommunityDailyPosts` (5), `FarmerPortal:CommunityDailyReplies` (30), `FarmerPortal:CommunityDailyAttachmentMb`
+(20), `FarmerPortal:WeatherApiKey` (empty = free endpoint).
+
+### Tests and tools
+
+- Harness: `FarmerPortalHardeningTests` (filter, pinned allow-list by reflection, UserController roles, V42 doses, weather URL,
+  photo root guard, bicep wiring, caps, refresh lifetime, privacy rules and routes, telemetry masking).
+- `python tools/farmer-portal-check/smoke_final.py [--group A,C] [--leaves <make_leaves folder>]` against the local API:
+  Group A (staff APIs 403 for a farmer token, farmer APIs still answer, staff untouched, account-admin roles) and Group C
+  (consent, refresh lifetime, every cap, one-save runs, account deletion end to end with re-sign-up). It uses throw-away
+  `600xxxxxxx` numbers and deletes them through the API; `cleanup_final_local.sql` removes leftovers.
+- `python tools/farmer-portal-check/walk_final.py --api-log <api console log>`: clicks every farmer page on the local web host
+  and fails on any Farmer 403 in the request log or a "Farmer role refused" log line.
+- `python tools/farmer-portal-check/shoot_final.py --out .superpowers/sdd/2026-11-27-farmer-portal/shots/final`.
+- Re-running the Task 2-7 smoke scripts on one day now meets the daily caps for the shared test farmers: delete their
+  call-backs / runs / forecasts / leaf checks first (the cleanup scripts or the SQL in the final fix report).
+
+### Owner go-live checklist
+
+1. Merge, then `dotnet ef migrations has-pending-model-changes --context AppDbContext` and dry-run the full chain (V34..V42 plus
+   any teammate migrations) on a local copy of the prod schema (`deploy/azure/copy-db.ps1`).
+2. Store the farmer secrets once (they are then read back on every deploy): pass them to the first infra deploy, for example by
+   adding them to the Key Vault (`farmer-trusted-client-key`, `farmer-otp-pepper`, `msg91-auth-key`, `assistant-anthropic-key`,
+   `farmer-weather-key`) before running `deploy.ps1`, and put `smsProvider` (`Msg91`, last, only when everything else is
+   ready), `msg91TemplateId` and `msg91SenderId` in `infra/azure/prod.parameters.json`.
+3. what-if, then the infra-only deploy (`api-private` share, env storage, API volume, the new env entries), then migrations
+   V34..V42, then the API image, then the web image. Never `-Quick` before the mount exists. Check the API log for the leaf
+   photo root warning.
+4. Send the same `TrustedClientKey` to API and web (the bicep does). In staging confirm the web circuit passes the browser IP.
+5. Confirm the first live SPIC AI answer comes from Anthropic (`claude-sonnet-5`, `FarmerEffort=low`); set an Anthropic
+   workspace spend limit.
+6. Open-Meteo licence: buy the commercial plan and set `farmerWeatherApiKey`, or confirm the free tier is acceptable.
+7. SPIC legal reviews the privacy notice text (`/farmer/privacy`, DRAFT) and the deletion list; decide retention if not
+   "until deletion"; add a contact address if wanted.
+8. Agronomist signs off the correctives (including the V42 manganese change), norms and curves.
+9. Google Play: the "delete account" URL is `https://<web host>/farmer/delete-account`.
+10. Only then set `Sms__Provider=Msg91`.
+11. Out of scope but urgent: Razorpay keys in `SpicAPI/appsettings.json`, the anonymous `seed-default-user` endpoint, a staff
+    cap on `api/Library/assistant/ask`, an Admin support view for the farmer portal (M1), identity sequences for seeded
+    tables before an editor exists (M5).
