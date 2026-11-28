@@ -321,6 +321,18 @@ namespace SPIC.Core.DTOs
         // populates it as DamagedQty > 0 when building this DTO, so it never actually disagrees with
         // DamagedQty for data that came from the server.
         public bool IsDamaged { get; set; }
+        public string ExceptionType
+        {
+            get
+            {
+                var parts = new List<string>();
+                if (ShortageQty > 0) parts.Add("Shortage");
+                if (ExcessQty > 0) parts.Add("Excess");
+                if (DamagedQty > 0) parts.Add("Damage");
+                return parts.Count == 0 ? "None" : string.Join(" + ", parts);
+            }
+            set { }
+        }
     }
 
     public sealed class PubDispatchDto
@@ -360,6 +372,10 @@ namespace SPIC.Core.DTOs
         public List<PubStepDto> Steps { get; set; } = new();
         public List<PubFileDto> Files { get; set; } = new();
         public List<PubDispatchItemDto> Items { get; set; } = new();
+        public string? Product { get; set; }
+        public string? Material { get; set; }
+        public int? SourceProductExcess { get; set; }
+        public int? SourceProductAvailableExcess { get; set; }
         public bool CanAcknowledge { get; set; }
         public bool CanSubmitProof { get; set; }
     }
@@ -394,6 +410,7 @@ namespace SPIC.Core.DTOs
         public PublicityStage Stage { get; set; }
         public PublicityStatus Status { get; set; }
         public DateTime CreatedAt { get; set; }
+        public DateTime? UpdatedAt { get; set; }
         public PublicityMaterialCategory MaterialCategory { get; set; }
         public bool IsGiftArticle { get; set; }
         public int MaterialTypeId { get; set; }
@@ -423,6 +440,9 @@ namespace SPIC.Core.DTOs
         public string? ExceptionRaisedBy { get; set; }
         public DateTime? ExceptionRaisedAt { get; set; }
         public string? ExceptionRemarks { get; set; }
+        public string? ExceptionResolvedBy { get; set; }
+        public DateTime? ExceptionResolvedAt { get; set; }
+        public string? ExceptionResolvedRemarks { get; set; }
         /// <summary>Latest remarks an approver entered (the "Additional Remarks" card).</summary>
         public string? ApproverRemarks { get; set; }
         public List<string> KnownAddresses { get; set; } = new();
@@ -703,6 +723,11 @@ namespace SPIC.Core.DTOs
         public int Count { get; set; }
     }
 
+    public sealed class PubPendingExcessDto
+    {
+        public bool Pending { get; set; }
+    }
+
     public sealed class PubNotificationDto
     {
         public int Id { get; set; }
@@ -750,8 +775,25 @@ namespace SPIC.Core.DTOs
         public int TransferQty { get; set; }
         public string? Status { get; set; }
         public int ReportedExcess { get; set; }
+        public int VerifiedExcess { get; set; }
+        public bool IsVerified { get; set; }
         public int AlreadyTransferred { get; set; }
         public int RemainingExcess { get; set; }
         public string? Reason { get; set; }
+        public List<PubDispatchItemDto> Items { get; set; } = new();
+        public List<PubSourceExcessItemDto> SourceExcessItems { get; set; } = new();
+    }
+
+    public sealed class PubSourceExcessItemDto
+    {
+        public int ProductId { get; set; }
+        public string ProductName { get; set; } = "";
+        public int ReportedExcess { get; set; }
+        public int VerifiedExcess { get; set; }
+        public bool IsVerified { get; set; }
+        public int AlreadyTransferred { get; set; }
+        public int RemainingAvailable { get; set; }
+        public bool IsCurrentTransfer { get; set; }
+        public int CurrentTransferQty { get; set; }
     }
 }

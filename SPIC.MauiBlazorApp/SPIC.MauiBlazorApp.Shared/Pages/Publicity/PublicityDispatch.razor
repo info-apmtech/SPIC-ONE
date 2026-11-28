@@ -42,21 +42,46 @@
 
         <section class="pub-card">
             <h2 class="pub-h2">Read Information (Read Only)</h2>
-            <div class="pub-grid pub-grid--4">
+            <div class="pub-grid pub-grid--3">
                 <PubInfo Label="Source Request ID" Value="@_d.IndentNo"><span>@_d.IndentNo <PubPill Text="Excess" Tone="blue" /></span></PubInfo>
                 <PubInfo Label="Source HQ" Tone="amber" Value="@_d.Hq" />
-                <PubInfo Label="Product / Material" Value="@($"{_d.Product} {_d.Material}")" />
-                @* excess left for this order: other transfer orders on the same excess are already committed *@
-                <PubInfo Label="Available Excess Quantity" Value="@($"{Math.Max(0, _d.Summary.Excess - (_d.Summary.TransferredOut - x.Quantity))} Nos")" />
                 <PubInfo Label="Destination Request ID" Tone="violet"><span>@x.RequestIndentNo <PubPill Text="Shortage" Tone="red" /></span></PubInfo>
                 <PubInfo Label="Destination HQ" Value="@x.DestinationHq" />
+                <PubInfo Label="Product / Material" Value="@(!string.IsNullOrWhiteSpace(x.Product) ? x.Product : (x.Items.Count == 1 ? x.Items[0].ProductName : _d.Product))" Sub="@(x.Material ?? _d.Material)" />
                 <PubInfo Label="Transfer Quantity" Value="@($"{x.Quantity} Nos")" />
-                <PubInfo Label="Request Date (Admin)" Value="@PubText.DateTime(x.CreatedAt)" />
+                <PubInfo Label="Verified Available Excess" Value="@($"{ (x.SourceProductAvailableExcess > 0 ? x.SourceProductAvailableExcess : Math.Max(0, _d.Summary.Excess - (_d.Summary.TransferredOut - x.Quantity))) } Nos")" />
+                <PubInfo Label="Requested By" Value="@x.CreatedByName" />
+                <PubInfo Label="Request Date" Value="@PubText.DateTime(x.CreatedAt)" />
             </div>
+            @if (x.Items is { Count: > 1 })
+            {
+                <div class="pub-table-wrap mt-3">
+                    <table class="pub-table">
+                        <thead>
+                            <tr>
+                                <th style="width:60px">S.No</th>
+                                <th>Product</th>
+                                <th style="width:140px; text-align:right">Transfer Qty</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @for (var i = 0; i < x.Items.Count; i++)
+                            {
+                                var item = x.Items[i];
+                                <tr>
+                                    <td>@(i + 1)</td>
+                                    <td><b>@item.ProductName</b></td>
+                                    <td style="text-align:right"><PubPill Text="@($"{item.DispatchedQty} Nos")" Tone="pink" /></td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
         </section>
 
         <section class="pub-card">
-            <h2 class="pub-h2">Upload Courier / Dispatch Proof</h2>
+            <h2 class="pub-h2">Upload Courier / Dispatch Proof <span style="color: #e5372b;">*</span></h2>
             <p class="pub-muted">Upload the courier receipt / dispatch document. We read the details from the image automatically.</p>
             <PubDocs Files="x.Files.Where(f => f.Kind == PublicityFileKind.CourierProof).ToList()" Empty="" OnDelete="RemoveFile" />
             <PubDrop Files="_proofFiles" FilesChanged="ProofPicked" Multiple="false" Title="Drag &amp; drop file here" />
@@ -67,7 +92,17 @@
             <a class="pub-btn pub-btn--grey" href="@Back"><i class="bi bi-chevron-double-left"></i> Back to List</a>
             <span class="pub-footer__gap"></span>
             <a class="pub-btn pub-btn--grey" href="@Back">Cancel</a>
-            <button type="button" class="pub-btn pub-btn--primary" disabled="@_busy" @onclick="SubmitProofAsync">Submit Proof to Admin <i class="bi bi-chevron-double-right"></i></button>
+            <button type="button" class="pub-btn pub-btn--primary" disabled="@(_busy || _reading)" @onclick="SubmitProofAsync">
+                @if (_busy)
+                {
+                    <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                    <span> Submitting...</span>
+                }
+                else
+                {
+                    <span>Submit Proof to Admin <i class="bi bi-chevron-double-right"></i></span>
+                }
+            </button>
         </div>
     }
     else
@@ -743,6 +778,18 @@
         _proofFiles = files;
         var file = files.FirstOrDefault();
         if (file is null || _x is null) return;
+        if (file.Size <= 0 || file.Size > PublicityApi.MaxFileBytes)
+        {
+            Toast.Error($"\"{file.Name}\" must be under 10 MB.");
+            return;
+        }
+        var ext = System.IO.Path.GetExtension(file.Name).ToLowerInvariant();
+        var allowed = new[] { ".pdf", ".jpg", ".jpeg", ".png", ".webp", ".doc", ".docx" };
+        if (!allowed.Contains(ext))
+        {
+            Toast.Error("Only PDF, JPG, PNG, DOC and DOCX files are allowed.");
+            return;
+        }
         _reading = true;
         StateHasChanged();
         var uploaded = await Api.UploadAsync(Id, PublicityFileKind.CourierProof, files, _x.Id);
@@ -768,7 +815,12 @@
 
     private async Task SubmitProofAsync()
     {
-        if (_x!.Files.All(f => f.Kind != PublicityFileKind.CourierProof)) { Toast.Error("Upload the courier / dispatch proof."); return; }
+        if (_busy || _reading) return;
+        if (_x is null || _x.Files.All(f => f.Kind != PublicityFileKind.CourierProof))
+        {
+            Toast.Error("Please upload the courier / dispatch proof before submitting.");
+            return;
+        }
         _busy = true;
         var ok = await Api.ProofAsync(_x.Id, _proof);
         _busy = false;

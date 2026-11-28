@@ -112,6 +112,10 @@ public sealed class PublicityApi : ApiClientBase, IDisposable
     public Task<PubDetailDto?> GetAsync(int id) => GetAsync<PubDetailDto>($"requests/{id}", "the request");
     public Task<List<PubExcessDto>?> ExcessSourcesForProductAsync(int id, int productId) =>
         GetAsync<List<PubExcessDto>>($"requests/{id}/excess-sources?productId={productId}", "the available stock");
+    // Only ever called when the list above comes back empty, to distinguish "nothing matches
+    // anywhere" from "a match exists at another HQ but hasn't been verified yet" - see ExcessSourcesPending.
+    public Task<PubPendingExcessDto?> ExcessSourcesPendingAsync(int id, int productId) =>
+        GetAsync<PubPendingExcessDto>($"requests/{id}/excess-sources/pending?productId={productId}", "the pending excess check");
     public Task<PubConsolidationDto?> ConsolidationAsync() => GetAsync<PubConsolidationDto>("consolidation", "the consolidation");
 
     public Task<PubSaved?> SaveAsync(int? id, PubUpsertDto dto) => id is > 0
@@ -197,6 +201,7 @@ public static class PubText
         PublicityStatus.Rejected => "Rejected",
         PublicityStatus.TransferOrderReceived => "Transfer Order Received",
         PublicityStatus.Returned => "Returned",
+        PublicityStatus.ExcessVerificationPending => "Excess Verification Pending",
         _ => s.ToString()
     };
 
@@ -212,7 +217,8 @@ public static class PubText
     public static string StatusTone(PublicityStatus s) => s switch
     {
         PublicityStatus.Draft => "grey",
-        PublicityStatus.PendingApproval or PublicityStatus.PendingFinalApproval or PublicityStatus.AcknowledgementPending => "amber",
+        PublicityStatus.PendingApproval or PublicityStatus.PendingFinalApproval or PublicityStatus.AcknowledgementPending
+            or PublicityStatus.ExcessVerificationPending => "amber",
         PublicityStatus.FinalApproved or PublicityStatus.Completed or PublicityStatus.ExceptionResolved or PublicityStatus.Delivered => "green",
         PublicityStatus.InDispatch => "cyan",
         PublicityStatus.ExceptionRaised or PublicityStatus.Rejected or PublicityStatus.Returned => "red",
@@ -235,6 +241,7 @@ public static class PubText
         PublicityStage.ReInitiation => "Re-initiation",
         PublicityStage.InterHqTransfer => "Inter-HQ Transfer",
         PublicityStage.TransferCreation => "Transfer Creation",
+        PublicityStage.ExcessVerification => "Excess Verification",
         _ => "Completed"
     };
 
@@ -264,6 +271,7 @@ public static class PubText
         PublicityStage.Acknowledgement or PublicityStage.Completed => "green",
         PublicityStage.ExceptionHandling => "red",
         PublicityStage.ReInitiation => "orange",
+        PublicityStage.ExcessVerification => "amber",
         _ => "violet"
     };
 

@@ -23,7 +23,7 @@
                 <div>
                     <PubInfo Icon="bi-journals" Tone="pink" Label="@(X.Kind == PublicityDispatchKind.Transfer ? "Transfer ID" : "Dispatch ID")" Value="@X.DispatchNo" />
                     <PubInfo Icon="bi-calendar-event" Tone="green" Label="Dispatch Date" Value="@PubText.Date(X.DispatchDate)" />
-                    <PubInfo Icon="bi-box-seam" Label="Product / Material" Value="@($"{D.Product} {D.Material}")" />
+                    <PubInfo Icon="bi-box-seam" Label="Product / Material" Value="@TransferredProductLabel" Sub="@(X.Material ?? D.Material)" />
                     <PubInfo Icon="bi-123" Label="Quantity" Value="@($"{X.Quantity} Nos")" />
                 </div>
                 <div>
@@ -39,6 +39,32 @@
                     <PubInfo Icon="bi-buildings" Label="Headquarter (HQ)" Value="@X.DestinationHq" />
                 </div>
             </div>
+
+            @if (X.Items is { Count: > 1 })
+            {
+                <div class="pub-table-wrap mt-3" style="margin-bottom: 1rem;">
+                    <table class="pub-table">
+                        <thead>
+                            <tr>
+                                <th style="width:60px">S.No</th>
+                                <th>Product</th>
+                                <th style="width:140px; text-align:right">@(X.Kind == PublicityDispatchKind.Transfer ? "Transfer Qty" : "Dispatch Qty")</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @for (var i = 0; i < X.Items.Count; i++)
+                            {
+                                var item = X.Items[i];
+                                <tr>
+                                    <td>@(i + 1)</td>
+                                    <td><b>@item.ProductName</b></td>
+                                    <td style="text-align:right"><PubPill Text="@($"{item.DispatchedQty} Nos")" Tone="pink" /></td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
 
             @if (X.Kind == PublicityDispatchKind.Transfer)
             {
@@ -92,6 +118,11 @@
     private bool _open = true;
     protected override void OnInitialized() => _open = StartOpen;
     private PubFileDto? Proof => X.Files.LastOrDefault(f => f.Kind == PublicityFileKind.CourierProof);
+    private string TransferredProductLabel =>
+        !string.IsNullOrWhiteSpace(X.Product) ? X.Product :
+        (X.Items is { Count: 1 } ? X.Items[0].ProductName :
+        (X.Items is { Count: > 1 } ? $"{X.Items.Count} Products" :
+        (!string.IsNullOrWhiteSpace(D.Product) ? D.Product : "Product")));
     private string Caption => X.Kind switch
     {
         PublicityDispatchKind.Transfer => $"Stock transfer from {X.SourceName} to {X.DestinationHq}",

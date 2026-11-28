@@ -9,11 +9,11 @@
 <section class="pub-card pub-card--flush">
     <button type="button" class="pub-card__band pub-band--green pub-collapse" aria-expanded="@_openRequest" @onclick="() => _openRequest = !_openRequest">
         <div class="pub-collapse__title">
-            <h2 class="pub-h2">Stock Transfer Request</h2>
-            <span class="pub-muted">Requested to transfer available excess stock from the source HQ to resolve the shortage/damage.</span>
+            <h2 class="pub-h2">Stock Transfer Request <small>- @X.DispatchNo</small></h2>
+            <span class="pub-muted">Transfer of @TransferredProductLabel from @X.SourceName to @X.DestinationHq</span>
         </div>
         <div class="pub-collapse__right">
-            <PubPill Text="Transfer Request Sent" Tone="green" />
+            <PubPill Text="@PubText.DispatchStatus(X.Status, X.Kind)" Tone="green" />
             <i class="bi bi-chevron-@(_openRequest ? "up" : "down")" aria-hidden="true"></i>
         </div>
     </button>
@@ -21,17 +21,43 @@
     {
         <div class="pub-card__body">
             @Notice
-            <div class="pub-grid pub-grid--4">
-                <PubInfo Icon="bi-journals" Tone="pink" Label="Source Request ID (Excess)" Value="@X.SourceIndentNo" />
+            <div class="pub-grid pub-grid--3">
+                <PubInfo Icon="bi-receipt" Tone="violet" Label="Transfer ID" Value="@X.DispatchNo" />
+                <PubInfo Icon="bi-box-seam" Tone="pink" Label="Product" Value="@TransferredProductLabel" />
+                <PubInfo Icon="bi-file-earmark-text" Tone="blue" Label="Material" Value="@X.Material" />
+                <PubInfo Icon="bi-123" Tone="green" Label="Transfer Quantity" Value="@($"{X.Quantity} Nos")" />
+                <PubInfo Icon="bi-shop" Tone="amber" Label="Source HQ" Value="@X.SourceName" Sub="@(X.SourceIndentNo is null ? null : $"Request: {X.SourceIndentNo}")" />
+                <PubInfo Icon="bi-geo-alt" Tone="pink" Label="Destination HQ" Value="@X.DestinationHq" Sub="@(X.RequestIndentNo is null ? null : $"Request: {X.RequestIndentNo}")" />
                 <PubInfo Icon="bi-person-badge" Tone="green" Label="Requested By" Value="@X.CreatedByName" />
-                <PubInfo Icon="bi-123" Tone="violet" Label="Transfer Quantity (Excess)" Value="@($"{X.Quantity} Nos")" />
-                <PubInfo Icon="bi-shop" Label="Source HQ (From)" Value="@X.SourceName" />
-                <PubInfo Icon="bi-journals" Tone="pink" Label="Destination Request ID (Shortage)" Value="@X.RequestIndentNo" />
-                <PubInfo Icon="bi-geo-alt" Tone="green" Label="Destination HQ (To)" Value="@X.DestinationHq" />
-                <PubInfo Icon="bi-calendar-event" Label="Requested On" Value="@PubText.DateTime(X.CreatedAt)" />
-                <PubInfo Label="Status"><PubPill Text="Transfer Request Sent" Tone="green" /></PubInfo>
+                <PubInfo Icon="bi-calendar-event" Label="Request Date" Value="@PubText.DateTime(X.CreatedAt)" />
+                <PubInfo Label="Transfer Status"><PubPill Text="@PubText.DispatchStatus(X.Status, X.Kind)" Tone="green" /></PubInfo>
             </div>
-            <div class="pub-field">
+            @if (X.Items is { Count: > 1 })
+            {
+                <div class="pub-table-wrap mt-3">
+                    <table class="pub-table">
+                        <thead>
+                            <tr>
+                                <th style="width:60px">S.No</th>
+                                <th>Product</th>
+                                <th style="width:140px; text-align:right">Transfer Qty</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @for (var i = 0; i < X.Items.Count; i++)
+                            {
+                                var item = X.Items[i];
+                                <tr>
+                                    <td>@(i + 1)</td>
+                                    <td><b>@item.ProductName</b></td>
+                                    <td style="text-align:right"><PubPill Text="@($"{item.DispatchedQty} Nos")" Tone="pink" /></td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+            <div class="pub-field mt-2">
                 <span class="pub-label">Remarks</span>
                 <b class="pub-info__value pub-info__value--sm">@(X.Remarks ?? "-")</b>
             </div>
@@ -117,4 +143,7 @@
     private bool _openProof = true;
     protected override void OnInitialized() { _openRequest = StartOpen; _openProof = StartOpen; }
     private PubFileDto? Proof => X.Files.LastOrDefault(f => f.Kind == PublicityFileKind.CourierProof);
+    private string TransferredProductLabel =>
+        !string.IsNullOrWhiteSpace(X.Product) ? X.Product :
+        (X.Items is { Count: 1 } ? X.Items[0].ProductName : "Product");
 }

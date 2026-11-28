@@ -302,7 +302,9 @@ namespace SpicAPI.Controllers
                 InDispatch = rows.Count(r => r.Status is PublicityStatus.InDispatch or PublicityStatus.ReInitiationInProgress or PublicityStatus.TransferInProgress),
                 AckPending = rows.Count(r => r.Status == PublicityStatus.AcknowledgementPending),
                 Completed = rows.Count(r => r.Status is PublicityStatus.Completed or PublicityStatus.ExceptionResolved),
-                Exception = rows.Count(r => r.Status == PublicityStatus.ExceptionRaised),
+                // ExcessVerificationPending still needs ADMIN-MD-CS action (Verify Excess Stock), so it
+                // counts as an open/actionable item here too - never silently dropped from both buckets.
+                Exception = rows.Count(r => r.Status is PublicityStatus.ExceptionRaised or PublicityStatus.ExcessVerificationPending),
                 PendingMine = rows.Count(r => IsPendingAt(r.Status, r.Stage, mine)),
                 WithDgm = rows.Count(r => IsPendingAt(r.Status, r.Stage, PublicityStage.DgmMdCsReview)),
                 DispatchPending = rows.Count(r => r.Status == PublicityStatus.FinalApproved),
@@ -1331,13 +1333,51 @@ namespace SpicAPI.Controllers
                     });
                     await _db.SaveChangesAsync();
                 }
+                else if (r.Items.Count == 1)
+                {
+                    _db.PublicityDispatchItems.Add(new PublicityDispatchItem
+                    {
+                        DispatchId = d.Id, RequestItemId = r.Items[0].Id, ProductId = r.Items[0].ProductId,
+                        DispatchedQty = dto.Quantity, ReceivedQty = 0, DamagedQty = 0
+                    });
+                    await _db.SaveChangesAsync();
+                }
+                else if (r.ProductId > 0)
+                {
+                    _db.PublicityDispatchItems.Add(new PublicityDispatchItem
+                    {
+                        DispatchId = d.Id, RequestItemId = null, ProductId = r.ProductId,
+                        DispatchedQty = dto.Quantity, ReceivedQty = 0, DamagedQty = 0
+                    });
+                    await _db.SaveChangesAsync();
+                }
                 await AddEvent(r, PublicityStage.InterHqTransfer, "Transfer Requested", name, dto.Remarks, d.Id);
                 await AddEvent(source, PublicityStage.TransferCreation, "Transfer Order Received", name, $"{d.Quantity} Nos to {r.IndentNo}", d.Id);
-                var hqs = await NamesAsync(Array.Empty<int>(), Array.Empty<int>(), new[] { r.HeadquarterId });
+                var hqs = await NamesAsync(Array.Empty<int>(), Array.Empty<int>(), new[] { source.HeadquarterId, r.HeadquarterId });
+                var sourceHqName = hqs.Hqs.GetValueOrDefault(source.HeadquarterId, "Source HQ");
+                var destHqName = hqs.Hqs.GetValueOrDefault(r.HeadquarterId, "Destination HQ");
+                string transferredProdName;
+                if (destItem != null)
+                {
+                    transferredProdName = await _db.Products.AsNoTracking().Where(p => p.Id == destItem.ProductId).Select(p => p.Name).FirstOrDefaultAsync() ?? "the product";
+                }
+                else if (r.Items.Count == 1)
+                {
+                    transferredProdName = await _db.Products.AsNoTracking().Where(p => p.Id == r.Items[0].ProductId).Select(p => p.Name).FirstOrDefaultAsync() ?? "the product";
+                }
+                else if (r.ProductId > 0)
+                {
+                    transferredProdName = await _db.Products.AsNoTracking().Where(p => p.Id == r.ProductId).Select(p => p.Name).FirstOrDefaultAsync() ?? "the product";
+                }
+                else
+                {
+                    transferredProdName = (await ProductMaterialPartsAsync(r)).Product;
+                }
+
                 await NotifyAsync(PublicityNotificationType.StockTransfer, source, d.Id, source.CreatedByUserId, AppRole.RMD, source.HeadquarterId,
                     "Stock Transfer Order Received",
-                    $"{d.Quantity} Nos {await ProductMaterialAsync(r)} to be dispatched to {hqs.Hqs.GetValueOrDefault(r.HeadquarterId, "the destination HQ")}",
-                    $"From your available excess stock (Request ID: {source.IndentNo})");
+                    $"Admin has requested you to transfer {d.Quantity} Nos of {transferredProdName} from {sourceHqName} to {destHqName} to resolve a shortage.",
+                    $"Transfer ID: {d.DispatchNo} (From Request {source.IndentNo} to {r.IndentNo})");
                 await RecomputeAsync(source);
             }
             else
@@ -1706,7 +1746,7 @@ namespace SpicAPI.Controllers
             if (d is null || d.Kind != PublicityDispatchKind.Transfer) return NotFound(new { Success = false, Message = "Transfer order not found." });
             if (!await CanSubmitProofAsync(d)) return Forbid();
             if (!await _db.PublicityFiles.AnyAsync(f => f.DispatchId == d.Id && f.Kind == PublicityFileKind.CourierProof))
-                return BadRequest(new { Success = false, Message = "Upload the courier / dispatch proof first." });
+                return BadRequest(new { Success = false, Message = "Please upload the courier / dispatch proof before submitting." });
 
             // The source RMDO only uploads the proof document now (no manual/editable courier fields on
             // that page anymore) - whatever OCR silently read off the document is accepted as-is, and
@@ -1916,6 +1956,29 @@ namespace SpicAPI.Controllers
                     }
                 }
             }
+            else
+            {
+                var existingRows = await _db.PublicityDispatchItems.Where(x => x.DispatchId == d.Id).ToListAsync();
+                if (existingRows.Count == 1)
+                {
+                    existingRows[0].ReceivedQty = receivedQty;
+                    existingRows[0].DamagedQty = damagedQty;
+                    existingRows[0].Remarks = Clean(dto.Remarks);
+                }
+                else if (existingRows.Count == 0 && r.Items.Count == 1)
+                {
+                    _db.PublicityDispatchItems.Add(new PublicityDispatchItem
+                    {
+                        DispatchId = d.Id,
+                        RequestItemId = r.Items[0].Id,
+                        ProductId = r.Items[0].ProductId,
+                        DispatchedQty = d.Quantity,
+                        ReceivedQty = receivedQty,
+                        DamagedQty = damagedQty,
+                        Remarks = Clean(dto.Remarks)
+                    });
+                }
+            }
 
             if (dto.Submit)
             {
@@ -1961,6 +2024,14 @@ namespace SpicAPI.Controllers
                 await _db.SaveChangesAsync();
                 var before = r.Status;
                 await RecomputeAsync(r);
+                var hadException = await _db.PublicityEvents.AnyAsync(e => e.RequestId == r.Id && e.Action == "Exception Raised");
+                var hasResolvedEvent = await _db.PublicityEvents.AnyAsync(e => e.RequestId == r.Id && e.Action == "Exception Resolved");
+                var sCurrent = await SummaryAsync(r);
+                if (hadException && !hasResolvedEvent && sCurrent.Outstanding == 0)
+                {
+                    await AddEvent(r, PublicityStage.ExceptionHandling, "Exception Resolved", name,
+                        "All reported shortage and damage quantities have been successfully resolved with replacement/transfer.", d.Id);
+                }
                 if (r.Status == PublicityStatus.Completed && before != PublicityStatus.Completed)
                     await AddEvent(r, PublicityStage.Completed, "Completed", name, "All required usable quantity received.");
                 if (d.SourceRequestId is int sid && await LoadAsync(sid, tracking: true) is { } source) await RecomputeAsync(source);
@@ -2075,7 +2146,13 @@ namespace SpicAPI.Controllers
                     .Select(x => (PublicityStatus?)x.Status).FirstOrDefaultAsync();
                 dto.CanDispatch = status == PublicityStatus.FinalApproved && await IsAdminMdCsAsync();
             }
-            var d = n.DispatchId is int did ? await _db.PublicityDispatches.AsNoTracking().Include(x => x.Acknowledgement).FirstOrDefaultAsync(x => x.Id == did) : null;
+            var d = n.DispatchId is int did
+                ? await _db.PublicityDispatches.AsNoTracking().Include(x => x.Acknowledgement).FirstOrDefaultAsync(x => x.Id == did)
+                : (n.Type == PublicityNotificationType.Exception && n.RequestId is int rid
+                    ? await _db.PublicityDispatches.AsNoTracking().Include(x => x.Acknowledgement)
+                        .Where(x => x.RequestId == rid && x.Acknowledgement != null && !x.Acknowledgement.IsDraft)
+                        .OrderByDescending(x => x.Id).FirstOrDefaultAsync()
+                    : null);
             if (d is not null)
             {
                 var isStockTransfer = n.Type == PublicityNotificationType.StockTransfer || d.Kind == PublicityDispatchKind.Transfer || d.SourceRequestId.HasValue;
@@ -2089,21 +2166,175 @@ namespace SpicAPI.Controllers
 
                 if (isStockTransfer)
                 {
+                    dto.DispatchNo = d.DispatchNo;
                     var source = d.SourceRequestId is int sid ? await LoadAsync(sid) : null;
                     var names = await NamesAsync(Array.Empty<int>(), Array.Empty<int>(), new[] { dest?.HeadquarterId ?? 0, source?.HeadquarterId ?? 0 });
                     dto.DestinationIndentNo = dest?.IndentNo;
                     dto.DestinationHq = dest is not null ? names.Hqs.GetValueOrDefault(dest.HeadquarterId) : null;
                     dto.TransferQty = d.Quantity;
                     dto.Reason = d.Remarks ?? (dto.DestinationHq is not null ? $"Shortage resolution for {dto.DestinationHq}" : null);
+
+                    if (d.Acknowledgement is { IsDraft: false } ack)
+                    {
+                        dto.ReceivedQty = ack.ReceivedQty;
+                        dto.ExcessQty = Math.Max(0, ack.ReceivedQty - d.Quantity);
+                        dto.ShortageQty = Math.Max(0, d.Quantity - ack.ReceivedQty);
+                        dto.DamagedQty = ack.DamagedQty;
+                        dto.ReportedByName = ack.AcknowledgedByName;
+                        dto.ReportedDate = ack.SubmittedAt;
+                    }
+
+                    var dispatchItems = await _db.PublicityDispatchItems.AsNoTracking().Where(x => x.DispatchId == d.Id).ToListAsync();
+                    var pids = dispatchItems.Select(x => x.ProductId).Distinct().ToList();
+                    var pnames = await _db.Products.AsNoTracking().Where(p => pids.Contains(p.Id)).ToDictionaryAsync(p => p.Id, p => p.Name);
+
+                    if (dispatchItems.Count > 0)
+                    {
+                        dto.Product = pids.Count == 1 ? pnames.GetValueOrDefault(pids[0], "") : string.Join(", ", pids.Select(pid => pnames.GetValueOrDefault(pid, $"Product #{pid}")));
+                        dto.Items = dispatchItems.Select(x => new PubDispatchItemDto
+                        {
+                            Id = x.Id, RequestItemId = x.RequestItemId, ProductId = x.ProductId,
+                            ProductName = pnames.GetValueOrDefault(x.ProductId, $"Product #{x.ProductId}"),
+                            DispatchedQty = x.DispatchedQty,
+                            ReceivedQty = (x.ReceivedQty == 0 && d.Acknowledgement is { IsDraft: false } && d.Acknowledgement.ReceivedQty > 0 && dispatchItems.Count == 1) ? d.Acknowledgement.ReceivedQty : x.ReceivedQty,
+                            DamagedQty = (x.DamagedQty == 0 && d.Acknowledgement is { IsDraft: false } && d.Acknowledgement.DamagedQty > 0 && dispatchItems.Count == 1) ? d.Acknowledgement.DamagedQty : x.DamagedQty,
+                            IsDamaged = (x.DamagedQty > 0 || (d.Acknowledgement is { IsDraft: false } && d.Acknowledgement.DamagedQty > 0 && dispatchItems.Count == 1)),
+                            Remarks = x.Remarks ?? d.Acknowledgement?.Remarks
+                        }).ToList();
+                    }
+                    else if (dest is not null && dest.Items.Count == 1)
+                    {
+                        var pid = dest.Items[0].ProductId;
+                        dto.Product = await _db.Products.AsNoTracking().Where(p => p.Id == pid).Select(p => p.Name).FirstOrDefaultAsync() ?? "";
+                        var ackObj = d.Acknowledgement is { IsDraft: false } ? d.Acknowledgement : null;
+                        dto.Items = new List<PubDispatchItemDto>
+                        {
+                            new PubDispatchItemDto
+                            {
+                                ProductId = pid,
+                                ProductName = dto.Product,
+                                DispatchedQty = d.Quantity,
+                                ReceivedQty = ackObj?.ReceivedQty ?? 0,
+                                DamagedQty = ackObj?.DamagedQty ?? 0,
+                                IsDamaged = (ackObj?.DamagedQty ?? 0) > 0,
+                                Remarks = ackObj?.Remarks
+                            }
+                        };
+                        pids.Add(pid);
+                    }
+                    else if (dest is not null && dest.ProductId > 0)
+                    {
+                        dto.Product = await _db.Products.AsNoTracking().Where(p => p.Id == dest.ProductId).Select(p => p.Name).FirstOrDefaultAsync() ?? "";
+                        pids.Add(dest.ProductId);
+                    }
+
                     if (source is not null)
                     {
-                        var s = await SummaryAsync(source);
                         dto.SourceIndentNo = source.IndentNo;
                         dto.SourceHq = names.Hqs.GetValueOrDefault(source.HeadquarterId);
-                        dto.ReportedExcess = s.Excess;
-                        // every other transfer order on this excess, shipped or not, so two open orders never both show the full excess
-                        dto.AlreadyTransferred = s.TransferredOut - d.Quantity;
-                        dto.RemainingExcess = Math.Max(0, s.Excess - dto.AlreadyTransferred);
+
+                        var isSourceVerified = await _db.PublicityEvents.AsNoTracking()
+                            .AnyAsync(e => e.RequestId == source.Id && e.Action == "Excess Verified");
+
+                        var sourceAckIds = await _db.PublicityDispatches.AsNoTracking()
+                            .Where(x => x.RequestId == source.Id && x.Acknowledgement != null && !x.Acknowledgement.IsDraft)
+                            .Select(x => x.Id).ToListAsync();
+
+                        var outgoing = await _db.PublicityDispatches.AsNoTracking()
+                            .Where(x => x.SourceRequestId == source.Id).ToListAsync();
+                        var outgoingIds = outgoing.Select(x => x.Id).ToList();
+
+                        var outgoingItems = await _db.PublicityDispatchItems.AsNoTracking()
+                            .Where(x => outgoingIds.Contains(x.DispatchId)).ToListAsync();
+                        var taggedDispatchIds = outgoingItems.Select(x => x.DispatchId).Distinct().ToHashSet();
+
+                        var excessItems = new List<PubSourceExcessItemDto>();
+
+                        if (source.Items.Count > 0)
+                        {
+                            var sourceProductIds = source.Items.Select(i => i.ProductId).Distinct().ToList();
+                            var sourceProductNames = await _db.Products.AsNoTracking()
+                                .Where(p => sourceProductIds.Contains(p.Id))
+                                .ToDictionaryAsync(p => p.Id, p => p.Name);
+
+                            var receivedByItem = await _db.PublicityDispatchItems.AsNoTracking()
+                                .Where(x => sourceAckIds.Contains(x.DispatchId) && x.RequestItemId.HasValue)
+                                .GroupBy(x => x.RequestItemId!.Value)
+                                .Select(g => new { RequestItemId = g.Key, Received = g.Sum(x => x.ReceivedQty) })
+                                .ToDictionaryAsync(x => x.RequestItemId, x => x.Received);
+
+                            foreach (var group in source.Items.GroupBy(i => i.ProductId))
+                            {
+                                var pid = group.Key;
+                                var requestedQty = group.Sum(i => i.Quantity);
+                                var itemIds = group.Select(i => i.Id).ToList();
+                                var received = itemIds.Sum(id => receivedByItem.GetValueOrDefault(id, 0));
+                                var reportedExcess = Math.Max(0, received - requestedQty);
+                                if (reportedExcess <= 0) continue; // Only include products with reported excess
+
+                                var verifiedExcess = isSourceVerified ? reportedExcess : 0;
+                                var taggedForThisProduct = outgoingItems.Where(x => x.ProductId == pid).ToList();
+                                int transferredOut;
+                                if (taggedForThisProduct.Count > 0)
+                                {
+                                    transferredOut = taggedForThisProduct.Sum(x => x.DispatchedQty);
+                                }
+                                else
+                                {
+                                    var taggedForThisProductIds = outgoingItems.Where(x => x.ProductId == pid)
+                                        .Select(x => x.DispatchId).Distinct().ToHashSet();
+                                    transferredOut = outgoing.Where(x => taggedForThisProductIds.Contains(x.Id)).Sum(x => x.Quantity);
+                                }
+                                transferredOut += outgoing.Where(outD => !taggedDispatchIds.Contains(outD.Id)).Sum(outD => outD.Quantity);
+
+                                var remaining = Math.Max(0, reportedExcess - transferredOut);
+                                var isCurrent = pids.Contains(pid) || (pids.Count == 0 && pid == dest?.ProductId);
+                                var currentQty = isCurrent
+                                    ? (dto.Items.Where(x => x.ProductId == pid).Sum(x => x.DispatchedQty) is var q && q > 0 ? q : (pids.Count <= 1 ? d.Quantity : 0))
+                                    : 0;
+
+                                excessItems.Add(new PubSourceExcessItemDto
+                                {
+                                    ProductId = pid,
+                                    ProductName = sourceProductNames.GetValueOrDefault(pid, $"Product #{pid}"),
+                                    ReportedExcess = reportedExcess,
+                                    VerifiedExcess = verifiedExcess,
+                                    AlreadyTransferred = transferredOut,
+                                    RemainingAvailable = remaining,
+                                    IsCurrentTransfer = isCurrent,
+                                    CurrentTransferQty = currentQty
+                                });
+                            }
+                        }
+                        else if (source.ProductId > 0)
+                        {
+                            var s = await SummaryAsync(source);
+                            if (s.Excess > 0)
+                            {
+                                var prodName = await _db.Products.AsNoTracking()
+                                    .Where(p => p.Id == source.ProductId).Select(p => p.Name).FirstOrDefaultAsync()
+                                    ?? dto.Product ?? "Product";
+                                var isCurrent = pids.Contains(source.ProductId) || dest?.ProductId == source.ProductId;
+                                excessItems.Add(new PubSourceExcessItemDto
+                                {
+                                    ProductId = source.ProductId,
+                                    ProductName = prodName,
+                                    ReportedExcess = s.Excess,
+                                    VerifiedExcess = isSourceVerified ? s.Excess : 0,
+                                    AlreadyTransferred = s.TransferredOut,
+                                    RemainingAvailable = Math.Max(0, s.Excess - s.TransferredOut),
+                                    IsCurrentTransfer = isCurrent,
+                                    CurrentTransferQty = isCurrent ? d.Quantity : 0
+                                });
+                            }
+                        }
+
+                        dto.SourceExcessItems = excessItems;
+                        dto.ReportedExcess = excessItems.Sum(x => x.ReportedExcess);
+                        dto.VerifiedExcess = excessItems.Sum(x => x.VerifiedExcess);
+                        dto.IsVerified = isSourceVerified;
+                        dto.AlreadyTransferred = excessItems.Sum(x => x.AlreadyTransferred);
+                        dto.RemainingExcess = excessItems.Sum(x => x.RemainingAvailable);
                     }
                 }
                 else
@@ -2127,6 +2358,44 @@ namespace SpicAPI.Controllers
                         dto.DamagedQty = ack.DamagedQty;
                         dto.ReportedByName = ack.AcknowledgedByName;
                         dto.ReportedDate = ack.SubmittedAt;
+                    }
+
+                    var dispatchItems = await _db.PublicityDispatchItems.AsNoTracking().Where(x => x.DispatchId == d.Id).ToListAsync();
+                    if (dispatchItems.Count > 0)
+                    {
+                        var pids = dispatchItems.Select(x => x.ProductId).Distinct().ToList();
+                        var pnames = await _db.Products.AsNoTracking().Where(p => pids.Contains(p.Id)).ToDictionaryAsync(p => p.Id, p => p.Name);
+                        dto.Items = dispatchItems.Select(x => new PubDispatchItemDto
+                        {
+                            Id = x.Id,
+                            RequestItemId = x.RequestItemId,
+                            ProductId = x.ProductId,
+                            ProductName = pnames.GetValueOrDefault(x.ProductId, $"Product #{x.ProductId}"),
+                            DispatchedQty = x.DispatchedQty,
+                            ReceivedQty = (x.ReceivedQty == 0 && d.Acknowledgement is { IsDraft: false } && d.Acknowledgement.ReceivedQty > 0 && dispatchItems.Count == 1) ? d.Acknowledgement.ReceivedQty : x.ReceivedQty,
+                            DamagedQty = (x.DamagedQty == 0 && d.Acknowledgement is { IsDraft: false } && d.Acknowledgement.DamagedQty > 0 && dispatchItems.Count == 1) ? d.Acknowledgement.DamagedQty : x.DamagedQty,
+                            IsDamaged = (x.DamagedQty > 0 || (d.Acknowledgement is { IsDraft: false } && d.Acknowledgement.DamagedQty > 0 && dispatchItems.Count == 1)),
+                            Remarks = x.Remarks ?? d.Acknowledgement?.Remarks
+                        }).ToList();
+                    }
+                    else if (dest is not null && dest.Items.Count == 1 && d.Acknowledgement is { IsDraft: false } ackSingle)
+                    {
+                        var pid = dest.Items[0].ProductId;
+                        var pname = await _db.Products.AsNoTracking().Where(p => p.Id == pid).Select(p => p.Name).FirstOrDefaultAsync() ?? "";
+                        dto.Items = new List<PubDispatchItemDto>
+                        {
+                            new PubDispatchItemDto
+                            {
+                                RequestItemId = dest.Items[0].Id,
+                                ProductId = pid,
+                                ProductName = pname,
+                                DispatchedQty = d.Quantity,
+                                ReceivedQty = ackSingle.ReceivedQty,
+                                DamagedQty = ackSingle.DamagedQty,
+                                IsDamaged = ackSingle.DamagedQty > 0,
+                                Remarks = ackSingle.Remarks
+                            }
+                        };
                     }
                 }
             }
@@ -2224,7 +2493,15 @@ namespace SpicAPI.Controllers
             else if (open.Count > 0) next = (PublicityStage.Delivery, PublicityStatus.InDispatch);
             else if (hasUnresolvedShortage) next = (PublicityStage.ExceptionHandling, PublicityStatus.ExceptionRaised);
             else if (outgoingOpen) next = (PublicityStage.TransferCreation, PublicityStatus.TransferOrderReceived);
-            else if (hasUnresolvedExcess && !isExcessVerified) next = (PublicityStage.ExceptionHandling, PublicityStatus.ExceptionRaised);
+            // 2026-11-27 fix: an unresolved excess used to be folded into the SAME ExceptionRaised state
+            // as a genuinely unresolved shortage, which is misleading - the destination already received
+            // everything it needed; only ADMIN-MD-CS verifying the reported excess remains. Its own
+            // distinct Stage/Status (ExcessVerification/ExcessVerificationPending) keeps it out of both
+            // the "Exception" and "Completed" KPI buckets until verified, then it lands on the existing
+            // ExceptionResolved - never silently becoming a bare Completed, which would erase the fact
+            // that an exception happened at all.
+            else if (hasUnresolvedExcess && !isExcessVerified) next = (PublicityStage.ExcessVerification, PublicityStatus.ExcessVerificationPending);
+            else if (hasUnresolvedExcess) next = (PublicityStage.Completed, PublicityStatus.ExceptionResolved);
             else next = (PublicityStage.Completed, PublicityStatus.Completed);
 
             if (r.Stage != next.Item1 || r.Status != next.Item2)
@@ -2269,6 +2546,22 @@ namespace SpicAPI.Controllers
                 var itemRows = await _db.PublicityDispatchItems.AsNoTracking()
                     .Where(x => ackDispatchIds.Contains(x.DispatchId) && x.RequestItemId != null)
                     .ToListAsync();
+
+                // Defensively repair in-memory any single-item transfer/replacement dispatch row where ReceivedQty was left 0
+                var ackByDispatchId = acks.ToDictionary(d => d.Id, d => d.Acknowledgement!);
+                foreach (var group in itemRows.GroupBy(x => x.DispatchId))
+                {
+                    if (group.Count() == 1 && ackByDispatchId.TryGetValue(group.Key, out var ackObj))
+                    {
+                        var row = group.First();
+                        if (row.ReceivedQty == 0 && ackObj.ReceivedQty > 0)
+                        {
+                            row.ReceivedQty = ackObj.ReceivedQty;
+                            row.DamagedQty = ackObj.DamagedQty;
+                        }
+                    }
+                }
+
                 var byItem = itemRows.GroupBy(x => x.RequestItemId!.Value)
                     .ToDictionary(g => g.Key, g => (Received: g.Sum(x => x.ReceivedQty), Damaged: g.Sum(x => x.DamagedQty)));
 
@@ -2370,7 +2663,13 @@ namespace SpicAPI.Controllers
                 .Where(e => e.Action == "Excess Verified")
                 .Select(e => e.RequestId).Distinct().ToListAsync()).ToHashSet();
 
-            var candidates = await _db.PublicityRequests.AsNoTracking().Where(x => !x.IsDeleted && x.Id != r.Id &&
+            // 2026-11-27 fix: missing .Include(x => x.Items) left every multi-item candidate's Items
+            // collection un-materialized (empty), so ProductExcessAsync's `source.Items.Count > 1` check
+            // always failed and silently fell back to the whole-REQUEST SummaryAsync total - e.g. a
+            // source with Urea=15/Tejas-K=1/Technical Grade Urea=3 Nos excess (19 total) showed 19 for
+            // EVERY product instead of each product's own figure. ExcessSourcesPending already included
+            // this same candidate query correctly; this was the one place it was missing.
+            var candidates = await _db.PublicityRequests.AsNoTracking().Include(x => x.Items).Where(x => !x.IsDeleted && x.Id != r.Id &&
                 x.MaterialTypeId == r.MaterialTypeId &&
                 (x.Status == PublicityStatus.Completed || x.Status == PublicityStatus.TransferOrderReceived
                     || x.Status == PublicityStatus.ExceptionRaised || x.Status == PublicityStatus.ExceptionResolved) &&
@@ -2411,6 +2710,35 @@ namespace SpicAPI.Controllers
             var validProductIds = r.Items.Count > 0 ? r.Items.Select(i => i.ProductId).ToHashSet() : new HashSet<int> { r.ProductId };
             if (!validProductIds.Contains(productId)) return BadRequest(new { Success = false, Message = "Invalid product for this request." });
             return Ok(await ExcessSourcesForProductAsync(r, productId));
+        }
+
+        /// <summary>Only ever called when the verified list above came back empty - tells the client
+        /// whether that's because nothing matches at all, or because a matching excess genuinely exists
+        /// elsewhere but ADMIN-MD-CS hasn't run "Verify Excess Stock" on its own source request yet (see
+        /// VerifyExcess below). Never exposes the candidate's identity/quantity - only a yes/no, since an
+        /// unverified figure must never be treated as actionable stock.</summary>
+        [HttpGet("requests/{id:int}/excess-sources/pending")]
+        public async Task<IActionResult> ExcessSourcesPending(int id, [FromQuery] int productId)
+        {
+            var r = await LoadAsync(id, tracking: false);
+            if (r is null) return NotFound(new { Success = false, Message = "Request not found." });
+            if (!await IsDispatcherAsync() || r.Status is not (PublicityStatus.ExceptionRaised or PublicityStatus.ExceptionResolved))
+                return BadRequest(new { Success = false, Message = "This request cannot be resolved now." });
+            var validProductIds = r.Items.Count > 0 ? r.Items.Select(i => i.ProductId).ToHashSet() : new HashSet<int> { r.ProductId };
+            if (!validProductIds.Contains(productId)) return BadRequest(new { Success = false, Message = "Invalid product for this request." });
+
+            var candidates = await _db.PublicityRequests.AsNoTracking().Include(x => x.Items).Where(x => !x.IsDeleted && x.Id != r.Id &&
+                x.MaterialTypeId == r.MaterialTypeId &&
+                (x.Status == PublicityStatus.Completed || x.Status == PublicityStatus.TransferOrderReceived
+                    || x.Status == PublicityStatus.ExceptionRaised || x.Status == PublicityStatus.ExceptionResolved) &&
+                (x.ProductId == productId || x.Items.Any(i => i.ProductId == productId))).Take(50).ToListAsync();
+            var pending = false;
+            foreach (var c in candidates)
+            {
+                var (_, remaining) = await ProductExcessAsync(c, productId);
+                if (remaining > 0) { pending = true; break; }
+            }
+            return Ok(new PubPendingExcessDto { Pending = pending });
         }
 
         /// <summary>ADMIN-MD-CS verifies reported excess stock for an excess-only exception. The excess is
@@ -2638,7 +2966,7 @@ namespace SpicAPI.Controllers
             var summary = await SummaryAsync(r);
             var dto = new PubDetailDto
             {
-                Id = r.Id, IndentNo = r.IndentNo, Stage = r.Stage, Status = r.Status, CreatedAt = r.CreatedAt,
+                Id = r.Id, IndentNo = r.IndentNo, Stage = r.Stage, Status = r.Status, CreatedAt = r.CreatedAt, UpdatedAt = r.UpdatedAt,
                 MaterialTypeId = r.MaterialTypeId, Material = pm.Material, ProductId = r.ProductId, Product = pm.Product,
                 Quantity = r.Quantity, RequestedByUserId = r.RequestedByUserId, RequestedByName = r.RequestedByName ?? r.CreatedByName,
                 RequestedByRole = requestedRole ?? "RMDO",
@@ -2669,9 +2997,13 @@ namespace SpicAPI.Controllers
                 // ExceptionResolved = shortage/damage already fully resolved, only a leftover excess-
                 // stock transfer-out remains - Resolve Exception must stay reachable for that, even
                 // though the request now reads as effectively complete everywhere else (see RecomputeAsync).
-                // If excess has already been verified for an excess-only request, CanResolve stays true
-                // for viewing historical verification state on the page.
-                CanResolve = isDispatcher && (r.Status is PublicityStatus.ExceptionRaised or PublicityStatus.ExceptionResolved || (r.Status == PublicityStatus.Completed && summary.ExcessVerified)),
+                // ExcessVerificationPending = the request's own dedicated Stage/Status for "nothing
+                // outstanding except ADMIN-MD-CS hasn't clicked Verify Excess Stock yet" - must stay
+                // reachable or that action becomes permanently unreachable. If excess has already been
+                // verified for an excess-only request, CanResolve stays true for viewing historical
+                // verification state on the page.
+                CanResolve = isDispatcher && (r.Status is PublicityStatus.ExceptionRaised or PublicityStatus.ExceptionResolved
+                    or PublicityStatus.ExcessVerificationPending || (r.Status == PublicityStatus.Completed && summary.ExcessVerified)),
                 SmdReviewedAt = r.SmdReviewedAt,
                 SmdReviewedByName = r.SmdReviewedByName,
                 Files = files.Concat(transferFiles).DistinctBy(f => f.Id).Select(ToFile).ToList(),
@@ -2705,6 +3037,12 @@ namespace SpicAPI.Controllers
             dto.ExceptionRaisedBy = exceptionEvent is null ? null : $"{exceptionEvent.ActorName} ({exceptionEvent.ActorRole})";
             dto.ExceptionRaisedAt = exceptionEvent?.At;
             dto.ExceptionRemarks = exceptionEvent?.Remarks;
+            var exceptionResolvedEvent = events.LastOrDefault(e => e.Action == "Exception Resolved");
+            dto.ExceptionResolvedBy = exceptionResolvedEvent is null ? null : $"{exceptionResolvedEvent.ActorName} ({exceptionResolvedEvent.ActorRole})";
+            dto.ExceptionResolvedAt = exceptionResolvedEvent?.At ?? (summary.Outstanding == 0 && exceptionEvent != null
+                ? (incoming.Where(x => x.Kind != PublicityDispatchKind.Original && x.Acknowledgement is { IsDraft: false }).Max(x => x.Acknowledgement?.SubmittedAt) ?? r.UpdatedAt)
+                : null);
+            dto.ExceptionResolvedRemarks = exceptionResolvedEvent?.Remarks;
             dto.ApproverRemarks = events.LastOrDefault(e => e.Stage is >= PublicityStage.RmReview and <= PublicityStage.DgmMdCsReview
                 && !string.IsNullOrWhiteSpace(e.Remarks))?.Remarks;
 
@@ -2803,48 +3141,115 @@ namespace SpicAPI.Controllers
                 }
             };
 
-            // Product-wise breakdown (Specific Product with line items - dest.Items is
-            // empty for General Product/Gift Articles requests, so dto.Items stays
-            // empty and the client falls back to the single-quantity form exactly as before).
-            if (dest.Items.Count > 0)
+            if (d.Kind == PublicityDispatchKind.Transfer)
             {
-                var productIds = dest.Items.Select(i => i.ProductId).Distinct().ToList();
-                var productNames = await _db.Products.AsNoTracking().Where(p => productIds.Contains(p.Id)).ToDictionaryAsync(p => p.Id, p => p.Name);
-                var existingRows = (await _db.PublicityDispatchItems.AsNoTracking().Where(x => x.DispatchId == d.Id).ToListAsync())
-                    .Where(x => x.RequestItemId.HasValue).ToDictionary(x => x.RequestItemId!.Value);
-                // "Already received before THIS dispatch" (not keyed by draft/submitted - a draft
-                // row's ReceivedQty is 0 or whatever was typed and not yet counted against anyone
-                // else) - only OTHER dispatches' rows count, so this dispatch's own live preview /
-                // stored row is never self-referential.
-                var requestDispatchIds = await _db.PublicityDispatches.AsNoTracking()
-                    .Where(x => x.RequestId == dest.Id).Select(x => x.Id).ToListAsync();
-                var priorReceivedByItem = await _db.PublicityDispatchItems.AsNoTracking()
-                    .Where(x => requestDispatchIds.Contains(x.DispatchId) && x.DispatchId != d.Id && x.RequestItemId != null)
-                    .GroupBy(x => x.RequestItemId!.Value)
-                    .Select(g => new { RequestItemId = g.Key, Received = g.Sum(x => x.ReceivedQty) })
-                    .ToDictionaryAsync(x => x.RequestItemId, x => x.Received);
-                // 2026-11-27 fix: a dispatch that only replaces SOME products (a partial re-
-                // initiation) must only ever show those products here - the very first dispatch of
-                // the request still shows every item (even a 0-approved one), matching Acknowledge's
-                // identical applicability rule so the read view and the write validation never disagree.
-                var isFirstDispatch = requestDispatchIds.Count == 0 || d.Id == requestDispatchIds.Min();
-                dto.Items = dest.Items.Where(i => isFirstDispatch || existingRows.ContainsKey(i.Id)
-                        || Math.Max(0, i.Quantity - priorReceivedByItem.GetValueOrDefault(i.Id)) > 0)
-                    .Select(i =>
+                var dispatchItems = await _db.PublicityDispatchItems.AsNoTracking().Where(x => x.DispatchId == d.Id).ToListAsync();
+                var pids = dispatchItems.Select(x => x.ProductId).Distinct().ToList();
+                var pnames = await _db.Products.AsNoTracking().Where(p => pids.Contains(p.Id)).ToDictionaryAsync(p => p.Id, p => p.Name);
+
+                if (dispatchItems.Count > 0)
                 {
-                    var productName = productNames.GetValueOrDefault(i.ProductId, $"Product #{i.ProductId}");
-                    if (existingRows.TryGetValue(i.Id, out var row))
-                        return new PubDispatchItemDto
-                        {
-                            Id = row.Id, RequestItemId = i.Id, ProductId = i.ProductId, ProductName = productName,
-                            DispatchedQty = row.DispatchedQty, ReceivedQty = row.ReceivedQty, DamagedQty = row.DamagedQty,
-                            IsDamaged = row.DamagedQty > 0, Remarks = row.Remarks
-                        };
-                    // Never yet acknowledged on THIS dispatch - a live preview so the form has a row
-                    // and a correct Dispatched Qty to show before the user types anything.
-                    var dispatchedQty = Math.Max(0, i.Quantity - priorReceivedByItem.GetValueOrDefault(i.Id));
-                    return new PubDispatchItemDto { RequestItemId = i.Id, ProductId = i.ProductId, ProductName = productName, DispatchedQty = dispatchedQty };
-                }).ToList();
+                    dto.Items = dispatchItems.Select(x => new PubDispatchItemDto
+                    {
+                        Id = x.Id, RequestItemId = x.RequestItemId, ProductId = x.ProductId,
+                        ProductName = pnames.GetValueOrDefault(x.ProductId, $"Product #{x.ProductId}"),
+                        DispatchedQty = x.DispatchedQty,
+                        ReceivedQty = (x.ReceivedQty == 0 && a is { IsDraft: false } && a.ReceivedQty > 0 && dispatchItems.Count == 1) ? a.ReceivedQty : x.ReceivedQty,
+                        DamagedQty = (x.DamagedQty == 0 && a is { IsDraft: false } && a.DamagedQty > 0 && dispatchItems.Count == 1) ? a.DamagedQty : x.DamagedQty,
+                        IsDamaged = (x.DamagedQty > 0 || (a is { IsDraft: false } && a.DamagedQty > 0 && dispatchItems.Count == 1)),
+                        Remarks = x.Remarks ?? a?.Remarks
+                    }).ToList();
+                    dto.Product = pids.Count == 1 ? pnames.GetValueOrDefault(pids[0], "") : string.Join(", ", pids.Select(pid => pnames.GetValueOrDefault(pid, "")));
+                }
+                else if (dest.Items.Count == 1)
+                {
+                    var pid = dest.Items[0].ProductId;
+                    var pname = await _db.Products.AsNoTracking().Where(p => p.Id == pid).Select(p => p.Name).FirstOrDefaultAsync() ?? "";
+                    dto.Product = pname;
+                    dto.Items = new List<PubDispatchItemDto>
+                    {
+                        new PubDispatchItemDto { RequestItemId = dest.Items[0].Id, ProductId = pid, ProductName = pname, DispatchedQty = d.Quantity }
+                    };
+                    pids.Add(pid);
+                }
+                else if (dest.ProductId > 0)
+                {
+                    var pname = await _db.Products.AsNoTracking().Where(p => p.Id == dest.ProductId).Select(p => p.Name).FirstOrDefaultAsync() ?? "";
+                    dto.Product = pname;
+                    pids.Add(dest.ProductId);
+                }
+                else
+                {
+                    dto.Product = (await ProductMaterialPartsAsync(dest)).Product;
+                }
+
+                dto.Material = (await ProductMaterialPartsAsync(dest)).Material;
+
+                if (source is not null)
+                {
+                    if (pids.Count == 1)
+                    {
+                        var (excess, remaining) = await ProductExcessAsync(source, pids[0]);
+                        dto.SourceProductExcess = excess;
+                        dto.SourceProductAvailableExcess = remaining + d.Quantity;
+                    }
+                    else
+                    {
+                        var s = await SummaryAsync(source);
+                        dto.SourceProductExcess = s.Excess;
+                        dto.SourceProductAvailableExcess = Math.Max(0, s.Excess - (s.TransferredOut - d.Quantity));
+                    }
+                }
+            }
+            else
+            {
+                var pm = await ProductMaterialPartsAsync(dest);
+                dto.Product = pm.Product;
+                dto.Material = pm.Material;
+
+                // Product-wise breakdown (Specific Product with line items - dest.Items is
+                // empty for General Product/Gift Articles requests, so dto.Items stays
+                // empty and the client falls back to the single-quantity form exactly as before).
+                if (dest.Items.Count > 0)
+                {
+                    var productIds = dest.Items.Select(i => i.ProductId).Distinct().ToList();
+                    var productNames = await _db.Products.AsNoTracking().Where(p => productIds.Contains(p.Id)).ToDictionaryAsync(p => p.Id, p => p.Name);
+                    var existingRows = (await _db.PublicityDispatchItems.AsNoTracking().Where(x => x.DispatchId == d.Id).ToListAsync())
+                        .Where(x => x.RequestItemId.HasValue).ToDictionary(x => x.RequestItemId!.Value);
+                    // "Already received before THIS dispatch" (not keyed by draft/submitted - a draft
+                    // row's ReceivedQty is 0 or whatever was typed and not yet counted against anyone
+                    // else) - only OTHER dispatches' rows count, so this dispatch's own live preview /
+                    // stored row is never self-referential.
+                    var requestDispatchIds = await _db.PublicityDispatches.AsNoTracking()
+                        .Where(x => x.RequestId == dest.Id).Select(x => x.Id).ToListAsync();
+                    var priorReceivedByItem = await _db.PublicityDispatchItems.AsNoTracking()
+                        .Where(x => requestDispatchIds.Contains(x.DispatchId) && x.DispatchId != d.Id && x.RequestItemId != null)
+                        .GroupBy(x => x.RequestItemId!.Value)
+                        .Select(g => new { RequestItemId = g.Key, Received = g.Sum(x => x.ReceivedQty) })
+                        .ToDictionaryAsync(x => x.RequestItemId, x => x.Received);
+                    // 2026-11-27 fix: a dispatch that only replaces SOME products (a partial re-
+                    // initiation) must only ever show those products here - the very first dispatch of
+                    // the request still shows every item (even a 0-approved one), matching Acknowledge's
+                    // identical applicability rule so the read view and the write validation never disagree.
+                    var isFirstDispatch = requestDispatchIds.Count == 0 || d.Id == requestDispatchIds.Min();
+                    dto.Items = dest.Items.Where(i => isFirstDispatch || existingRows.ContainsKey(i.Id)
+                            || Math.Max(0, i.Quantity - priorReceivedByItem.GetValueOrDefault(i.Id)) > 0)
+                        .Select(i =>
+                    {
+                        var productName = productNames.GetValueOrDefault(i.ProductId, $"Product #{i.ProductId}");
+                        if (existingRows.TryGetValue(i.Id, out var row))
+                            return new PubDispatchItemDto
+                            {
+                                Id = row.Id, RequestItemId = i.Id, ProductId = i.ProductId, ProductName = productName,
+                                DispatchedQty = row.DispatchedQty, ReceivedQty = row.ReceivedQty, DamagedQty = row.DamagedQty,
+                                IsDamaged = row.DamagedQty > 0, Remarks = row.Remarks
+                            };
+                        // Never yet acknowledged on THIS dispatch - a live preview so the form has a row
+                        // and a correct Dispatched Qty to show before the user types anything.
+                        var dispatchedQty = Math.Max(0, i.Quantity - priorReceivedByItem.GetValueOrDefault(i.Id));
+                        return new PubDispatchItemDto { RequestItemId = i.Id, ProductId = i.ProductId, ProductName = productName, DispatchedQty = dispatchedQty };
+                    }).ToList();
+                }
             }
             var acked = a is { IsDraft: false };
             var ackPill = !acked ? "Pending" : dto.Ack!.ExceptionType == "None" ? "Completed" : dto.Ack!.ExceptionType == "Excess" ? "Excess Reported" : "Exception Raised";
@@ -2925,6 +3330,8 @@ namespace SpicAPI.Controllers
             // ExceptionResolved counts as done here too - shortage/damage is fully resolved, only a
             // leftover excess-stock transfer-out remains (see RecomputeAsync/Stats' Completed KPI).
             var done = r.Status is PublicityStatus.Completed or PublicityStatus.ExceptionResolved;
+            var isPartiallyResolved = r.Status == PublicityStatus.ExceptionRaised && incoming.Any(d => d.Kind != PublicityDispatchKind.Original && d.Acknowledgement is { IsDraft: false });
+            var isExcessPending = r.Status == PublicityStatus.ExcessVerificationPending;
             steps.Add(new PubStepDto
             {
                 Label = "Dispatch",
@@ -2936,14 +3343,16 @@ namespace SpicAPI.Controllers
             steps.Add(new PubStepDto
             {
                 Label = "Acknowledgement",
-                Pill = anyAck ? (r.Status == PublicityStatus.ExceptionRaised ? "Exception Raised" : "Completed") : dispatched ? "Pending" : "Pending",
+                Pill = anyAck ? (isPartiallyResolved ? "Partially Resolved" : r.Status == PublicityStatus.ExceptionRaised ? "Exception Raised" : isExcessPending ? "Excess Reported" : "Completed") : dispatched ? "Pending" : "Pending",
                 At = Last(PublicityStage.Acknowledgement)?.At,
-                State = anyAck ? (r.Status is PublicityStatus.ExceptionRaised ? 3 : 2) : dispatched ? 1 : 0
+                State = anyAck ? (r.Status is PublicityStatus.ExceptionRaised ? (isPartiallyResolved ? 1 : 3) : 2) : dispatched ? 1 : 0
             });
             steps.Add(new PubStepDto
             {
-                Label = "Completion", Pill = done ? "Completed" : "Pending", At = done ? Last(PublicityStage.Completed)?.At ?? r.UpdatedAt : null,
-                State = done ? 2 : anyAck && !done ? 1 : 0
+                Label = "Completion",
+                Pill = done ? (r.Status == PublicityStatus.ExceptionResolved ? "Exception Resolved" : "Completed") : isExcessPending ? "Excess Verification Pending" : "Pending",
+                At = done ? Last(PublicityStage.Completed)?.At ?? r.UpdatedAt : null,
+                State = done ? 2 : (isExcessPending || (anyAck && !done)) ? 1 : 0
             });
             return steps;
         }

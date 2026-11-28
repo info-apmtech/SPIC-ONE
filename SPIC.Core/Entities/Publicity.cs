@@ -15,14 +15,21 @@ namespace SPIC.Core.Entities
     {
         IndentCreation = 0, RmReview = 1, SmdReview = 2, SmmReview = 3, AdminMdCsReview = 4, DgmMdCsReview = 5,
         Dispatch = 6, Delivery = 7, Acknowledgement = 8, ExceptionHandling = 9, ReInitiation = 10,
-        InterHqTransfer = 11, TransferCreation = 12, Completed = 13
+        InterHqTransfer = 11, TransferCreation = 12, Completed = 13,
+        // 2026-11-27: every delivery shortage/damage is resolved but a reported excess still needs
+        // ADMIN-MD-CS to click "Verify Excess Stock" - distinct from ExceptionHandling (an unresolved
+        // SHORTAGE still needing a replacement) and from Completed (nothing left to do at all).
+        // Appended at the end - never renumber existing values, they're persisted as plain ints.
+        ExcessVerification = 14
     }
 
     public enum PublicityStatus
     {
         Draft = 0, PendingApproval = 1, PendingFinalApproval = 2, FinalApproved = 3, InDispatch = 4,
         Delivered = 5, AcknowledgementPending = 6, ExceptionRaised = 7, ReInitiationInProgress = 8,
-        TransferInProgress = 9, ExceptionResolved = 10, Completed = 11, Rejected = 12, TransferOrderReceived = 13, Returned = 14
+        TransferInProgress = 9, ExceptionResolved = 10, Completed = 11, Rejected = 12, TransferOrderReceived = 13, Returned = 14,
+        // 2026-11-27: pairs with PublicityStage.ExcessVerification above - appended at the end, same reason.
+        ExcessVerificationPending = 15
     }
 
     public enum PublicityDispatchKind { Original = 0, ReInitiation = 1, Transfer = 2 }
