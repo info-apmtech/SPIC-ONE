@@ -296,12 +296,27 @@ namespace SpicAPI.Controllers
             };
 
             // Count and insert under one advisory lock per farmer + staff member, so two taps at once (or
-            // both API replicas) cannot pass the cap together.
+            // both API replicas) cannot pass the cap together. The per-farmer daily cap across officers (final fix
+            // wave, review M3) takes the farmer's own lock first, inside the same transaction (always farmer, then
+            // farmer + staff, so two requests cannot wait on each other).
             var npgsql = _db.Database.IsNpgsql();
             await using var tx = npgsql ? await _db.Database.BeginTransactionAsync(ct) : null;
             if (npgsql)
+            {
+                await _db.Database.ExecuteSqlInterpolatedAsync(
+                    $"SELECT pg_advisory_xact_lock(hashtextextended({"fcr:" + userId}, 0))", ct);
                 await _db.Database.ExecuteSqlInterpolatedAsync(
                     $"SELECT pg_advisory_xact_lock(hashtextextended({"fcr:" + userId + ":" + member.Staff.UserId}, 0))", ct);
+            }
+
+            var dayStart = FarmerAssistantRules.IstDayStartUtc(now);
+            var sentToday = await _db.FarmerContactRequests.CountAsync(r => r.FarmerUserId == userId && r.CreatedAtUtc >= dayStart, ct);
+            if (!FarmerDailyCapRules.Allows(sentToday, FarmerDailyCapRules.CallBacksPerDay))
+            {
+                Response.Headers.RetryAfter = FarmerAssistantRules.SecondsUntilReset(now).ToString();
+                return StatusCode(StatusCodes.Status429TooManyRequests,
+                    new FarmerProfileErrorDto { Message = FarmerDailyCapRules.CallBackMessage(FarmerDailyCapRules.CallBacksPerDay) });
+            }
 
             var open = await _db.FarmerContactRequests.CountAsync(r =>
                 r.FarmerUserId == userId && r.StaffUserId == member.Staff.UserId && r.Status == FarmerContactRequestStatus.Open, ct);

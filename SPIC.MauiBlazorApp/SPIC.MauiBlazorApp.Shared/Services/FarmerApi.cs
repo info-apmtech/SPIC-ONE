@@ -105,6 +105,23 @@ public sealed class FarmerApi
         catch (Exception) { return new(null, OfflineMessage, none); }
     }
 
+    /// <summary>
+    /// "Delete my account" (DELETE api/Farmer/profile): null when the account is gone (204, or 404 = already
+    /// deleted), else the problem in plain words.
+    /// </summary>
+    public async Task<string?> DeleteAccountAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            using var response = await _http.DeleteAsync("api/Farmer/profile", ct);
+            if (response.IsSuccessStatusCode || response.StatusCode == HttpStatusCode.NotFound) return null;
+            var error = await ReadAsync<FarmerProfileErrorDto>(response, ct);
+            return error?.Message is { Length: > 0 } m ? m : Fallback(response.StatusCode);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { return "The request was cancelled. Your account was not deleted."; }
+        catch (Exception) { return OfflineMessage; }
+    }
+
     /// <summary>State / district dropdowns: the existing location master endpoints.</summary>
     public Task<List<LocationOption>?> StatesAsync(CancellationToken ct = default) => OptionsAsync("api/State", "stateName", ct);
 

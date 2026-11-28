@@ -104,6 +104,8 @@ builder.Services.AddMemoryCache();
 builder.Services.AddHttpClient(FarmerWeatherService.HttpClientName, c => c.Timeout = FarmerWeatherService.Timeout)
     .RemoveAllLoggers();
 builder.Services.AddSingleton<IFarmerWeatherService, FarmerWeatherService>();
+// Farmer portal "Delete my account" (DELETE api/Farmer/profile, final fix wave).
+builder.Services.AddScoped<FarmerAccountDeletion>();
 builder.Services.AddScoped<CommunityNearResolver>();
 builder.Services.AddScoped<FarmerAssistantContextLoader>();
 builder.Services.AddScoped<IFarmerAiBudget, FarmerAiBudget>();

@@ -125,7 +125,7 @@ public sealed class TelemetryIngestService
                 string? userId = null, userName = null, role = null;
                 if (caller == CallerKind.User) (userId, userName, role) = (claimId, claimName, claimRole);
                 else if (caller == CallerKind.Trusted)
-                    (userId, userName, role) = (TelemetryHttp.Trim(er.UserId, 450), TelemetryHttp.Trim(er.UserName, 256), TelemetryHttp.Trim(er.Role, 64));
+                    (userId, userName, role) = (TelemetryHttp.Trim(er.UserId, 450), TelemetryHttp.Trim(TelemetryHttp.SafeUserName(er.UserName, er.Role), 256), TelemetryHttp.Trim(er.Role, 64));
 
                 _channel.Enqueue(new AppErrorLog
                 {

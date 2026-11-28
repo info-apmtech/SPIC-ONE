@@ -25,8 +25,9 @@ namespace SpicAPI.Services
         /// <summary>A signed JWT (raw, without the "Bearer " prefix).</summary>
         Task<string> GenerateJwtTokenAsync(UserInfo user);
 
-        /// <summary>Persists a new refresh token for the user and returns its raw value (the only time it exists in plaintext).</summary>
-        Task<string> IssueRefreshTokenAsync(string userId);
+        /// <summary>Persists a new refresh token for the user and returns its raw value (the only time it exists in plaintext).
+        /// <paramref name="role"/> picks the lifetime: Farmer = FarmerPortal:RefreshExpiryDays, everyone else unchanged.</summary>
+        Task<string> IssueRefreshTokenAsync(string userId, AppRole? role = null);
     }
 
     public sealed class TokenIssuer : ITokenIssuer
@@ -67,7 +68,7 @@ namespace SpicAPI.Services
                 }
             }
 
-            var refreshToken = await IssueRefreshTokenAsync(user.Id);
+            var refreshToken = await IssueRefreshTokenAsync(user.Id, user.Role);
 
             return new LoginResponseModel
             {
@@ -90,12 +91,25 @@ namespace SpicAPI.Services
             };
         }
 
-        public async Task<string> IssueRefreshTokenAsync(string userId)
+        /// <summary>Default lifetime of a Farmer refresh token (final fix wave, review M4): a farmer who opens the app
+        /// within a month does not need a new SMS code.</summary>
+        public const double FarmerRefreshDaysDefault = 30;
+
+        /// <summary>
+        /// Refresh token lifetime in days: Farmer role = FarmerPortal:RefreshExpiryDays (default 30); every other role
+        /// keeps Jwt:RefreshExpiryDays (default 2), exactly as before.
+        /// </summary>
+        public static double RefreshDays(IConfiguration config, AppRole? role) =>
+            role == AppRole.Farmer
+                ? (config.GetValue<double?>("FarmerPortal:RefreshExpiryDays") is { } d && d > 0 ? d : FarmerRefreshDaysDefault)
+                : config.GetValue<double?>("Jwt:RefreshExpiryDays") ?? 2;
+
+        public async Task<string> IssueRefreshTokenAsync(string userId, AppRole? role = null)
         {
             var raw = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
                 .Replace('+', '-').Replace('/', '_').TrimEnd('='); // URL-safe
 
-            var refreshExpiryDays = _config.GetValue<double?>("Jwt:RefreshExpiryDays") ?? 2;
+            var refreshExpiryDays = RefreshDays(_config, role);
 
             _db.RefreshTokens.Add(new RefreshToken
             {

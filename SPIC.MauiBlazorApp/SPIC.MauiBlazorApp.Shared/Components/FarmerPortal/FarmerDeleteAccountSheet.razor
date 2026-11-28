@@ -1,0 +1,90 @@
+@namespace SPIC.MauiBlazorApp.Shared.Components.FarmerPortal
+@using SPIC.Core.FarmerPortal
+@using SPIC.MauiBlazorApp.Shared.Services
+@inject FarmerApi Api
+
+@*
+    "Delete my account" confirm sheet (final fix wave, review I4). Says exactly what is removed and that it cannot be
+    undone; the delete button stays off until the farmer ticks "I understand". On success it raises OnDeleted (the
+    profile page signs out). Bottom sheet on phone, right drawer on tablet / desktop (shell BottomSheet).
+
+        <FarmerDeleteAccountSheet @bind-IsOpen="_deleteOpen" OnDeleted="SignedOutAsync" />
+*@
+
+<BottomSheet IsOpen="IsOpen" IsOpenChanged="OnOpenChanged" Title="Delete your account?"
+             Subtitle="Read what is removed before you confirm." CssClass="fp fpdel" OnClosed="Reset" CloseOnBackdrop="@(!_busy)">
+    <ChildContent>
+        <FarmerDeletionSummary />
+
+        <label class="fp-check fpdel-confirm">
+            <input type="checkbox" checked="@_understood" disabled="@_busy"
+                   @onchange="e => _understood = e.Value is true" />
+            <span>I understand my account and these details will be deleted and this cannot be undone.</span>
+        </label>
+
+        @if (_error is not null)
+        {
+            <p class="fp-alert fp-alert--error fpdel-error" role="alert"><i class="bi bi-exclamation-circle-fill" aria-hidden="true"></i> @_error</p>
+        }
+    </ChildContent>
+    <Footer>
+        <div class="fp fpdel-footer">
+            <button type="button" class="fp-btn fp-btn--ghost" @onclick="CloseAsync" disabled="@_busy">Keep my account</button>
+            <button type="button" class="fp-btn fp-btn--secondary fpdel-go" @onclick="DeleteAsync" disabled="@(_busy || !_understood)">
+                @if (_busy)
+                {
+                    <span class="fp-spinner" aria-hidden="true"></span>
+                    <span>Deleting...</span>
+                }
+                else
+                {
+                    <i class="bi bi-trash3" aria-hidden="true"></i>
+                    <span>Delete my account</span>
+                }
+            </button>
+        </div>
+    </Footer>
+</BottomSheet>
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+
+    [Parameter] public EventCallback<bool> IsOpenChanged { get; set; }
+
+    /// <summary>Raised after the API deleted the account (the caller signs out).</summary>
+    [Parameter] public EventCallback OnDeleted { get; set; }
+
+    private bool _understood;
+    private bool _busy;
+    private string? _error;
+
+    private void Reset()
+    {
+        if (_busy) return;
+        _understood = false;
+        _error = null;
+    }
+
+    private async Task OnOpenChanged(bool open)
+    {
+        if (_busy && !open) return;
+        await IsOpenChanged.InvokeAsync(open);
+    }
+
+    private Task CloseAsync() => _busy ? Task.CompletedTask : IsOpenChanged.InvokeAsync(false);
+
+    private async Task DeleteAsync()
+    {
+        if (_busy || !_understood) return;
+        _busy = true;
+        _error = null;
+        var problem = await Api.DeleteAccountAsync();
+        _busy = false;
+        if (problem is not null)
+        {
+            _error = problem;
+            return;
+        }
+        await OnDeleted.InvokeAsync();
+    }
+}

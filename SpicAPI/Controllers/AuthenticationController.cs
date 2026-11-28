@@ -92,7 +92,7 @@ namespace SpicAPI.Controllers
 
             // Rotate: the redeemed token is revoked immediately and linked to its replacement, so
             // a replayed copy of this same raw value can never be redeemed a second time.
-            var newRefreshToken = await _tokens.IssueRefreshTokenAsync(user.Id);
+            var newRefreshToken = await _tokens.IssueRefreshTokenAsync(user.Id, user.Role);
             existing.IsRevoked = true;
             existing.RevokedAt = now;
             existing.ReplacedByTokenHash = TokenIssuer.HashToken(newRefreshToken);

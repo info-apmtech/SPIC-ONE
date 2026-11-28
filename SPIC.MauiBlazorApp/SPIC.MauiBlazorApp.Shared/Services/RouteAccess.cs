@@ -67,6 +67,9 @@ namespace SPIC.MauiBlazorApp.Shared.Services
 
         internal const string FarmerSegment = "farmer";
 
+        /// <summary>Public /farmer/... pages (no sign-in, any role): the privacy notice and the account-deletion info.</summary>
+        internal static readonly HashSet<string> FarmerPublicPages = new(StringComparer.OrdinalIgnoreCase) { "privacy", "delete-account" };
+
         internal const string CommunitySegment = "Community";
 
         /// <summary>The staff page for farmer call-back requests (/farmer-requests).</summary>
@@ -84,6 +87,9 @@ namespace SPIC.MauiBlazorApp.Shared.Services
             if (firstSegment.Equals(FarmerSegment, StringComparison.OrdinalIgnoreCase))
             {
                 if (secondSegment.Equals("login", StringComparison.OrdinalIgnoreCase)) return Allow;
+                // The privacy notice and the account-deletion page are public (final fix wave): readable before
+                // sign-in and by anyone signed in (Google Play links the deletion page).
+                if (FarmerPublicPages.Contains(secondSegment)) return Allow;
                 return login.UserRole is AppRole.Farmer or AppRole.Admin ? Allow : Redirect(login.LandingPage);
             }
 

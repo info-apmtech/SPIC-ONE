@@ -13,6 +13,8 @@ using SPIC.Core.FarmerPortal;
 using Spic.Infrastructure.Data;
 using SpicAPI.Controllers;
 using SpicAPI.Services;
+using SPIC.MauiBlazorApp.Shared.Services;
+using Microsoft.Extensions.Configuration;
 
 namespace SPIC.RegressionHarness;
 
@@ -33,6 +35,9 @@ internal static class FarmerPortalHardeningTests
 		Weather();
 		PhotoRoot();
 		Infra();
+		Caps();
+		Refresh();
+		Privacy();
 	}
 
 	private static string RepoFile(params string[] parts)
@@ -273,6 +278,7 @@ internal static class FarmerPortalHardeningTests
 		"GET api/Farmer/leaf-check/{id:long}",
 		"GET api/Farmer/leaf-check/{id:long}/image",
 		"POST api/Farmer/leaf-check",
+		"DELETE api/Farmer/profile",
 		"GET api/Farmer/profile",
 		"PUT api/Farmer/profile",
 		"GET api/Farmer/trends",
@@ -364,5 +370,74 @@ internal static class FarmerPortalHardeningTests
 		Check.That("user admin: an unknown caller role may NOT create a SuperAdmin", !UserController.MayAssignRole(null, AppRole.SuperAdmin));
 		Check.That("user admin: seed-default-user is unchanged (anonymous, owner item)",
 			typeof(UserController).GetMethod(nameof(UserController.SeedDefaultUser))!.GetCustomAttributes<AllowAnonymousAttribute>(true).Any());
+	}
+
+	// ---------------------------------------------------------------- Group C: caps (I3, M2, M3), refresh (M4), privacy (I4)
+
+	private static void Caps()
+	{
+		Check.Equal("caps: fertilizer default 50 per IST day", 50, FarmerDailyCapRules.Limit(null, FarmerDailyCapRules.FertilizerRunsDefault));
+		Check.Equal("caps: yield default 50 per IST day", 50, FarmerDailyCapRules.Limit("", FarmerDailyCapRules.YieldForecastsDefault));
+		Check.Equal("caps: config value is used", 7, FarmerDailyCapRules.Limit(" 7 ", 50));
+		Check.Equal("caps: zero / negative / text fall back", 50, FarmerDailyCapRules.Limit("0", 50) + FarmerDailyCapRules.Limit("-3", 50) + FarmerDailyCapRules.Limit("lots", 50) - 100);
+		Check.Equal("caps: 10 call-backs a day across officers", 10, FarmerDailyCapRules.CallBacksPerDay);
+		Check.That("caps: community 5 posts / 30 replies / 20 MB", FarmerDailyCapRules.CommunityPostsDefault == 5 && FarmerDailyCapRules.CommunityRepliesDefault == 30
+			&& FarmerDailyCapRules.MegaBytes(FarmerDailyCapRules.CommunityAttachmentMbDefault) == 20L * 1024 * 1024);
+		Check.That("caps: the 50th is allowed, the 51st is not", FarmerDailyCapRules.Allows(49, 50) && !FarmerDailyCapRules.Allows(50, 50));
+		Check.That("caps: bytes up to the limit pass, one more does not",
+			FarmerDailyCapRules.AllowsBytes(19L * 1024 * 1024, 1024 * 1024, 20L * 1024 * 1024) && !FarmerDailyCapRules.AllowsBytes(19L * 1024 * 1024, 1024 * 1024 + 1, 20L * 1024 * 1024));
+		Check.That("caps: farmers attach photos and PDFs, not DOC / DOCX",
+			FarmerDailyCapRules.FarmerAttachmentExtensions.SetEquals(new[] { ".jpg", ".jpeg", ".png", ".webp", ".pdf" }) && !FarmerDailyCapRules.FarmerAttachmentExtensions.Contains(".docx"));
+		// 20:00 UTC on 28 Nov = 01:30 IST on 29 Nov: the IST day began at 18:30 UTC on 28 Nov.
+		var utcNow = new DateTime(2026, 11, 28, 20, 0, 0, DateTimeKind.Utc);
+		Check.Equal("caps: IST day start on a UTC server clock", new DateTime(2026, 11, 28, 18, 30, 0), FarmerDailyCapRules.IstDayStartServerLocal(utcNow, TimeZoneInfo.Utc));
+		var ist = TimeZoneInfo.CreateCustomTimeZone("IST-test", TimeSpan.FromHours(5.5), "IST", "IST");
+		Check.Equal("caps: IST day start on an IST server clock is midnight", new DateTime(2026, 11, 29, 0, 0, 0), FarmerDailyCapRules.IstDayStartServerLocal(utcNow, ist));
+		foreach (var m in new[] { FarmerDailyCapRules.FertilizerMessage(50), FarmerDailyCapRules.YieldMessage(50), FarmerDailyCapRules.CallBackMessage(10),
+			FarmerDailyCapRules.CommunityPostMessage(5), FarmerDailyCapRules.CommunityReplyMessage(30), FarmerDailyCapRules.CommunityAttachmentMessage(20) })
+			Check.That($"caps: plain message names the limit and midnight: '{m}'", m.Contains("midnight") && System.Text.RegularExpressions.Regex.IsMatch(m, @"\d"));
+	}
+
+	private static void Refresh()
+	{
+		IConfiguration Config(params (string Key, string Value)[] pairs) =>
+			new Microsoft.Extensions.Configuration.ConfigurationBuilder()
+				.AddInMemoryCollection(pairs.Select(p => new KeyValuePair<string, string?>(p.Key, p.Value))).Build();
+		Check.Equal("refresh: Farmer default 30 days", 30d, TokenIssuer.RefreshDays(Config(), AppRole.Farmer));
+		Check.Equal("refresh: FarmerPortal:RefreshExpiryDays is used for farmers", 45d, TokenIssuer.RefreshDays(Config(("FarmerPortal:RefreshExpiryDays", "45")), AppRole.Farmer));
+		Check.Equal("refresh: a bad farmer value falls back to 30", 30d, TokenIssuer.RefreshDays(Config(("FarmerPortal:RefreshExpiryDays", "0")), AppRole.Farmer));
+		Check.Equal("refresh: Jwt:RefreshExpiryDays does not change farmers", 30d, TokenIssuer.RefreshDays(Config(("Jwt:RefreshExpiryDays", "5")), AppRole.Farmer));
+		Check.Equal("refresh: staff default unchanged (2 days)", 2d, TokenIssuer.RefreshDays(Config(("FarmerPortal:RefreshExpiryDays", "45")), AppRole.MDO));
+		Check.Equal("refresh: staff keep Jwt:RefreshExpiryDays", 5d, TokenIssuer.RefreshDays(Config(("Jwt:RefreshExpiryDays", "5")), AppRole.Admin));
+		Check.Equal("refresh: unknown role = staff rule", 2d, TokenIssuer.RefreshDays(Config(), null));
+	}
+
+	private static void Privacy()
+	{
+		Check.That("privacy: no recorded version needs acceptance", FarmerPrivacyRules.NeedsAcceptance(null));
+		Check.That("privacy: an older version needs acceptance", FarmerPrivacyRules.NeedsAcceptance("2026-01-01"));
+		Check.That("privacy: the current version does not", !FarmerPrivacyRules.NeedsAcceptance(FarmerPrivacyRules.Version));
+		Check.That("privacy: the version fits FarmerProfiles.PrivacyVersion (20)", FarmerPrivacyRules.Version.Length <= 20);
+		var removed = string.Join(" ", FarmerPrivacyRules.RemovedItems).ToLowerInvariant();
+		foreach (var word in new[] { "phone", "gps", "crops", "fertilizer", "harvest", "leaf photos", "spic ai", "sign-in", "call-back", "community" })
+			Check.That($"privacy: the deletion list names '{word}'", removed.Contains(word));
+		Check.That("privacy: the deletion sheet says it cannot be undone", FarmerPrivacyRules.CannotUndo.StartsWith("This cannot be undone"));
+		// The privacy notice says phone numbers never reach the request / error logs: a farmer's user name is "f" + mobile.
+		Check.Equal("logs: a farmer user name is masked", "f98xxxxxx21", Spic.Infrastructure.Services.Telemetry.TelemetryHttp.SafeUserName("f9876543221", "Farmer"));
+		Check.Equal("logs: staff user names are unchanged", "qa.mdo", Spic.Infrastructure.Services.Telemetry.TelemetryHttp.SafeUserName("qa.mdo", "MDO"));
+		Check.Equal("logs: a staff user name that looks like a farmer's is unchanged", "f9876543221", Spic.Infrastructure.Services.Telemetry.TelemetryHttp.SafeUserName("f9876543221", "Dealer"));
+		Check.Equal("logs: other farmer user names are unchanged", "qa.farmer", Spic.Infrastructure.Services.Telemetry.TelemetryHttp.SafeUserName("qa.farmer", "Farmer"));
+
+		var anon = new LoginState();
+		var farmer = TestLogin.As(AppRole.Farmer, "");
+		var mdo = TestLogin.As(AppRole.MDO, "Dashboard.View");
+		foreach (var url in new[] { FarmerPrivacyRules.PrivacyPath, FarmerPrivacyRules.DeleteInfoPath })
+		{
+			Check.That($"route: anyone signed out opens {url}", RouteAccess.CanOpen(anon, url, null));
+			Check.That($"route: a farmer opens {url}", RouteAccess.CanOpen(farmer, url, null));
+			Check.That($"route: staff (MDO) open {url} too (public page)", RouteAccess.CanOpen(mdo, url, null));
+		}
+		Check.That("route: staff are still sent back from /farmer", !RouteAccess.CanOpen(mdo, "/farmer", null));
+		Check.That("route: staff are still sent back from /farmer/profile", !RouteAccess.CanOpen(mdo, "/farmer/profile", null));
 	}
 }

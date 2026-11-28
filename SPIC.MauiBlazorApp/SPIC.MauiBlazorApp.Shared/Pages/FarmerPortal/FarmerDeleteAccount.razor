@@ -1,0 +1,45 @@
+@page "/farmer/delete-account"
+@layout SPIC.MauiBlazorApp.Shared.Layout.EmptyLayout
+@using SPIC.Core.FarmerPortal
+@inject LoginState LoginState
+
+@*
+    How to delete a SPIC ONE farmer account (final fix wave, review I4). Public web page: Google Play asks for a web
+    link that explains in-app account deletion. Deletion itself happens in the app (My profile, Delete my account,
+    DELETE api/Farmer/profile); this page lists the same items the API removes (FarmerPrivacyRules).
+*@
+
+<div class="fp fp-page fp-public fpda">
+    <div class="fp-public__body">
+        <FpHero Title="Delete your account" Subtitle="How to delete your SPIC ONE farmer account and what happens to your data."
+                Eyebrow="SPIC ONE for farmers" BackHref="@BackHref" BackLabel="@BackLabel" DocumentTitle="Delete your account" />
+
+        <FpCard Title="Delete it in the app" Icon="bi-phone" Hue="FpHue.Green">
+            <ol class="fpda-steps">
+                <li><span class="fpda-steps__n" aria-hidden="true">1</span><span>Sign in to SPIC ONE with your mobile number (the app, or this website).</span></li>
+                <li><span class="fpda-steps__n" aria-hidden="true">2</span><span>Open <strong>My profile</strong>.</span></li>
+                <li><span class="fpda-steps__n" aria-hidden="true">3</span><span>Tap <strong>Delete my account</strong> at the bottom, read the list and confirm.</span></li>
+            </ol>
+            <p class="fp-caption fpda-caption">Your account is deleted at once and you are signed out on this phone.</p>
+            <a class="fp-btn fp-btn--primary fpda-action" href="@(SignedIn ? "/farmer/profile" : "/farmer/login")">
+                <span>@(SignedIn ? "Open My profile" : "Sign in to delete")</span>
+                <i class="bi bi-arrow-right" aria-hidden="true"></i>
+            </a>
+        </FpCard>
+
+        <FpCard Title="What happens to your data" Icon="bi-shield-check" Hue="FpHue.Gold">
+            <FarmerDeletionSummary />
+        </FpCard>
+
+        <FpCard Title="Cannot sign in any more?" Icon="bi-telephone" Hue="FpHue.Sky">
+            <p class="fp-text">If you lost the phone number, ask your SPIC field officer to have the account removed.</p>
+            <a class="fp-section-link" href="@FarmerPrivacyRules.PrivacyPath">Read the privacy notice <i class="bi bi-chevron-right" aria-hidden="true"></i></a>
+        </FpCard>
+    </div>
+</div>
+
+@code {
+    private bool SignedIn => LoginState.IsLoggedIn;
+    private string BackHref => SignedIn ? "/farmer/profile" : "/farmer/login";
+    private string BackLabel => SignedIn ? "Back to my profile" : "Back to sign in";
+}

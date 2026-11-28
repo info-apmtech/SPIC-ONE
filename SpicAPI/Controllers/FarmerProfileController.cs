@@ -16,7 +16,10 @@ namespace SpicAPI.Controllers
     ///
     ///   GET api/Farmer/profile -> FarmerProfileDto, or 404 { profileComplete: false, sasLinked, phone }
     ///   PUT api/Farmer/profile -> validates (FarmerProfileRules + state / district exist and match),
-    ///                             saves, and copies the Name (never the email) to the Identity user
+    ///                             saves, and copies the Name (never the email) to the Identity user; records
+    ///                             the privacy notice acceptance (FarmerPrivacyRules.Version) when not yet recorded
+    ///   DELETE api/Farmer/profile -> "Delete my account" (FarmerAccountDeletion): removes the caller's data and
+    ///                             the account, 204
     ///
     /// State and district dropdowns use the existing api/State and api/District/byState/{id}.
     /// </summary>
@@ -28,11 +31,13 @@ namespace SpicAPI.Controllers
     {
         private readonly AppDbContext _db;
         private readonly UserManager<UserInfo> _userManager;
+        private readonly SpicAPI.Services.FarmerAccountDeletion _deletion;
 
-        public FarmerProfileController(AppDbContext db, UserManager<UserInfo> userManager)
+        public FarmerProfileController(AppDbContext db, UserManager<UserInfo> userManager, SpicAPI.Services.FarmerAccountDeletion deletion)
         {
             _db = db;
             _userManager = userManager;
+            _deletion = deletion;
         }
 
         private string? CallerId => User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -111,6 +116,12 @@ namespace SpicAPI.Controllers
                 ? FarmerProfileRules.DefaultLanguage
                 : dto.PreferredLanguage.Trim();
             profile.UpdatedAtUtc = now;
+            // The login page's consent line and the profile form both link the privacy notice (final fix wave).
+            if (FarmerPrivacyRules.NeedsAcceptance(profile.PrivacyVersion))
+            {
+                profile.PrivacyAcceptedAt = now;
+                profile.PrivacyVersion = FarmerPrivacyRules.Version;
+            }
 
             // The account shows the same name everywhere (top bar, staff lists). The email stays on
             // the farmer profile ONLY: Identity emails are not unique here (RequireUniqueEmail = false)
@@ -132,6 +143,21 @@ namespace SpicAPI.Controllers
             }
 
             return Ok(await ToDtoAsync(profile, await IsSasLinkedAsync(userId)));
+        }
+
+        /// <summary>
+        /// "Delete my account": the caller's own account only (the id comes from the token, never the request).
+        /// 204 when done; 404 when the account is already gone. The client signs out right after.
+        /// </summary>
+        [HttpDelete]
+        public async Task<IActionResult> Delete(CancellationToken ct)
+        {
+            var userId = CallerId;
+            if (string.IsNullOrEmpty(userId)) return Unauthorized();
+            var result = await _deletion.DeleteAsync(userId, ct);
+            return result is null
+                ? NotFound(new FarmerProfileErrorDto { Message = "This account was not found. It may have been deleted already." })
+                : NoContent();
         }
 
         private Task<bool> IsSasLinkedAsync(string userId) =>

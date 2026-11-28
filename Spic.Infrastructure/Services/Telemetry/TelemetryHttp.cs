@@ -95,9 +95,24 @@ public static partial class TelemetryHttp
     public static (string? UserId, string? UserName, string? Role) UserOf(ClaimsPrincipal? user)
     {
         if (user?.Identity?.IsAuthenticated != true) return (null, null, null);
+        var role = Trim(user.FindFirst(ClaimTypes.Role)?.Value, 64);
         return (Trim(user.FindFirst(ClaimTypes.NameIdentifier)?.Value, 450),
-                Trim(user.Identity?.Name, 256),
-                Trim(user.FindFirst(ClaimTypes.Role)?.Value, 64));
+                Trim(SafeUserName(user.Identity?.Name, role), 256),
+                role);
+    }
+
+    private static readonly Regex FarmerUserName = new(@"^f([6-9][0-9]{9})$", RegexOptions.CultureInvariant);
+
+    /// <summary>
+    /// The user name a telemetry row may keep. A self-registered farmer's user name is "f" + the mobile number
+    /// (FarmerPhone.UserNameFor), and phone numbers never go into logs (farmer portal final fix wave): it is
+    /// written masked, "f98xxxxxx21". Every other user name is unchanged.
+    /// </summary>
+    public static string? SafeUserName(string? userName, string? role)
+    {
+        if (userName is null || !string.Equals(role, nameof(AppRole.Farmer), StringComparison.OrdinalIgnoreCase)) return userName;
+        var m = FarmerUserName.Match(userName);
+        return m.Success ? "f" + SPIC.Core.FarmerPortal.FarmerPhone.Mask(m.Groups[1].Value) : userName;
     }
 
     /// <summary>One id per request, shared by its request row and every error row it produces.</summary>

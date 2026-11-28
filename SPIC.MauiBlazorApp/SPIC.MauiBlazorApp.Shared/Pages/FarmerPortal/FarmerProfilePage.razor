@@ -1,9 +1,12 @@
 @page "/farmer/profile"
 @using SPIC.Core.DTOs
 @using SPIC.Core.Entities
+@using SPIC.Core.FarmerPortal
 @inject FarmerSession Farmer
 @inject LoginState LoginState
 @inject ToastService Toast
+@inject ShellSession Shell
+@inject NavigationManager Nav
 
 @* The farmer's own profile: a summary in the hero, then the same form as onboarding, filled in. *@
 
@@ -51,12 +54,27 @@
     {
         <FarmerProfileForm Initial="@Farmer.Profile" Phone="@Farmer.Phone" SubmitLabel="Save changes" OnSaved="Saved"
                            FocusLocation="@string.Equals(Focus, "location", StringComparison.OrdinalIgnoreCase)" />
+
+        @* Final fix wave (review I4): the privacy notice and in-app account deletion (Google Play). *@
+        <FpCard Title="Your data" Subtitle="What SPIC ONE keeps about you, and how to delete it." Icon="bi-shield-lock" Hue="FpHue.Neutral" CssClass="fpp-data">
+            <div class="fpp-data__row">
+                <a class="fp-section-link" href="@FarmerPrivacyRules.PrivacyPath">
+                    <i class="bi bi-file-earmark-text" aria-hidden="true"></i> Privacy notice
+                </a>
+                <button type="button" class="fp-btn fp-btn--secondary fpp-delete" @onclick="() => _deleteOpen = true">
+                    <i class="bi bi-person-x" aria-hidden="true"></i>
+                    <span>Delete my account</span>
+                </button>
+            </div>
+        </FpCard>
+        <FarmerDeleteAccountSheet @bind-IsOpen="_deleteOpen" OnDeleted="DeletedAsync" />
     }
 </div>
 
 @code {
     private bool _loading = true;
     private string? _error;
+    private bool _deleteOpen;
 
     /// <summary>?focus=location scrolls to "Farm location" (from the weather strip's "Use my location").</summary>
     [SupplyParameterFromQuery(Name = "focus")] public string? Focus { get; set; }
@@ -81,6 +99,16 @@
     {
         Farmer.Update(profile);
         Toast.Success("Your changes are saved.");
+    }
+
+    /// <summary>The account is gone: forget the profile, sign out on this device and go to the farmer sign-in.</summary>
+    private async Task DeletedAsync()
+    {
+        _deleteOpen = false;
+        Farmer.Reset();
+        Toast.Success("Your account is deleted. Thank you for using SPIC ONE.");
+        await Shell.LogoutAsync();
+        Nav.NavigateTo("/farmer/login");
     }
 
     private static string Place(FarmerProfileDto p) =>

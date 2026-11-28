@@ -4,6 +4,8 @@ using Microsoft.EntityFrameworkCore;
 using Spic.Infrastructure.Data;
 using SPIC.Core.DTOs;
 using SPIC.Core.Entities;
+using SPIC.Core.FarmerPortal;
+using SpicAPI.Services;
 using System.Linq.Expressions;
 using System.Security.Claims;
 using System.Text;
@@ -16,6 +18,11 @@ namespace SpicAPI.Controllers
 	///
 	/// Every signed-in user may read and post; editing/deleting is limited to the author
 	/// or Admin/CorporateAdmin. Contracts are fixed in SPIC.Core/DTOs/CommunityDtos.cs.
+	/// <para>
+	/// Self-registered farmers (farmer portal, final fix wave) post under per-farmer IST-day caps: discussions,
+	/// replies and attachment megabytes (FarmerDailyCapRules, FarmerPortal:CommunityDaily* keys), counted under a
+	/// per-farmer advisory lock; their attachments are photos and PDFs only. Staff and dealers are unchanged.
+	/// </para>
 	/// </summary>
 	[Authorize]
 	[ApiController]
@@ -25,12 +32,14 @@ namespace SpicAPI.Controllers
 		private readonly AppDbContext _db;
 		private readonly IWebHostEnvironment _env;
 		private readonly SpicAPI.Services.CommunityNearResolver _near;
+		private readonly IConfiguration _config;
 
-		public CommunityController(AppDbContext db, IWebHostEnvironment env, SpicAPI.Services.CommunityNearResolver near)
+		public CommunityController(AppDbContext db, IWebHostEnvironment env, SpicAPI.Services.CommunityNearResolver near, IConfiguration config)
 		{
 			_db = db;
 			_env = env;
 			_near = near;
+			_config = config;
 		}
 
 		// ---------------------------------------------------------------- constants
@@ -360,6 +369,18 @@ namespace SpicAPI.Controllers
 
 			var author = await ResolveAuthorAsync();
 
+			// Farmer daily cap (counted under the farmer's lock, deleted posts included).
+			var farmer = CurrentRole() == AppRole.Farmer;
+			await using var capLock = farmer ? await FarmerDailyLock.AcquireAsync(_db, "fp:cpost:" + author.UserId, HttpContext.RequestAborted) : null;
+			if (farmer)
+			{
+				var limit = FarmerDailyCapRules.Limit(_config["FarmerPortal:CommunityDailyPosts"], FarmerDailyCapRules.CommunityPostsDefault);
+				var start = FarmerDayStartServerLocal();
+				var used = await _db.CommunityPosts.CountAsync(p => p.AuthorUserId == author.UserId && p.CreatedAt >= start);
+				if (!FarmerDailyCapRules.Allows(used, limit))
+					return FarmerCapped(FarmerDailyCapRules.CommunityPostMessage(limit));
+			}
+
 			var post = new CommunityPost
 			{
 				Title = request.Title.Trim(),
@@ -380,6 +401,7 @@ namespace SpicAPI.Controllers
 
 			_db.CommunityPosts.Add(post);
 			await _db.SaveChangesAsync();
+			if (capLock is not null) await capLock.CommitAsync();
 
 			return Ok(await BuildDetailAsync(post));
 		}
@@ -478,6 +500,18 @@ namespace SpicAPI.Controllers
 
 			var author = await ResolveAuthorAsync();
 
+			// Farmer daily cap (counted under the farmer's lock, deleted replies included).
+			var farmer = CurrentRole() == AppRole.Farmer;
+			await using var capLock = farmer ? await FarmerDailyLock.AcquireAsync(_db, "fp:creply:" + author.UserId, HttpContext.RequestAborted) : null;
+			if (farmer)
+			{
+				var limit = FarmerDailyCapRules.Limit(_config["FarmerPortal:CommunityDailyReplies"], FarmerDailyCapRules.CommunityRepliesDefault);
+				var start = FarmerDayStartServerLocal();
+				var used = await _db.CommunityPostReplies.CountAsync(r => r.AuthorUserId == author.UserId && r.CreatedAt >= start);
+				if (!FarmerDailyCapRules.Allows(used, limit))
+					return FarmerCapped(FarmerDailyCapRules.CommunityReplyMessage(limit));
+			}
+
 			var reply = new CommunityPostReply
 			{
 				PostId = id,
@@ -509,6 +543,7 @@ namespace SpicAPI.Controllers
 			}
 
 			await _db.SaveChangesAsync();
+			if (capLock is not null) await capLock.CommitAsync();
 
 			return Ok(MapReply(reply, 0, false));
 		}
@@ -655,7 +690,15 @@ namespace SpicAPI.Controllers
 				var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
 				if (!AllowedExtensions.Contains(ext))
 					return BadRequest(new { Success = false, Message = "Only JPG, PNG, WEBP, PDF, DOC and DOCX files are allowed." });
+				if (CurrentRole() == AppRole.Farmer && !FarmerDailyCapRules.FarmerAttachmentExtensions.Contains(ext))
+					return BadRequest(new { Success = false, Message = FarmerDailyCapRules.CommunityFarmerFileTypes });
 			}
+
+			// Farmer daily attachment megabytes, counted and written under the farmer's lock.
+			await using var capLock = CurrentRole() == AppRole.Farmer
+				? await FarmerDailyLock.AcquireAsync(_db, "fp:cfile:" + CurrentUserId(), HttpContext.RequestAborted) : null;
+			if (CurrentRole() == AppRole.Farmer && await FarmerAttachmentCapAsync(files.Sum(f => f.Length)) is { } capped)
+				return capped;
 
 			var folder = Path.Combine(GetUploadsRoot(), "Community", id.ToString());
 			Directory.CreateDirectory(folder);
@@ -691,6 +734,7 @@ namespace SpicAPI.Controllers
 
 				post.UpdatedAt = DateTime.Now;
 				await _db.SaveChangesAsync();
+				if (capLock is not null) await capLock.CommitAsync();
 			}
 			catch (Exception)
 			{
@@ -732,6 +776,12 @@ namespace SpicAPI.Controllers
 					return BadRequest(new { Success = false, Message = "Only JPG, PNG and WEBP images can be attached to a reply." });
 			}
 
+			// Farmer daily attachment megabytes, counted and written under the farmer's lock.
+			await using var capLock = CurrentRole() == AppRole.Farmer
+				? await FarmerDailyLock.AcquireAsync(_db, "fp:cfile:" + CurrentUserId(), HttpContext.RequestAborted) : null;
+			if (CurrentRole() == AppRole.Farmer && await FarmerAttachmentCapAsync(files.Sum(f => f.Length)) is { } capped)
+				return capped;
+
 			var folder = Path.Combine(GetUploadsRoot(), "Community", reply.PostId.ToString());
 			Directory.CreateDirectory(folder);
 
@@ -766,6 +816,7 @@ namespace SpicAPI.Controllers
 				}
 
 				await _db.SaveChangesAsync();
+				if (capLock is not null) await capLock.CommitAsync();
 			}
 			catch (Exception)
 			{
@@ -1404,6 +1455,38 @@ namespace SpicAPI.Controllers
 		}
 
 		private string CurrentUserId() => User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "";
+
+		// ---------------------------------------------------------------- farmer daily caps (final fix wave)
+
+		/// <summary>Start of the IST day on the clock Community rows are stamped with (DateTime.Now, server local).</summary>
+		private static DateTime FarmerDayStartServerLocal() =>
+			FarmerDailyCapRules.IstDayStartServerLocal(DateTime.UtcNow, TimeZoneInfo.Local);
+
+		private IActionResult FarmerCapped(string message)
+		{
+			Response.Headers.RetryAfter = FarmerAssistantRules.SecondsUntilReset(DateTime.UtcNow).ToString();
+			return StatusCode(StatusCodes.Status429TooManyRequests, new { Success = false, Message = message });
+		}
+
+		/// <summary>
+		/// 429 when the farmer's attachments today (on their own discussions and replies, deleted ones included) plus
+		/// <paramref name="adding"/> bytes pass FarmerPortal:CommunityDailyAttachmentMb; otherwise null.
+		/// </summary>
+		private async Task<IActionResult?> FarmerAttachmentCapAsync(long adding)
+		{
+			var userId = CurrentUserId();
+			var mb = FarmerDailyCapRules.Limit(_config["FarmerPortal:CommunityDailyAttachmentMb"], FarmerDailyCapRules.CommunityAttachmentMbDefault);
+			var start = FarmerDayStartServerLocal();
+			var onPosts = await _db.CommunityPostAttachments
+				.Where(a => a.CreatedAt >= start && a.ReplyId == null && _db.CommunityPosts.Any(p => p.Id == a.PostId && p.AuthorUserId == userId))
+				.SumAsync(a => (long?)a.Size) ?? 0;
+			var onReplies = await _db.CommunityPostAttachments
+				.Where(a => a.CreatedAt >= start && a.ReplyId != null && _db.CommunityPostReplies.Any(r => r.Id == a.ReplyId && r.AuthorUserId == userId))
+				.SumAsync(a => (long?)a.Size) ?? 0;
+			return FarmerDailyCapRules.AllowsBytes(onPosts + onReplies, adding, FarmerDailyCapRules.MegaBytes(mb))
+				? null
+				: FarmerCapped(FarmerDailyCapRules.CommunityAttachmentMessage(mb));
+		}
 
 		private AppRole? CurrentRole()
 		{

@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using SPIC.Core.DTOs;
 using SPIC.Core.Entities;
 using SPIC.Core.FarmerPortal;
+using SpicAPI.Services;
 using Spic.Infrastructure.Data;
 using Spic.Infrastructure.Services.Lab;
 
@@ -40,12 +41,14 @@ namespace SpicAPI.Controllers
         private readonly AppDbContext _db;
         private readonly LabFertilizerSchedule _schedule;
         private readonly ILogger<FarmerFertilizerController> _log;
+        private readonly IConfiguration _config;
 
-        public FarmerFertilizerController(AppDbContext db, LabFertilizerSchedule schedule, ILogger<FarmerFertilizerController> log)
+        public FarmerFertilizerController(AppDbContext db, LabFertilizerSchedule schedule, ILogger<FarmerFertilizerController> log, IConfiguration config)
         {
             _db = db;
             _schedule = schedule;
             _log = log;
+            _config = config;
         }
 
         private string? CallerId => User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -277,16 +280,29 @@ namespace SpicAPI.Controllers
                 SoilReportId = request.SoilReportId,
                 Summary = result.Summary.Length > 500 ? result.Summary[..500] : result.Summary,
                 InputsJson = JsonSerializer.Serialize(request, StoreJson),
-                ResultJson = "{}",
                 CreatedAtUtc = DateTime.UtcNow
             };
-            _db.FertilizerRecommendationRuns.Add(run);
-            await _db.SaveChangesAsync(ct);
-
-            result.RunId = run.Id;
+            // One SaveChanges (final fix wave, review M2): the stored result has no id; the id and time are the row's
+            // own columns and are put back when the run is read (Run below).
             result.CreatedAtUtc = run.CreatedAtUtc;
             run.ResultJson = JsonSerializer.Serialize(result, StoreJson);
-            await _db.SaveChangesAsync(ct);
+
+            // Per-farmer daily cap, counted and inserted under one advisory lock (FarmerDailyCapRules).
+            var limit = FarmerDailyCapRules.Limit(_config["FarmerPortal:FertilizerDailyLimit"], FarmerDailyCapRules.FertilizerRunsDefault);
+            await using (var tx = await FarmerDailyLock.AcquireAsync(_db, "fp:fert:" + userId, ct))
+            {
+                var start = FarmerAssistantRules.IstDayStartUtc(run.CreatedAtUtc);
+                var used = await _db.FertilizerRecommendationRuns.CountAsync(r => r.FarmerUserId == userId && r.CreatedAtUtc >= start, ct);
+                if (!FarmerDailyCapRules.Allows(used, limit))
+                {
+                    Response.Headers.RetryAfter = FarmerAssistantRules.SecondsUntilReset(run.CreatedAtUtc).ToString();
+                    return StatusCode(StatusCodes.Status429TooManyRequests, new FertilizerErrorDto { Message = FarmerDailyCapRules.FertilizerMessage(limit) });
+                }
+                _db.FertilizerRecommendationRuns.Add(run);
+                await _db.SaveChangesAsync(ct);
+                if (tx is not null) await tx.CommitAsync(ct);
+            }
+            result.RunId = run.Id;
 
             _log.LogInformation("Fertilizer run {RunId}: norm {NormId}, {Acres} acres", run.Id, norm.Id, request.AreaAcres);
             return Ok(result);
@@ -313,13 +329,17 @@ namespace SpicAPI.Controllers
         {
             var userId = CallerId;
             if (string.IsNullOrEmpty(userId)) return Unauthorized();
-            var json = await _db.FertilizerRecommendationRuns.AsNoTracking()
+            var row = await _db.FertilizerRecommendationRuns.AsNoTracking()
                 .Where(r => r.Id == id && r.FarmerUserId == userId)
-                .Select(r => r.ResultJson)
+                .Select(r => new { r.Id, r.CreatedAtUtc, r.ResultJson })
                 .FirstOrDefaultAsync(ct);
-            if (json is null) return NotFound(new FertilizerErrorDto { Message = "This recommendation was not found." });
-            var dto = JsonSerializer.Deserialize<FertilizerRecommendationDto>(json, StoreJson);
-            return dto is null ? NotFound(new FertilizerErrorDto { Message = "This recommendation was not found." }) : Ok(dto);
+            if (row is null) return NotFound(new FertilizerErrorDto { Message = "This recommendation was not found." });
+            var dto = JsonSerializer.Deserialize<FertilizerRecommendationDto>(row.ResultJson, StoreJson);
+            if (dto is null) return NotFound(new FertilizerErrorDto { Message = "This recommendation was not found." });
+            // The id and time come from the row (runs saved since the final fix wave store the result without its id).
+            dto.RunId = row.Id;
+            dto.CreatedAtUtc = DateTime.SpecifyKind(row.CreatedAtUtc, DateTimeKind.Utc);
+            return Ok(dto);
         }
 
         /// <summary>The caller's latest run in short, for the chatbot context and the yield forecast prefill.</summary>

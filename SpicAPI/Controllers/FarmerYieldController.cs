@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using SPIC.Core.DTOs;
 using SPIC.Core.Entities;
 using SPIC.Core.FarmerPortal;
+using SpicAPI.Services;
 using Spic.Infrastructure.Data;
 
 namespace SpicAPI.Controllers
@@ -34,11 +35,13 @@ namespace SpicAPI.Controllers
 
         private readonly AppDbContext _db;
         private readonly ILogger<FarmerYieldController> _log;
+        private readonly IConfiguration _config;
 
-        public FarmerYieldController(AppDbContext db, ILogger<FarmerYieldController> log)
+        public FarmerYieldController(AppDbContext db, ILogger<FarmerYieldController> log, IConfiguration config)
         {
             _db = db;
             _log = log;
+            _config = config;
         }
 
         private string? CallerId => User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -190,16 +193,28 @@ namespace SpicAPI.Controllers
                 LowT = (decimal)result.LowT,
                 HighT = (decimal)result.HighT,
                 ConfidenceLabel = result.ConfidenceLabel,
-                ResultJson = "{}",
                 CreatedAtUtc = DateTime.UtcNow
             };
-            _db.YieldPredictions.Add(row);
-            await _db.SaveChangesAsync(ct);
-
-            result.Id = row.Id;
+            // One SaveChanges (final fix wave, review M2): the stored result has no id; One() puts the row's id back.
             result.CreatedAtUtc = row.CreatedAtUtc;
             row.ResultJson = JsonSerializer.Serialize(result, StoreJson);
-            await _db.SaveChangesAsync(ct);
+
+            // Per-farmer daily cap, counted and inserted under one advisory lock (FarmerDailyCapRules).
+            var limit = FarmerDailyCapRules.Limit(_config["FarmerPortal:YieldDailyLimit"], FarmerDailyCapRules.YieldForecastsDefault);
+            await using (var tx = await FarmerDailyLock.AcquireAsync(_db, "fp:yield:" + userId, ct))
+            {
+                var start = FarmerAssistantRules.IstDayStartUtc(row.CreatedAtUtc);
+                var used = await _db.YieldPredictions.CountAsync(p => p.FarmerUserId == userId && p.CreatedAtUtc >= start, ct);
+                if (!FarmerDailyCapRules.Allows(used, limit))
+                {
+                    Response.Headers.RetryAfter = FarmerAssistantRules.SecondsUntilReset(row.CreatedAtUtc).ToString();
+                    return StatusCode(StatusCodes.Status429TooManyRequests, new YieldErrorDto { Message = FarmerDailyCapRules.YieldMessage(limit) });
+                }
+                _db.YieldPredictions.Add(row);
+                await _db.SaveChangesAsync(ct);
+                if (tx is not null) await tx.CommitAsync(ct);
+            }
+            result.Id = row.Id;
 
             _log.LogInformation("Yield forecast {Id}: norm {NormId}, {Acres} acres", row.Id, norm.Id, request.AreaAcres);
             return Ok(result);
@@ -237,12 +252,16 @@ namespace SpicAPI.Controllers
         {
             var userId = CallerId;
             if (string.IsNullOrEmpty(userId)) return Unauthorized();
-            var json = await _db.YieldPredictions.AsNoTracking()
+            var row = await _db.YieldPredictions.AsNoTracking()
                 .Where(p => p.Id == id && p.FarmerUserId == userId)
-                .Select(p => p.ResultJson)
+                .Select(p => new { p.Id, p.CreatedAtUtc, p.ResultJson })
                 .FirstOrDefaultAsync(ct);
-            var dto = json is null ? null : JsonSerializer.Deserialize<YieldPredictionDto>(json, StoreJson);
-            return dto is null ? NotFound(new YieldErrorDto { Message = "This forecast was not found." }) : Ok(dto);
+            var dto = row is null ? null : JsonSerializer.Deserialize<YieldPredictionDto>(row.ResultJson, StoreJson);
+            if (dto is null) return NotFound(new YieldErrorDto { Message = "This forecast was not found." });
+            // The id and time come from the row (forecasts saved since the final fix wave store the result without its id).
+            dto.Id = row!.Id;
+            dto.CreatedAtUtc = DateTime.SpecifyKind(row.CreatedAtUtc, DateTimeKind.Utc);
+            return Ok(dto);
         }
     }
 }

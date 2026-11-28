@@ -239,6 +239,12 @@ namespace SpicAPI.Controllers
             await LinkSasFarmerAsync(user, phone);
 
             var profile = await _db.FarmerProfiles.AsNoTracking().FirstOrDefaultAsync(p => p.UserId == user.Id);
+            // Continuing past the login page's consent line accepts the current privacy notice (final fix wave).
+            // A new farmer has no profile yet: the first profile save records it.
+            if (profile is not null && FarmerPrivacyRules.NeedsAcceptance(profile.PrivacyVersion))
+                await _db.FarmerProfiles.Where(p => p.Id == profile.Id)
+                    .ExecuteUpdateAsync(s => s.SetProperty(p => p.PrivacyAcceptedAt, (DateTime?)now)
+                        .SetProperty(p => p.PrivacyVersion, FarmerPrivacyRules.Version));
             var profileComplete = profile is not null &&
                 FarmerProfileRules.IsComplete(profile.Name, profile.StateId, profile.DistrictId, profile.Village, profile.PinCode);
 
