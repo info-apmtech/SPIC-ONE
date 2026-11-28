@@ -36,9 +36,24 @@ public class FarmerChatMessage
     public string? SourcesJson { get; set; }
     /// <summary>Up to three follow-up questions as JSON (assistant messages only).</summary>
     public string? SuggestionsJson { get; set; }
+    /// <summary>True when the sources are related library items the answer did not name (fix round 1, V39).</summary>
+    public bool SourcesRelated { get; set; }
     /// <summary>"anthropic" | "keyword" (assistant messages only).</summary>
     public string? Provider { get; set; }
     /// <summary>The answer language asked for (the profile's PreferredLanguage at the time).</summary>
     public string? Language { get; set; }
+    public DateTime CreatedAtUtc { get; set; }
+}
+
+/// <summary>
+/// One AI call made for a farmer (Task 5 fix round 1, V39): the shared daily AI budget across all farmers
+/// (SpicAPI/Services/FarmerAiBudget.cs) counts these rows on the IST day. Kind is the FarmerAiKind name
+/// ("Chat", "LeafCheck"). Rows are written before the call, under an advisory lock.
+/// </summary>
+public class FarmerAiUsage
+{
+    public long Id { get; set; }
+    public string Kind { get; set; } = string.Empty;
+    public string FarmerUserId { get; set; } = string.Empty;
     public DateTime CreatedAtUtc { get; set; }
 }

@@ -519,6 +519,13 @@ namespace Spic.Infrastructure.Data
                 // The daily cap: questions of one farmer since IST midnight.
                 entity.HasIndex(x => new { x.FarmerUserId, x.Role, x.CreatedAtUtc });
             });
+            // Task 5 fix round 1: the shared daily AI budget across all farmers.
+            builder.Entity<FarmerAiUsage>(entity =>
+            {
+                entity.Property(x => x.Kind).HasMaxLength(20);
+                entity.Property(x => x.FarmerUserId).HasMaxLength(450);
+                entity.HasIndex(x => new { x.CreatedAtUtc, x.Kind });
+            });
 
             builder.Entity<SampleLabResult>(entity =>
             {
@@ -1250,6 +1257,7 @@ namespace Spic.Infrastructure.Data
         public DbSet<FertilizerRecommendationRun> FertilizerRecommendationRuns { get; set; }
         public DbSet<FarmerChatConversation> FarmerChatConversations { get; set; }
         public DbSet<FarmerChatMessage> FarmerChatMessages { get; set; }
+        public DbSet<FarmerAiUsage> FarmerAiUsages { get; set; }
 
         //// JMDO Task Allocation
         public DbSet<JmdoTaskAllocation> JmdoTaskAllocations { get; set; }

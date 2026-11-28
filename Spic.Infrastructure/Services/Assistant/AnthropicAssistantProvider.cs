@@ -57,6 +57,9 @@ public class AnthropicAssistantProvider : IAssistantProvider
                         answerText.Contains(i.Title, StringComparison.OrdinalIgnoreCase))
             .ToList();
 
+        // Nothing named in the answer (common for Tamil / Hindi answers to English titles): the first two items are
+        // linked; in farmer mode they are marked as RELATED items, not as the answer's source (fix round 1, M6).
+        var related = cited.Count == 0 && ctx.Items.Count > 0;
         if (cited.Count == 0)
             cited = ctx.Items.Take(2).ToList();
 
@@ -69,6 +72,7 @@ public class AnthropicAssistantProvider : IAssistantProvider
             Provider = Name,
             Text = answerText,
             Sources = cited.Select(i => i.ToSource()).ToList(),
+            SourcesRelated = related && ctx.Mode == AssistantMode.Farmer,
             Suggestions = suggestions
         };
     }
@@ -107,7 +111,8 @@ public class AnthropicAssistantProvider : IAssistantProvider
         return new AnthropicRequest(
             string.IsNullOrWhiteSpace(ctx.SystemPrompt) ? SystemPrompt : ctx.SystemPrompt!,
             turns.Select(t => AnthropicMessage.Text(t.Role, t.Text)).ToList(),
-            maxTokens);
+            maxTokens,
+            Effort: string.IsNullOrWhiteSpace(ctx.Effort) ? null : ctx.Effort);
     }
 
     public static string BuildQuestionBlock(AssistantContext ctx)

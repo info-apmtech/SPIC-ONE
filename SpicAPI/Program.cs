@@ -101,6 +101,7 @@ builder.Services.AddHttpClient(FarmerWeatherService.HttpClientName, c => c.Timeo
 builder.Services.AddSingleton<IFarmerWeatherService, FarmerWeatherService>();
 builder.Services.AddScoped<CommunityNearResolver>();
 builder.Services.AddScoped<FarmerAssistantContextLoader>();
+builder.Services.AddScoped<IFarmerAiBudget, FarmerAiBudget>();
 builder.Services.AddScoped<IExcelBulkUploadService, ExcelBulkUploadService>();
 builder.Services.AddScoped<IIfmsAccountStore, IfmsAccountStore>();
 builder.Services.AddScoped<IIfmsRelayDeviceStore, IfmsRelayDeviceStore>();

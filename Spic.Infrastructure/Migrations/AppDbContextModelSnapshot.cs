@@ -5134,6 +5134,34 @@ namespace Spic.Infrastructure.Migrations
                     b.ToTable("FarmProductRateRequests");
                 });
 
+            modelBuilder.Entity("SPIC.Core.Entities.FarmerAiUsage", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("FarmerUserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAtUtc", "Kind");
+
+                    b.ToTable("FarmerAiUsages");
+                });
+
             modelBuilder.Entity("SPIC.Core.Entities.FarmerChatConversation", b =>
                 {
                     b.Property<long>("Id")
@@ -5202,6 +5230,9 @@ namespace Spic.Infrastructure.Migrations
 
                     b.Property<string>("SourcesJson")
                         .HasColumnType("text");
+
+                    b.Property<bool>("SourcesRelated")
+                        .HasColumnType("boolean");
 
                     b.Property<string>("SuggestionsJson")
                         .HasColumnType("text");

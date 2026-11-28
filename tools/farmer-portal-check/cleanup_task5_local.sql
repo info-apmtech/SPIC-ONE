@@ -12,3 +12,9 @@ DELETE FROM "FarmerChatConversations" c
 USING "FarmerProfiles" p
 WHERE p."UserId" = c."FarmerUserId"
   AND p."Phone" IN ('6777777703', '6163665844', '6999174165', '6404528677', '6846575346', '6271619756', '6614843176', '6224431458');
+
+-- Fix round 1: the shared daily AI budget rows of the same farmers.
+DELETE FROM "FarmerAiUsages" u
+USING "FarmerProfiles" p
+WHERE p."UserId" = u."FarmerUserId"
+  AND p."Phone" IN ('6777777703', '6163665844', '6999174165', '6404528677', '6846575346', '6271619756', '6614843176', '6224431458');

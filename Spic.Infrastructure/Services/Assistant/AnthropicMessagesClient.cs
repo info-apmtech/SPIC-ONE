@@ -28,8 +28,9 @@ public static class AnthropicContent
     };
 }
 
-/// <summary>A Messages API request. <see cref="Model"/> null = Assistant:Model.</summary>
-public sealed record AnthropicRequest(string System, IReadOnlyList<AnthropicMessage> Messages, int MaxTokens, string? Model = null, int TimeoutSeconds = 60);
+/// <summary>A Messages API request. <see cref="Model"/> null = Assistant:Model; <see cref="Effort"/> null = no
+/// output_config (the model's default effort).</summary>
+public sealed record AnthropicRequest(string System, IReadOnlyList<AnthropicMessage> Messages, int MaxTokens, string? Model = null, int TimeoutSeconds = 60, string? Effort = null);
 
 /// <summary>The text of a reply (thinking blocks are skipped) or why there is none.</summary>
 public sealed record AnthropicResult(bool Ok, string? Text, string? StopReason, string? Error)
@@ -66,7 +67,38 @@ public class AnthropicMessagesClient
 
     public string Model => string.IsNullOrWhiteSpace(_options.Model) ? DefaultModel : _options.Model.Trim();
 
-    private string Url => string.IsNullOrWhiteSpace(_options.Endpoint) ? Endpoint : _options.Endpoint.Trim();
+    private static int _endpointLogged;
+
+    /// <summary>
+    /// The URL the key is sent to. An Assistant:Endpoint override is used only when it is an absolute https URL, or
+    /// http to this machine (localhost / 127.0.0.1 / ::1, the local stub); anything else is ignored and the Anthropic
+    /// API is used (fix round 1, M5: a leftover or mistyped override must not send the live key elsewhere in clear).
+    /// </summary>
+    public static (string Url, bool Overridden, string? Ignored) ResolveEndpoint(string? configured)
+    {
+        if (string.IsNullOrWhiteSpace(configured)) return (Endpoint, false, null);
+        var value = configured.Trim();
+        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri)) return (Endpoint, false, value);
+        var loopback = uri.IsLoopback;
+        if (uri.Scheme == Uri.UriSchemeHttps || (uri.Scheme == Uri.UriSchemeHttp && loopback)) return (value, true, null);
+        return (Endpoint, false, value);
+    }
+
+    private string Url
+    {
+        get
+        {
+            var (url, overridden, ignored) = ResolveEndpoint(_options.Endpoint);
+            if ((overridden || ignored is not null) && Interlocked.Exchange(ref _endpointLogged, 1) == 0)
+            {
+                if (overridden)
+                    _logger.LogWarning("Assistant:Endpoint override in use: the Anthropic key is sent to host {Host}.", new Uri(url).Host);
+                else
+                    _logger.LogWarning("Assistant:Endpoint is set but is not https (or http to this machine); it is ignored and the Anthropic API is used.");
+            }
+            return url;
+        }
+    }
 
     /// <summary>The JSON body for a request (public for the harness).</summary>
     public static string Serialize(AnthropicRequest request, string model)
@@ -78,6 +110,8 @@ public class AnthropicMessagesClient
             ["system"] = request.System,
             ["messages"] = request.Messages.Select(m => new Dictionary<string, object?> { ["role"] = m.Role, ["content"] = m.Content }).ToList()
         };
+        if (!string.IsNullOrWhiteSpace(request.Effort))
+            body["output_config"] = new Dictionary<string, object?> { ["effort"] = request.Effort.Trim() };
         return JsonSerializer.Serialize(body, WireJson);
     }
 

@@ -96,7 +96,7 @@
                     <a class="fp-btn fp-btn--secondary fp-btn--sm fpai-chat__chats" href="/farmer/assistant/chats">
                         <i class="bi bi-clock-history" aria-hidden="true"></i> My chats
                     </a>
-                    <p class="fpai-chat__title">@(Current?.Title ?? "New chat")</p>
+                    <p class="fpai-chat__title @(Current is null ? "fpai-chat__title--new" : null)">@(Current?.Title ?? "New chat")</p>
                     @if (Current is not null)
                     {
                         <button type="button" class="fp-btn fp-btn--ghost fp-btn--sm" @onclick="NewChat">
@@ -170,7 +170,7 @@
                                             @if (!mine && m.Sources.Count > 0)
                                             {
                                                 <div class="fpai-sources">
-                                                    <span class="fpai-sources__label">From the SPIC library</span>
+                                                    <span class="fpai-sources__label">@(m.SourcesRelated ? "Related in the SPIC library" : "From the SPIC library")</span>
                                                     <div class="fpai-sources__list">
                                                         @foreach (var src in m.Sources)
                                                         {
@@ -189,7 +189,7 @@
                             }
                         }
 
-                        @if (_pending is not null)
+                        @if (_pending is not null && _view == _askView)
                         {
                             <div class="fpai-msg fpai-msg--me">
                                 <div class="fpai-msg__col">
@@ -199,7 +199,7 @@
                             </div>
                         }
 
-                        @if (_thinking)
+                        @if (_thinking && _view == _askView)
                         {
                             <div class="fpai-msg fpai-msg--ai" role="status">
                                 <span class="fpai-avatar" aria-hidden="true">@LeafAvatar</span>
@@ -209,6 +209,14 @@
                                         <span class="fpai-typing__text">SPIC AI is writing...</span>
                                     </div>
                                 </div>
+                            </div>
+                        }
+
+                        @if (_notice is not null && !_thinking)
+                        {
+                            <div class="fp-alert fp-alert--info fpai-notice" role="status">
+                                <i class="bi bi-hourglass-split" aria-hidden="true"></i>
+                                <span>@_notice</span>
                             </div>
                         }
 
@@ -302,6 +310,12 @@
     private bool _thinking;
     private string? _pending;
     private string? _askError;
+    private string? _notice;
+    // M1 (fix round 1): every navigation inside the page bumps _view; an answer that comes back after the farmer moved
+    // to another chat (or New chat / My chats) only updates My chats and the allowance, never the chat on screen.
+    private int _view;
+    private int _askView = -1;
+    private string? _lastUri;
     private bool _capped;
     private string? _capMessage;
     private int _left;
@@ -325,6 +339,12 @@
 
     protected override async Task OnParametersSetAsync()
     {
+        if (Nav.Uri != _lastUri)
+        {
+            _lastUri = Nav.Uri;
+            _view++;
+            _notice = null;
+        }
         if (_loading || _loadError is not null) return;
         if (_loadedId == ConversationId) return;
         await LoadThreadAsync();
@@ -424,17 +444,21 @@
 
         _input = "";
         _askError = null;
+        _notice = null;
         _pending = text;
         _thinking = true;
         _scrollPending = true;
+        _askView = _view;
         StateHasChanged();
 
         var askedIn = Current?.Id;
+        var askedView = _view;
         var result = await Api.AskAsync(new FarmerAskRequest { ConversationId = askedIn, Question = text }, _cts.Token);
         if (_cts.IsCancellationRequested) return;
         _thinking = false;
         _pending = null;
         _scrollPending = true;
+        var stillHere = _view == askedView;
 
         if (result.Value is not { } response)
         {
@@ -444,17 +468,32 @@
                 _capMessage = result.Message;
                 _left = 0;
             }
-            else
+            else if (stillHere)
             {
                 _askError = result.Message ?? "SPIC AI could not answer just now. Please try again.";
             }
-            _input = text; // nothing was lost: the question is back in the box
+            if (stillHere) _input = text; // nothing was lost: the question is back in the box
             return;
         }
 
         _left = response.LeftToday;
         _capped = _left <= 0;
         _now = DateTime.UtcNow;
+
+        if (!stillHere)
+        {
+            // The farmer moved on while SPIC AI was answering: keep My chats right; if they are now looking at the
+            // chat that was answered, load it again so it shows every message.
+            UpsertConversationRow(response, 1);
+            if (Current?.Id == response.ConversationId && ConversationId == response.ConversationId)
+            {
+                Current = null;
+                await LoadThreadAsync();
+            }
+            return;
+        }
+
+        _notice = response.Notice;
 
         if (Current is null || Current.Id != response.ConversationId)
         {
@@ -477,7 +516,12 @@
             Current.UpdatedAtUtc = response.Answer.CreatedAtUtc;
         }
 
-        // Move the conversation to the top of My chats without another round trip.
+        UpsertConversationRow(response, Current.Messages.Count(m => m.Role == "user"));
+    }
+
+    /// <summary>Moves the answered conversation to the top of My chats without another round trip.</summary>
+    private void UpsertConversationRow(FarmerAskResponse response, int questions)
+    {
         var row = _conversations.FirstOrDefault(c => c.Id == response.ConversationId);
         if (row is null)
         {
@@ -486,9 +530,10 @@
         else
         {
             _conversations.Remove(row);
+            questions = Math.Max(questions, row.QuestionCount + 1);
         }
         row.UpdatedAtUtc = response.Answer.CreatedAtUtc;
-        row.QuestionCount = Current.Messages.Count(m => m.Role == "user");
+        row.QuestionCount = questions;
         _conversations.Insert(0, row);
     }
 

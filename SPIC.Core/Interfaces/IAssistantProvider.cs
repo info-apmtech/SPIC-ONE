@@ -68,6 +68,9 @@ public class AssistantContext
 
     /// <summary>Answer length override (tokens); null = Assistant:MaxTokens.</summary>
     public int? MaxTokens { get; set; }
+
+    /// <summary>output_config.effort for this call ("low", ...); null = not sent (the model's default).</summary>
+    public string? Effort { get; set; }
 }
 
 public enum AssistantMode
@@ -83,6 +86,8 @@ public class AssistantAnswer
     public List<AssistantSourceDto> Sources { get; set; } = new();
     /// <summary>Up to three follow-up questions the client shows as chips.</summary>
     public List<string> Suggestions { get; set; } = new();
+    /// <summary>True when <see cref="Sources"/> are related items the answer did not name (farmer mode only).</summary>
+    public bool SourcesRelated { get; set; }
     /// <summary>"anthropic" | "keyword" — which provider actually produced the answer.</summary>
     public string Provider { get; set; } = "keyword";
 }

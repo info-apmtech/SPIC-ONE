@@ -52,6 +52,8 @@ public class FarmerChatMessageDto
     public DateTime CreatedAtUtc { get; set; }
     /// <summary>Digital Library items the answer used (link chips).</summary>
     public List<AssistantSourceDto> Sources { get; set; } = new();
+    /// <summary>True when <see cref="Sources"/> are related library items the answer did not name ("Related in the SPIC library").</summary>
+    public bool SourcesRelated { get; set; }
     /// <summary>Follow-up questions (chips).</summary>
     public List<string> Suggestions { get; set; } = new();
     /// <summary>"anthropic" | "keyword" for answers; null for questions. "keyword" = basic library answer.</summary>
@@ -73,6 +75,8 @@ public class FarmerAskResponse
     public FarmerChatMessageDto Answer { get; set; } = new();
     public int LeftToday { get; set; }
     public DateTime ResetsAtUtc { get; set; }
+    /// <summary>A gentle line when the daily AI budget or the kill switch chose the basic answer (fix round 1).</summary>
+    public string? Notice { get; set; }
 }
 
 public class FarmerAssistantErrorDto

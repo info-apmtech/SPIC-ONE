@@ -6,6 +6,7 @@ using SPIC.Core.Interfaces;
 using SPIC.MauiBlazorApp.Shared.Components.FarmerPortal;
 using SPIC.MauiBlazorApp.Shared.Services;
 using Spic.Infrastructure.Services.Assistant;
+using SPIC.Core.FarmerPortal;
 using R = SPIC.Core.FarmerPortal.FarmerAssistantRules;
 
 namespace SPIC.RegressionHarness;
@@ -29,6 +30,56 @@ internal static class FarmerPortalAssistantTests
 		Fallback();
 		Starters();
 		UiAndMenu();
+		Budget();
+	}
+
+	// Fix round 1 (I1): the daily AI budget across all farmers, the kill switch, and the review's small fixes.
+	private static void Budget()
+	{
+		var D = FarmerAiDecision.Allowed;
+		Check.Equal("budget: under the limit -> AI", D, FarmerAiBudgetRules.Decide(true, true, 1999, 2000, 0, null));
+		Check.Equal("budget: at the limit -> basic answer", FarmerAiDecision.GlobalLimit, FarmerAiBudgetRules.Decide(true, true, 2000, 2000, 0, null));
+		Check.Equal("budget: over the limit -> basic answer", FarmerAiDecision.GlobalLimit, FarmerAiBudgetRules.Decide(true, true, 2500, 2000, 0, null));
+		Check.Equal("budget: a limit of 0 allows no AI answer", FarmerAiDecision.GlobalLimit, FarmerAiBudgetRules.Decide(true, true, 0, 0, 0, null));
+		Check.Equal("budget: kill switch -> basic answer even with budget left", FarmerAiDecision.Disabled, FarmerAiBudgetRules.Decide(false, true, 0, 2000, 0, null));
+		Check.Equal("budget: no key -> basic answer (nothing counted)", FarmerAiDecision.NoKey, FarmerAiBudgetRules.Decide(true, false, 0, 2000, 0, null));
+		Check.Equal("budget: a kind's sub-limit (leaf check) applies", FarmerAiDecision.KindLimit, FarmerAiBudgetRules.Decide(true, true, 100, 2000, 300, 300));
+		Check.Equal("budget: under the sub-limit -> AI", D, FarmerAiBudgetRules.Decide(true, true, 100, 2000, 299, 300));
+		Check.Equal("budget: the global limit wins over a sub-limit", FarmerAiDecision.GlobalLimit, FarmerAiBudgetRules.Decide(true, true, 2000, 2000, 0, 300));
+
+		Check.That("budget: enabled by default (empty)", FarmerAiBudgetRules.Enabled(null) && FarmerAiBudgetRules.Enabled("") && FarmerAiBudgetRules.Enabled("true"));
+		Check.That("budget: false / 0 / off / no switch it off", new[] { "false", "False", "0", "off", " no " }.All(v => !FarmerAiBudgetRules.Enabled(v)));
+		Check.Equal("budget: default global limit 2000", 2000, FarmerAiBudgetRules.GlobalLimit(""));
+		Check.Equal("budget: configured global limit", 3, FarmerAiBudgetRules.GlobalLimit("3"));
+		Check.Equal("budget: junk / negative = 2000", 2000, FarmerAiBudgetRules.GlobalLimit("-1"));
+		Check.Equal("budget: 0 is a real limit (no AI)", 0, FarmerAiBudgetRules.GlobalLimit("0"));
+		Check.That("budget: no sub-limit unless configured", FarmerAiBudgetRules.KindLimit("") is null && FarmerAiBudgetRules.KindLimit("50") == 50);
+
+		// IST day rollover from a UTC clock: yesterday evening's (IST) calls do not count after 18:30 UTC.
+		var calls = new[] { Utc(2026, 11, 28, 18, 0), Utc(2026, 11, 28, 18, 29, 59), Utc(2026, 11, 28, 18, 30), Utc(2026, 11, 29, 5, 0) };
+		Check.Equal("budget: before IST midnight all of that IST day count", 2, FarmerAiBudgetRules.UsedToday(calls, Utc(2026, 11, 28, 18, 29, 59)));
+		Check.Equal("budget: after IST midnight (18:30 UTC) only the new day's calls count", 2, FarmerAiBudgetRules.UsedToday(calls, Utc(2026, 11, 29, 6, 0)));
+		Check.Equal("budget: at 18:30:00 UTC the new day has one call", 1, FarmerAiBudgetRules.UsedToday(calls.Take(3), Utc(2026, 11, 28, 18, 30)));
+
+		Check.That("budget: gentle notice at the limit", FarmerAiBudgetRules.Notice(FarmerAiDecision.GlobalLimit)!.Contains("basic answer") && FarmerAiBudgetRules.Notice(FarmerAiDecision.GlobalLimit)!.Contains("12 midnight"));
+		Check.That("budget: paused notice for the kill switch", FarmerAiBudgetRules.Notice(FarmerAiDecision.Disabled)!.Contains("paused"));
+		Check.That("budget: no notice when the AI answers or there is no key", FarmerAiBudgetRules.Notice(FarmerAiDecision.Allowed) is null && FarmerAiBudgetRules.Notice(FarmerAiDecision.NoKey) is null);
+
+		// M7: farmer answers ask for low effort; the library request sends no output_config.
+		var farmer = AnthropicAssistantProvider.BuildRequest(new AssistantContext { Mode = AssistantMode.Farmer, Question = "q", Effort = "low", MaxTokens = 1500 }, new AssistantOptions());
+		Check.That("effort: farmer request sends output_config.effort low", AnthropicMessagesClient.Serialize(farmer, "claude-sonnet-5").Contains("\"output_config\":{\"effort\":\"low\"}"));
+		var library = AnthropicAssistantProvider.BuildRequest(new AssistantContext { Question = "q" }, new AssistantOptions { MaxTokens = 800 });
+		Check.That("effort: the library request has no output_config", !AnthropicMessagesClient.Serialize(library, "claude-sonnet-5").Contains("output_config"));
+		Check.Equal("effort: default for farmers is low", "low", new AssistantOptions().FarmerEffort);
+
+		// M5: the endpoint override only for https or this machine.
+		Check.Equal("endpoint: empty = Anthropic", AnthropicMessagesClient.Endpoint, AnthropicMessagesClient.ResolveEndpoint("").Url);
+		Check.That("endpoint: https gateway is used", AnthropicMessagesClient.ResolveEndpoint("https://gw.example.org/v1/messages").Overridden);
+		Check.That("endpoint: http to 127.0.0.1 (local stub) is used", AnthropicMessagesClient.ResolveEndpoint("http://127.0.0.1:5999/v1/messages").Overridden
+			&& AnthropicMessagesClient.ResolveEndpoint("http://localhost:5999/v1/messages").Overridden);
+		var remote = AnthropicMessagesClient.ResolveEndpoint("http://gw.example.org/v1/messages");
+		Check.That("endpoint: plain http to another host is ignored (key never sent in clear)", !remote.Overridden && remote.Url == AnthropicMessagesClient.Endpoint && remote.Ignored is not null);
+		Check.That("endpoint: junk is ignored", AnthropicMessagesClient.ResolveEndpoint("not a url").Url == AnthropicMessagesClient.Endpoint);
 	}
 
 	private static DateTime Utc(int y, int mo, int d, int h, int mi, int s = 0) => new(y, mo, d, h, mi, s, DateTimeKind.Utc);

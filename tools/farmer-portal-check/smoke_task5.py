@@ -15,6 +15,11 @@ Stub mode (the Anthropic path against tools/farmer-portal-check/fake_anthropic.p
     dotnet run --project SpicAPI --no-launch-profile --urls http://localhost:5120
     python tools/farmer-portal-check/smoke_task5.py --mode stub --record <scratch>/last.json
 
+Budget mode (fix round 1): the stub API above plus $env:FarmerPortal__AssistantGlobalDailyLimit = "3", after
+cleanup_task5_local.sql: python tools/farmer-portal-check/smoke_task5.py --mode budget --limit 3
+Kill switch: the stub API plus $env:FarmerPortal__AssistantEnabled = "false":
+    python tools/farmer-portal-check/smoke_task5.py --mode kill --record <scratch>/last.json
+
 Keyword mode uses up the daily allowance of the cap farmer (6163665844) for today's IST day;
 cleanup_task5_local.sql removes the local test farmers' chats (and so resets it).
 """
@@ -185,7 +190,7 @@ def stub_mode(base, args):
     ans = a1["answer"]
     check("stub: provider anthropic", ans["provider"] == "anthropic", ans)
     check("stub: SUGGESTIONS line stripped into 3 chips", "SUGGESTIONS" not in ans["text"] and len(ans["suggestions"]) == 3, ans)
-    check("stub: cited library item is a source", any("Urea" in x["title"] for x in ans["sources"]), ans["sources"])
+    check("stub: cited library item is a source", any("Urea" in x["title"] for x in ans["sources"]) and ans.get("sourcesRelated") is False, ans)
     with open(args.record, encoding="utf-8") as f:
         body = json.load(f)
     system = body["system"]
@@ -197,6 +202,7 @@ def stub_mode(base, args):
     raw = json.dumps(body, ensure_ascii=False)
     check("stub: no farmer name or phone sent", "Smoke Test Farmer" not in raw and args.tamil_phone not in raw)
     check("stub: no thinking or sampling fields sent", "\"thinking\"" not in raw and "temperature" not in raw)
+    check("stub: low effort for farmer answers (fix round 1, M7)", body.get("output_config") == {"effort": "low"}, body.get("output_config"))
 
     st, a2, _ = ask(base, tok, "How much urea per acre?", conversation_id=a1["conversationId"])
     with open(args.record, encoding="utf-8") as f:
@@ -222,10 +228,58 @@ def stub_mode(base, args):
     check("stub: soil values are not sent", "180" not in last3.split("Latest SPIC soil test")[1].split("\n")[0], last3)
 
 
+def budget_mode(base, args):
+    """API with the stub key and FarmerPortal__AssistantGlobalDailyLimit=<args.limit>, after cleanup_task5_local.sql
+    (no AI usage rows today). Parallel asks must give exactly <limit> AI answers; the rest are labelled basic answers
+    with the gentle notice."""
+    tok = farmer_token(base, args.tamil_phone)
+    s = status(base, tok)
+    check("budget: full answers before the limit", s["fullAnswers"] is True, s)
+    n = args.limit + 3
+    results = []
+    lock = threading.Lock()
+
+    def one(i):
+        st_, body_, _ = ask(base, tok, f"[smoke] budget {i}: why are my paddy leaves yellow?")
+        with lock:
+            results.append((st_, body_))
+
+    threads = [threading.Thread(target=one, args=(i,)) for i in range(n)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    ok = [b for st_, b in results if st_ == 200]
+    full = [b for b in ok if b["answer"]["provider"] == "anthropic"]
+    basic = [b for b in ok if b["answer"]["provider"] == "keyword"]
+    check(f"budget: {n} parallel asks -> exactly {args.limit} AI answers", len(ok) == n and len(full) == args.limit, [(st_, b.get("answer", {}).get("provider") if isinstance(b, dict) else b) for st_, b in results])
+    check("budget: the rest are labelled basic answers", len(basic) == n - args.limit and all(b["answer"]["text"].startswith(LABEL) for b in basic))
+    check("budget: with the gentle notice", all("Many farmers are asking SPIC AI today" in (b.get("notice") or "") for b in basic), [b.get("notice") for b in basic])
+    check("budget: AI answers carry no notice", all(not b.get("notice") for b in full))
+    s = status(base, tok)
+    check("budget: status says basic answers now", s["fullAnswers"] is False, s)
+    st, one_more, _ = ask(base, tok, "[smoke] budget after the limit")
+    check("budget: still a 200 basic answer (not a 429)", st == 200 and one_more["answer"]["provider"] == "keyword", (st, one_more))
+
+
+def kill_mode(base, args):
+    """API with the stub key and FarmerPortal__AssistantEnabled=false: never calls the AI."""
+    before = os.path.getmtime(args.record) if args.record and os.path.exists(args.record) else None
+    tok = farmer_token(base, args.tamil_phone)
+    s = status(base, tok)
+    check("kill switch: status says basic answers", s["fullAnswers"] is False, s)
+    st, body, _ = ask(base, tok, "[smoke] kill switch: why are my paddy leaves yellow?")
+    check("kill switch: labelled basic answer", st == 200 and body["answer"]["provider"] == "keyword" and body["answer"]["text"].startswith(LABEL), (st, body))
+    check("kill switch: paused notice", st == 200 and "paused" in (body.get("notice") or ""), body.get("notice") if st == 200 else st)
+    after = os.path.getmtime(args.record) if args.record and os.path.exists(args.record) else None
+    check("kill switch: the (stub) AI was not called", before == after, (before, after))
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--base", default="http://localhost:5120")
-    ap.add_argument("--mode", choices=("keyword", "stub"), default="keyword")
+    ap.add_argument("--mode", choices=("keyword", "stub", "budget", "kill"), default="keyword")
+    ap.add_argument("--limit", type=int, default=3, help="budget mode: FarmerPortal__AssistantGlobalDailyLimit the API runs with")
     ap.add_argument("--record", default="")
     ap.add_argument("--phone", default="6777777703", help="English local test farmer with the demo soil report")
     ap.add_argument("--tamil-phone", default="6999174165", help="Tamil local test farmer")
@@ -234,7 +288,7 @@ def main():
     host = args.base.split("//")[-1].split(":")[0].split("/")[0]
     if host not in ("localhost", "127.0.0.1"):
         sys.exit("smoke_task5.py runs against a LOCAL API only")
-    (keyword_mode if args.mode == "keyword" else stub_mode)(args.base, args)
+    {"keyword": keyword_mode, "stub": stub_mode, "budget": budget_mode, "kill": kill_mode}[args.mode](args.base, args)
     print()
     print("FAILED: " + ", ".join(failures) if failures else "All checks passed.")
     sys.exit(1 if failures else 0)

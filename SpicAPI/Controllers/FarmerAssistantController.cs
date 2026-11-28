@@ -24,6 +24,10 @@ namespace SpicAPI.Controllers
     ///   DELETE api/Farmer/assistant/conversations/{id}   soft delete (its questions still count today)
     ///   POST   api/Farmer/assistant/ask                  ask (new conversation when ConversationId is null)
     ///
+    /// Fix round 1: every AI answer first takes one unit of the shared daily AI budget (<see cref="IFarmerAiBudget"/>,
+    /// FarmerPortal:AssistantGlobalDailyLimit, kill switch FarmerPortal:AssistantEnabled); when it says no, the labelled
+    /// basic answer is given with a gentle notice.
+    ///
     /// Answers come from the configured <see cref="IAssistantProvider"/> in <see cref="AssistantMode.Farmer"/>:
     /// the farmer system prompt in the profile's language, the farmer's context and the Digital Library items
     /// retrieved for the question. With no Anthropic key (or when the call fails) the keyword provider answers,
@@ -43,6 +47,8 @@ namespace SpicAPI.Controllers
         private readonly AppDbContext _db;
         private readonly LibraryRetriever _retriever;
         private readonly IAssistantProvider _provider;
+        private readonly KeywordAssistantProvider _basic;
+        private readonly IFarmerAiBudget _budget;
         private readonly FarmerAssistantContextLoader _context;
         private readonly AssistantOptions _options;
         private readonly IConfiguration _config;
@@ -52,6 +58,8 @@ namespace SpicAPI.Controllers
             AppDbContext db,
             LibraryRetriever retriever,
             IAssistantProvider provider,
+            KeywordAssistantProvider basic,
+            IFarmerAiBudget budget,
             FarmerAssistantContextLoader context,
             IOptions<AssistantOptions> options,
             IConfiguration config,
@@ -60,6 +68,8 @@ namespace SpicAPI.Controllers
             _db = db;
             _retriever = retriever;
             _provider = provider;
+            _basic = basic;
+            _budget = budget;
             _context = context;
             _options = options.Value;
             _config = config;
@@ -100,7 +110,8 @@ namespace SpicAPI.Controllers
                 LeftToday = FarmerAssistantRules.Left(used, limit),
                 ResetsAtUtc = FarmerAssistantRules.NextResetUtc(now),
                 MaxQuestionChars = FarmerAssistantRules.MaxQuestionChars,
-                FullAnswers = _options.HasAnthropicKey,
+                // Key set, not switched off and today's shared AI budget not used up.
+                FullAnswers = await _budget.AvailableAsync(FarmerAiKind.Chat, ct),
                 Language = language,
                 LanguageName = FarmerAssistantRules.LanguageName(language),
                 Starters = FarmerAssistantRules.Starters(crops)
@@ -176,7 +187,7 @@ namespace SpicAPI.Controllers
         // ------------------------------------------------------------------ ask
 
         [HttpPost("ask")]
-        public async Task<IActionResult> Ask([FromBody] FarmerAskRequest? request, CancellationToken ct)
+        public async Task<IActionResult> Ask([FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] FarmerAskRequest? request, CancellationToken ct)
         {
             var userId = CallerId;
             if (string.IsNullOrEmpty(userId)) return Unauthorized();
@@ -194,9 +205,15 @@ namespace SpicAPI.Controllers
                     return NotFound(new FarmerAssistantErrorDto { Message = "This chat was not found. Please start a new chat." });
             }
 
-            var loaded = await _context.LoadAsync(userId, ct);
             var limit = DailyLimit;
             var now = DateTime.UtcNow;
+
+            // A capped farmer gets the 429 before any context is loaded (fix round 1, M3); the locked count below
+            // stays the authority.
+            if (FarmerAssistantRules.IsCapped(await UsedTodayAsync(userId, now, ct), limit))
+                return Capped(limit, now);
+
+            var loaded = await _context.LoadAsync(userId, ct);
 
             // Earlier messages for the model, read before this question is stored.
             var earlier = conversation is null
@@ -226,14 +243,7 @@ namespace SpicAPI.Controllers
                 if (FarmerAssistantRules.IsCapped(used, limit))
                 {
                     _log.LogInformation("Farmer assistant daily cap reached ({Used}/{Limit}).", used, limit);
-                    Response.Headers.RetryAfter = FarmerAssistantRules.SecondsUntilReset(now).ToString();
-                    return StatusCode(StatusCodes.Status429TooManyRequests, new FarmerAssistantErrorDto
-                    {
-                        Message = FarmerAssistantRules.CapMessage(limit),
-                        RetryAfterSeconds = FarmerAssistantRules.SecondsUntilReset(now),
-                        ResetsAtUtc = FarmerAssistantRules.NextResetUtc(now),
-                        DailyLimit = limit
-                    });
+                    return Capped(limit, now);
                 }
 
                 if (conversation is null)
@@ -265,9 +275,15 @@ namespace SpicAPI.Controllers
                 usedAfter = used + 1;
             }
 
+            // From here on the question is stored and counted: the answer is made and saved even if the farmer leaves
+            // the page (fix round 1, M2), so CancellationToken.None; the 60 s Anthropic timeout still bounds it.
+            // The shared daily AI budget (or the kill switch) may choose the labelled basic answer instead of the AI.
+            var decision = await _budget.TryConsumeAsync(FarmerAiKind.Chat, userId, CancellationToken.None);
+            var provider = decision == FarmerAiDecision.Allowed ? _provider : _basic;
+
             // The answer (never throws: Anthropic falls back to the keyword provider on any failure).
-            var (items, _) = await _retriever.RetrieveAsync(question, null, cancellationToken: ct);
-            var answer = await _provider.AnswerAsync(new AssistantContext
+            var (items, _) = await _retriever.RetrieveAsync(question, null, cancellationToken: CancellationToken.None);
+            var answer = await provider.AnswerAsync(new AssistantContext
             {
                 Mode = AssistantMode.Farmer,
                 Question = question,
@@ -277,8 +293,9 @@ namespace SpicAPI.Controllers
                 ContextBlock = FarmerAssistantRules.ContextBlock(loaded.Facts),
                 Language = loaded.Language,
                 Crops = loaded.Facts.Crops,
-                MaxTokens = _options.FarmerMaxTokens > 0 ? _options.FarmerMaxTokens : FarmerAssistantRules.DefaultMaxTokens
-            }, ct);
+                MaxTokens = _options.FarmerMaxTokens > 0 ? _options.FarmerMaxTokens : FarmerAssistantRules.DefaultMaxTokens,
+                Effort = string.IsNullOrWhiteSpace(_options.FarmerEffort) ? null : _options.FarmerEffort
+            }, CancellationToken.None);
 
             var reply = new FarmerChatMessage
             {
@@ -288,6 +305,7 @@ namespace SpicAPI.Controllers
                 Text = answer.Text,
                 SourcesJson = answer.Sources.Count == 0 ? null : JsonSerializer.Serialize(answer.Sources, Json),
                 SuggestionsJson = answer.Suggestions.Count == 0 ? null : JsonSerializer.Serialize(answer.Suggestions, Json),
+                SourcesRelated = answer.SourcesRelated,
                 Provider = answer.Provider,
                 Language = loaded.Language,
                 CreatedAtUtc = DateTime.UtcNow
@@ -307,7 +325,8 @@ namespace SpicAPI.Controllers
                 Question = Map(userMessage),
                 Answer = Map(reply),
                 LeftToday = FarmerAssistantRules.Left(usedAfter, limit),
-                ResetsAtUtc = FarmerAssistantRules.NextResetUtc(now)
+                ResetsAtUtc = FarmerAssistantRules.NextResetUtc(now),
+                Notice = answer.Provider == "keyword" ? FarmerAiBudgetRules.Notice(decision) : null
             });
         }
 
@@ -320,9 +339,22 @@ namespace SpicAPI.Controllers
             Text = m.Text,
             CreatedAtUtc = Utc(m.CreatedAtUtc),
             Sources = Read<List<AssistantSourceDto>>(m.SourcesJson) ?? new(),
+            SourcesRelated = m.SourcesRelated,
             Suggestions = Read<List<string>>(m.SuggestionsJson) ?? new(),
             Provider = m.Provider
         };
+
+        private IActionResult Capped(int limit, DateTime now)
+        {
+            Response.Headers.RetryAfter = FarmerAssistantRules.SecondsUntilReset(now).ToString();
+            return StatusCode(StatusCodes.Status429TooManyRequests, new FarmerAssistantErrorDto
+            {
+                Message = FarmerAssistantRules.CapMessage(limit),
+                RetryAfterSeconds = FarmerAssistantRules.SecondsUntilReset(now),
+                ResetsAtUtc = FarmerAssistantRules.NextResetUtc(now),
+                DailyLimit = limit
+            });
+        }
 
         /// <summary>Timestamps are stored as UTC without a kind (timestamp without time zone): send them with "Z".</summary>
         private static DateTime Utc(DateTime value) => DateTime.SpecifyKind(value, DateTimeKind.Utc);
