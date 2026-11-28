@@ -171,7 +171,7 @@
             <div class="modal-content" style="border-radius: 14px; border: none; box-shadow: 0 20px 60px rgba(0,0,0,0.2);">
                 <div class="modal-header" style="border-bottom: 1px solid #e5e7eb;">
                     <h5 class="modal-title" style="font-weight:700;">
-                        @(_isRejecting ? "Reject Cancellation" : "Approve Cancellation") — @_selected.CancellationReference
+                        @(_isCompletingRefund ? "Complete Manual Refund" : (_isRejecting ? "Reject Cancellation" : "Approve Cancellation")) — @_selected.CancellationReference
                     </h5>
                     <button type="button" class="btn-close" disabled="@_isBusy" @onclick="CloseDialog"></button>
                 </div>
@@ -181,7 +181,23 @@
                     <div class="gc-kv"><span>Total Paid</span><span>@Money(_selected.TotalAmount) (@_selected.PaymentStatus)</span></div>
                     <div class="gc-kv"><span>Refund Amount</span><span class="gc-strong">@Money(_selected.RefundAmount)</span></div>
 
-                    @if (_isRejecting)
+                    @if (_isCompletingRefund)
+                    {
+                        <div class="mt-3">
+                            <label class="form-label" style="font-weight:600; font-size:0.85rem;">Bank Refund Reference / UTR Number <span style="color:red">*</span></label>
+                            <input type="text" class="form-control" placeholder="e.g. UTR1234567890 or NEFT/IMPS Ref" @bind="_refundReference" @bind:event="oninput" disabled="@_isBusy" />
+                        </div>
+                        <div class="mt-2">
+                            <label class="form-label" style="font-weight:600; font-size:0.85rem;">Actual Transfer Date <span style="color:red">*</span></label>
+                            <input type="date" class="form-control" @bind="_refundDate" disabled="@_isBusy" />
+                        </div>
+                        <div class="mt-2">
+                            <label class="form-label" style="font-weight:600; font-size:0.85rem;">Remarks (Optional)</label>
+                            <textarea class="form-control" rows="2" maxlength="500" placeholder="e.g. Transferred via net banking" @bind="_refundRemarks" @bind:event="oninput" disabled="@_isBusy"></textarea>
+                        </div>
+                        <p class="gc-muted mt-2 mb-0">Confirm that the funds have been transferred manually outside the application. This will mark the refund as Completed.</p>
+                    }
+                    else if (_isRejecting)
                     {
                         <label class="form-label mt-2" style="font-weight:600; font-size:0.85rem;">Reason for rejection</label>
                         <textarea class="form-control" rows="3" maxlength="500" @bind="_rejectReason" @bind:event="oninput" disabled="@_isBusy"></textarea>
@@ -208,7 +224,11 @@
                 </div>
                 <div class="modal-footer" style="border-top: 1px solid #e5e7eb;">
                     <button class="gc-btn gc-btn-secondary" disabled="@_isBusy" @onclick="CloseDialog">Close</button>
-                    @if (_isRejecting)
+                    @if (_isCompletingRefund)
+                    {
+                        <button class="gc-btn gc-btn-approve" disabled="@(_isBusy || string.IsNullOrWhiteSpace(_refundReference))" @onclick="ConfirmCompleteRefundAsync">@(_isBusy ? "Saving..." : "Mark Refund Completed")</button>
+                    }
+                    else if (_isRejecting)
                     {
                         <button class="gc-btn gc-btn-reject" disabled="@(_isBusy || string.IsNullOrWhiteSpace(_rejectReason))" @onclick="ConfirmRejectAsync">@(_isBusy ? "Rejecting..." : "Reject Request")</button>
                     }
@@ -225,21 +245,25 @@
 @code {
     private static readonly (string Key, string Label)[] Tabs =
     {
-        ("PendingApproval", "Pending Approval"),
-        ("Approved", "Approved"),
-        ("Rejected", "Rejected"),
+        ("PendingRefund", "Pending Refund"),
+        ("PendingApproval", "Pending Approval (Legacy)"),
+        ("Completed", "Completed"),
         ("All", "All")
     };
 
     private List<CancellationRequestItem> _items = new();
-    private string _status = "PendingApproval";
+    private string _status = "PendingRefund";
     private bool _isLoading = true;
     private bool _isBusy;
     private string? _error;
 
     private CancellationRequestItem? _selected;
+    private bool _isCompletingRefund;
     private bool _isRejecting;
     private string _rejectReason = "";
+    private string _refundReference = "";
+    private DateTime _refundDate = DateTime.Today;
+    private string _refundRemarks = "";
 
     // Client-side search / guest-house filter over the rows already loaded for the selected tab.
     private string _searchText = "";
@@ -304,9 +328,24 @@
         }
     </text>;
 
-    // Approve / Reject buttons, shared by the table row and the phone card (same rules as before).
+    // Row actions: Complete Refund for SDWA Admin on pending refunds; Approve/Reject for legacy requests.
     private RenderFragment RowActions(CancellationRequestItem item) => @<text>
-        @if (item.ApprovalStatus == "PendingApproval")
+        @if (item.RefundStatus == "Pending" && item.RefundAmount > 0)
+        {
+            @if (IsSdwaAdmin)
+            {
+                <button class="gc-btn gc-btn-approve" disabled="@_isBusy" @onclick="() => OpenCompleteRefund(item)">
+                    <i class="bi bi-cash-stack"></i> Complete Refund
+                </button>
+            }
+            else
+            {
+                <button class="gc-btn gc-btn-secondary" disabled title="Only SDWA Admin can mark manual refunds as completed">
+                    <i class="bi bi-lock"></i> Complete Refund
+                </button>
+            }
+        }
+        else if (item.ApprovalStatus == "PendingApproval")
         {
             <button class="gc-btn gc-btn-approve" disabled="@_isBusy" @onclick="() => OpenApprove(item)"><i class="bi bi-check-lg"></i> Approve</button>
             @if (item.RefundStatus != "Processing")
@@ -321,6 +360,7 @@
     </text>;
 
     private bool IsAdmin => LoginState.UserRole is AppRole.Admin or AppRole.CorporateAdmin;
+    private bool IsSdwaAdmin => LoginState.HasPageStrict(PagePermission.SDWAAdmin);
 
     // Page VIEW: Admin / CorporateAdmin as before, plus the Designation grant for this page -
     // the same PagePermission.GuestHouseCancellations the menu, ShellNavigation.PermissionKey and
@@ -367,15 +407,27 @@
         }
     }
 
+    private void OpenCompleteRefund(CancellationRequestItem item)
+    {
+        _selected = item;
+        _isCompletingRefund = true;
+        _isRejecting = false;
+        _refundReference = "";
+        _refundDate = DateTime.Today;
+        _refundRemarks = "";
+    }
+
     private void OpenApprove(CancellationRequestItem item)
     {
         _selected = item;
+        _isCompletingRefund = false;
         _isRejecting = false;
     }
 
     private void OpenReject(CancellationRequestItem item)
     {
         _selected = item;
+        _isCompletingRefund = false;
         _isRejecting = true;
         _rejectReason = "";
     }
@@ -384,6 +436,40 @@
     {
         if (_isBusy) return;
         _selected = null;
+        _isCompletingRefund = false;
+        _isRejecting = false;
+    }
+
+    private async Task ConfirmCompleteRefundAsync()
+    {
+        if (_selected == null || _isBusy || string.IsNullOrWhiteSpace(_refundReference)) return;
+        _isBusy = true;
+        try
+        {
+            var payload = new
+            {
+                RefundReference = _refundReference.Trim(),
+                RefundDate = _refundDate,
+                Remarks = _refundRemarks.Trim()
+            };
+            var response = await Http.PostAsJsonAsync($"api/GuestHouseFrontOffice/cancellations/{_selected.CancellationId}/complete-refund", payload);
+            var message = await ReadMessageAsync(response);
+            if (response.IsSuccessStatusCode)
+                Toast.Success(message ?? "Manual refund marked as Completed.");
+            else
+                Toast.Error(message ?? "The refund could not be completed.", durationMs: 8000);
+        }
+        catch (Exception)
+        {
+            Toast.Error("The refund completion request did not succeed. Please try again.", durationMs: 8000);
+        }
+        finally
+        {
+            _isBusy = false;
+            _selected = null;
+            _isCompletingRefund = false;
+        }
+        await LoadAsync();
     }
 
     private async Task ConfirmApproveAsync()

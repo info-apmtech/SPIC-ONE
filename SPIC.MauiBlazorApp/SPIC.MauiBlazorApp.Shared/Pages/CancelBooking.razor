@@ -75,11 +75,11 @@
             </div>
             @if (_preview.AlreadyRequested)
             {
-                <p class="cb-info-text">A cancellation request for this booking has already been submitted (status: @ApprovalLabel(_preview.ExistingApprovalStatus)). You can track it from Refund Status.</p>
+                <p class="cb-info-text">This booking has already been cancelled. You can track your refund from Refund Status.</p>
             }
             else
             {
-                <p class="cb-info-text">Cancelling this booking may affect your refund based on the cancellation policy. Based on the time left before check-in, you qualify for a @Percent(_preview.RefundPercent) refund. Your request will be reviewed by the Admin before the booking is cancelled and the refund is processed.</p>
+                <p class="cb-info-text">Cancelling this booking will cancel your reservation immediately and release the room. Based on the time left before check-in, you qualify for a @Percent(_preview.RefundPercent) refund. Any applicable refund will be processed manually by our staff within 2 working days.</p>
             }
         </div>
 
@@ -90,13 +90,17 @@
                     <h3 class="cb-card-title">Cancellation Reason</h3>
                     <div class="cb-form-group">
                         <label class="cb-form-label">Select reason for cancellation</label>
-                        <select class="cb-form-control" @bind="_selectedReason" disabled="@_preview.AlreadyRequested">
+                        <select class="@ReasonSelectClass" @bind="_selectedReason" @bind:after="OnReasonSelected" disabled="@_preview.AlreadyRequested">
                             <option value="" disabled selected>Choose a reason</option>
                             @foreach (var reason in _preview.CancellationReasons)
                             {
                                 <option value="@reason">@reason</option>
                             }
                         </select>
+                        @if (_showReasonValidation)
+                        {
+                            <span class="cb-validation-message">Please select a cancellation reason.</span>
+                        }
                     </div>
                 </div>
 
@@ -227,7 +231,7 @@
 @*     </div>
  *@</div>
 
-<BottomSheet @bind-IsOpen="showConfirmPopup" Title="Confirm Cancellation?" Subtitle="Your request will be sent to the Admin for approval. The booking stays active until it is approved." CssClass="cb-sheet">
+<BottomSheet @bind-IsOpen="showConfirmPopup" Title="Confirm Cancellation?" Subtitle="Your booking will be cancelled immediately and the room will be released." CssClass="cb-sheet">
     <ChildContent>
         <div class="cb-modal-container cb-sheet-body">
             <div class="cb-modal-icon-wrapper confirm">
@@ -263,14 +267,14 @@
     </Footer>
 </BottomSheet>
 
-<BottomSheet @bind-IsOpen="showSuccessPopup" Title="Cancellation Request Submitted" CssClass="cb-sheet">
+<BottomSheet @bind-IsOpen="showSuccessPopup" Title="Booking Cancelled Successfully" CssClass="cb-sheet">
     <ChildContent>
         <div class="cb-modal-container cb-sheet-body">
             <div class="cb-modal-icon-wrapper success">
                 <svg xmlns="http://www.w3.org/2000/svg" width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="#10B981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
             </div>
 
-            <p class="cb-modal-subtitle">Your cancellation request has been submitted and is awaiting Admin approval. Refund will be credited to your original payment source within 2 working days after Admin approval.</p>
+            <p class="cb-modal-subtitle">Your booking has been cancelled immediately and the room released. Any applicable refund will be processed manually by our staff within 2 working days.</p>
 
             <div class="cb-modal-data-box">
                 <div class="cb-m-row">
@@ -309,11 +313,15 @@
     private bool _isSubmitting;
     private string? _loadError;
     private string _selectedReason = "";
+    private bool _showReasonValidation;
     private string? _cancellationReference;
     private string? _approvalStatus;
 
     private bool showConfirmPopup = false;
     private bool showSuccessPopup = false;
+
+    private string ReasonSelectClass =>
+        _showReasonValidation ? "cb-form-control cb-form-control-invalid" : "cb-form-control";
 
     private static readonly string FallbackImage =
         "_content/SPIC.MauiBlazorApp.Shared/Images/Gallery/image20.jpg";
@@ -366,10 +374,19 @@
     {
         if (string.IsNullOrWhiteSpace(_selectedReason))
         {
+            _showReasonValidation = true;
             Toast.Warning("Please select a reason for cancellation.");
             return;
         }
         showConfirmPopup = true;
+    }
+
+    private void OnReasonSelected()
+    {
+        if (!string.IsNullOrWhiteSpace(_selectedReason))
+        {
+            _showReasonValidation = false;
+        }
     }
 
     private void CloseConfirmPopup()

@@ -1,4 +1,4 @@
-﻿using System.Security.Claims;
+using System.Security.Claims;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -423,7 +423,8 @@ internal static class GuestHouseSingleRoomBookingTests
 		Check.That("a cancellation row exists for A only",
 			await fx.Db.Set<GuestHouseBookingCancellation>().CountAsync(x => x.GuestHouseBookingId == a.BookingId) == 1
 			&& await fx.Db.Set<GuestHouseBookingCancellation>().CountAsync(x => x.GuestHouseBookingId == b.BookingId) == 0);
-		Check.Equal("cancellation starts pending approval", "PendingApproval", Prop<string>(cancel, "ApprovalStatus") ?? "");
+		Check.Equal("cancellation is approved immediately", "Approved", Prop<string>(cancel, "ApprovalStatus") ?? "");
+		Check.Equal("unpaid PayAfterStay has refund completed immediately", "Completed", Prop<string>(cancel, "RefundStatus") ?? "");
 
 		var again = await c.RequestCancellation(a.BookingId, new CreateCancellationRequest { Reason = "Change in travel plans" });
 		Check.That("repeating the request is idempotent", Status(again) == 200 && Prop<bool>(again, "AlreadyRequested"));
@@ -434,7 +435,7 @@ internal static class GuestHouseSingleRoomBookingTests
 			bAfter.BookingStatus == bBefore.BookingStatus && bAfter.PaymentStatus == bBefore.PaymentStatus && bAfter.TotalAmount == bBefore.TotalAmount
 			&& bAfter.GuestHouseRoomId == bBefore.GuestHouseRoomId && bAfter.Payments.Single().PaymentStatus == bBefore.Payments.Single().PaymentStatus);
 		Check.That("no refund row was created for either booking", !await fx.Db.Set<GuestHouseBookingRefund>().AnyAsync());
-		Check.Equal("a request never cancels the booking itself", GuestHouseBookingStatus.Confirmed,
+		Check.Equal("cancellation immediately cancels the booking itself", GuestHouseBookingStatus.Cancelled,
 			(await fx.Db.GuestHouseBookings.AsNoTracking().SingleAsync(x => x.Id == a.BookingId)).BookingStatus);
 	}
 

@@ -56,6 +56,12 @@ internal static class Program
 		GuestHouseSingleRoomBookingTests.Run();
 		Console.WriteLine();
 
+		// Guest House Instant Cancellation and Manual Refund safeguards:
+		// immediate room release, zero refund for unpaid/complimentary, pending manual refund for paid,
+		// Razorpay race protection, and strict SDWA Admin manual refund completion.
+		GuestHouseInstantCancellationAndRefundTests.Run();
+		Console.WriteLine();
+
 		// Late check-out grace period + extra-day charge, payment gate, invoice line, overdue-room protection.
 		GuestHouseLateCheckOutTests.Run();
 		Console.WriteLine();
