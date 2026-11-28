@@ -681,8 +681,51 @@ and behaviour.
 | `Assistant:AnthropicApiKey` | (existing) empty = basic answers only; in Azure `Assistant__AnthropicApiKey` from Key Vault |
 | `Assistant:Model` | (existing) default `claude-sonnet-5`, used by both assistants |
 | `Assistant:FarmerMaxTokens` | farmer answer length, default 1500 (Indian scripts take more tokens) |
-| `Assistant:Endpoint` | optional Messages API URL (a gateway / proxy, or the local stub); empty = `https://api.anthropic.com/v1/messages`. The key is sent there |
+| `Assistant:FarmerEffort` | `output_config.effort` for farmer answers, default `low` (keeps adaptive thinking short inside the 1500 tokens); empty = not sent (for a model without effort support) |
+| `Assistant:Endpoint` | optional Messages API URL (a gateway / proxy, or the local stub); empty = `https://api.anthropic.com/v1/messages`. The key is sent there, so it is used only when it is `https://`, or `http://` to this machine (the stub); anything else is ignored with a warning |
 | `FarmerPortal:AssistantDailyLimit` | questions per farmer per IST day; empty = 30 |
+| `FarmerPortal:AssistantEnabled` | kill switch, default `true`; `false` = Anthropic is never called for farmers, every answer is the labelled basic answer ("Full SPIC AI answers are paused just now ...") |
+| `FarmerPortal:AssistantGlobalDailyLimit` | AI answers per IST day across ALL farmers and AI features, default 2000 (0 = none); above it farmers get the labelled basic answer until IST midnight |
+| `FarmerPortal:AiKindDailyLimit:Chat` / `:LeafCheck` | optional sub-limit per AI feature inside the global one (Task 6 sets its own); empty = none |
+
+### Daily AI budget and kill switch (fix round 1)
+
+`SpicAPI/Services/FarmerAiBudget.cs` (`IFarmerAiBudget.TryConsumeAsync(kind, farmerUserId)`, kinds `Chat` and
+`LeafCheck`) is the one daily AI budget for every farmer AI feature; Task 6 calls it with `FarmerAiKind.LeafCheck`.
+Before each Anthropic call it counts today's `FarmerAiUsages` rows (IST day, all kinds, and the kind when it has a
+sub-limit) and inserts one, in one transaction under the global advisory lock `farmer-ai-budget` (milliseconds; never
+held during the AI call), so parallel requests and both replicas cannot pass the limit (smoke: 6 parallel asks with a
+limit of 3 gave exactly 3 AI answers). The decision is `FarmerAiBudgetRules.Decide`: no key -> basic (nothing
+counted); switched off -> basic; used today >= global limit, or >= the kind's sub-limit -> basic; else AI. A basic
+answer chosen by the budget is the normal labelled one (gold tag) plus a gentle note in the chat: "Many farmers are
+asking SPIC AI today, so this is a basic answer from the SPIC library. Full answers are back after 12 midnight." (or
+"... paused just now ..." for the kill switch). It is still a 200, not a 429. `status.fullAnswers` is false while
+the budget is used up or switched off. The first refusal of the day is logged once per replica. A call counts when it
+is made, even if Anthropic then fails or refuses (input tokens may already be billed).
+
+**Cost (Claude Sonnet 5: $2 per million input tokens, $10 per million output tokens).** Input dominates:
+
+| Part of one call | Typical | Worst |
+|---|---|---|
+| System prompt | ~650 tokens | ~650 |
+| Farmer context (crops, place, soil ratings, fertilizer summary) | ~150 | ~250 |
+| Library content (top 4 items; each field max 1500 characters) | ~1,500 (today's items are short) | ~6,000 |
+| History (last 10 messages; Tamil / Hindi script takes ~3-4x the tokens of English) | ~1,500 | ~6,000 |
+| Question (max 1000 characters) | ~100 | ~1,000 |
+| **Input** | **~4,000 tokens = $0.008** | **~14,000 tokens = $0.028** |
+| Output (answer + low-effort thinking, capped at 1500) | ~500 = $0.005 | 1,500 = $0.015 |
+| **Per AI answer** | **~$0.013** | **~$0.043** |
+
+Per farmer (30 a day): ~$0.40 typical, ~$1.30 worst. **Whole portal per day at the default global limit (2000 AI
+answers): ~$26 typical, ~$86 worst (about $2,600 a month worst case).** Lower `FarmerPortal:AssistantGlobalDailyLimit`
+to spend less; `FarmerPortal:AssistantEnabled=false` stops all farmer AI calls at once (no redeploy, just the setting).
+
+### Library assistant: what changed under it
+
+The library chat now calls Anthropic through the same `AnthropicMessagesClient`. Its prompt, 800 tokens, question block
+and fallback are unchanged. Two small differences (fix round 1, review M4): a reply with `stop_reason: refusal` now
+always gives the keyword answer (before, any text in it was shown), and a request the client has abandoned is no longer
+answered with a keyword answer in the background. Neither is visible to a connected user.
 
 ### Tables (migration `V37_FarmerAssistant`)
 
@@ -695,6 +738,9 @@ scope filter.
 - `FarmerChatMessages` (Id bigint, ConversationId -> conversation with cascade, FarmerUserId, Role varchar(16), Text,
   SourcesJson, SuggestionsJson, Provider varchar(20), Language varchar(8), CreatedAtUtc); indexes (ConversationId, Id)
   and (FarmerUserId, Role, CreatedAtUtc) for the cap.
+- Fix round 1, migration `V39_FarmerAiBudget`: `FarmerAiUsages` (Id bigint, Kind varchar(20), FarmerUserId, CreatedAtUtc;
+  index (CreatedAtUtc, Kind)), one row per farmer AI call, and `FarmerChatMessages.SourcesRelated` (bool, default false:
+  the answer did not name the linked items, shown as "Related in the SPIC library").
 
 ### Tests and tools
 
@@ -717,6 +763,10 @@ scope filter.
 
 - Prod migration `V37_FarmerAssistant` (owner runs prod).
 - Set `Assistant__AnthropicApiKey` for full answers in the farmer's language; until then farmers get labelled basic
-  English answers from the library. Cost ceiling: 30 questions x 1500 output tokens per farmer per day.
+  English answers from the library. Cost: see "Daily AI budget and kill switch" (~$26 a day typical, ~$86 worst at the
+  default 2000 AI answers a day). **Also set a monthly spend limit on the Anthropic workspace / key used here** (Claude
+  Console, workspace limits) as a second, independent brake.
+- Prod migration `V39_FarmerAiBudget` (after V38). `FarmerAiUsages` grows by at most the daily limit (2000 rows a day);
+  old rows can be deleted at any time (only today's are read).
 - The library has few published items today; answers (the basic ones especially) are only as good as the library.
 - An agronomist should read a sample of real answers (Tamil especially) before go-live.
