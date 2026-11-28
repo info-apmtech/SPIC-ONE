@@ -1,4 +1,4 @@
-﻿using System.Net;
+using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Microsoft.AspNetCore.Components;
@@ -31,7 +31,47 @@ namespace SPIC.MauiBlazorApp.Shared.Services
             if (!request.Headers.Contains("X-Spic-Client")) request.Headers.TryAddWithoutValidation("X-Spic-Client", _client.ClientHeader);
             if (!request.Headers.Contains("X-Spic-Version")) request.Headers.TryAddWithoutValidation("X-Spic-Version", _client.Version);
 
-            var response = await base.SendAsync(request, cancellationToken);
+            HttpResponseMessage response;
+            try
+            {
+                response = await base.SendAsync(request, cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                // Explicitly requested cancellation by the caller (e.g. page navigation or component disposal)
+                throw;
+            }
+            catch (OperationCanceledException)
+            {
+                // Cancellation was NOT requested by the caller (cancellationToken.IsCancellationRequested is false).
+                // It was caused by HttpClient's timeout or an aborted transport connection (e.g. API server terminated/restarting).
+                return new HttpResponseMessage(HttpStatusCode.ServiceUnavailable)
+                {
+                    RequestMessage = request,
+                    ReasonPhrase = "API Server Unavailable or Connection Aborted",
+                    Content = new StringContent("{\"message\":\"Unable to connect to the SPIC API server. Please ensure the backend is running.\"}")
+                };
+            }
+            catch (HttpRequestException ex)
+            {
+                // Connection refused or network unreachable
+                return new HttpResponseMessage(HttpStatusCode.ServiceUnavailable)
+                {
+                    RequestMessage = request,
+                    ReasonPhrase = "API Server Request Failed",
+                    Content = new StringContent($"{{\"message\":\"{ex.Message.Replace("\"", "\\\"")}\"}}")
+                };
+            }
+            catch (IOException ex)
+            {
+                // Transport stream I/O failure (e.g. WSA_OPERATION_ABORTED when server drops)
+                return new HttpResponseMessage(HttpStatusCode.ServiceUnavailable)
+                {
+                    RequestMessage = request,
+                    ReasonPhrase = "API Server Transport Aborted",
+                    Content = new StringContent($"{{\"message\":\"{ex.Message.Replace("\"", "\\\"")}\"}}")
+                };
+            }
 
             // IIS supplies the server's UTC Date header. Synchronize before callers publish
             // a new token, so an incorrect iPhone clock cannot immediately expire it.

@@ -2302,7 +2302,8 @@ namespace SpicAPI.Controllers
                 || x.Status == DealerStatus.Terminated
                 || (x.Status == DealerStatus.InActive && x.InactiveProposal == FutureBusinessProposal.Terminated)
                 || (x.Status == DealerStatus.InActive && x.InactiveProposal == FutureBusinessProposal.NotTraceable)
-                || x.DealerType == RegistrationDealerType.Department;
+                || x.DealerType == RegistrationDealerType.Department
+                || x.IsSubmittedForReview == true;
 
         /// <summary>
         /// "New Dealer" as the Dashboard sees it. The permanent DB flag is the primary
@@ -2715,8 +2716,7 @@ namespace SpicAPI.Controllers
                 {
                     "Pending Draft" => query.Where(x => x.IsSubmittedForReview != true),
                     "Pending RM" => query.Where(x => x.IsSubmittedForReview == true
-                        && ((x.RMApproved == null && x.SMApproved != false && x.AVPApproved == null)
-                            || (x.RMApproved != false && x.SMApproved == false && (avpOfficeReturnedDealerIds == null || !avpOfficeReturnedDealerIds.Contains(x.Id))))),
+                        && x.RMApproved == null && x.SMApproved != false && x.AVPApproved == null),
                     "Pending SMM" => query.Where(x => x.IsSubmittedForReview == true
                         && ((x.RMApproved == true && x.SMApproved == null && x.AVPApproved == null)
                             || (x.RMApproved != false && x.SMApproved != false && x.AVPApproved == false)
@@ -2891,8 +2891,7 @@ namespace SpicAPI.Controllers
                     Total = g.Count(),
                     Draft = g.Count(x => x.Status != DealerStatus.Terminated && x.IsSubmittedForReview != true),
                     InRM = g.Count(x => x.IsSubmittedForReview == true
-                        && ((x.RMApproved == null && x.SMApproved != false && x.AVPApproved == null)
-                            || (x.RMApproved != false && x.SMApproved == false && !avpOfficeReturnedDealerIds.Contains(x.Id)))),
+                        && x.RMApproved == null && x.SMApproved != false && x.AVPApproved == null),
                     InSMM = g.Count(x => x.IsSubmittedForReview == true
                         && ((x.RMApproved == true && x.SMApproved == null && x.AVPApproved == null)
                             || (x.RMApproved != false && x.SMApproved != false && x.AVPApproved == false)

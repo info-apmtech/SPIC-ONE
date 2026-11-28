@@ -6,6 +6,7 @@
 @inject NavigationManager Nav
 @inject ToastService Toast
 @inject FileDownloadService Downloads
+@inject SPIC.MauiBlazorApp.Shared.Services.PublicityNotificationState PubNotify
 
 @* Approver consolidation (Figma "State Consolidation" - 3 reference screens: SMDO, SMM Review,
    ADMIN Review). Same route/data for every role (RM sees its region, SMD/SMM their state, ADMIN-MD
@@ -756,6 +757,10 @@
         var result = await Api.ReviewBulkDetailedAsync(new PubBulkReviewDto { Ids = ids });
         _busy = false;
         if (result is not { Success: true }) return;
+        if (result.UnreadNotificationsCount.HasValue)
+            PubNotify.SetUnreadCount(result.UnreadNotificationsCount.Value);
+        else
+            await PubNotify.RefreshAsync();
         Toast.Success(result.Approved < ids.Count
             ? $"{result.Approved} of {ids.Count} request(s) for {sg.State} forwarded to {Next} ({ids.Count - result.Approved} already processed or out of scope)."
             : $"{result.Approved} request(s) for {sg.State} forwarded to {Next}.");
@@ -792,6 +797,10 @@
         // from Regions still sitting at SmdReview, and every request this call just advanced is no
         // longer at that stage, so a repeat call has nothing left to submit.
         if (result is not { Success: true }) return;
+        if (result.UnreadNotificationsCount.HasValue)
+            PubNotify.SetUnreadCount(result.UnreadNotificationsCount.Value);
+        else
+            await PubNotify.RefreshAsync();
         Toast.Success(result.Approved < ids.Count
             ? $"{result.Approved} of {ids.Count} request(s) submitted to {Next} ({ids.Count - result.Approved} already processed or out of scope)."
             : $"{result.Approved} request(s) submitted to {Next}.");
