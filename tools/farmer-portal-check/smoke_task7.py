@@ -85,7 +85,22 @@ def main():
     check("predict: the first tip is the full NPK dose", r["tips"] and r["tips"][0]["code"] == "npk", r["tips"])
     check("predict: saved with an id", r["id"] > 0, r.get("id"))
     check("predict: sources named", "TNAU" in r["source"] and "FAO" in r["source"], r.get("source"))
+    check("predict: an NDVI value is reported as entered", "Crop vigour was entered as an NDVI value." in r["confidenceReasons"], r.get("confidenceReasons"))
+    check("predict: two or three tips", 2 <= len(r["tips"]) <= 3, [t["code"] for t in r["tips"]])
     first_id = r["id"]
+
+    # Fix round 1: the untouched default NDVI (what the screen sends) and an omitted source are never "measured".
+    for name, body in [("ndviSource default", req(ndviSource="default")), ("ndviSource omitted", {k: v for k, v in SKETCH.items() if k != "ndviSource"})]:
+        st, d, _ = call(base, "POST", "api/Farmer/yield/predict", body, token=tok)
+        check(f"predict ({name}): 20 %, medium confidence", st == 200 and d["rangePercent"] == 20 and d["confidenceLabel"] == "Medium confidence"
+              and d["ndviSource"] == "default", (st, d.get("rangePercent"), d.get("confidenceLabel"), d.get("ndviSource")))
+        check(f"predict ({name}): says the vigour was left at the default, not entered",
+              any("left at the default" in x for x in d["confidenceReasons"]) and not any("entered as an NDVI value" in x for x in d["confidenceReasons"]), d.get("confidenceReasons"))
+        check(f"predict ({name}): NPK tip then the canopy check", [t["code"] for t in d["tips"]][:2] == ["npk", "canopy"], [t["code"] for t in d["tips"]])
+    st, rows, _ = call(base, "POST", "api/Farmer/yield/predict", req(ndviSource="default"), token=tok)
+    check("predict: paddy's source says its Ky is assumed", "Ky assumed" in rows["source"] and "and Ky (FAO I&D paper 33)" not in rows["source"], rows.get("source"))
+    st, bg, _ = call(base, "POST", "api/Farmer/yield/predict", req(crop="Black gram"), token=tok)
+    check("predict: black gram's source names the bean proxy", st == 200 and "bean as a pulses proxy" in bg["source"], bg.get("source"))
 
     st, look, _ = call(base, "POST", "api/Farmer/yield/predict", req(ndvi=0.45, ndviSource="look", method="rainfed", rainfallMm=550, npkPercent=60), token=tok)
     check("predict: low inputs by look -> 25 %, low confidence", st == 200 and look["rangePercent"] == 25 and look["confidenceLabel"] == "Low confidence", look)

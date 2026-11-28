@@ -92,8 +92,9 @@ public class YieldPredictRequest
     public string Method { get; set; } = "";
     public decimal AreaAcres { get; set; }
     public double Ndvi { get; set; }
-    /// <summary>"value" (slider / number) or "look" (sparse / medium / dense): a look widens the range.</summary>
-    public string NdviSource { get; set; } = "value";
+    /// <summary>"value" (slider / number), "look" (sparse / medium / dense) or "default" (left at 0.72, also when the
+    /// field is not sent): a look or the default widens the range.</summary>
+    public string NdviSource { get; set; } = "default";
     public int RainfallMm { get; set; }
     public int NpkPercent { get; set; }
 }

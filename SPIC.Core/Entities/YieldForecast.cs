@@ -60,8 +60,8 @@ public class YieldPrediction
     public string IrrigationClass { get; set; } = string.Empty;
     public decimal AreaAcres { get; set; }
     public decimal Ndvi { get; set; }
-    /// <summary>"value" (slider / number) | "look" (sparse / medium / dense).</summary>
-    public string NdviSource { get; set; } = "value";
+    /// <summary>"value" (slider / number) | "look" (sparse / medium / dense) | "default" (left at 0.72).</summary>
+    public string NdviSource { get; set; } = "default";
     public int RainfallMm { get; set; }
     public int NpkPercent { get; set; }
     public decimal ExpectedT { get; set; }

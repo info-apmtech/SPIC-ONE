@@ -144,6 +144,19 @@ internal static class FarmerPortalYieldTests
 		Check.Equal("sketch: +/- 12 % with an NDVI value", 12, r.RangePercent);
 		Check.Equal("sketch: high confidence", "High confidence", r.ConfidenceLabel);
 		Check.Equal("sketch: confidence score 70", 70, r.ConfidenceScore);
+		Check.That("sketch: an NDVI value says so", r.ConfidenceReasons.Contains("Crop vigour was entered as an NDVI value."));
+
+		// Fix round 1: what the screen sends when the farmer never touches the NDVI slider.
+		var untouched = Run(Req(source: Y.SourceDefault));
+		Check.Equal("sketch untouched: the default NDVI widens to 20 %", 20, untouched.RangePercent);
+		Check.Equal("sketch untouched: medium confidence", "Medium confidence", untouched.ConfidenceLabel);
+		Check.That("sketch untouched: never claims an entered NDVI", untouched.ConfidenceReasons.Contains(Y.DefaultNdviReason)
+			&& !untouched.ConfidenceReasons.Any(x => x.Contains("entered as an NDVI value")), string.Join(" | ", untouched.ConfidenceReasons));
+		Check.That("sketch untouched: at least as wide as a look pick", untouched.RangePercent >= Run(Req(source: Y.SourceLook)).RangePercent);
+		Check.That("sketch untouched: same expected harvest, wider range", Near(untouched.ExpectedT, r.ExpectedT) && untouched.HighT - untouched.LowT > r.HighT - r.LowT);
+		Check.That("sketch untouched: two or three tips, NPK first then the canopy check", untouched.Tips.Count is >= 2 and <= 3
+			&& untouched.Tips[0].Code == "npk" && untouched.Tips.Any(t => t.Code == "canopy"), string.Join(",", untouched.Tips.Select(t => t.Code)));
+		Check.Equal("request: an omitted NDVI source is the default", Y.SourceDefault, new YieldPredictRequest().NdviSource);
 		Check.Equal("sketch: per acre", Math.Round(r.PerHectareT * 0.4047, 2), r.PerAcreT);
 
 		foreach (var n in CropYieldNormSeed.Rows)
@@ -162,23 +175,29 @@ internal static class FarmerPortalYieldTests
 		var allOrdered = true;
 		var allPositive = true;
 		var widthsOk = true;
+		var tipsOk = true;
+		var unmeasuredWide = true;
 		var count = 0;
 		foreach (var n in CropYieldNormSeed.Rows)
 		foreach (var m in Y.Methods.Where(m => m.IrrigationClass == n.IrrigationClass))
 		foreach (var ndvi in new[] { 0.35, 0.6, 0.72, 0.92 })
 		foreach (var rain in new[] { 400, 850, 1400 })
 		foreach (var npk in new[] { 50, 90, 120 })
-		foreach (var src in new[] { Y.SourceValue, Y.SourceLook })
+		foreach (var src in new[] { Y.SourceValue, Y.SourceLook, Y.SourceDefault })
 		{
 			var f = Y.Estimate(n, Req(n.Crop, m.Code, 2.5m, ndvi, rain, npk, src));
 			count++;
 			if (!(f.LowT <= f.ExpectedT && f.ExpectedT <= f.HighT)) allOrdered = false;
 			if (!(f.ExpectedT > 0 && f.PerHectareT > 0 && f.Factors.All(x => x.Value > 0 && x.Value <= 1.05 + 1e-9))) allPositive = false;
 			if (f.RangePercent < Y.RangeValue || f.RangePercent > Y.RangeMax) widthsOk = false;
+			if (f.Tips.Count is < 2 or > 3) tipsOk = false;
+			if (src != Y.SourceValue && f.RangePercent < Y.RangeLook) unmeasuredWide = false;
 		}
 		Check.That($"range: low <= expected <= high in all {count} combinations", allOrdered);
 		Check.That("range: every forecast and factor is positive (factors at most 1.05)", allPositive);
 		Check.That("range: width stays 12-25 %", widthsOk);
+		Check.That("tips: always two or three (brief)", tipsOk);
+		Check.That("range: a look or the untouched default is never narrower than 20 %", unmeasuredWide);
 
 		var look = Run(Req(ndvi: 0.62, source: Y.SourceLook));
 		Check.Equal("range: NDVI picked by look widens to 20 %", 20, look.RangePercent);
@@ -208,7 +227,9 @@ internal static class FarmerPortalYieldTests
 		Check.That("breakdown: four factors, in order", string.Join(",", thin.Factors.Select(f => f.Code)) == "ndvi,rain,npk,irrigation");
 		Check.That("breakdown: at most three tips", CropYieldNormSeed.Rows.All(n => Y.Estimate(n, Req(n.Crop, n.IrrigationClass == Y.Rainfed ? Y.MethodRainfed : Y.MethodCanalBorewell, 2, 0.45, 450, 55)).Tips.Count <= 3));
 		var best = Run(Req(ndvi: 0.8, npk: 100, rain: 1000));
-		Check.That("breakdown: best inputs have no loss and the keep-it-up tip", best.BiggestLoss is null && best.Tips.Count == 1 && best.Tips[0].Code == "keep");
+		Check.That("breakdown: best inputs have no loss and the keep-it-up tip, then the planning tip", best.BiggestLoss is null && best.Tips.Count == 2
+			&& best.Tips[0].Code == "keep" && best.Tips[1].Code == "plan" && best.Tips[1].Text.Contains($"{Y.Tonnes(best.HighT)} t"), string.Join(",", best.Tips.Select(t => t.Code)));
+		Check.That("breakdown: a measured NDVI gets no canopy-check tip", best.Tips.All(t => t.Code != "canopy"));
 		var drip = Run(Req("Maize", Y.MethodDrip, ndvi: 0.8, npk: 100, rain: 700));
 		Check.That("breakdown: drip shows as an addition", drip.Factors.Single(f => f.Code == "irrigation").LossT < 0 && drip.BiggestLoss is null);
 		var canalMaize = Run(Req("Maize", ndvi: 0.8, npk: 100, rain: 700));
@@ -232,6 +253,7 @@ internal static class FarmerPortalYieldTests
 	{
 		var norm = Norm("Paddy", Y.Irrigated);
 		Check.That("validate: the sketch request is valid", Y.Validate(Req(), norm, true).Count == 0);
+		Check.That("validate: the default NDVI source is valid", Y.Validate(Req(source: Y.SourceDefault), norm, true).Count == 0);
 		Check.That("validate: area 0 / 1001 refused", Y.Validate(Req(acres: 0m), norm, true).ContainsKey("areaAcres") && Y.Validate(Req(acres: 1001m), norm, true).ContainsKey("areaAcres"));
 		Check.That("validate: NDVI outside 0.35-0.92 refused", Y.Validate(Req(ndvi: 0.3), norm, true).ContainsKey("ndvi") && Y.Validate(Req(ndvi: 0.95), norm, true).ContainsKey("ndvi"));
 		Check.That("validate: NDVI NaN refused", Y.Validate(Req(ndvi: double.NaN), norm, true).ContainsKey("ndvi"));
@@ -291,6 +313,15 @@ internal static class FarmerPortalYieldTests
 		Check.That("seed: rainfall bands sit inside the slider", rows.All(r => r.RainLowMm >= Y.RainMin && r.RainHighMm <= Y.RainMax && r.RainLowMm < r.RainHighMm));
 		Check.That("seed: water need and Ky are sane", rows.All(r => r.WaterNeedMinMm < r.WaterNeedMaxMm && r.YieldResponseFactor is >= 0.5m and <= 1.5m));
 		Check.That("seed: every row names TNAU or ICAR and FAO", rows.All(r => (r.Source.Contains("TNAU") || r.Source.Contains("ICAR")) && r.Source.Contains("FAO")));
+		// Fix round 1: an assumed or proxy Ky is never shown as FAO 33's own value.
+		const string ownKy = "and Ky (FAO I&D paper 33)";
+		Check.That("seed: assumed-Ky rows (paddy) say so and never claim FAO 33's Ky",
+			rows.Where(r => CropYieldNormSeed.AssumedKyCrops.Contains(r.Crop)).All(r => r.Source.Contains("Ky assumed") && !r.Source.Contains(ownKy)));
+		Check.That("seed: proxy-Ky rows (pulses) name the bean proxy and never claim their own FAO 33 Ky",
+			rows.Where(r => CropYieldNormSeed.ProxyKyCrops.Contains(r.Crop)).All(r => r.Source.Contains("bean as a pulses proxy") && !r.Source.Contains(ownKy)));
+		Check.That("seed: only the other rows claim FAO 33's own Ky",
+			rows.Where(r => !CropYieldNormSeed.AssumedKyCrops.Contains(r.Crop) && !CropYieldNormSeed.ProxyKyCrops.Contains(r.Crop)).All(r => r.Source.EndsWith(ownKy)));
+		Check.That("seed: the assumed / proxy crops are seeded", CropYieldNormSeed.AssumedKyCrops.Concat(CropYieldNormSeed.ProxyKyCrops).All(c => rows.Any(r => r.Crop == c)));
 		Check.That("seed: every source fits the column and has an https page", rows.All(r => r.Source.Length <= 500 && r.SourceUrl.StartsWith("https://") && (r.Notes?.Length ?? 0) <= 500));
 		Check.That("seed: unit is tonnes and a product is named", rows.All(r => r.Unit == "t" && r.Product.Length > 0 && r.Product.Length <= 40));
 		foreach (var crop in new[] { "Paddy", "Maize", "Cotton", "Groundnut", "Sugarcane", "Banana", "Black gram", "Green gram" })
@@ -336,6 +367,8 @@ internal static class FarmerPortalYieldTests
 		Check.That("ui: NPK hint without advice", !YieldUi.NpkHint(null, null).Contains("last fertilizer"));
 		var r = Run(Req());
 		Check.That("ui: formula line", YieldUi.Formula(r).StartsWith("5.8 t/ha x 1.00 vigour x 1.00 rain x 0.98 fertilizer x 1.00 irrigation = "), YieldUi.Formula(r));
+		Check.That("ui: the how-it-works card calls the rain band and curves model assumptions", YieldUi.AssumptionsLine.Contains("rain band") && YieldUi.AssumptionsLine.Contains("assumptions"));
+		Check.That("ui: every tip code has an icon", new[] { "npk", "ndvi", "rain", "drip", "canopy", "plan", "soil" }.All(c => YieldUi.TipIcon(c) != "bi-hand-thumbs-up"));
 		Check.That("ui: disclaimer says it is a model estimate, not a guarantee", YieldUi.Disclaimer.StartsWith("Estimate from crop norms and your inputs, not a guarantee.") && YieldUi.Disclaimer.Contains("model estimate"));
 	}
 }

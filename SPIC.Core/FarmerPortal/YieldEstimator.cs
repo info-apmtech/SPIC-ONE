@@ -11,7 +11,8 @@ namespace SPIC.Core.FarmerPortal;
 ///
 ///   expected t/ha = norm x f_ndvi x f_rain x f_npk x f_irrigation
 ///   total t       = t/ha x acres x 0.4047
-///   range         = total x (1 -/+ w), w = 12 % (NDVI value) or 20 % (NDVI picked by look), +4 % rain outside the
+///   range         = total x (1 -/+ w), w = 12 % (NDVI value) or 20 % (NDVI picked by look or left at the default),
+///                   +4 % rain outside the
 ///                   crop's band, +3 % NPK under 70 %, at most 25 %
 ///
 /// The norm (<see cref="CropYieldNorm"/>, seeded with sources) is the yield of good management in Tamil Nadu for the
@@ -43,8 +44,14 @@ public static class YieldEstimator
     public const string MethodDrip = "drip";
     public const string MethodSprinkler = "sprinkler";
 
+    /// <summary>NDVI typed or set on the slider by the farmer.</summary>
     public const string SourceValue = "value";
+    /// <summary>NDVI picked by look (sparse / medium / dense).</summary>
     public const string SourceLook = "look";
+    /// <summary>NDVI left at the sketch's 0.72: nothing was measured or picked (fix round 1).</summary>
+    public const string SourceDefault = "default";
+
+    public static bool IsKnownSource(string? source) => source is SourceValue or SourceLook or SourceDefault;
 
     public sealed record Method(string Code, string Label, string IrrigationClass, string Icon);
 
@@ -188,7 +195,10 @@ public static class YieldEstimator
 
     public const int RangeValue = 12, RangeLook = 20, RangeRainOutside = 4, RangeLowNpk = 3, RangeMax = 25;
 
-    /// <summary>Half width of the range in percent, and why it is that wide.</summary>
+    public const string DefaultNdviReason = "Crop vigour was left at the default; move the slider or pick how your crop looks.";
+
+    /// <summary>Half width of the range in percent, and why it is that wide. An NDVI value gives 12 %; a look, or the
+    /// untouched default (nothing measured), 20 %.</summary>
     public static (int Percent, List<string> Reasons) RangeWidth(YieldPredictRequest r, CropYieldNorm norm)
     {
         var reasons = new List<string>();
@@ -198,7 +208,13 @@ public static class YieldEstimator
             w = RangeLook;
             reasons.Add("Crop vigour was picked by look, not measured.");
         }
-        else reasons.Add("Crop vigour was entered as an NDVI value.");
+        else if (r.NdviSource == SourceValue) reasons.Add("Crop vigour was entered as an NDVI value.");
+        else
+        {
+            // Untouched (or not sent): nothing is known about the canopy, so at least as wide as a look.
+            w = RangeLook;
+            reasons.Add(DefaultNdviReason);
+        }
         if (r.RainfallMm < norm.RainLowMm || r.RainfallMm > norm.RainHighMm)
         {
             w += RangeRainOutside;
@@ -238,7 +254,7 @@ public static class YieldEstimator
         if (r.AreaAcres < MinAcres || r.AreaAcres > MaxAcres) errors["areaAcres"] = "Enter your area in acres (0.1 to 1000).";
         if (double.IsNaN(r.Ndvi) || r.Ndvi < NdviMin - 1e-9 || r.Ndvi > NdviMax + 1e-9)
             errors["ndvi"] = $"Crop vigour (NDVI) must be between {NdviMin:0.00} and {NdviMax:0.00}.";
-        if (r.NdviSource != SourceValue && r.NdviSource != SourceLook) errors["ndviSource"] = "Please set the crop vigour.";
+        if (!IsKnownSource(r.NdviSource)) errors["ndviSource"] = "Please set the crop vigour.";
         if (r.RainfallMm < RainMin || r.RainfallMm > RainMax) errors["rainfallMm"] = $"Season rainfall must be between {RainMin} and {RainMax} mm.";
         if (r.NpkPercent < NpkMin || r.NpkPercent > NpkMax) errors["npkPercent"] = $"Fertilizer applied must be between {NpkMin} % and {NpkMax} %.";
         return errors;
@@ -418,7 +434,39 @@ public static class YieldEstimator
                 Code = "keep",
                 Text = "Your inputs are close to the best for this crop. Keep weeding, pest checks and irrigation on time to hold this yield."
             });
+        // Always 2-3 tips (brief): fill with plain, non-gain tips in this order.
+        foreach (var extra in ExtraTips(dto))
+        {
+            if (top.Count >= MinTips) break;
+            if (top.All(t => t.Code != extra.Code)) top.Add(extra);
+        }
         return top.Take(3).ToList();
+    }
+
+    public const int MinTips = 2;
+
+    /// <summary>Non-gain tips used to make up 2 tips: check the canopy (when no NDVI value was given), plan the harvest
+    /// around the range, and a soil test.</summary>
+    private static IEnumerable<YieldTipDto> ExtraTips(YieldPredictionDto dto)
+    {
+        if (dto.NdviSource != SourceValue)
+            yield return new YieldTipDto
+            {
+                Code = "canopy",
+                Text = "Check how your crop really looks: enter the NDVI from a satellite or drone app, or pick sparse, medium or dense. The range gets narrower."
+            };
+        yield return new YieldTipDto
+        {
+            Code = "plan",
+            Text = $"Plan around the range: arrange labour, bags and transport for up to {Tonnes(dto.HighT)} t, and agree sales only for about {Tonnes(dto.LowT)} t until the crop is in."
+        };
+        yield return new YieldTipDto
+        {
+            Code = "soil",
+            Text = "Take a SPIC soil test before next season, so the fertilizer dose fits your own field.",
+            Href = "/farmer/team",
+            LinkText = "Ask my SPIC team"
+        };
     }
 
     // ------------------------------------------------------------------ helpers

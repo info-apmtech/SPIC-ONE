@@ -10,6 +10,10 @@ public static class YieldUi
     public const string Disclaimer =
         "Estimate from crop norms and your inputs, not a guarantee. This is a model estimate, not a field visit or a satellite reading: weather, pests and disease can change the harvest. Talk to your MDO before you commit a sale.";
 
+    /// <summary>Fix round 1: said under "How we worked this out", so the rain band and curves are not read as sourced.</summary>
+    public const string AssumptionsLine =
+        "The rain band, the factor curves and the irrigation factors are our model's assumptions, built on the sources below; they are not published figures or measured on your field.";
+
     /// <summary>Tonnes as shown (2 decimals under 10 t, 1 under 100 t, whole above).</summary>
     public static string Tonnes(double t) => YieldEstimator.Tonnes(t);
 
@@ -109,6 +113,9 @@ public static class YieldUi
         "ndvi" => "bi-tree",
         "rain" => "bi-cloud-rain-heavy",
         "drip" => "bi-droplet-half",
+        "canopy" => "bi-binoculars",
+        "plan" => "bi-truck",
+        "soil" => "bi-moisture",
         _ => "bi-hand-thumbs-up"
     };
 

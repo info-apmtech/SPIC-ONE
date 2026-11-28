@@ -21,18 +21,27 @@ public static class CropYieldNormSeed
     private const string I = "Irrigated";
     private const string R = "Rainfed";
 
+    /// <summary>Rows whose Ky is FAO paper 33's own value for the crop.</summary>
     private const string Fao = "FAO water need (Irrigation Water Management manual 3, table 5) and Ky (FAO I&D paper 33)";
+    /// <summary>Rice: FAO paper 33 has no Ky, so 1.10 is assumed (fix round 1: the farmer-visible source says so).</summary>
+    private const string FaoKyAssumed = "FAO water need (Irrigation Water Management manual 3, table 5); Ky assumed (rice is not in FAO I&D paper 33)";
+    /// <summary>Black gram and green gram: FAO's bean water need and Ky stand in for the pulses.</summary>
+    private const string FaoBean = "FAO water need and Ky of FAO's bean as a pulses proxy (Irrigation Water Management manual 3, table 5; FAO I&D paper 33)";
+
+    /// <summary>Crops whose Ky is assumed / a proxy (the harness checks their sources never claim FAO 33's own Ky).</summary>
+    public static readonly IReadOnlySet<string> AssumedKyCrops = new HashSet<string> { "Paddy" };
+    public static readonly IReadOnlySet<string> ProxyKyCrops = new HashSet<string> { "Black gram", "Green gram" };
     private const string Des = "DES Statistical Hand Book of Tamil Nadu 2022-23";
 
     public static readonly CropYieldNorm[] Rows =
     {
         Row(1, "Paddy", I, 5.8m, 4.5m, 7.0m, 5.2m, 800, 1300, 450, 700, 1.10m, "paddy grain",
             "State average 3,500 kg/ha is milled rice; at 67 % milling out-turn about 5.2 t/ha of paddy. Ky assumed (rice is not in FAO paper 33).",
-            $"TNAU rice varieties: CO 51 6,623 kg/ha, ADT 45 5,900 kg/ha; {Des}: rice 3,500 kg/ha; {Fao}",
+            $"TNAU rice varieties: CO 51 6,623 kg/ha, ADT 45 5,900 kg/ha; {Des}: rice 3,500 kg/ha; {FaoKyAssumed}",
             "https://agritech.tnau.ac.in/agriculture/CO51.html", 10),
         Row(2, "Paddy", R, 3.6m, 2.5m, 4.5m, null, 800, 1300, 450, 700, 1.10m, "paddy grain",
             "Semi-dry / rainfed rice of the Ramanathapuram and Sivaganga tracts. Ky assumed.",
-            $"TNAU ARS Paramakudi: ANNA (R) 4 3.7 t/ha, PMK (R) 3 3.2-3.5 t/ha; {Fao}",
+            $"TNAU ARS Paramakudi: ANNA (R) 4 3.7 t/ha, PMK (R) 3 3.2-3.5 t/ha; {FaoKyAssumed}",
             "https://tnau.ac.in/site/ars-paramakudi/?p=379", 11),
         Row(3, "Maize", I, 7.5m, 5.5m, 9.0m, 7.0m, 500, 900, 500, 800, 1.25m, "grain",
             "Hybrids. FAO: a good commercial irrigated grain yield is 6-9 t/ha.",
@@ -68,19 +77,19 @@ public static class CropYieldNormSeed
             "https://nrcb.icar.gov.in/oldwebsite/crop-production.php", 60),
         Row(11, "Black gram", I, 0.9m, 0.6m, 1.1m, null, 450, 700, 300, 500, 1.15m, "grain",
             "Water need and Ky of FAO's bean (pulses).",
-            $"TNAU Pulses Research Station Vamban: VBN 10 900 kg/ha irrigated, VBN 8 900 kg/ha; {Fao}",
+            $"TNAU Pulses Research Station Vamban: VBN 10 900 kg/ha irrigated, VBN 8 900 kg/ha; {FaoBean}",
             "https://tnau.ac.in/site/prs-vamban/?p=379", 70),
         Row(12, "Black gram", R, 0.75m, 0.45m, 0.9m, 0.68m, 450, 700, 300, 500, 1.15m, "grain",
             "Water need and Ky of FAO's bean (pulses).",
-            $"TNAU Pulses Research Station Vamban: VBN 10 750 kg/ha rainfed; {Des}: black gram 675 kg/ha; {Fao}",
+            $"TNAU Pulses Research Station Vamban: VBN 10 750 kg/ha rainfed; {Des}: black gram 675 kg/ha; {FaoBean}",
             "https://tnau.ac.in/site/prs-vamban/?p=379", 71),
         Row(13, "Green gram", I, 1.0m, 0.7m, 1.25m, null, 450, 700, 300, 500, 1.15m, "grain",
             "Water need and Ky of FAO's bean (pulses).",
-            $"TNAU green gram VBN 4: 1,251 kg/ha irrigated (EJPB 2021); TNAU green gram 850-1,000 kg/ha; {Fao}",
+            $"TNAU green gram VBN 4: 1,251 kg/ha irrigated (EJPB 2021); TNAU green gram 850-1,000 kg/ha; {FaoBean}",
             "https://agritech.tnau.ac.in/agriculture/CropProduction/Pulses/organic%20package%20greengram.html", 80),
         Row(14, "Green gram", R, 0.8m, 0.35m, 1.0m, 0.36m, 450, 700, 300, 500, 1.15m, "grain",
             "Water need and Ky of FAO's bean (pulses). The state average (361 kg/ha) is low: most green gram is a rice-fallow or rainfed catch crop.",
-            $"TNAU green gram VBN 4: 936 kg/ha rainfed (EJPB 2021); {Des}: green gram 361 kg/ha; {Fao}",
+            $"TNAU green gram VBN 4: 936 kg/ha rainfed (EJPB 2021); {Des}: green gram 361 kg/ha; {FaoBean}",
             "https://agritech.tnau.ac.in/agriculture/CropProduction/Pulses/organic%20package%20greengram.html", 81)
     };
 

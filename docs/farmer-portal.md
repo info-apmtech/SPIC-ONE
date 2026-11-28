@@ -968,12 +968,17 @@ Contracts: `SPIC.Core/DTOs/YieldDtos.cs`. Client: `Services/FarmerYieldApi.cs` (
   with an over-application warning.
 - **f_irrigation**: canal / borewell and rainfed 1.00, drip 1.05, sprinkler 1.02, paddy under drip or sprinkler 0.90
   (aerobic rice). Model assumptions.
-- **Range** +/- 12 % with an NDVI value, 20 % when picked by look, +4 % rain outside the band, +3 % NPK under 70 %, at most
-  25 %. Ring = 100 - 2.5 x range (70+ High, 40-69 Medium, under 40 Low confidence).
+- **Range** +/- 12 % with an NDVI value (`ndviSource` "value": the farmer moved the slider or typed it), 20 % when picked by
+  look ("look") or left untouched at 0.72 ("default", also when the field is not sent; reason "Crop vigour was left at the
+  default; move the slider or pick how your crop looks."), +4 % rain outside the band, +3 % NPK under 70 %, at most 25 %.
+  Ring = 100 - 2.5 x range (70+ High, 40-69 Medium, under 40 Low confidence). So the sketch as a farmer first sees it
+  (NDVI untouched) is +/- 20 %, Medium confidence (fix round 1).
 - **Factor loss** = expected / f - expected (the yield that factor costs on the whole area); tips are the largest gains
   (full NPK, fuller canopy, rain), drip for non-paddy crops on canal / borewell, or "close to the best" when nothing costs
-  yield. The owner's sketch (Paddy, 3 acres, canal, 0.72, 850 mm, 90 %) gives 5.70 t/ha, **6.92 t (69 quintals)**,
-  6.09-7.75 t, high confidence.
+  yield. Always 2-3 tips: when fewer than two gain tips exist, plain ones are added in this order: check the canopy (when
+  NDVI was not entered), plan labour / bags / transport around the range, a SPIC soil test. The owner's sketch (Paddy,
+  3 acres, canal, 0.72, 850 mm, 90 %) gives 5.70 t/ha, **6.92 t (69 quintals)**: 5.53-8.30 t, medium confidence with the
+  NDVI untouched; 6.09-7.75 t, high confidence with 0.72 entered.
 
 ### Tables (migration `V41_YieldForecast`)
 
@@ -998,7 +1003,9 @@ Contracts: `SPIC.Core/DTOs/YieldDtos.cs`. Client: `Services/FarmerYieldApi.cs` (
   t/ha; PRS Vamban VBN 10 / VBN 8; green gram VBN 4), ICAR-NRCB (Robusta 47.2 t/ha conventional planting), DES Chennai
   Statistical Hand Book of Tamil Nadu 2022-23 tables 4.3 / 4.20 (state averages, read from the PDF), FAO Irrigation Water
   Management manual 3 table 5 (seasonal water need) and FAO Irrigation and Drainage Paper 33 (Ky). Rice is not in FAO 33, so
-  its Ky is assumed. The rain bands are model choices (the season rainfall in which the norm holds), not published figures.
+  its Ky is assumed and paddy's source says "Ky assumed"; the pulses' source says "Ky of FAO's bean as a pulses proxy"; only
+  the other rows say "Ky (FAO I&D paper 33)" (pinned by the harness). "How we worked this out" also says the rain band, the
+  curves and the irrigation factors are the model's assumptions. The rain bands are model choices (the season rainfall in which the norm holds), not published figures.
   Read 2026-11-28; agritech.tnau.ac.in refused direct connections, so the TNAU figures come from search extracts of those
   pages and of the TNAU station pages.
 - `YieldPredictions` (Id bigint, FarmerUserId, NormId, Crop, Method, IrrigationClass, AreaAcres, Ndvi, NdviSource, RainfallMm,
