@@ -124,6 +124,8 @@ builder.Services.AddSingleton(new PlatformService
 {
     IsWeb = true
 });
+// Leaf check "Take a photo": mobile browsers honour capture="environment" (recheck fix U2: no native camera here).
+builder.Services.AddSingleton<INativeCamera, NoNativeCamera>();
 builder.Services.AddTransient<AuthHttpMessageHandler>();
 builder.Services.AddScoped(sp =>
 {

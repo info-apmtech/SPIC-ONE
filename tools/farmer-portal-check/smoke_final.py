@@ -424,7 +424,7 @@ def ins(query):
 
 
 def group_r(base):
-    print("Group R: recheck fixes (B1 shared SAS collection, B2 file subtrees)")
+    print("Group R: recheck fixes (B1 shared SAS collection, B2 file subtrees, B3 prefixed phone)")
     phone = throwaway_phone()
     login = sign_in(base, phone)
     tok = login["token"]
@@ -513,6 +513,38 @@ def group_r(base):
                 pass
         st, _, _ = call(base, "DELETE", "api/Farmer/profile", token=tok)
         check("recheck: the throw-away farmer is deleted again (204)", st == 204, st)
+
+    group_r_phone(base)
+
+
+def group_r_phone(base):
+    """B3: a Farmer account whose PhoneNumber is stored as '+91 ...' (as admin-made SAS accounts are) can save its
+    profile, and the next OTP sign-in stores the 10 digits (linking the SAS record that carried the old spelling)."""
+    print("Group R: recheck fix B3 (phone stored with a prefix)")
+    phone = throwaway_phone()
+    sign_in(base, phone)
+    uid = sql(f'select "Id" from "AppUsers" where "UserName" = {q("f" + phone)}')
+    spelled = "+91 " + phone
+    sql(f'update "AppUsers" set "PhoneNumber" = {q(spelled)} where "Id" = {q(uid)}')
+    sas = ins(f'insert into "SasFarmers" ("Name","Mobile","CreatedAt","UpdatedAt","IsDeleted") values (\'[smoke-recheck] B3\', {q(spelled)}, now(), now(), false)')
+    tok = None
+    try:
+        tok = sign_in(base, phone)["token"]
+        stored = sql(f'select "PhoneNumber" from "AppUsers" where "Id" = {q(uid)}')
+        check("B3: the OTP sign-in rewrites a '+91 ...' account phone to the 10 digits", stored == phone, stored[:3] + "...")
+        linked = sql(f'select coalesce("UserId", \'\') from "SasFarmers" where "Id" = {sas}')
+        check("B3: the SAS record that carried the old spelling is linked to the account", linked == uid, bool(linked))
+        # The profile save copies the account phone: put the prefixed spelling back to prove the save normalises it.
+        sql(f'update "AppUsers" set "PhoneNumber" = {q("+91" + phone)} where "Id" = {q(uid)}')
+        st, b, _ = call(base, "PUT", "api/Farmer/profile", PROFILE, token=tok)
+        check("B3: a profile save with a '+91...' account phone -> 200 (was 409 'try again')", st == 200, (st, str(b)[:200]))
+        saved = sql(f'select "Phone" from "FarmerProfiles" where "UserId" = {q(uid)}')
+        check("B3: FarmerProfiles.Phone holds the 10 digits", saved == phone, saved[:3] + "...")
+    finally:
+        if tok:
+            call(base, "DELETE", "api/Farmer/profile", token=tok)
+        sql(f'delete from "SasFarmers" where "Id" = {sas}')
+        check("B3: the throw-away farmer is gone again", sql(f'select count(*) from "AppUsers" where "Id" = {q(uid)}') == "0")
 
 
 def main():

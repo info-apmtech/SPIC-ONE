@@ -1261,3 +1261,29 @@ merge. Harness: `FarmerPortalRecheckTests`. Smoke: `smoke_final.py --group R` (p
   replies; rows in the transaction, files after the commit), clears `UserId` / `UserName` on `AppPageViews`, and clears the
   `Message` of the kept (handled) call-backs. `FarmerPrivacyRules`, the privacy page and the "Hardening" text say so.
   Ruling: EXIF stripping of farmer Community photos is not done (see the recheck report).
+
+### Group 2: broken flows
+
+- **U1 farmer refresh token.** `SessionPersistence.TryRestoreAsync(store, login, http)` (Login.razor, FarmerLogin.razor):
+  when the stored JWT is a **Farmer** JWT that is expired or has under a minute left and a refresh token is stored, it
+  calls `api/Authentication/refresh` before showing the form; the stored refresh token is cleared only after that attempt
+  fails. MainLayout restores a page refresh the same way, and its 5-second expiry tick refreshes a farmer session
+  silently 3 minutes before expiry (`FarmerRefreshAhead`, at most once a minute, before the 2-minute warning) and tries
+  once more at expiry before AutoLogout. Ruling: Farmer role only; staff sessions behave as before (owner decides).
+  Checked with `tools/farmer-portal-check/verify_recheck_session.py` against an API run with `Jwt__ExpiryMinutes=4`.
+- **U2 Android camera.** `INativeCamera` (Shared) with `MauiCamera` (MAUI host, `MediaPicker.CapturePhotoAsync`,
+  available on Android only) and `NoNativeCamera` (web host). On Android the leaf check's "Take a photo" / "Retake" are
+  buttons that open the camera; the photo goes up as taken (the server turns it upright and re-encodes it). The Android
+  manifest has the CAMERA permission, an optional `android.hardware.camera` feature and the IMAGE_CAPTURE `<queries>`
+  entry. Web and iOS keep `InputFile capture="environment"`.
+- **U3 SPIC AI thread loading.** A load version: only the newest thread load clears "Opening your chat...", early
+  returns clear it, and New chat ends any load.
+- **B3 phone spelling.** `FarmerProfiles.Phone` gets `FarmerPhone.ProfilePhone` (the 10 digits). At OTP sign-in a Farmer
+  account whose `PhoneNumber` is another spelling of the verified number (`FarmerPhone.IsOtherSpelling`, for example
+  "+91 98765 43210") is rewritten to the 10 digits; the unlinked SAS records that carried the old spelling are linked to
+  the account first, so they keep showing up. The profile save answers 409 only for a unique violation (23505); any other
+  `DbUpdateException` is logged (type and SQL state only) and answers 500.
+- **U5 farmer sign-in page.** Log out, AutoLogout, the expiry dialog and a 401 send a farmer to `/farmer/login` (role read
+  before the session is cleared); staff still go to `/login`. A sign-in stores `spic_last_signin_farmer` (persistent, not
+  cleared on sign-out, removed by a staff sign-in), so `/` and a signed-out link go to `/farmer/login` on a farmer's
+  device; a signed-out `/farmer/*` link always does.

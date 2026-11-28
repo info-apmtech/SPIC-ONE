@@ -386,22 +386,34 @@
         await LoadThreadAsync();
     }
 
+    /// <summary>Bumped by every thread load and by New chat (recheck fix U3): only the newest load may clear
+    /// <see cref="_threadLoading"/> or show its result, and an early return or New chat always clears it.</summary>
+    private int _threadLoadVersion;
+
     private async Task LoadThreadAsync()
     {
+        var version = ++_threadLoadVersion;
         _loadedId = ConversationId;
         _threadError = null;
         _askError = null;
         if (ConversationId is not { } id)
         {
+            _threadLoading = false;
             Current = null;
             return;
         }
-        if (Current?.Id == id) return;
+        if (Current?.Id == id)
+        {
+            _threadLoading = false;
+            return;
+        }
 
         _threadLoading = true;
         StateHasChanged();
         var result = await Api.ConversationAsync(id, _cts.Token);
-        if (_cts.IsCancellationRequested || ConversationId != id) return;
+        if (_cts.IsCancellationRequested) return;
+        // A newer load or New chat owns the flag now; this stale answer changes nothing.
+        if (version != _threadLoadVersion || ConversationId != id) return;
         _threadLoading = false;
         if (result.Value is { } detail)
         {
@@ -417,6 +429,9 @@
 
     private void NewChat()
     {
+        _threadLoadVersion++;
+        _threadLoading = false;
+        _threadError = null;
         _pending = null;
         _askError = null;
         Current = null;

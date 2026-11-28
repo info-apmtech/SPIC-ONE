@@ -6,6 +6,7 @@
 @inject ISessionStore SessionStore
 @inject LoginState LoginState
 @inject NavigationManager Nav
+@inject HttpClient Http
 
 <div class="@(Platform.IsWeb ? "login-page web-bg" : "login-page app-bg")">
 
@@ -89,9 +90,18 @@
         // on the login form. Anything invalid or expired falls through to the form.
         try
         {
-            if (await SessionPersistence.TryRestoreAsync(SessionStore, LoginState))
+            if (await SessionPersistence.TryRestoreAsync(SessionStore, LoginState, Http))
             {
                 Nav.NavigateTo(LoginState.LandingPage, replace: true);
+                return;
+            }
+
+            // Recheck U5: "/" (the app's start page) on a device whose last sign-in was a farmer opens the farmer
+            // sign-in. An explicit /login keeps the staff form.
+            if (Nav.ToBaseRelativePath(Nav.Uri).Split('?', '#')[0].Length == 0
+                && await SessionPersistence.LastSignInWasFarmerAsync(SessionStore))
+            {
+                Nav.NavigateTo(SessionPersistence.FarmerLoginPath, replace: true);
                 return;
             }
         }

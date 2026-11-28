@@ -4,6 +4,7 @@
 @inject FarmerSession Farmer
 @inject FarmerLeafCheckApi Api
 @inject LoginState LoginState
+@inject INativeCamera Camera
 
 @*
     Leaf check (farmer portal Task 6, api/Farmer/leaf-check). Pick the crop, take a photo (camera) or choose one from
@@ -83,9 +84,19 @@
                             <p class="fplc-drop__text">One leaf, in daylight, on a plain background</p>
                         }
                         <div class="fplc-pick">
-                            <label class="fp-btn fp-btn--primary fplc-pick__btn" for="fplc-camera">
-                                <i class="bi bi-camera-fill" aria-hidden="true"></i> Take a photo
-                            </label>
+                            @if (Camera.IsAvailable)
+                            {
+                                @* Android app: the WebView's file chooser cannot open the camera (recheck U2). *@
+                                <button type="button" class="fp-btn fp-btn--primary fplc-pick__btn" disabled="@(_submitting || _reading)" @onclick="CaptureNativeAsync">
+                                    <i class="bi bi-camera-fill" aria-hidden="true"></i> Take a photo
+                                </button>
+                            }
+                            else
+                            {
+                                <label class="fp-btn fp-btn--primary fplc-pick__btn" for="fplc-camera">
+                                    <i class="bi bi-camera-fill" aria-hidden="true"></i> Take a photo
+                                </label>
+                            }
                             <label class="fp-btn fp-btn--secondary fplc-pick__btn" for="fplc-gallery">
                                 <i class="bi bi-images" aria-hidden="true"></i> Choose from gallery
                             </label>
@@ -107,7 +118,14 @@
                         <div class="fplc-preview__bar">
                             <span class="fp-caption">@_photoInfo</span>
                             <span class="fplc-preview__actions">
-                                <label class="fp-btn fp-btn--ghost fp-btn--sm" for="fplc-camera"><i class="bi bi-camera" aria-hidden="true"></i> Retake</label>
+                                @if (Camera.IsAvailable)
+                                {
+                                    <button type="button" class="fp-btn fp-btn--ghost fp-btn--sm" @onclick="CaptureNativeAsync"><i class="bi bi-camera" aria-hidden="true"></i> Retake</button>
+                                }
+                                else
+                                {
+                                    <label class="fp-btn fp-btn--ghost fp-btn--sm" for="fplc-camera"><i class="bi bi-camera" aria-hidden="true"></i> Retake</label>
+                                }
                                 <label class="fp-btn fp-btn--ghost fp-btn--sm" for="fplc-gallery"><i class="bi bi-images" aria-hidden="true"></i> Another photo</label>
                             </span>
                         </div>
@@ -304,6 +322,45 @@
         catch (Exception)
         {
             SetPhotoError("We could not open this photo. Please take a new photo and try again.");
+        }
+        finally
+        {
+            _reading = false;
+        }
+    }
+
+    /// <summary>"Take a photo" on the Android app (recheck fix U2): the host's camera (MediaPicker) instead of the
+    /// file input. The photo goes up as taken; the server turns it upright, shrinks and re-encodes it.</summary>
+    private async Task CaptureNativeAsync()
+    {
+        if (_submitting || _reading) return;
+        _reading = true;
+        _formError = null;
+        ClearError("photo");
+        try
+        {
+            var photo = await Camera.CaptureAsync();
+            if (photo is null) return; // cancelled: keep the current photo
+            if (photo.Error is not null || photo.Bytes is not { Length: > 0 } bytes)
+            {
+                SetPhotoError(photo.Error ?? "We could not open this photo. Please take a new photo and try again.");
+                return;
+            }
+            var max = _status?.MaxPhotoBytes ?? SPIC.Core.FarmerPortal.LeafCheckRules.MaxPhotoBytes;
+            if (bytes.Length > max)
+            {
+                SetPhotoError("This photo is too large (over 8 MB). Please take a new photo or choose a smaller one.");
+                return;
+            }
+            var type = photo.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase) ? photo.ContentType : "image/jpeg";
+            _photo = bytes;
+            _photoType = type;
+            _previewUrl = LeafCheckUi.DataUrl(type, bytes);
+            _photoInfo = $"{(string.IsNullOrWhiteSpace(photo.FileName) ? "Photo" : Short(photo.FileName))} · {LeafCheckUi.Size(bytes.Length)}";
+        }
+        catch (Exception)
+        {
+            SetPhotoError("We could not open the camera. Please try again, or choose a photo from the gallery.");
         }
         finally
         {

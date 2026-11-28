@@ -292,8 +292,20 @@ namespace SpicAPI.Controllers
             if (existing is not null)
             {
                 // The OTP just proved the number (an admin-made Farmer account may not say so yet).
-                if (!existing.PhoneNumberConfirmed || string.IsNullOrEmpty(existing.PhoneNumber))
+                var otherSpelling = FarmerPhone.IsOtherSpelling(existing.PhoneNumber, phone);
+                if (!existing.PhoneNumberConfirmed || string.IsNullOrEmpty(existing.PhoneNumber) || otherSpelling)
                 {
+                    if (otherSpelling)
+                    {
+                        // Recheck B3: store the 10 digits. The SAS reads matched SasFarmers.Mobile against the old
+                        // spelling, so first link the unlinked SAS records that carry it (they keep showing up).
+                        var old = existing.PhoneNumber!;
+                        await _db.SasFarmers.Where(f => !f.IsDeleted && f.UserId == null && f.Mobile == old)
+                            .ExecuteUpdateAsync(s => s.SetProperty(f => f.UserId, existing.Id)
+                                .SetProperty(f => f.UpdatedBy, existing.UserName)
+                                .SetProperty(f => f.UpdatedAt, DateTime.Now));
+                        existing.PhoneNumber = phone;
+                    }
                     existing.PhoneNumber ??= phone;
                     existing.PhoneNumberConfirmed = true;
                     await _db.SaveChangesAsync();

@@ -56,6 +56,25 @@ public static partial class FarmerPhone
         "+91-" + normalised
     };
 
+    /// <summary>
+    /// True when <paramref name="stored"/> is another spelling (see <see cref="StoredVariants"/>) of the verified
+    /// number <paramref name="normalised"/>, not the plain 10 digits (recheck fix B3: an admin-made Farmer account
+    /// with "+91 98765 43210" is rewritten to the 10 digits at OTP sign-in).
+    /// </summary>
+    public static bool IsOtherSpelling(string? stored, string normalised) =>
+        !string.IsNullOrEmpty(stored) && stored != normalised && StoredVariants(normalised).Contains(stored);
+
+    /// <summary>
+    /// The value for FarmerProfiles.Phone (varchar 10) from the account's PhoneNumber: the normalised 10 digits when
+    /// that is a valid mobile, else the profile's current value (recheck fix B3; a "+91..." spelling used to overflow
+    /// the column and every profile save failed).
+    /// </summary>
+    public static string ProfilePhone(string? accountPhone, string? current)
+    {
+        var n = Normalise(accountPhone);
+        return IsValid(n) ? n : (current ?? string.Empty);
+    }
+
     /// <summary>Identity user name of a self signed-up farmer.</summary>
     public static string UserNameFor(string normalised) => "f" + normalised;
 }

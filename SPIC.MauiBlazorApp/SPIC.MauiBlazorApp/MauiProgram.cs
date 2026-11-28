@@ -115,6 +115,8 @@ namespace SPIC.MauiBlazorApp
             {
                 IsWeb = false
             });
+            // Leaf check "Take a photo": MediaPicker on Android, the file input elsewhere (recheck fix U2).
+            builder.Services.AddSingleton<INativeCamera, SPIC.MauiBlazorApp.Services.MauiCamera>();
             builder.Services.AddTransient<AuthHttpMessageHandler>();
             builder.Services.AddScoped(sp =>
             {

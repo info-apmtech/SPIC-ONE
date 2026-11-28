@@ -205,6 +205,7 @@
 
     private async Task HandleExpiredAsync()
     {
+        var loginPath = LoginPath;
         try
         {
             await OnExpired.InvokeAsync();
@@ -212,7 +213,7 @@
         catch (Exception) { /* never block the redirect */ }
 
         if (_disposed) return;
-        Navigation.NavigateTo(LoginPath);
+        Navigation.NavigateTo(loginPath);
     }
 
     private async Task ContinueAsync()
@@ -286,6 +287,8 @@
     private async Task SignOutNowAsync()
     {
         _visible = false;
+        // Read before LoginState.Logout(): the layout passes the role's sign-in page (recheck U5).
+        var loginPath = LoginPath;
 
         LoginState.Logout();
         LoginState.Expiration = default;
@@ -297,7 +300,7 @@
         }
         catch (Exception) { /* storage cleanup is best effort */ }
 
-        Navigation.NavigateTo(LoginPath);
+        Navigation.NavigateTo(loginPath);
     }
 
     private static string FormatRemaining(TimeSpan t)

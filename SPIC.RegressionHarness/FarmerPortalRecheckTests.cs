@@ -13,6 +13,7 @@ using SPIC.Core.FarmerPortal;
 using Spic.Infrastructure.Data;
 using SpicAPI.Controllers;
 using SpicAPI.Services;
+using SPIC.MauiBlazorApp.Shared.Services;
 
 namespace SPIC.RegressionHarness;
 
@@ -30,6 +31,190 @@ internal static class FarmerPortalRecheckTests
 		SasSampleScope();
 		FileSubtrees();
 		DeletionText();
+		PhoneSpelling();
+		FarmerSessionRules();
+		FarmerRestore();
+		ShellSources();
+	}
+
+	// ------------------------------------------------------------------ B3
+
+	private static void PhoneSpelling()
+	{
+		Check.That("B3: '+919876543210' is another spelling of the verified number", FarmerPhone.IsOtherSpelling("+919876543210", "9876543210"));
+		Check.That("B3: '+91 9876543210' too", FarmerPhone.IsOtherSpelling("+91 9876543210", "9876543210"));
+		Check.That("B3: '09876543210' too", FarmerPhone.IsOtherSpelling("09876543210", "9876543210"));
+		Check.That("B3: the plain 10 digits are not 'another spelling' (nothing to rewrite)", !FarmerPhone.IsOtherSpelling("9876543210", "9876543210"));
+		Check.That("B3: a different number is not another spelling", !FarmerPhone.IsOtherSpelling("+919876543211", "9876543210"));
+		Check.That("B3: no stored number is not another spelling", !FarmerPhone.IsOtherSpelling(null, "9876543210"));
+		Check.Equal("B3: the profile phone is the 10 digits of '+91-9876543210'", "9876543210", FarmerPhone.ProfilePhone("+91-9876543210", null));
+		Check.Equal("B3: the profile phone is the 10 digits of '+91 98765 43210'", "9876543210", FarmerPhone.ProfilePhone("+91 98765 43210", "x"));
+		Check.That("B3: the profile phone always fits varchar(10)", new[] { "+919876543210", "0091 98765 43210", "09876543210", "9876543210" }
+			.All(p => FarmerPhone.ProfilePhone(p, null).Length <= 10));
+		Check.Equal("B3: an invalid account phone keeps the profile's current value", "9876543210", FarmerPhone.ProfilePhone("12345", "9876543210"));
+		var unique = new DbUpdateException("x", new Npgsql.PostgresException("dup", "ERROR", "ERROR", Npgsql.PostgresErrorCodes.UniqueViolation));
+		var tooLong = new DbUpdateException("x", new Npgsql.PostgresException("long", "ERROR", "ERROR", Npgsql.PostgresErrorCodes.StringDataRightTruncation));
+		Check.That("B3: a unique violation (23505) is the 'saved twice' race (409)", FarmerProfileController.IsUniqueViolation(unique));
+		Check.That("B3: value too long (22001) is not a race (500, logged)", !FarmerProfileController.IsUniqueViolation(tooLong));
+		Check.That("B3: a DbUpdateException without a Postgres error is not a race", !FarmerProfileController.IsUniqueViolation(new DbUpdateException("x")));
+	}
+
+	// ------------------------------------------------------------------ U1 / U5 rules
+
+	private static string FakeJwt(string role, DateTime exp)
+	{
+		static string B64(string s) => Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(s)).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+		var payload = "{\"http://schemas.microsoft.com/ws/2008/06/identity/claims/role\":\"" + role + "\",\"nameid\":\"u-" + role +
+			"\",\"exp\":" + new DateTimeOffset(exp).ToUnixTimeSeconds() + "}";
+		return B64("{\"alg\":\"none\"}") + "." + B64(payload) + ".sig";
+	}
+
+	private static void FarmerSessionRules()
+	{
+		var now = new DateTime(2026, 11, 28, 6, 0, 0, DateTimeKind.Utc);
+		Check.Equal("U1: the role is read from a farmer JWT", AppRole.Farmer, SessionPersistence.RoleOf(FakeJwt("Farmer", now)) ?? AppRole.Admin);
+		Check.Equal("U1: and from a staff JWT", AppRole.MDO, SessionPersistence.RoleOf(FakeJwt("MDO", now)) ?? AppRole.Admin);
+		Check.That("U1: no token has no role", SessionPersistence.RoleOf(null) is null && SessionPersistence.RoleOf("junk") is null);
+		Check.That("U1: an expired farmer JWT needs a refresh", SessionPersistence.NeedsFarmerRefresh(AppRole.Farmer, now.AddMinutes(-5), now));
+		Check.That("U1: a farmer JWT with under a minute left needs a refresh", SessionPersistence.NeedsFarmerRefresh(AppRole.Farmer, now.AddSeconds(30), now));
+		Check.That("U1: a farmer JWT with time left does not", !SessionPersistence.NeedsFarmerRefresh(AppRole.Farmer, now.AddMinutes(30), now));
+		Check.That("U1: staff are never refreshed on restore (owner decides)", !SessionPersistence.NeedsFarmerRefresh(AppRole.MDO, now.AddMinutes(-5), now));
+		Check.That("U1: the silent refresh runs before the 2-minute warning", SessionPersistence.FarmerRefreshAhead > TimeSpan.FromMinutes(2));
+		Check.Equal("U5: a farmer signs out to the farmer sign-in", "/farmer/login", SessionPersistence.LoginPathFor(AppRole.Farmer));
+		Check.Equal("U5: staff sign out to /login (unchanged)", "/login", SessionPersistence.LoginPathFor(AppRole.MDO));
+		Check.Equal("U5: no role signs out to /login", "/login", SessionPersistence.LoginPathFor(null));
+		Check.Equal("U5: a signed-out /farmer/fertilizer link opens the farmer sign-in", "/farmer/login", SessionPersistence.SignedOutLoginPath("farmer/fertilizer", false));
+		Check.Equal("U5: a signed-out /farmer link too", "/farmer/login", SessionPersistence.SignedOutLoginPath("farmer", false));
+		Check.Equal("U5: a staff link on a staff device keeps /login", "/login", SessionPersistence.SignedOutLoginPath("Sas/Collections", false));
+		Check.Equal("U5: any signed-out link on a device whose last sign-in was a farmer opens the farmer sign-in", "/farmer/login", SessionPersistence.SignedOutLoginPath("", true));
+		Check.That("U5: a look-alike staff route is not a farmer link", SessionPersistence.SignedOutLoginPath("farmer-requests", false) == "/login");
+		Check.That("U5: the 'last sign-in was a farmer' flag survives sign-out (not in SessionKeys.All)", !SessionKeys.All.Contains(SessionKeys.LastSignInFarmer));
+	}
+
+	private sealed class MemoryStore : ISessionStore
+	{
+		public readonly Dictionary<string, string> Session = new();
+		public readonly Dictionary<string, string> Persistent = new();
+		public Task<string?> GetAsync(string key) =>
+			Task.FromResult<string?>(Session.TryGetValue(key, out var v) && v.Length > 0 ? v : Persistent.TryGetValue(key, out var p) ? p : null);
+		public Task SetAsync(string key, string value) { Session[key] = value; return Task.CompletedTask; }
+		public Task RemoveAsync(string key) { Session.Remove(key); return Task.CompletedTask; }
+		public Task SetPersistentAsync(string key, string value) { Persistent[key] = value; return Task.CompletedTask; }
+		public Task RemovePersistentAsync(string key) { Persistent.Remove(key); return Task.CompletedTask; }
+	}
+
+	private sealed class RefreshStub : HttpMessageHandler
+	{
+		private readonly Func<HttpResponseMessage> _answer;
+		public int Calls;
+		public string? LastPath;
+		public RefreshStub(Func<HttpResponseMessage> answer) => _answer = answer;
+		protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+		{
+			Calls++;
+			LastPath = request.RequestUri?.AbsolutePath;
+			return Task.FromResult(_answer());
+		}
+	}
+
+	private static void FarmerRestore()
+	{
+		var expired = DateTime.UtcNow.AddMinutes(-10);
+		var fresh = FakeJwt("Farmer", DateTime.UtcNow.AddHours(1));
+		var freshExp = DateTime.UtcNow.AddHours(1);
+
+		// 1. Expired farmer JWT + stored refresh token: refreshed before the form is shown.
+		var store = new MemoryStore();
+		store.Session[SessionKeys.Token] = FakeJwt("Farmer", expired);
+		store.Session[SessionKeys.Expiration] = expired.ToString("O");
+		store.Session[SessionKeys.RefreshToken] = "old-refresh";
+		var ok = new RefreshStub(() => new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+		{
+			Content = System.Net.Http.Json.JsonContent.Create(new RefreshTokenResponseDto { Token = fresh, Expiration = freshExp, RefreshToken = "new-refresh" })
+		});
+		var login = new LoginState();
+		var restored = SessionPersistence.TryRestoreAsync(store, login, new HttpClient(ok) { BaseAddress = new Uri("http://localhost/") }).GetAwaiter().GetResult();
+		Check.That("U1: an expired farmer session is restored through the refresh token", restored && login.Token == fresh);
+		Check.Equal("U1: the refresh endpoint was called once", "1|/api/Authentication/refresh", ok.Calls + "|" + ok.LastPath);
+		Check.Equal("U1: the new refresh token is stored", "new-refresh", store.Session.GetValueOrDefault(SessionKeys.RefreshToken));
+		Check.Equal("U1: the new JWT is stored", fresh, store.Session.GetValueOrDefault(SessionKeys.Token));
+
+		// 2. The refresh fails: the form is shown and only then the refresh token is forgotten.
+		var store2 = new MemoryStore();
+		store2.Session[SessionKeys.Token] = FakeJwt("Farmer", expired);
+		store2.Session[SessionKeys.Expiration] = expired.ToString("O");
+		store2.Session[SessionKeys.RefreshToken] = "dead-refresh";
+		store2.Persistent[SessionKeys.RefreshToken] = "dead-refresh";
+		var refused = new RefreshStub(() => new HttpResponseMessage(System.Net.HttpStatusCode.Unauthorized));
+		var login2 = new LoginState();
+		var restored2 = SessionPersistence.TryRestoreAsync(store2, login2, new HttpClient(refused) { BaseAddress = new Uri("http://localhost/") }).GetAwaiter().GetResult();
+		Check.That("U1: a refused refresh falls back to the sign-in form", !restored2 && refused.Calls == 1);
+		Check.That("U1: the refused refresh token is cleared from both tiers after the attempt",
+			!store2.Session.ContainsKey(SessionKeys.RefreshToken) && !store2.Persistent.ContainsKey(SessionKeys.RefreshToken));
+
+		// 3. Staff: unchanged (no refresh call on restore).
+		var store3 = new MemoryStore();
+		store3.Session[SessionKeys.Token] = FakeJwt("MDO", expired);
+		store3.Session[SessionKeys.Expiration] = expired.ToString("O");
+		store3.Session[SessionKeys.RefreshToken] = "staff-refresh";
+		var never = new RefreshStub(() => new HttpResponseMessage(System.Net.HttpStatusCode.OK));
+		var restored3 = SessionPersistence.TryRestoreAsync(store3, new LoginState(), new HttpClient(never) { BaseAddress = new Uri("http://localhost/") }).GetAwaiter().GetResult();
+		Check.That("U1: an expired staff session is not refreshed on restore and keeps its refresh token",
+			!restored3 && never.Calls == 0 && store3.Session.ContainsKey(SessionKeys.RefreshToken));
+
+		// 4. A farmer with time left: no refresh call, restored as before.
+		var store4 = new MemoryStore();
+		store4.Session[SessionKeys.Token] = fresh;
+		store4.Session[SessionKeys.Expiration] = freshExp.ToString("O");
+		var never4 = new RefreshStub(() => new HttpResponseMessage(System.Net.HttpStatusCode.OK));
+		var restored4 = SessionPersistence.TryRestoreAsync(store4, new LoginState(), new HttpClient(never4) { BaseAddress = new Uri("http://localhost/") }).GetAwaiter().GetResult();
+		Check.That("U1: a valid farmer session restores without a refresh call", restored4 && never4.Calls == 0);
+
+		// U5: the sign-in remembers a farmer device; a staff sign-in clears it.
+		var store5 = new MemoryStore();
+		SessionPersistence.StartAsync(new HttpClient(never4), store5, new LoginState(), fresh, freshExp, "", "", "r", remember: false).GetAwaiter().GetResult();
+		Check.That("U5: a farmer sign-in remembers 'last sign-in was a farmer'", SessionPersistence.LastSignInWasFarmerAsync(store5).GetAwaiter().GetResult());
+		SessionPersistence.StartAsync(new HttpClient(never4), store5, new LoginState(), FakeJwt("MDO", DateTime.UtcNow.AddHours(1)), freshExp, "", "", "r", remember: false).GetAwaiter().GetResult();
+		Check.That("U5: a staff sign-in on the same device clears it", !SessionPersistence.LastSignInWasFarmerAsync(store5).GetAwaiter().GetResult());
+	}
+
+	// ------------------------------------------------------------------ U1 / U2 / U3 / U5 wiring (source)
+
+	private static string Source(params string[] parts)
+	{
+		var dir = new DirectoryInfo(AppContext.BaseDirectory);
+		while (dir != null && !File.Exists(Path.Combine(dir.FullName, "SpicOne.sln"))) dir = dir.Parent;
+		return File.ReadAllText(Path.Combine(new[] { dir?.FullName ?? throw new InvalidOperationException("SpicOne.sln not found") }.Concat(parts).ToArray()))
+			.Replace("\r\n", "\n");
+	}
+
+	private static void ShellSources()
+	{
+		var layout = Source("SPIC.MauiBlazorApp", "SPIC.MauiBlazorApp.Shared", "Layout", "MainLayout.razor");
+		Check.That("U1: the layout's expiry tick tries a silent farmer refresh before AutoLogout",
+			layout.Contains("if (await SessionPersistence.TryRefreshAsync(Http, SessionStore, LoginState))\n                    {\n                        _farmerRefreshedAtUtc = DateTime.UtcNow;\n                        return;") && layout.Contains("await InvokeAsync(ExpiryTickAsync)"));
+		Check.That("U5: the layout signs out to the role's sign-in page", layout.Contains("var loginPath = SessionPersistence.LoginPathFor(LoginState.UserRole);")
+			&& !layout.Contains("Navigation.NavigateTo(\n            \"/login\"\n        );"));
+		Check.That("U5: the expiry dialog gets the role's sign-in page", layout.Contains("<SessionExpiryDialog LoginPath=\"@SessionPersistence.LoginPathFor(LoginState.UserRole)\" />"));
+		Check.That("U5: a 401 sends a farmer to the farmer sign-in", Source("SPIC.MauiBlazorApp", "SPIC.MauiBlazorApp.Shared", "Services", "AuthHttpMessageHandler.cs")
+			.Contains("_navigation.NavigateTo(loginPath, forceLoad: true);"));
+
+		var assistant = Source("SPIC.MauiBlazorApp", "SPIC.MauiBlazorApp.Shared", "Pages", "FarmerPortal", "FarmerAssistant.razor");
+		Check.That("U3: New chat ends any thread load (version bump and flag cleared)",
+			assistant.Contains("private void NewChat()\n    {\n        _threadLoadVersion++;\n        _threadLoading = false;"));
+		Check.That("U3: a stale thread load leaves the flag to the newest load",
+			assistant.Contains("if (version != _threadLoadVersion || ConversationId != id) return;"));
+
+		var manifest = Source("SPIC.MauiBlazorApp", "SPIC.MauiBlazorApp", "Platforms", "Android", "AndroidManifest.xml");
+		Check.That("U2: the Android manifest asks for the camera", manifest.Contains("android.permission.CAMERA"));
+		Check.That("U2: the Android manifest declares the IMAGE_CAPTURE query", manifest.Contains("android.media.action.IMAGE_CAPTURE"));
+		Check.That("U2: the camera is optional on the Play Store", manifest.Contains("android.hardware.camera\" android:required=\"false\""));
+		Check.That("U2: the MAUI host registers its camera", Source("SPIC.MauiBlazorApp", "SPIC.MauiBlazorApp", "MauiProgram.cs").Contains("AddSingleton<INativeCamera, SPIC.MauiBlazorApp.Services.MauiCamera>()"));
+		Check.That("U2: the web host keeps the file input camera", Source("SPIC.MauiBlazorApp", "SPIC.MauiBlazorApp.Web", "Program.cs").Contains("AddSingleton<INativeCamera, NoNativeCamera>()"));
+		Check.That("U2: the web host's camera is not 'available'", !new NoNativeCamera().IsAvailable && new NoNativeCamera().CaptureAsync().GetAwaiter().GetResult() is null);
+		var leaf = Source("SPIC.MauiBlazorApp", "SPIC.MauiBlazorApp.Shared", "Pages", "FarmerPortal", "FarmerLeafCheck.razor");
+		Check.That("U2: the leaf check keeps capture=\"environment\" for the web and iOS", leaf.Contains("capture=\"environment\""));
+		Check.That("U2: the leaf check uses the host camera when it has one", leaf.Contains("@if (Camera.IsAvailable)") && leaf.Contains("@onclick=\"CaptureNativeAsync\""));
 	}
 
 	// ------------------------------------------------------------------ B1

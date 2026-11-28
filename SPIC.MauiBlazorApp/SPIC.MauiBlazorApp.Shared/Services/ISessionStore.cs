@@ -45,5 +45,12 @@ namespace SPIC.MauiBlazorApp.Shared.Services
         public const string ServerClockOffset = "spic_server_clock_offset";
 
         public static readonly string[] All = { Token, Expiration, RoleAccess, DesignationName, RefreshToken, ServerClockOffset };
+
+        /// <summary>
+        /// "1" when the last sign-in on this device was a farmer (recheck fix U5). Persistent and deliberately NOT in
+        /// <see cref="All"/>: it survives sign-out so "/" and a signed-out /farmer/* link open the farmer sign-in.
+        /// Holds no personal data.
+        /// </summary>
+        public const string LastSignInFarmer = "spic_last_signin_farmer";
     }
 }

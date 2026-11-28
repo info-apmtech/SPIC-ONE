@@ -6,6 +6,7 @@ using SPIC.Core.DTOs;
 using SPIC.Core.Entities;
 using SPIC.Core.FarmerPortal;
 using Spic.Infrastructure.Data;
+using Npgsql;
 using System.Security.Claims;
 
 namespace SpicAPI.Controllers
@@ -32,15 +33,22 @@ namespace SpicAPI.Controllers
         private readonly AppDbContext _db;
         private readonly UserManager<UserInfo> _userManager;
         private readonly SpicAPI.Services.FarmerAccountDeletion _deletion;
+        private readonly ILogger<FarmerProfileController> _logger;
 
-        public FarmerProfileController(AppDbContext db, UserManager<UserInfo> userManager, SpicAPI.Services.FarmerAccountDeletion deletion)
+        public FarmerProfileController(AppDbContext db, UserManager<UserInfo> userManager, SpicAPI.Services.FarmerAccountDeletion deletion,
+            ILogger<FarmerProfileController> logger)
         {
             _db = db;
             _userManager = userManager;
             _deletion = deletion;
+            _logger = logger;
         }
 
         private string? CallerId => User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+        /// <summary>PostgreSQL unique violation (23505): the only DbUpdateException that means "saved twice at once".</summary>
+        public static bool IsUniqueViolation(DbUpdateException ex) =>
+            ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation };
 
         [HttpGet]
         public async Task<IActionResult> Get()
@@ -101,7 +109,8 @@ namespace SpicAPI.Controllers
             var email = string.IsNullOrWhiteSpace(dto.Email) ? null : dto.Email.Trim();
             profile.Name = dto.Name!.Trim();
             profile.Email = email;
-            profile.Phone = user.PhoneNumber ?? profile.Phone;
+            // The 10 digits, whatever spelling the account holds (recheck B3; the column is varchar(10)).
+            profile.Phone = FarmerPhone.ProfilePhone(user.PhoneNumber, profile.Phone);
             profile.StateId = dto.StateId;
             profile.DistrictId = dto.DistrictId;
             profile.Village = dto.Village!.Trim();
@@ -136,10 +145,18 @@ namespace SpicAPI.Controllers
             {
                 await _db.SaveChangesAsync();
             }
-            catch (DbUpdateException)
+            catch (DbUpdateException ex) when (IsUniqueViolation(ex))
             {
                 // Two first saves at once: the unique UserId index kept one row. Ask for a retry.
                 return Conflict(new FarmerProfileErrorDto { Message = "Your profile was just saved from another screen. Please try again." });
+            }
+            catch (DbUpdateException ex)
+            {
+                // Anything else is a real failure, not a race (recheck B3): logged without personal data, 500.
+                _logger.LogError("Farmer profile save failed ({Error} {SqlState})", ex.InnerException?.GetType().Name ?? ex.GetType().Name,
+                    (ex.InnerException as PostgresException)?.SqlState);
+                return StatusCode(StatusCodes.Status500InternalServerError,
+                    new FarmerProfileErrorDto { Message = "We could not save your profile. Please try again later." });
             }
 
             return Ok(await ToDtoAsync(profile, await IsSasLinkedAsync(userId)));

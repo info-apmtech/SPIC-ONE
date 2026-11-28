@@ -33,7 +33,7 @@
         <ToastHost />
         <ConfirmDialog />
         <OfflineBanner />
-        <SessionExpiryDialog />
+        <SessionExpiryDialog LoginPath="@SessionPersistence.LoginPathFor(LoginState.UserRole)" />
 
     @* Desktop (>= 1200px): full sidebar. Hidden on phone + tablet by Layout.css. *@
     <aside class="sidebar">
@@ -391,6 +391,23 @@ else
                     LoginState.Clock.Restore(await SessionStore.GetAsync(SessionKeys.ServerClockOffset));
 
                 /*
+                 * Recheck fix U1 (Farmer role only): an expired (or nearly expired) farmer JWT is
+                 * traded for a fresh one with the stored refresh token before anything uses it.
+                 * The refresh token is forgotten only when that attempt fails.
+                 */
+                var storedExpText = await SessionStore.GetAsync(SessionKeys.Expiration);
+                DateTime? storedExpiry = DateTime.TryParse(storedExpText, System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.RoundtripKind, out var storedExp) ? storedExp : null;
+                if (SessionPersistence.NeedsFarmerRefresh(SessionPersistence.RoleOf(token), storedExpiry, LoginState.Clock.UtcNow))
+                {
+                    LoginState.SetAllowedPages(await SessionStore.GetAsync(SessionKeys.RoleAccess));
+                    if (await SessionPersistence.TryRefreshAsync(Http, SessionStore, LoginState))
+                        token = LoginState.Token ?? token;
+                    else
+                        await SessionPersistence.ForgetRefreshTokenAsync(SessionStore);
+                }
+
+                /*
                  * Restore Authorization Header
                  */
 
@@ -502,8 +519,11 @@ else
             }
             else
             {
+                // Recheck U5: a /farmer/* link, or a device whose last sign-in was a farmer, opens the farmer sign-in.
                 Navigation.NavigateTo(
-                    "/login"
+                    SessionPersistence.SignedOutLoginPath(
+                        Navigation.ToBaseRelativePath(Navigation.Uri),
+                        await SessionPersistence.LastSignInWasFarmerAsync(SessionStore))
                 );
             }
         }
@@ -526,6 +546,9 @@ else
 
     private async Task Logout()
     {
+        // Recheck U5: the sign-in page for this role, read before anything is cleared.
+        var loginPath = SessionPersistence.LoginPathFor(LoginState.UserRole);
+
         // Enter the single logout transition FIRST: hide the entire
         // authenticated shell (menu, profile icon, page content) as one state
         // BEFORE any authentication state is cleared, so no intermediate
@@ -583,7 +606,7 @@ else
 
 
         Navigation.NavigateTo(
-            "/login"
+            loginPath
         );
     }
 
@@ -600,13 +623,13 @@ else
             new Timer(
                 async _ =>
                 {
-                    if (LoginState.IsTokenExpired)
+                    try
                     {
-                        await InvokeAsync(
-                            async () =>
-                                await AutoLogout()
-                        );
+                        await InvokeAsync(ExpiryTickAsync);
                     }
+                    catch (ObjectDisposedException) { }
+                    catch (InvalidOperationException) { }
+                    catch (TaskCanceledException) { }
                 },
                 null,
                 TimeSpan.FromSeconds(5),
@@ -619,8 +642,57 @@ else
        AUTO LOGOUT
        ========================================================= */
 
+    /// <summary>Last expiry-tick refresh attempt ("expiration|expired"), so each farmer token is refreshed at most once
+    /// ahead of the warning and once more at expiry.</summary>
+    private string? _farmerRefreshTried;
+    private DateTime _farmerRefreshedAtUtc;
+    private bool _expiryTickBusy;
+
+    /// <summary>
+    /// One expiry check (every 5 s). Recheck fix U1, Farmer role only: a farmer session is refreshed silently
+    /// <see cref="SessionPersistence.FarmerRefreshAhead"/> before expiry (so the warning dialog does not appear) and
+    /// tried once more at expiry; AutoLogout (which clears the stored refresh token) runs only after that fails.
+    /// Staff keep the old rule: AutoLogout at expiry.
+    /// </summary>
+    private async Task ExpiryTickAsync()
+    {
+        if (_expiryTickBusy) return;
+        _expiryTickBusy = true;
+        try
+        {
+            var expiration = LoginState.Expiration;
+            if (LoginState.UserRole == AppRole.Farmer && expiration != default
+                && expiration.ToUniversalTime() - LoginState.Clock.UtcNow <= SessionPersistence.FarmerRefreshAhead)
+            {
+                var key = expiration.ToString("O") + "|" + LoginState.IsTokenExpired;
+                // At most one refresh a minute ahead of expiry, so a short Jwt:ExpiryMinutes cannot loop; at expiry
+                // the one last try always runs.
+                var due = LoginState.IsTokenExpired || DateTime.UtcNow - _farmerRefreshedAtUtc >= TimeSpan.FromMinutes(1);
+                if (_farmerRefreshTried != key && due)
+                {
+                    _farmerRefreshTried = key;
+                    if (await SessionPersistence.TryRefreshAsync(Http, SessionStore, LoginState))
+                    {
+                        _farmerRefreshedAtUtc = DateTime.UtcNow;
+                        return;
+                    }
+                }
+            }
+
+            if (LoginState.IsTokenExpired)
+                await AutoLogout();
+        }
+        finally
+        {
+            _expiryTickBusy = false;
+        }
+    }
+
     private async Task AutoLogout()
     {
+        // Recheck U5: the sign-in page for this role, read before anything is cleared.
+        var loginPath = SessionPersistence.LoginPathFor(LoginState.UserRole);
+
         // Hide the authenticated shell as one state before clearing anything.
         _isReady = false;
         StateHasChanged();
@@ -657,7 +729,7 @@ else
 
 
         Navigation.NavigateTo(
-            "/login"
+            loginPath
         );
     }
 

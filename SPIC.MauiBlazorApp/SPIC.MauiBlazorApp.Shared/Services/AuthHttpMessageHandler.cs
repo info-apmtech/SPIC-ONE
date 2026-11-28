@@ -141,6 +141,8 @@ namespace SPIC.MauiBlazorApp.Shared.Services
 
         private async Task HandleUnauthorized()
         {
+            // Recheck U5: a farmer goes back to the farmer sign-in; read before the session is cleared.
+            var loginPath = SessionPersistence.LoginPathFor(_loginState.UserRole);
             try
             {
                 _loginState.Token = null;
@@ -154,11 +156,12 @@ namespace SPIC.MauiBlazorApp.Shared.Services
 
             // Already on the sign-in page: keep it (and whatever it is showing) instead of reloading.
             var relative = _navigation.ToBaseRelativePath(_navigation.Uri);
-            if (relative.StartsWith("login", StringComparison.OrdinalIgnoreCase)) return;
+            if (relative.StartsWith("login", StringComparison.OrdinalIgnoreCase)
+                || relative.StartsWith("farmer/login", StringComparison.OrdinalIgnoreCase)) return;
 
             try
             {
-                _navigation.NavigateTo("/login", forceLoad: true);
+                _navigation.NavigateTo(loginPath, forceLoad: true);
             }
             catch (NavigationException)
             {
