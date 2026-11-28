@@ -2954,6 +2954,388 @@ namespace Spic.Infrastructure.Migrations
                     b.ToTable("CropTypes");
                 });
 
+            modelBuilder.Entity("SPIC.Core.Entities.CropYieldNorm", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Crop")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<decimal>("HighTPerHa")
+                        .HasColumnType("numeric(8,2)");
+
+                    b.Property<string>("IrrigationClass")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<decimal>("LowTPerHa")
+                        .HasColumnType("numeric(8,2)");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Product")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<int>("RainHighMm")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("RainLowMm")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("SourceUrl")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<decimal?>("StateAverageTPerHa")
+                        .HasColumnType("numeric(8,2)");
+
+                    b.Property<decimal>("TypicalTPerHa")
+                        .HasColumnType("numeric(8,2)");
+
+                    b.Property<string>("Unit")
+                        .IsRequired()
+                        .HasMaxLength(4)
+                        .HasColumnType("character varying(4)");
+
+                    b.Property<int>("WaterNeedMaxMm")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("WaterNeedMinMm")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("YieldResponseFactor")
+                        .HasColumnType("numeric(4,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Crop", "IrrigationClass")
+                        .IsUnique();
+
+                    b.ToTable("CropYieldNorms");
+
+                    b.HasData(
+                        new
+                        {
+                            Id = 1,
+                            Crop = "Paddy",
+                            HighTPerHa = 7.0m,
+                            IrrigationClass = "Irrigated",
+                            IsActive = true,
+                            LowTPerHa = 4.5m,
+                            Notes = "State average 3,500 kg/ha is milled rice; at 67 % milling out-turn about 5.2 t/ha of paddy. Ky assumed (rice is not in FAO paper 33).",
+                            Product = "paddy grain",
+                            RainHighMm = 1300,
+                            RainLowMm = 800,
+                            SortOrder = 10,
+                            Source = "TNAU rice varieties: CO 51 6,623 kg/ha, ADT 45 5,900 kg/ha; DES Statistical Hand Book of Tamil Nadu 2022-23: rice 3,500 kg/ha; FAO water need (Irrigation Water Management manual 3, table 5) and Ky (FAO I&D paper 33)",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/CO51.html",
+                            StateAverageTPerHa = 5.2m,
+                            TypicalTPerHa = 5.8m,
+                            Unit = "t",
+                            WaterNeedMaxMm = 700,
+                            WaterNeedMinMm = 450,
+                            YieldResponseFactor = 1.10m
+                        },
+                        new
+                        {
+                            Id = 2,
+                            Crop = "Paddy",
+                            HighTPerHa = 4.5m,
+                            IrrigationClass = "Rainfed",
+                            IsActive = true,
+                            LowTPerHa = 2.5m,
+                            Notes = "Semi-dry / rainfed rice of the Ramanathapuram and Sivaganga tracts. Ky assumed.",
+                            Product = "paddy grain",
+                            RainHighMm = 1300,
+                            RainLowMm = 800,
+                            SortOrder = 11,
+                            Source = "TNAU ARS Paramakudi: ANNA (R) 4 3.7 t/ha, PMK (R) 3 3.2-3.5 t/ha; FAO water need (Irrigation Water Management manual 3, table 5) and Ky (FAO I&D paper 33)",
+                            SourceUrl = "https://tnau.ac.in/site/ars-paramakudi/?p=379",
+                            TypicalTPerHa = 3.6m,
+                            Unit = "t",
+                            WaterNeedMaxMm = 700,
+                            WaterNeedMinMm = 450,
+                            YieldResponseFactor = 1.10m
+                        },
+                        new
+                        {
+                            Id = 3,
+                            Crop = "Maize",
+                            HighTPerHa = 9.0m,
+                            IrrigationClass = "Irrigated",
+                            IsActive = true,
+                            LowTPerHa = 5.5m,
+                            Notes = "Hybrids. FAO: a good commercial irrigated grain yield is 6-9 t/ha.",
+                            Product = "grain",
+                            RainHighMm = 900,
+                            RainLowMm = 500,
+                            SortOrder = 20,
+                            Source = "TNAU maize hybrid COH(M) 8: 7,500-8,000 kg/ha irrigated; DES Statistical Hand Book of Tamil Nadu 2022-23: maize 7,007 kg/ha; FAO water need (Irrigation Water Management manual 3, table 5) and Ky (FAO I&D paper 33)",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_maize_Characteristics_hybrids%20COhm8.html",
+                            StateAverageTPerHa = 7.0m,
+                            TypicalTPerHa = 7.5m,
+                            Unit = "t",
+                            WaterNeedMaxMm = 800,
+                            WaterNeedMinMm = 500,
+                            YieldResponseFactor = 1.25m
+                        },
+                        new
+                        {
+                            Id = 4,
+                            Crop = "Maize",
+                            HighTPerHa = 6.0m,
+                            IrrigationClass = "Rainfed",
+                            IsActive = true,
+                            LowTPerHa = 3.5m,
+                            Product = "grain",
+                            RainHighMm = 900,
+                            RainLowMm = 500,
+                            SortOrder = 21,
+                            Source = "TNAU maize hybrid COH(M) 8: 5,000-5,500 kg/ha rainfed; FAO water need (Irrigation Water Management manual 3, table 5) and Ky (FAO I&D paper 33)",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_maize_Characteristics_hybrids%20COhm8.html",
+                            TypicalTPerHa = 5.0m,
+                            Unit = "t",
+                            WaterNeedMaxMm = 800,
+                            WaterNeedMinMm = 500,
+                            YieldResponseFactor = 1.25m
+                        },
+                        new
+                        {
+                            Id = 5,
+                            Crop = "Cotton",
+                            HighTPerHa = 2.6m,
+                            IrrigationClass = "Irrigated",
+                            IsActive = true,
+                            LowTPerHa = 1.4m,
+                            Notes = "The state average is lint (313 kg/ha in 2022-23, about 0.9 t/ha of kapas at 34 % ginning), so it is not shown.",
+                            Product = "seed cotton (kapas)",
+                            RainHighMm = 1100,
+                            RainLowMm = 600,
+                            SortOrder = 30,
+                            Source = "TNAU cotton varieties (seed cotton, irrigated): CO 14 1,768, CCH 2623 1,800, SVPR 6 2,312 kg/ha; DES Statistical Hand Book of Tamil Nadu 2022-23: cotton 313 kg lint/ha; FAO water need (Irrigation Water Management manual 3, table 5) and Ky (FAO I&D paper 33)",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/CT%20CO14.html",
+                            TypicalTPerHa = 2.0m,
+                            Unit = "t",
+                            WaterNeedMaxMm = 1300,
+                            WaterNeedMinMm = 700,
+                            YieldResponseFactor = 0.85m
+                        },
+                        new
+                        {
+                            Id = 6,
+                            Crop = "Cotton",
+                            HighTPerHa = 1.8m,
+                            IrrigationClass = "Rainfed",
+                            IsActive = true,
+                            LowTPerHa = 0.7m,
+                            Product = "seed cotton (kapas)",
+                            RainHighMm = 1100,
+                            RainLowMm = 600,
+                            SortOrder = 31,
+                            Source = "TNAU cotton: Sumangala 1,200 kg/ha seed cotton in rainfed tracts; FAO water need (Irrigation Water Management manual 3, table 5) and Ky (FAO I&D paper 33)",
+                            SourceUrl = "https://agritech.tnau.ac.in/CropProduction/Fibre%20crops/fibrecrops_cotton.html",
+                            TypicalTPerHa = 1.2m,
+                            Unit = "t",
+                            WaterNeedMaxMm = 1300,
+                            WaterNeedMinMm = 700,
+                            YieldResponseFactor = 0.85m
+                        },
+                        new
+                        {
+                            Id = 7,
+                            Crop = "Groundnut",
+                            HighTPerHa = 3.2m,
+                            IrrigationClass = "Irrigated",
+                            IsActive = true,
+                            LowTPerHa = 1.8m,
+                            Product = "dry pods",
+                            RainHighMm = 800,
+                            RainLowMm = 500,
+                            SortOrder = 40,
+                            Source = "TNAU groundnut varieties (pods, irrigated): VRI 8 2,700 kg/ha, TMV 14 2,360 kg/ha; DES Statistical Hand Book of Tamil Nadu 2022-23: groundnut 2,598 kg/ha pods; FAO water need (Irrigation Water Management manual 3, table 5) and Ky (FAO I&D paper 33)",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/grounnut%20VRI%208.html",
+                            StateAverageTPerHa = 2.6m,
+                            TypicalTPerHa = 2.6m,
+                            Unit = "t",
+                            WaterNeedMaxMm = 700,
+                            WaterNeedMinMm = 500,
+                            YieldResponseFactor = 0.70m
+                        },
+                        new
+                        {
+                            Id = 8,
+                            Crop = "Groundnut",
+                            HighTPerHa = 2.6m,
+                            IrrigationClass = "Rainfed",
+                            IsActive = true,
+                            LowTPerHa = 1.2m,
+                            Product = "dry pods",
+                            RainHighMm = 800,
+                            RainLowMm = 500,
+                            SortOrder = 41,
+                            Source = "TNAU groundnut varieties (pods, rainfed): VRI 8 2,130 kg/ha, TMV 14 2,222 kg/ha; FAO water need (Irrigation Water Management manual 3, table 5) and Ky (FAO I&D paper 33)",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/grounnut%20VRI%208.html",
+                            TypicalTPerHa = 2.0m,
+                            Unit = "t",
+                            WaterNeedMaxMm = 700,
+                            WaterNeedMinMm = 500,
+                            YieldResponseFactor = 0.70m
+                        },
+                        new
+                        {
+                            Id = 9,
+                            Crop = "Sugarcane",
+                            HighTPerHa = 140m,
+                            IrrigationClass = "Irrigated",
+                            IsActive = true,
+                            LowTPerHa = 85m,
+                            Notes = "Irrigated only (no rainfed row): the water need is far above the rainfall.",
+                            Product = "cane",
+                            RainHighMm = 1400,
+                            RainLowMm = 800,
+                            SortOrder = 50,
+                            Source = "TNAU promising sugarcane varieties: Co 86032 110 t/ha, CoC 24 133 t/ha; DES Statistical Hand Book of Tamil Nadu 2022-23: sugarcane 111 t/ha; FAO water need (Irrigation Water Management manual 3, table 5) and Ky (FAO I&D paper 33)",
+                            SourceUrl = "https://agritech.tnau.ac.in/crop_improvement/crop_imprv_prom_varieties_sugarcrops.html",
+                            StateAverageTPerHa = 111m,
+                            TypicalTPerHa = 115m,
+                            Unit = "t",
+                            WaterNeedMaxMm = 2500,
+                            WaterNeedMinMm = 1500,
+                            YieldResponseFactor = 1.20m
+                        },
+                        new
+                        {
+                            Id = 10,
+                            Crop = "Banana",
+                            HighTPerHa = 70m,
+                            IrrigationClass = "Irrigated",
+                            IsActive = true,
+                            LowTPerHa = 35m,
+                            Notes = "Irrigated only (no rainfed row). Ky: FAO gives 1.2-1.35.",
+                            Product = "fruit bunches",
+                            RainHighMm = 1400,
+                            RainLowMm = 800,
+                            SortOrder = 60,
+                            Source = "ICAR-NRCB: Robusta 47.2 t/ha conventional planting, 65.9 t/ha paired rows; TNAU Grand Naine about 30 kg per plant; DES Statistical Hand Book of Tamil Nadu 2022-23 table 4.20: banana 39.4 t/ha; FAO water need (Irrigation Water Management manual 3, table 5) and Ky (FAO I&D paper 33)",
+                            SourceUrl = "https://nrcb.icar.gov.in/oldwebsite/crop-production.php",
+                            StateAverageTPerHa = 39.4m,
+                            TypicalTPerHa = 50m,
+                            Unit = "t",
+                            WaterNeedMaxMm = 2200,
+                            WaterNeedMinMm = 1200,
+                            YieldResponseFactor = 1.30m
+                        },
+                        new
+                        {
+                            Id = 11,
+                            Crop = "Black gram",
+                            HighTPerHa = 1.1m,
+                            IrrigationClass = "Irrigated",
+                            IsActive = true,
+                            LowTPerHa = 0.6m,
+                            Notes = "Water need and Ky of FAO's bean (pulses).",
+                            Product = "grain",
+                            RainHighMm = 700,
+                            RainLowMm = 450,
+                            SortOrder = 70,
+                            Source = "TNAU Pulses Research Station Vamban: VBN 10 900 kg/ha irrigated, VBN 8 900 kg/ha; FAO water need (Irrigation Water Management manual 3, table 5) and Ky (FAO I&D paper 33)",
+                            SourceUrl = "https://tnau.ac.in/site/prs-vamban/?p=379",
+                            TypicalTPerHa = 0.9m,
+                            Unit = "t",
+                            WaterNeedMaxMm = 500,
+                            WaterNeedMinMm = 300,
+                            YieldResponseFactor = 1.15m
+                        },
+                        new
+                        {
+                            Id = 12,
+                            Crop = "Black gram",
+                            HighTPerHa = 0.9m,
+                            IrrigationClass = "Rainfed",
+                            IsActive = true,
+                            LowTPerHa = 0.45m,
+                            Notes = "Water need and Ky of FAO's bean (pulses).",
+                            Product = "grain",
+                            RainHighMm = 700,
+                            RainLowMm = 450,
+                            SortOrder = 71,
+                            Source = "TNAU Pulses Research Station Vamban: VBN 10 750 kg/ha rainfed; DES Statistical Hand Book of Tamil Nadu 2022-23: black gram 675 kg/ha; FAO water need (Irrigation Water Management manual 3, table 5) and Ky (FAO I&D paper 33)",
+                            SourceUrl = "https://tnau.ac.in/site/prs-vamban/?p=379",
+                            StateAverageTPerHa = 0.68m,
+                            TypicalTPerHa = 0.75m,
+                            Unit = "t",
+                            WaterNeedMaxMm = 500,
+                            WaterNeedMinMm = 300,
+                            YieldResponseFactor = 1.15m
+                        },
+                        new
+                        {
+                            Id = 13,
+                            Crop = "Green gram",
+                            HighTPerHa = 1.25m,
+                            IrrigationClass = "Irrigated",
+                            IsActive = true,
+                            LowTPerHa = 0.7m,
+                            Notes = "Water need and Ky of FAO's bean (pulses).",
+                            Product = "grain",
+                            RainHighMm = 700,
+                            RainLowMm = 450,
+                            SortOrder = 80,
+                            Source = "TNAU green gram VBN 4: 1,251 kg/ha irrigated (EJPB 2021); TNAU green gram 850-1,000 kg/ha; FAO water need (Irrigation Water Management manual 3, table 5) and Ky (FAO I&D paper 33)",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/CropProduction/Pulses/organic%20package%20greengram.html",
+                            TypicalTPerHa = 1.0m,
+                            Unit = "t",
+                            WaterNeedMaxMm = 500,
+                            WaterNeedMinMm = 300,
+                            YieldResponseFactor = 1.15m
+                        },
+                        new
+                        {
+                            Id = 14,
+                            Crop = "Green gram",
+                            HighTPerHa = 1.0m,
+                            IrrigationClass = "Rainfed",
+                            IsActive = true,
+                            LowTPerHa = 0.35m,
+                            Notes = "Water need and Ky of FAO's bean (pulses). The state average (361 kg/ha) is low: most green gram is a rice-fallow or rainfed catch crop.",
+                            Product = "grain",
+                            RainHighMm = 700,
+                            RainLowMm = 450,
+                            SortOrder = 81,
+                            Source = "TNAU green gram VBN 4: 936 kg/ha rainfed (EJPB 2021); DES Statistical Hand Book of Tamil Nadu 2022-23: green gram 361 kg/ha; FAO water need (Irrigation Water Management manual 3, table 5) and Ky (FAO I&D paper 33)",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/CropProduction/Pulses/organic%20package%20greengram.html",
+                            StateAverageTPerHa = 0.36m,
+                            TypicalTPerHa = 0.8m,
+                            Unit = "t",
+                            WaterNeedMaxMm = 500,
+                            WaterNeedMinMm = 300,
+                            YieldResponseFactor = 1.15m
+                        });
+                });
+
             modelBuilder.Entity("SPIC.Core.Entities.DealerApprovalHistory", b =>
                 {
                     b.Property<int>("Id")
@@ -16206,6 +16588,82 @@ namespace Spic.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("WholesalerStockAsOnTodays");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.YieldPrediction", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<decimal>("AreaAcres")
+                        .HasColumnType("numeric(10,2)");
+
+                    b.Property<string>("ConfidenceLabel")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("Crop")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<decimal>("ExpectedT")
+                        .HasColumnType("numeric(10,2)");
+
+                    b.Property<string>("FarmerUserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
+                    b.Property<decimal>("HighT")
+                        .HasColumnType("numeric(10,2)");
+
+                    b.Property<string>("IrrigationClass")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<decimal>("LowT")
+                        .HasColumnType("numeric(10,2)");
+
+                    b.Property<string>("Method")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<decimal>("Ndvi")
+                        .HasColumnType("numeric(4,2)");
+
+                    b.Property<string>("NdviSource")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<int>("NormId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("NpkPercent")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("RainfallMm")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ResultJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FarmerUserId", "CreatedAtUtc");
+
+                    b.ToTable("YieldPredictions");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.Zone", b =>

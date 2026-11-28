@@ -553,6 +553,40 @@ namespace Spic.Infrastructure.Data
                 entity.HasIndex(x => new { x.Nutrient, x.Crop });
                 entity.HasData(NutrientCorrectiveSeed.Rows);
             });
+            // Farmer portal Task 7: the harvest yield forecast (seed: CropYieldNormSeed, sources on every row).
+            builder.Entity<CropYieldNorm>(entity =>
+            {
+                entity.Property(x => x.Crop).HasMaxLength(40);
+                entity.Property(x => x.IrrigationClass).HasMaxLength(10);
+                entity.Property(x => x.TypicalTPerHa).HasColumnType("numeric(8,2)");
+                entity.Property(x => x.LowTPerHa).HasColumnType("numeric(8,2)");
+                entity.Property(x => x.HighTPerHa).HasColumnType("numeric(8,2)");
+                entity.Property(x => x.StateAverageTPerHa).HasColumnType("numeric(8,2)");
+                entity.Property(x => x.YieldResponseFactor).HasColumnType("numeric(4,2)");
+                entity.Property(x => x.Product).HasMaxLength(40);
+                entity.Property(x => x.Unit).HasMaxLength(4);
+                entity.Property(x => x.Notes).HasMaxLength(500);
+                entity.Property(x => x.Source).HasMaxLength(500);
+                entity.Property(x => x.SourceUrl).HasMaxLength(500);
+                entity.HasIndex(x => new { x.Crop, x.IrrigationClass }).IsUnique();
+                entity.HasData(CropYieldNormSeed.Rows);
+            });
+            builder.Entity<YieldPrediction>(entity =>
+            {
+                entity.Property(x => x.FarmerUserId).HasMaxLength(450);
+                entity.Property(x => x.Crop).HasMaxLength(40);
+                entity.Property(x => x.Method).HasMaxLength(20);
+                entity.Property(x => x.IrrigationClass).HasMaxLength(10);
+                entity.Property(x => x.AreaAcres).HasColumnType("numeric(10,2)");
+                entity.Property(x => x.Ndvi).HasColumnType("numeric(4,2)");
+                entity.Property(x => x.NdviSource).HasMaxLength(10);
+                entity.Property(x => x.ExpectedT).HasColumnType("numeric(10,2)");
+                entity.Property(x => x.LowT).HasColumnType("numeric(10,2)");
+                entity.Property(x => x.HighT).HasColumnType("numeric(10,2)");
+                entity.Property(x => x.ConfidenceLabel).HasMaxLength(30);
+                // History: one farmer's forecasts, newest first.
+                entity.HasIndex(x => new { x.FarmerUserId, x.CreatedAtUtc });
+            });
 
             builder.Entity<SampleLabResult>(entity =>
             {
@@ -1287,6 +1321,8 @@ namespace Spic.Infrastructure.Data
         public DbSet<FarmerAiUsage> FarmerAiUsages { get; set; }
         public DbSet<LeafDiagnosis> LeafDiagnoses { get; set; }
         public DbSet<NutrientCorrective> NutrientCorrectives { get; set; }
+        public DbSet<CropYieldNorm> CropYieldNorms { get; set; }
+        public DbSet<YieldPrediction> YieldPredictions { get; set; }
 
         //// JMDO Task Allocation
         public DbSet<JmdoTaskAllocation> JmdoTaskAllocations { get; set; }
