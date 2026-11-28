@@ -902,3 +902,118 @@ low-effort thinking ~500 output ($0.005) = **~$0.01 typical, ~$0.02 worst** (150
 - The basic colour check is a hint: lighting changes the colour score, and a brown background right next to the leaf
   (soil, a dark hand) reads as dry edges. The tips ask for a plain background.
 - Android WebView camera capture (`capture="environment"`) was not tried on a device in this task.
+
+## 7. Harvest yield forecast (Task 7, 2026-11-28)
+
+### What it does
+
+- **AI Harvest Yield Prediction** `/farmer/yield` (fourth home tile "Harvest forecast", More sheet after Leaf check, desktop
+  sidebar under Leaf check). The title follows the owner's sketch, but **no AI model is called**: the estimate is the
+  documented rule model `YieldEstimator` over seeded crop norms, and the disclaimer says so ("Estimate from crop norms and
+  your inputs, not a guarantee. This is a model estimate, not a field visit or a satellite reading ...").
+- Inputs like the sketch, in two cards. **Your crop and field**: crop chips (eight crops with a norm), cultivated area in
+  acres (with "= 1.21 ha"), irrigation method (Canal / Borewell Irrigated, Rainfed, Drip, Sprinkler; Rainfed is greyed out
+  for sugarcane and banana, which have no rainfed norm). **This season**: Satellite canopy vigour (NDVI) 0.35-0.92, default
+  0.72, with "Not sure? Pick how your crop looks: Sparse / Medium / Dense" (0.45 / 0.62 / 0.78, small field pictures);
+  Seasonal rainfall 400-1400 mm, default 850, zones from the chosen crop's band; Recommended NPK applied 50-120 %, default
+  90 %. Crop, area and irrigation are prefilled from the profile (first profile crop with a norm, else Paddy; area else 3.0
+  acres; canal / borewell / mixed / no answer = Canal / Borewell Irrigated).
+- **NPK prefill**: stays at the sketch's 90 %. A fertilizer run (Task 4) says what to apply, not what was applied, so there is
+  no meaningful mapping to "% applied"; the slider hint names the latest advice instead ("Your last fertilizer advice:
+  Paddy, 28 Nov. Applied all of it? Set 100 %.").
+- **Result** (`Components/FarmerPortal/YieldResultView.razor`): summary band (expected tonnes, quintals, t/ha and t/acre, the
+  low - expected - high range bar, the confidence ring and why the range is that wide; range, good-management, Tamil Nadu
+  average and your t/ha), **What shapes your yield** (one bar per factor, 100 % = best, what each costs in kg / t, the
+  biggest loss marked), **How to get more** (2-3 tips with the gain, links to Fertilizer advice / Leaf check, plus warnings
+  for over 100 % NPK or a very dense canopy), **How we worked this out** (norm x factors = t/ha, x hectares = t, the
+  sources), actions and the disclaimer.
+- **My past forecasts** `/farmer/yield/history` (latest 20) and `/farmer/yield/history/{id}` (one saved forecast in full).
+
+### Endpoints (`SpicAPI/Controllers/FarmerYieldController.cs`, Farmer role, scoped to the caller)
+
+| Method | Route | Notes |
+|---|---|---|
+| GET | `api/Farmer/yield/options` | `YieldOptionsDto`: crops (product, a norm per irrigation class: typical / low / high t/ha, rain band), methods, the NDVI / rainfall / NPK sliders, the looks, `prefill` (crop, area, method, NPK, `*FromProfile`, `lastFertilizerCrop` / `lastFertilizerAtUtc`) |
+| POST | `api/Farmer/yield/predict` `{ crop, method, areaAcres, ndvi, ndviSource: value / look, rainfallMm, npkPercent }` | 200 `YieldPredictionDto` (saved, `id`); 400 `{ message, errors }` (crop, method incl. "rainfed sugarcane", areaAcres 0.1-1000, ndvi 0.35-0.92, ndviSource, rainfallMm 400-1400, npkPercent 50-120). Crop and method are matched without case |
+| GET | `api/Farmer/yield/history` | latest 20 `YieldPredictionSummaryDto` |
+| GET | `api/Farmer/yield/history/{id}` | one of the caller's forecasts in full; 404 for anyone else's |
+
+Contracts: `SPIC.Core/DTOs/YieldDtos.cs`. Client: `Services/FarmerYieldApi.cs` (no toasts). No config keys.
+
+### The model (`SPIC.Core/FarmerPortal/YieldEstimator.cs`, pinned by the harness)
+
+`expected t/ha = norm x f_ndvi x f_rain x f_npk x f_irrigation`; `total t = t/ha x acres x 0.4047`.
+
+- **Norm**: the crop's typical yield with good management in Tamil Nadu for its irrigation class (drip and sprinkler use the
+  Irrigated row, rainfed the Rainfed row).
+- **f_ndvi** (canopy vigour), piecewise linear through (0.35, 0.45), (0.60, 0.85), (0.72, 1.00), (0.88, 1.00), (0.92, 0.96):
+  a sparse canopy catches too little light, a full one (0.72-0.88) gives the norm, a very lush one risks lodging.
+- **f_rain** against the crop's band: inside 1.0; below, the FAO water-production rule `1 - Ya/Ym = Ky (1 - ETa/ETm)` with
+  the relative deficit `(low - rain) / low`: rainfed `1 - Ky d` (at least 0.30), irrigated only 30 % of that loss (the brief's
+  buffer); above, `1 - 0.35 (rain - high) / high` (at least 0.60) for both (waterlogging, leaching, disease).
+- **f_npk**, diminishing returns: `1 - 0.20 ((100 - p) / 50)^1.5` up to 100 % (50 % 0.80, 75 % 0.93, 90 % 0.98), 1.0 above
+  with an over-application warning.
+- **f_irrigation**: canal / borewell and rainfed 1.00, drip 1.05, sprinkler 1.02, paddy under drip or sprinkler 0.90
+  (aerobic rice). Model assumptions.
+- **Range** +/- 12 % with an NDVI value, 20 % when picked by look, +4 % rain outside the band, +3 % NPK under 70 %, at most
+  25 %. Ring = 100 - 2.5 x range (70+ High, 40-69 Medium, under 40 Low confidence).
+- **Factor loss** = expected / f - expected (the yield that factor costs on the whole area); tips are the largest gains
+  (full NPK, fuller canopy, rain), drip for non-paddy crops on canal / borewell, or "close to the best" when nothing costs
+  yield. The owner's sketch (Paddy, 3 acres, canal, 0.72, 850 mm, 90 %) gives 5.70 t/ha, **6.92 t (69 quintals)**,
+  6.09-7.75 t, high confidence.
+
+### Tables (migration `V41_YieldForecast`)
+
+- `CropYieldNorms` (Id, Crop, IrrigationClass Irrigated / Rainfed, TypicalTPerHa, LowTPerHa, HighTPerHa, StateAverageTPerHa?,
+  RainLowMm, RainHighMm, WaterNeedMinMm, WaterNeedMaxMm, YieldResponseFactor (Ky), Product, Unit "t", Notes, Source, SourceUrl,
+  SortOrder, IsActive); unique (Crop, IrrigationClass); 14 rows from `Spic.Infrastructure/Data/CropYieldNormSeed.cs`:
+
+  | Crop | Irrigated t/ha (range) | Rainfed t/ha (range) | Rain band mm | Ky | TN average 2022-23 |
+  |---|---|---|---|---|---|
+  | Paddy (grain) | 5.8 (4.5-7.0) | 3.6 (2.5-4.5) | 800-1300 | 1.10 (assumed) | 3,500 kg rice = about 5.2 t paddy |
+  | Maize (grain) | 7.5 (5.5-9.0) | 5.0 (3.5-6.0) | 500-900 | 1.25 | 7.0 |
+  | Cotton (kapas) | 2.0 (1.4-2.6) | 1.2 (0.7-1.8) | 600-1100 | 0.85 | 313 kg lint (not shown) |
+  | Groundnut (pods) | 2.6 (1.8-3.2) | 2.0 (1.2-2.6) | 500-800 | 0.70 | 2.6 |
+  | Sugarcane (cane) | 115 (85-140) | none | 800-1400 | 1.20 | 111 |
+  | Banana (bunches) | 50 (35-70) | none | 800-1400 | 1.30 | 39.4 |
+  | Black gram | 0.9 (0.6-1.1) | 0.75 (0.45-0.9) | 450-700 | 1.15 | 0.68 |
+  | Green gram | 1.0 (0.7-1.25) | 0.8 (0.35-1.0) | 450-700 | 1.15 | 0.36 |
+
+  Sources (named on every row): TNAU variety / research-station pages (rice CO 51 6,623 and ADT 45 5,900 kg/ha; ARS
+  Paramakudi ANNA (R) 4 3.7 t/ha, PMK (R) 3 3.2-3.5 t/ha; maize COH(M) 8 7,500-8,000 irrigated / 5,000-5,500 rainfed; cotton
+  CO 14, CCH 2623, SVPR 6, Sumangala; groundnut VRI 8 and TMV 14 irrigated / rainfed; sugarcane Co 86032 110 and CoC 24 133
+  t/ha; PRS Vamban VBN 10 / VBN 8; green gram VBN 4), ICAR-NRCB (Robusta 47.2 t/ha conventional planting), DES Chennai
+  Statistical Hand Book of Tamil Nadu 2022-23 tables 4.3 / 4.20 (state averages, read from the PDF), FAO Irrigation Water
+  Management manual 3 table 5 (seasonal water need) and FAO Irrigation and Drainage Paper 33 (Ky). Rice is not in FAO 33, so
+  its Ky is assumed. The rain bands are model choices (the season rainfall in which the norm holds), not published figures.
+  Read 2026-11-28; agritech.tnau.ac.in refused direct connections, so the TNAU figures come from search extracts of those
+  pages and of the TNAU station pages.
+- `YieldPredictions` (Id bigint, FarmerUserId, NormId, Crop, Method, IrrigationClass, AreaAcres, Ndvi, NdviSource, RainfallMm,
+  NpkPercent, ExpectedT, LowT, HighT, ConfidenceLabel, ResultJson, CreatedAtUtc); index (FarmerUserId, CreatedAtUtc). No
+  foreign keys, like the other farmer tables.
+
+### Tests and tools
+
+- Harness: `FarmerPortalYieldTests` (NDVI curve points, strictly increasing to 0.72 and never falling to 0.88, the lodging
+  drop; NPK 0.80 / 0.93 / 1.0, increasing with diminishing returns, the warning; rain band, Ky deficit, the 30 % irrigated
+  buffer, excess and floors; irrigation factors and norm choice; the sketch defaults inside paddy's range and equal to norm x
+  factors x acres x 0.4047; every norm's sketch values inside its own range; low <= expected <= high over 1,000+ input
+  combinations; range widths and confidence bands; factor losses, biggest loss, tips; validation; profile mapping and
+  prefill; options; seed integrity and sources; screen helpers incl. the crowded slider labels, tile, More sheet and
+  routes); updated tile / More-sheet expectations in `FarmerPortalUiTests` / `FarmerPortalRouteTests`.
+- Smoke: `python tools/farmer-portal-check/smoke_task7.py` (local API only; 42 checks: access 401 / 403, options and prefill,
+  the sketch, low inputs by look, the NPK warning, validation, history scoped to the caller).
+  `cleanup_task7_local.sql` removes the local test farmers' forecasts.
+- Screenshots: `python tools/farmer-portal-check/shoot_task7.py --out ... [--set farmer|empty|error]` (`--set empty` with a
+  farmer who has no forecasts; `--set error` with `--storage-in` from a `--storage-out` run, while the API is stopped).
+
+### Left / for the owner
+
+- Prod migration `V41_YieldForecast` (after V40). No config keys; no AI budget is used.
+- **An agronomist should sign off the norms and the curves** before go-live: the typical yields and ranges, the rain bands,
+  rice's assumed Ky, the drip / sprinkler factors (1.05 / 1.02) and aerobic paddy (0.90), and the NDVI values behind
+  Sparse / Medium / Dense.
+- NDVI is typed by the farmer or picked by look: there is no satellite feed yet. A Sentinel-2 NDVI for the farmer's field
+  (from the profile's GPS) would narrow the range.
+- Crops without a confirmed norm (coconut, turmeric, chilli, onion, tomato, wheat, soybean) are not offered; add a seed row
+  with its sources to offer one.
