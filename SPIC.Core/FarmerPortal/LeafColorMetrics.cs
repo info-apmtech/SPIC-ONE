@@ -9,7 +9,8 @@ public enum LeafPixelClass
     Green = 1,
     /// <summary>Hue 40-70 deg: chlorosis.</summary>
     Yellow = 2,
-    /// <summary>Hue below 40 deg (orange-brown, dark red-brown): dry, necrotic tissue.</summary>
+    /// <summary>Hue below 40 deg, value at most 0.65 (medium / dark brown, dark red-brown): dry, necrotic tissue. Counted
+    /// only next to green / yellow leaf tissue (<see cref="LeafColorAnalyzer.BrownReach"/>).</summary>
     Brown = 3
 }
 
@@ -37,7 +38,8 @@ public sealed class LeafMetrics
     public double MarginBrownShare { get; set; }
     /// <summary>Brown share of the leaf inside the edge band.</summary>
     public double InteriorBrownShare { get; set; }
-    /// <summary>Of the small blocks with yellow in them, the share that also hold green (green veins with yellow
+    /// <summary>Of the small blocks (1/24 of the shorter side, at least 4 px) with at least 15 % yellow, the share that also
+    /// hold at least 10 % green and 20 % yellow (green veins with yellow
     /// between them give a high value; a leaf yellow all over, or yellow in one big patch, a low one).</summary>
     public double MixedBlockShare { get; set; }
     /// <summary>1 - MixedBlockShare when the leaf has yellow; 1 when it has none.</summary>
@@ -60,6 +62,11 @@ public static class LeafColorAnalyzer
     public const double YellowHueFrom = 40;
     public const double GreenHueFrom = 70;
     public const double GreenHueTo = 170;
+    /// <summary>Brown (dry) tissue is at most this bright; lighter tan is background.</summary>
+    public const double MaxBrownValue = 0.65;
+    /// <summary>Brown pixels count as leaf only this close to green / yellow leaf tissue (share of the shorter photo
+    /// side), so a wooden table or soil away from the leaf is not measured as dry leaf.</summary>
+    public const double BrownReach = 0.06;
 
     /// <summary>A photo with less leaf than this (of all pixels) is "not a leaf / too far away".</summary>
     public const double MinLeafShare = 0.15;
@@ -90,7 +97,8 @@ public static class LeafColorAnalyzer
         if (v < MinValue || s < MinSaturation) return LeafPixelClass.Background;
         if (h >= GreenHueFrom && h <= GreenHueTo) return LeafPixelClass.Green;
         if (h >= YellowHueFrom && h < GreenHueFrom) return LeafPixelClass.Yellow;
-        // orange-brown, or a dark red-brown; a bright red / pink (flower, cloth) is not leaf
+        // dry tissue is a medium or dark brown: light tan (skin, card, sand) and bright red / pink (flower, cloth) are not leaf
+        if (v > MaxBrownValue) return LeafPixelClass.Background;
         if (h >= 10 && h < YellowHueFrom) return LeafPixelClass.Brown;
         if ((h < 10 || h >= 345) && v < 0.6) return LeafPixelClass.Brown;
         return LeafPixelClass.Background;
@@ -116,7 +124,7 @@ public static class LeafColorAnalyzer
 
     /// <summary>
     /// The chlorosis pattern hint. none: yellow under 8 % and brown under 5 %. margin: brown at least 5 %, the edge band at
-    /// least 25 % brown and at least twice the inside. Then with yellow at least 8 %: interveinal when at least 45 % of the
+    /// least 25 % brown and at least twice the inside. Then with yellow at least 8 %: interveinal when at least 40 % of the
     /// yellow blocks also hold green, uniform when the leaf is at least 60 % yellow, else patchy. Brown only: spots.
     /// </summary>
     public static string PatternOf(LeafMetrics m)
@@ -125,7 +133,7 @@ public static class LeafColorAnalyzer
         if (m.BrownShare >= 0.05 && m.MarginBrownShare >= 0.25 && m.MarginBrownShare >= 2 * m.InteriorBrownShare) return "margin";
         if (m.YellowShare >= 0.08)
         {
-            if (m.MixedBlockShare >= 0.45) return "interveinal";
+            if (m.MixedBlockShare >= 0.4) return "interveinal";
             return m.YellowShare >= 0.6 ? "uniform" : "patchy";
         }
         return "spots";
@@ -141,13 +149,22 @@ public static class LeafColorAnalyzer
 
         var n = width * height;
         var cls = new LeafPixelClass[n];
+        for (var i = 0; i < n; i++) cls[i] = Classify(rgb[i * 3], rgb[i * 3 + 1], rgb[i * 3 + 2]);
+
+        // Brown only next to living leaf tissue: distance to the nearest green / yellow pixel.
+        var plant = new bool[n];
+        for (var i = 0; i < n; i++) plant[i] = cls[i] is LeafPixelClass.Green or LeafPixelClass.Yellow;
+        var toPlant = Distances(plant, width, height);
+        var reach = Math.Max(3, (int)Math.Round(BrownReach * Math.Min(width, height)));
+        for (var i = 0; i < n; i++)
+            if (cls[i] == LeafPixelClass.Brown && toPlant[i] > reach) cls[i] = LeafPixelClass.Background;
+
         int leaf = 0, green = 0, yellow = 0, brown = 0;
         double sumR = 0, sumG = 0, sumB = 0, sumRatio = 0;
         for (var i = 0; i < n; i++)
         {
             byte r = rgb[i * 3], g = rgb[i * 3 + 1], b = rgb[i * 3 + 2];
-            var c = Classify(r, g, b);
-            cls[i] = c;
+            var c = cls[i];
             if (c == LeafPixelClass.Background) continue;
             leaf++;
             sumR += r; sumG += g; sumB += b;
@@ -178,7 +195,9 @@ public static class LeafColorAnalyzer
 
         // ---- edge band: city-block distance to the nearest background pixel (the photo border does not count,
         //      so a leaf that fills the frame has no edge band) ----
-        var dist = Distances(cls, width, height);
+        var background = new bool[n];
+        for (var i = 0; i < n; i++) background[i] = cls[i] == LeafPixelClass.Background;
+        var dist = Distances(background, width, height);
         var band = Math.Max(2, (int)Math.Round(0.06 * Math.Sqrt(leaf)));
         int bandPx = 0, bandBrown = 0, inPx = 0, inBrown = 0;
         for (var i = 0; i < n; i++)
@@ -192,7 +211,7 @@ public static class LeafColorAnalyzer
         m.InteriorBrownShare = inPx == 0 ? 0 : Round((double)inBrown / inPx);
 
         // ---- blocks: green + yellow together in one small block = green veins with yellow between ----
-        var bs = Math.Max(4, Math.Min(width, height) / 32);
+        var bs = Math.Max(4, Math.Min(width, height) / 24);
         int yellowBlocks = 0, mixedBlocks = 0;
         for (var by = 0; by < height; by += bs)
         for (var bx = 0; bx < width; bx += bs)
@@ -210,7 +229,7 @@ public static class LeafColorAnalyzer
             }
             if (bl * 2 < all || byl < 0.15 * bl) continue;
             yellowBlocks++;
-            if (bg >= 0.2 * bl && byl >= 0.2 * bl) mixedBlocks++;
+            if (bg >= 0.1 * bl && byl >= 0.2 * bl) mixedBlocks++;
         }
         m.MixedBlockShare = yellowBlocks == 0 ? 0 : Round((double)mixedBlocks / yellowBlocks);
         m.Uniformity = m.YellowShare < 0.08 || yellowBlocks == 0 ? 1 : Round(1 - m.MixedBlockShare);
@@ -218,12 +237,13 @@ public static class LeafColorAnalyzer
         return m;
     }
 
-    /// <summary>Two-pass city-block distance of every leaf pixel to the nearest background pixel (photo border = far).</summary>
-    private static int[] Distances(LeafPixelClass[] cls, int w, int h)
+    /// <summary>Two-pass city-block distance of every pixel to the nearest <paramref name="target"/> pixel (0 on a target;
+    /// the photo border is not a target).</summary>
+    private static int[] Distances(bool[] target, int w, int h)
     {
         const int Far = int.MaxValue / 4;
-        var d = new int[cls.Length];
-        for (var i = 0; i < d.Length; i++) d[i] = cls[i] == LeafPixelClass.Background ? 0 : Far;
+        var d = new int[target.Length];
+        for (var i = 0; i < d.Length; i++) d[i] = target[i] ? 0 : Far;
         for (var y = 0; y < h; y++)
         for (var x = 0; x < w; x++)
         {

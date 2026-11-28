@@ -1,0 +1,247 @@
+@namespace SPIC.MauiBlazorApp.Shared.Components.FarmerPortal
+@using SPIC.Core.DTOs
+
+@*
+    LeafCheckResultView - one leaf-photo check (farmer portal Task 6): the summary band (photo, condition, confidence
+    bar, "Basic colour check" tag), likely nutrients, what we saw (pattern, leaf colour score, colour shares,
+    symptoms), what to do (advice and the TNAU correctives with sources), actions and the disclaimer. Used by
+    /farmer/leaf-check and the saved checks in /farmer/leaf-check/history/{id}.
+*@
+
+<section class="fplr" aria-label="Your leaf check result">
+    @{ var hue = LeafCheckUi.ConditionHue(Result.Condition, Result.NotALeaf); var pct = LeafCheckUi.Percent(Result.Confidence); }
+    <FpCard @ref="_summaryCard" Title="@Result.ConditionLabel" Icon="@LeafCheckUi.ConditionIcon(Result.Condition, Result.NotALeaf)" Hue="@hue"
+            Variant="FpCardVariant.Highlight" Subtitle="@Subtitle" CssClass="@($"fplr-summary fplr-summary--{Result.Condition}")">
+        <div class="fplr-band">
+            @if (!string.IsNullOrEmpty(PhotoUrl))
+            {
+                <img class="fplr-photo" src="@PhotoUrl" alt="Your leaf photo" />
+            }
+            <div class="fplr-band__body">
+                @if (Result.BasicLabel is not null)
+                {
+                    <span class="fplr-basic"><i class="bi bi-palette2" aria-hidden="true"></i> @Result.BasicLabel</span>
+                }
+                else
+                {
+                    <span class="fplr-ai"><i class="bi bi-stars" aria-hidden="true"></i> Checked by SPIC AI</span>
+                }
+                @if (!Result.NotALeaf)
+                {
+                    <div class="fplr-confidence">
+                        <div class="fplr-confidence__head">
+                            <span>Confidence</span>
+                            <strong class="fp-num">@pct %</strong>
+                            <span class="fplr-confidence__word">@LeafCheckUi.ConfidenceWord(Result.Confidence)</span>
+                        </div>
+                        <div class="fplr-bar fp-hue-@hue.ToString().ToLowerInvariant()" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@pct" aria-label="Confidence">
+                            <span style="width:@(pct)%"></span>
+                        </div>
+                    </div>
+                }
+                @if (Result.Nutrients.Count > 0 && !Result.NotALeaf)
+                {
+                    <div class="fplr-top">
+                        @foreach (var n in Result.Nutrients.Take(3))
+                        {
+                            <span class="fplr-top__chip"><b>@n.Code</b> @n.Name · @n.LikelihoodLabel</span>
+                        }
+                    </div>
+                }
+                @if (Result.Notice is not null)
+                {
+                    <p class="fp-caption fplr-notice"><i class="bi bi-info-circle" aria-hidden="true"></i> @Result.Notice</p>
+                }
+            </div>
+        </div>
+    </FpCard>
+
+    @if (Result.NotALeaf)
+    {
+        <FpCard Title="Take a better photo" Icon="bi-camera" Hue="FpHue.Sky" CssClass="fp-fade-up-2">
+            <ul class="fplr-list">
+                @foreach (var a in Result.Advice)
+                {
+                    <li>@a</li>
+                }
+            </ul>
+            <div class="fplr-tips">
+                @foreach (var tip in LeafCheckUi.Tips)
+                {
+                    <div class="fplr-tip"><span class="fp-icon-circle fp-icon-circle--sm fp-hue-sky" aria-hidden="true"><i class="bi @tip.Icon"></i></span><span><strong>@tip.Title</strong> @tip.Text</span></div>
+                }
+            </div>
+        </FpCard>
+    }
+    else
+    {
+        <div class="fplr-grid">
+            @if (Result.Nutrients.Count > 0)
+            {
+                <FpCard Title="Likely nutrients" Icon="bi-capsule" Hue="FpHue.Gold" CssClass="fp-fade-up-2"
+                        Subtitle="Which nutrient may be short, from the photo.">
+                    <ul class="fplr-nutrients">
+                        @foreach (var n in Result.Nutrients)
+                        {
+                            var p = LeafCheckUi.Percent(n.Likelihood);
+                            <li class="fplr-nutrient">
+                                <span class="fplr-nutrient__badge" aria-hidden="true">@n.Code</span>
+                                <span class="fplr-nutrient__body">
+                                    <span class="fplr-nutrient__head"><strong>@n.Name</strong><span class="fplr-nutrient__word">@n.LikelihoodLabel</span></span>
+                                    <span class="fplr-bar fplr-bar--thin fp-hue-gold" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@p" aria-label="@($"{n.Name} likelihood")"><span style="width:@(p)%"></span></span>
+                                </span>
+                            </li>
+                        }
+                    </ul>
+                </FpCard>
+            }
+
+            <FpCard Title="What we saw" Icon="bi-eye" Hue="FpHue.Green" CssClass="fp-fade-up-2">
+                <div class="fplr-seen">
+                    <div class="fplr-seen__row">
+                        <span class="fp-caption">Pattern</span>
+                        <strong>@Result.PatternLabel</strong>
+                    </div>
+                    <div class="fplr-seen__row">
+                        <span class="fp-caption">Leaf colour score</span>
+                        <span class="fplr-lcc" role="img" aria-label="@($"Leaf colour score {Result.LccLabel}")">
+                            @for (var i = 1; i <= 6; i++)
+                            {
+                                <span class="fplr-lcc__step fplr-lcc__step--@i @(i == Result.Metrics.LccScore ? "is-on" : null)">@i</span>
+                            }
+                        </span>
+                        <span class="fp-caption">@Result.LccLabel (darker green = more nitrogen)</span>
+                    </div>
+                    <div class="fplr-seen__row">
+                        <span class="fp-caption">Leaf colours</span>
+                        <span class="fplr-shares" aria-hidden="true">
+                            <span class="fplr-shares__green" style="width:@(LeafCheckUi.Percent(Result.Metrics.GreenShare))%"></span>
+                            <span class="fplr-shares__yellow" style="width:@(LeafCheckUi.Percent(Result.Metrics.YellowShare))%"></span>
+                            <span class="fplr-shares__brown" style="width:@(LeafCheckUi.Percent(Result.Metrics.BrownShare))%"></span>
+                        </span>
+                        <span class="fplr-legend fp-num">
+                            <span><i class="fplr-dot fplr-dot--green"></i> Green @LeafCheckUi.Percent(Result.Metrics.GreenShare) %</span>
+                            <span><i class="fplr-dot fplr-dot--yellow"></i> Yellow @LeafCheckUi.Percent(Result.Metrics.YellowShare) %</span>
+                            <span><i class="fplr-dot fplr-dot--brown"></i> Brown @LeafCheckUi.Percent(Result.Metrics.BrownShare) %</span>
+                        </span>
+                    </div>
+                    @if (Result.LeafAgeHint != "unknown")
+                    {
+                        <div class="fplr-seen__row">
+                            <span class="fp-caption">You said</span>
+                            <strong>@LeafAgeText(Result.LeafAgeHint) are affected</strong>
+                        </div>
+                    }
+                </div>
+                @if (Result.Symptoms.Count > 0)
+                {
+                    <ul class="fplr-list fplr-list--seen">
+                        @foreach (var s in Result.Symptoms)
+                        {
+                            <li>@s</li>
+                        }
+                    </ul>
+                }
+            </FpCard>
+        </div>
+
+        <FpCard Title="What to do" Icon="bi-clipboard2-check" Hue="FpHue.Teal" CssClass="fp-fade-up-3"
+                Subtitle="@(Result.Correctives.Count > 0 ? "Steps first, then the TNAU doses for the likely nutrients." : null)">
+            @if (Result.Advice.Count > 0)
+            {
+                <ol class="fplr-steps">
+                    @foreach (var a in Result.Advice)
+                    {
+                        <li>@a</li>
+                    }
+                </ol>
+            }
+            @if (Result.Correctives.Count > 0)
+            {
+                @foreach (var group in Result.Correctives.GroupBy(c => c.Nutrient))
+                {
+                    <div class="fplr-fix">
+                        <h3 class="fplr-fix__title"><span class="fplr-nutrient__badge" aria-hidden="true">@group.Key</span> If @group.First().NutrientName.ToLowerInvariant() is short</h3>
+                        <ul class="fplr-fix__list">
+                            @foreach (var c in group)
+                            {
+                                <li class="fplr-fix__item">
+                                    <span class="fplr-method fplr-method--@c.Method.ToLowerInvariant()"><i class="bi @LeafCheckUi.MethodIcon(c.Method)" aria-hidden="true"></i> @LeafCheckUi.MethodLabel(c.Method)</span>
+                                    <span class="fplr-fix__body">
+                                        <strong>@c.Product</strong>
+                                        <span class="fplr-fix__dose">@c.Dose</span>
+                                        @if (!string.IsNullOrWhiteSpace(c.Note))
+                                        {
+                                            <span class="fp-caption">@c.Note</span>
+                                        }
+                                        @if (!string.IsNullOrWhiteSpace(c.SourceUrl))
+                                        {
+                                            <a class="fplr-source" href="@c.SourceUrl" target="_blank" rel="noopener"><i class="bi bi-box-arrow-up-right" aria-hidden="true"></i> @c.Source</a>
+                                        }
+                                        else
+                                        {
+                                            <span class="fplr-source">@c.Source</span>
+                                        }
+                                    </span>
+                                </li>
+                            }
+                        </ul>
+                        @if (group.Key == "N")
+                        {
+                            <a class="fp-link-btn fplr-fix__link" href="/farmer/fertilizer"><i class="bi bi-flower2" aria-hidden="true"></i> Open Fertilizer advice for your urea dose</a>
+                        }
+                    </div>
+                }
+            }
+            @if (Result.NeedsSoilTest)
+            {
+                <div class="fp-alert fp-alert--info fplr-soil" role="note">
+                    <i class="bi bi-moisture" aria-hidden="true"></i>
+                    <span>A soil test tells you for sure which nutrient is short. Ask your SPIC officer to collect a soil sample.</span>
+                </div>
+            }
+        </FpCard>
+    }
+
+    <div class="fp-action-pills fplr-actions">
+        <a class="fp-action-pill" href="/farmer/team"><i class="bi bi-moisture" aria-hidden="true"></i> Get a soil test</a>
+        <a class="fp-action-pill" href="/farmer/team"><i class="bi bi-person-badge" aria-hidden="true"></i> Ask my MDO</a>
+        @if (OnCheckAnother.HasDelegate)
+        {
+            <button type="button" class="fp-action-pill" @onclick="OnCheckAnother"><i class="bi bi-camera" aria-hidden="true"></i> Check another leaf</button>
+        }
+        @if (ShowHistoryLink)
+        {
+            <a class="fp-action-pill" href="/farmer/leaf-check/history"><i class="bi bi-clock-history" aria-hidden="true"></i> My past checks</a>
+        }
+    </div>
+
+    <FpDisclaimer>
+        @Result.Disclaimer <a href="/farmer/team">My SPIC team</a>
+    </FpDisclaimer>
+</section>
+
+@code {
+    [Parameter, EditorRequired] public LeafCheckResultDto Result { get; set; } = new();
+
+    /// <summary>The photo as a data URL (the preview, or the stored photo loaded through the API).</summary>
+    [Parameter] public string? PhotoUrl { get; set; }
+
+    [Parameter] public EventCallback OnCheckAnother { get; set; }
+
+    [Parameter] public bool ShowHistoryLink { get; set; } = true;
+
+    private FpCard? _summaryCard;
+
+    private string Subtitle => $"{Result.Crop} · {LeafCheckUi.When(Result.CreatedAtUtc)}";
+
+    private static string LeafAgeText(string age) => age switch
+    {
+        "older" => "Older (lower) leaves",
+        "younger" => "Young (top) leaves",
+        _ => "All leaves"
+    };
+
+    /// <summary>Moves focus (and the screen) to the summary. Never throws.</summary>
+    public Task FocusAsync() => _summaryCard?.FocusTitleAsync() ?? Task.CompletedTask;
+}

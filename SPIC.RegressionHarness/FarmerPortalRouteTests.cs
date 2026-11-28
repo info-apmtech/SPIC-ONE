@@ -51,8 +51,8 @@ internal static class FarmerPortalRouteTests
 		Check.Equal("tabs: farmer without SAS link", "farmer,FarmerProfile", Keys(ShellNavigation.GetPhoneTabs(farmer)));
 		Check.Equal("tabs: farmer tablet rail is the farmer list only", "farmer,FarmerProfile", Keys(ShellNavigation.GetRailItems(farmer)));
 		// Task 2 (fix round 1) adds Dealers / My SPIC team / My requests and Task 3 Trends / Community near me to
-		// the farmer More sheet, Task 4 Fertilizer advice first, Task 5 Ask SPIC AI second (still no staff pages).
-		Check.Equal("tabs: farmer More sheet offers no staff pages", "FarmerFertilizer,FarmerAssistant,FarmerDealers,FarmerTeam,FarmerMyRequests,FarmerTrends,FarmerCommunity",
+		// the farmer More sheet, Task 4 Fertilizer advice first, Task 5 Ask SPIC AI second, Task 6 Leaf check third (still no staff pages).
+		Check.Equal("tabs: farmer More sheet offers no staff pages", "FarmerFertilizer,FarmerAssistant,FarmerLeafCheck,FarmerDealers,FarmerTeam,FarmerMyRequests,FarmerTrends,FarmerCommunity",
 			Keys(ShellNavigation.MoreItems(farmer)));
 		var linked = TestLogin.As(AppRole.Farmer, "");
 		linked.SetFarmerSasLinked(true);

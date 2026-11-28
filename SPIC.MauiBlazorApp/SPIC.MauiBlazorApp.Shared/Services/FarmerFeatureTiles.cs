@@ -39,6 +39,9 @@ public static class FarmerFeatureTiles
         // Task 5
         new("assistant", "Ask SPIC AI", "Farming questions in your language",
             "bi-stars", FpHue.Rose, "/farmer/assistant", Always),
+        // Task 6
+        new("leaf-check", "Leaf check", "Photo of a leaf: what is it short of?",
+            "bi-camera", FpHue.Teal, "/farmer/leaf-check", Always),
         // Task 2
         new("dealers", "Dealers near me", "Call or visit a SPIC dealer",
             "bi-shop", FpHue.Gold, "/farmer/dealers", Always),

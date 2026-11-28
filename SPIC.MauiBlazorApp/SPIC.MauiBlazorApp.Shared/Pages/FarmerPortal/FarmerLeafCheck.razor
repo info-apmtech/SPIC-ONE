@@ -1,0 +1,376 @@
+@page "/farmer/leaf-check"
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
+@inject FarmerSession Farmer
+@inject FarmerLeafCheckApi Api
+@inject LoginState LoginState
+
+@*
+    Leaf check (farmer portal Task 6, api/Farmer/leaf-check). Pick the crop, take a photo (camera) or choose one from
+    the gallery, see the preview and the tips, say which leaves are yellow, submit. While it is checked the preview
+    shows a scanning state; the result (LeafCheckResultView) appears below and is saved to My past checks.
+*@
+
+<div class="fp fp-page fplc">
+    <FpHero Title="Leaf check" Compact="true" BackHref="@LoginState.FarmerLandingPath" BackLabel="Back to home"
+            Subtitle="Photograph one leaf. SPIC AI checks its colour for nutrient shortage and tells you what to do.">
+        <div class="fp-chips fplc-hero-chips">
+            @if (_status is { } st)
+            {
+                <FpChip Icon="bi-camera" Text="@LeafCheckUi.LeftText(st.LeftToday, st.DailyLimit)" Small="true" />
+                @if (!st.FullCheck)
+                {
+                    <FpChip Icon="bi-palette2" Text="Basic colour check today" Small="true" />
+                }
+            }
+            <a class="fp-btn fp-btn--light fp-btn--sm fplc-history-link" href="/farmer/leaf-check/history"><i class="bi bi-clock-history" aria-hidden="true"></i> My past checks</a>
+        </div>
+    </FpHero>
+
+    @if (LoginState.UserRole != AppRole.Farmer)
+    {
+        <FpEmpty Art="FpArtKind.Field" Title="You are viewing as support staff"
+                 Message="Farmers check a leaf photo for nutrient shortage here. Support staff have no farmer profile, so nothing is saved." />
+    }
+    else if (_loading)
+    {
+        <FpSkeleton Variant="FpSkeletonVariant.Form" Count="2" LoadingText="Opening the leaf check..." />
+    }
+    else if (_loadError is not null || _status is null)
+    {
+        <FpError Title="We could not open the leaf check" Message="@(_loadError ?? "Please try again.")" OnRetry="LoadAsync" />
+    }
+    else if (_result is { } result)
+    {
+        <LeafCheckResultView @ref="_resultView" Result="@result" PhotoUrl="@_previewUrl" OnCheckAnother="StartOver" />
+    }
+    else if (_capped || _status.LeftToday <= 0)
+    {
+        <FpCard Title="That's all for today" Icon="bi-hourglass-split" Hue="FpHue.Gold" CssClass="fplc-cap">
+            <p class="fp-text">@(_capMessage ?? SPIC.Core.FarmerPortal.LeafCheckRules.CapMessage(_status.DailyLimit))</p>
+            <div class="fp-action-pills">
+                <a class="fp-action-pill" href="/farmer/team"><i class="bi bi-person-badge" aria-hidden="true"></i> Ask my SPIC team</a>
+                <a class="fp-action-pill" href="/farmer/leaf-check/history"><i class="bi bi-clock-history" aria-hidden="true"></i> My past checks</a>
+            </div>
+        </FpCard>
+    }
+    else
+    {
+        <div class="fplc-layout">
+            @* ---- the photo ---- *@
+            <FpCard Title="Your leaf photo" Icon="bi-camera" Hue="FpHue.Green" CssClass="fplc-card fplc-card--photo"
+                    Subtitle="@(_photo is null ? "Take a photo with your camera or choose one from your gallery." : "Check the photo is sharp and shows the problem.")">
+                @if (_previewUrl is null)
+                {
+                    <div class="fplc-drop @(_reading ? "is-busy" : null)">
+                        <span class="fplc-drop__art" aria-hidden="true">
+                            <svg viewBox="0 0 120 120" width="96" height="96">
+                                <circle cx="60" cy="60" r="56" fill="#e8f5ee" />
+                                <path d="M34 82 C34 52 54 34 88 32 C88 64 70 84 40 86 Z" fill="#14935a" />
+                                <path d="M40 80 C52 66 64 54 82 40" stroke="#e8f5ee" stroke-width="3" fill="none" stroke-linecap="round" />
+                                <path d="M54 66 l-6 -10 M64 56 l-4 -12 M66 58 l10 -2 M56 68 l10 0" stroke="#e8f5ee" stroke-width="2" fill="none" stroke-linecap="round" />
+                                <circle cx="88" cy="84" r="16" fill="#0b6b3a" />
+                                <rect x="80" y="79" width="16" height="11" rx="2.5" fill="#fff" />
+                                <circle cx="88" cy="84.5" r="3.2" fill="#0b6b3a" />
+                            </svg>
+                        </span>
+                        @if (_reading)
+                        {
+                            <p class="fplc-drop__text"><span class="fp-spinner" aria-hidden="true"></span> Opening your photo...</p>
+                        }
+                        else
+                        {
+                            <p class="fplc-drop__text">One leaf, in daylight, on a plain background</p>
+                        }
+                        <div class="fplc-pick">
+                            <label class="fp-btn fp-btn--primary fplc-pick__btn" for="fplc-camera">
+                                <i class="bi bi-camera-fill" aria-hidden="true"></i> Take a photo
+                            </label>
+                            <label class="fp-btn fp-btn--secondary fplc-pick__btn" for="fplc-gallery">
+                                <i class="bi bi-images" aria-hidden="true"></i> Choose from gallery
+                            </label>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <div class="fplc-preview @(_submitting ? "is-scanning" : null)">
+                        <img src="@_previewUrl" alt="Preview of your leaf photo" />
+                        @if (_submitting)
+                        {
+                            <span class="fplc-scan" aria-hidden="true"></span>
+                            <span class="fplc-preview__badge"><span class="fp-spinner" aria-hidden="true"></span> Checking your leaf...</span>
+                        }
+                    </div>
+                    @if (!_submitting)
+                    {
+                        <div class="fplc-preview__bar">
+                            <span class="fp-caption">@_photoInfo</span>
+                            <span class="fplc-preview__actions">
+                                <label class="fp-btn fp-btn--ghost fp-btn--sm" for="fplc-camera"><i class="bi bi-camera" aria-hidden="true"></i> Retake</label>
+                                <label class="fp-btn fp-btn--ghost fp-btn--sm" for="fplc-gallery"><i class="bi bi-images" aria-hidden="true"></i> Another photo</label>
+                            </span>
+                        </div>
+                    }
+                }
+                @* The real file inputs: the labels above open them. capture="environment" opens the back camera on phones. *@
+                <InputFile id="fplc-camera" class="fp-sr-only" accept="image/*" capture="environment" OnChange="PhotoChosenAsync" disabled="@(_submitting || _reading)" />
+                <InputFile id="fplc-gallery" class="fp-sr-only" accept="image/jpeg,image/png,image/webp,image/*" OnChange="PhotoChosenAsync" disabled="@(_submitting || _reading)" />
+                <FpFieldError Text="@Err("photo")" />
+            </FpCard>
+
+            <div class="fplc-side">
+                @if (_submitting)
+                {
+                    <FpCard Title="Checking your leaf" Icon="bi-hourglass-split" Hue="FpHue.Sky" CssClass="fplc-card fplc-working" Animate="false"
+                            Subtitle="This takes up to a minute. You can stay on this page.">
+                        <ol class="fplc-working__steps">
+                            <li><i class="bi bi-palette2" aria-hidden="true"></i> We measure the green, yellow and brown on the leaf</li>
+                            <li><i class="bi bi-stars" aria-hidden="true"></i> @(_status.FullCheck ? "SPIC AI looks at the leaf for nutrient, disease and pest signs" : "We compare the colours with the usual shortage patterns")</li>
+                            <li><i class="bi bi-journal-check" aria-hidden="true"></i> We match TNAU advice for the likely nutrients</li>
+                        </ol>
+                    </FpCard>
+                }
+                else
+                {
+                    @* ---- crop and leaves ---- *@
+                    <FpCard Title="About your crop" Icon="bi-flower1" Hue="FpHue.Gold" CssClass="fplc-card">
+                        <div class="fp-field">
+                            <span class="fp-label" id="fplc-crop-label">Crop <span class="fp-req" aria-hidden="true">*</span></span>
+                            <div class="fp-chips fplc-crops" role="radiogroup" aria-labelledby="fplc-crop-label">
+                                @foreach (var c in _crops)
+                                {
+                                    <FpChip Text="@c" Emoji="@FpUi.CropEmoji(c)" Selected="@(c == _crop)" OnClick="() => PickCrop(c)" />
+                                }
+                            </div>
+                            <FpFieldError Text="@Err("crop")" />
+                        </div>
+                        <div class="fp-field">
+                            <span class="fp-label" id="fplc-age-label">Which leaves have the problem? <span class="fp-optional">(helps the check)</span></span>
+                            <div class="fp-chips" role="radiogroup" aria-labelledby="fplc-age-label">
+                                @foreach (var a in LeafCheckUi.LeafAges)
+                                {
+                                    <FpChip Text="@a.Label" Small="true" Selected="@(a.Value == _leafAge)" OnClick="() => _leafAge = a.Value" />
+                                }
+                            </div>
+                        </div>
+                    </FpCard>
+
+                    @* ---- tips ---- *@
+                    <FpCard Title="Tips for a good photo" Icon="bi-lightbulb" Hue="FpHue.Sky" CssClass="fplc-card fplc-tips-card">
+                        <ul class="fplc-tips">
+                            @foreach (var tip in LeafCheckUi.Tips)
+                            {
+                                <li class="fplc-tip">
+                                    <span class="fp-icon-circle fp-icon-circle--sm fp-hue-sky" aria-hidden="true"><i class="bi @tip.Icon"></i></span>
+                                    <span><strong>@tip.Title</strong><span class="fp-caption">@tip.Text</span></span>
+                                </li>
+                            }
+                        </ul>
+                    </FpCard>
+                }
+
+                @if (_formError is not null)
+                {
+                    <div class="fp-alert fp-alert--error" role="alert"><i class="bi bi-exclamation-circle-fill" aria-hidden="true"></i><span>@_formError</span></div>
+                }
+
+                <div class="fp-actionbar fplc-actionbar">
+                    <button type="button" class="fp-btn fp-btn--primary" disabled="@(_submitting || _reading || _photo is null || _crop is null)" @onclick="SubmitAsync">
+                        @if (_submitting)
+                        {
+                            <span class="fp-spinner" aria-hidden="true"></span>
+                            <span>Checking your leaf...</span>
+                        }
+                        else
+                        {
+                            <i class="bi bi-search" aria-hidden="true"></i>
+                            <span>@(_photo is null ? "Add a photo to check" : _crop is null ? "Choose your crop" : "Check my leaf")</span>
+                        }
+                    </button>
+                </div>
+            </div>
+        </div>
+        <FpDisclaimer Text="@(_status.FullCheck ? SPIC.Core.FarmerPortal.LeafCheckRules.Disclaimer : "Today SPIC AI gives a basic colour check from the leaf colours. Confirm with a soil test or your MDO.")" />
+    }
+</div>
+
+@code {
+    private bool _loading = true;
+    private string? _loadError;
+    private LeafCheckStatusDto? _status;
+    private List<string> _crops = new();
+
+    private string? _crop;
+    private string _leafAge = "unknown";
+
+    private byte[]? _photo;
+    private string _photoType = "image/jpeg";
+    private string? _previewUrl;
+    private string? _photoInfo;
+    private bool _reading;
+
+    private bool _submitting;
+    private string? _formError;
+    private IReadOnlyDictionary<string, string>? _errors;
+    private bool _capped;
+    private string? _capMessage;
+
+    private LeafCheckResultDto? _result;
+    private LeafCheckResultView? _resultView;
+    private bool _focusResult;
+
+    /// <summary>Photos are shrunk in the browser before upload (the server re-encodes again); 1600 px is plenty.</summary>
+    private const int UploadSide = 1600;
+
+    private string? Err(string key) => _errors is not null && _errors.TryGetValue(key, out var v) ? v : null;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_focusResult || _resultView is null) return;
+        _focusResult = false;
+        try { await _resultView.FocusAsync(); } catch { /* never throw from here */ }
+    }
+
+    private async Task LoadAsync()
+    {
+        if (LoginState.UserRole != AppRole.Farmer)
+        {
+            _loading = false;
+            return;
+        }
+        _loading = true;
+        _loadError = null;
+        StateHasChanged();
+        var status = await Api.StatusAsync();
+        if (status.Value is not { } st)
+        {
+            _loading = false;
+            _loadError = status.Message ?? "Please try again.";
+            return;
+        }
+        _status = st;
+        try { await Farmer.EnsureLoadedAsync(); } catch { /* the profile only orders the crops */ }
+        var profileCrops = Farmer.Profile?.PrimaryCrops ?? new List<string>();
+        _crops = LeafCheckUi.CropOrder(st.Crops, profileCrops);
+        // The first profile crop that is offered is chosen for the farmer (they can change it).
+        _crop ??= _crops.FirstOrDefault(c => profileCrops.Contains(c, StringComparer.OrdinalIgnoreCase));
+        _loading = false;
+    }
+
+    private void PickCrop(string crop)
+    {
+        _crop = crop;
+        ClearError("crop");
+    }
+
+    private async Task PhotoChosenAsync(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file is null) return;
+        _reading = true;
+        _formError = null;
+        ClearError("photo");
+        StateHasChanged();
+        try
+        {
+            var max = _status?.MaxPhotoBytes ?? SPIC.Core.FarmerPortal.LeafCheckRules.MaxPhotoBytes;
+            byte[]? bytes = null;
+            var type = "image/jpeg";
+            // Shrink in the browser first (canvas; also turns the photo upright). Fall back to the original file.
+            try
+            {
+                var small = await file.RequestImageFileAsync("image/jpeg", UploadSide, UploadSide);
+                if (small.Size > 0 && small.Size <= max) bytes = await ReadAsync(small, max);
+            }
+            catch { bytes = null; }
+            if (bytes is null || bytes.Length == 0)
+            {
+                if (file.Size > max)
+                {
+                    SetPhotoError("This photo is too large (over 8 MB). Please take a new photo or choose a smaller one.");
+                    return;
+                }
+                bytes = await ReadAsync(file, max);
+                type = string.IsNullOrWhiteSpace(file.ContentType) ? "application/octet-stream" : file.ContentType;
+            }
+            _photo = bytes;
+            _photoType = type;
+            _previewUrl = LeafCheckUi.DataUrl(type.StartsWith("image/") ? type : "image/jpeg", bytes);
+            _photoInfo = $"{(string.IsNullOrWhiteSpace(file.Name) ? "Photo" : Short(file.Name))} · {LeafCheckUi.Size(bytes.Length)}";
+        }
+        catch (Exception)
+        {
+            SetPhotoError("We could not open this photo. Please take a new photo and try again.");
+        }
+        finally
+        {
+            _reading = false;
+        }
+    }
+
+    private static async Task<byte[]> ReadAsync(IBrowserFile file, long max)
+    {
+        await using var stream = file.OpenReadStream(max);
+        using var ms = new MemoryStream();
+        await stream.CopyToAsync(ms);
+        return ms.ToArray();
+    }
+
+    private static string Short(string name) => name.Length <= 28 ? name : name[..12] + "..." + name[^12..];
+
+    private void SetPhotoError(string message)
+    {
+        _errors = new Dictionary<string, string> { ["photo"] = message };
+    }
+
+    private async Task SubmitAsync()
+    {
+        if (_photo is null || _crop is null || _status is null) return;
+        _formError = null;
+        _errors = null;
+        _submitting = true;
+        StateHasChanged();
+        var result = await Api.CheckAsync(_photo, _photoType, _crop, _leafAge);
+        _submitting = false;
+        if (result.Value is { } check)
+        {
+            _result = check;
+            _focusResult = true;
+            _status.UsedToday++;
+            _status.LeftToday = Math.Max(0, _status.LeftToday - 1);
+            return;
+        }
+        if (result.Capped)
+        {
+            _capped = true;
+            _capMessage = result.Message;
+            return;
+        }
+        // Photo and crop errors show at their fields; anything else (offline, server) in the strip above the button.
+        _errors = result.Errors;
+        _formError = result.Errors is { Count: > 0 } errs && errs.Keys.All(k => k is "photo" or "crop")
+            ? null
+            : result.Message ?? "Please try again.";
+    }
+
+    private void StartOver()
+    {
+        _result = null;
+        _photo = null;
+        _previewUrl = null;
+        _photoInfo = null;
+        _leafAge = "unknown";
+        _errors = null;
+        _formError = null;
+    }
+
+    private void ClearError(string key)
+    {
+        if (_errors is null || !_errors.ContainsKey(key)) return;
+        var copy = _errors.Where(e => e.Key != key).ToDictionary(e => e.Key, e => e.Value);
+        _errors = copy.Count == 0 ? null : copy;
+    }
+}

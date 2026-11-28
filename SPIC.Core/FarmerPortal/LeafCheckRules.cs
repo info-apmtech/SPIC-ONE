@@ -234,7 +234,7 @@ public static class LeafCheckRules
             r.Confidence = 0.5;
             r.Symptoms.Add($"Only {Pct(m.LeafShare)} of the photo has leaf colours");
             r.Advice.Add("Take a new photo of one leaf, close up, so it fills most of the picture.");
-            r.Advice.Add("Use daylight and a plain background (a white paper or your palm).");
+            r.Advice.Add("Use daylight and a plain background (a white paper or a plain cloth).");
             return r;
         }
 

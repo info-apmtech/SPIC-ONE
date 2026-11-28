@@ -1,0 +1,193 @@
+@page "/farmer/leaf-check/history"
+@page "/farmer/leaf-check/history/{CheckId:long}"
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
+@inject FarmerLeafCheckApi Api
+@inject FarmerSession Farmer
+@inject LoginState LoginState
+@inject NavigationManager Nav
+@inject ToastService Toast
+
+@*
+    My past leaf checks (farmer portal Task 6): the farmer's latest 30 checks with a small photo
+    (api/Farmer/leaf-check/history, {id}/image?thumb=true), and one saved check in full (history/{id}) with delete.
+*@
+
+<div class="fp fp-page fplh">
+    @if (CheckId is null)
+    {
+        <FpHero Title="My past leaf checks" Compact="true" BackHref="/farmer/leaf-check" BackLabel="Back to leaf check"
+                Subtitle="Your last 30 leaf photos and what we found. Open one to see the advice again." />
+    }
+    else
+    {
+        <FpHero Title="Saved leaf check" Compact="true" BackHref="/farmer/leaf-check/history" BackLabel="Back to my past checks"
+                Subtitle="@(_check is { } c ? $"{c.Crop} · {LeafCheckUi.When(c.CreatedAtUtc)}" : "Your saved check")" />
+    }
+
+    @if (LoginState.UserRole != AppRole.Farmer)
+    {
+        <FpEmpty Art="FpArtKind.Field" Title="You are viewing as support staff" Message="Farmers see their own leaf checks here." />
+    }
+    else if (_loading)
+    {
+        <FpSkeleton Variant="FpSkeletonVariant.Cards" Count="3" LoadingText="Opening your leaf checks..." />
+    }
+    else if (_error is not null)
+    {
+        <FpError Title="We could not open your leaf checks" Message="@_error" OnRetry="LoadAsync" />
+    }
+    else if (CheckId is not null && _check is { } check)
+    {
+        <LeafCheckResultView Result="@check" PhotoUrl="@_photoUrl" ShowHistoryLink="false" />
+        <div class="fplh-delete">
+            <button type="button" class="fp-btn fp-btn--ghost fp-btn--sm" disabled="@_deleting" @onclick="DeleteAsync">
+                <i class="bi bi-trash3" aria-hidden="true"></i> Delete this check and its photo
+            </button>
+        </div>
+    }
+    else if (_items.Count == 0)
+    {
+        <FpEmpty Art="FpArtKind.Sprout" Card="true" Title="No leaf checks yet"
+                 Message="Photograph a leaf that looks yellow or dry. We tell you which nutrient may be short and what to do.">
+            <a class="fp-btn fp-btn--primary" href="/farmer/leaf-check"><i class="bi bi-camera" aria-hidden="true"></i> Check a leaf</a>
+        </FpEmpty>
+    }
+    else
+    {
+        <ul class="fplh-list">
+            @foreach (var item in _items)
+            {
+                var hue = LeafCheckUi.ConditionHue(item.Condition, item.NotALeaf);
+                <li>
+                    <a class="fplh-item fp-fade-up" href="@($"/farmer/leaf-check/history/{item.Id}")">
+                        <span class="fplh-item__thumb">
+                            @if (_thumbs.TryGetValue(item.Id, out var url) && url is not null)
+                            {
+                                <img src="@url" alt="" />
+                            }
+                            else
+                            {
+                                <span class="fplh-item__placeholder" aria-hidden="true">@(FpUi.CropEmoji(item.Crop) ?? "\U0001F343")</span>
+                            }
+                        </span>
+                        <span class="fplh-item__body">
+                            <span class="fplh-item__title">
+                                <span class="fp-icon-circle fp-icon-circle--sm @FpUi.HueCss(hue)" aria-hidden="true"><i class="bi @LeafCheckUi.ConditionIcon(item.Condition, item.NotALeaf)"></i></span>
+                                @item.ConditionLabel
+                            </span>
+                            <span class="fp-caption">@item.Crop · @LeafCheckUi.When(item.CreatedAtUtc)</span>
+                            <span class="fplh-item__chips">
+                                @if (item.TopNutrientName is not null && !item.NotALeaf)
+                                {
+                                    <span class="fplh-chip fplh-chip--nutrient"><b>@item.TopNutrient</b> @item.TopNutrientName</span>
+                                }
+                                @if (item.LccScore > 0 && !item.NotALeaf)
+                                {
+                                    <span class="fplh-chip fp-num">Colour score @item.LccScore / 6</span>
+                                }
+                                <span class="fplh-chip @(item.Provider == "ai" ? "fplh-chip--ai" : "fplh-chip--basic")">
+                                    @(item.Provider == "ai" ? "SPIC AI" : SPIC.Core.FarmerPortal.LeafCheckRules.BasicLabel)
+                                </span>
+                            </span>
+                        </span>
+                        <i class="bi bi-chevron-right fplh-item__chevron" aria-hidden="true"></i>
+                    </a>
+                </li>
+            }
+        </ul>
+        <div class="fp-actionbar">
+            <a class="fp-btn fp-btn--primary" href="/farmer/leaf-check"><i class="bi bi-camera" aria-hidden="true"></i> Check another leaf</a>
+        </div>
+        <FpDisclaimer Text="@SPIC.Core.FarmerPortal.LeafCheckRules.Disclaimer" />
+    }
+</div>
+
+@code {
+    [Parameter] public long? CheckId { get; set; }
+
+    private bool _loading = true;
+    private string? _error;
+    private List<LeafCheckSummaryDto> _items = new();
+    private readonly Dictionary<long, string?> _thumbs = new();
+    private LeafCheckResultDto? _check;
+    private string? _photoUrl;
+    private bool _deleting;
+    private long? _loadedFor = -1;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedFor == CheckId) return;
+        _loadedFor = CheckId;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        if (LoginState.UserRole != AppRole.Farmer)
+        {
+            _loading = false;
+            return;
+        }
+        _loading = true;
+        _error = null;
+        _check = null;
+        _photoUrl = null;
+        StateHasChanged();
+        try { await Farmer.EnsureLoadedAsync(); } catch { /* the shell tabs only */ }
+
+        if (CheckId is { } id)
+        {
+            var result = await Api.GetAsync(id);
+            _loading = false;
+            if (result.Value is not { } check)
+            {
+                _error = result.Message ?? "Please try again.";
+                return;
+            }
+            _check = check;
+            StateHasChanged();
+            if (check.HasImage)
+            {
+                var bytes = await Api.ImageAsync(id);
+                if (CheckId == id && bytes is not null) _photoUrl = LeafCheckUi.DataUrl("image/jpeg", bytes);
+            }
+            return;
+        }
+
+        var list = await Api.HistoryAsync();
+        _loading = false;
+        if (list.Value is not { } items)
+        {
+            _error = list.Message ?? "Please try again.";
+            return;
+        }
+        _items = items;
+        StateHasChanged();
+        // Small photos after the list is on screen, one by one (240 px each).
+        foreach (var item in items.Where(i => i.HasImage).ToList())
+        {
+            if (CheckId is not null) return;
+            if (_thumbs.ContainsKey(item.Id)) continue;
+            var bytes = await Api.ImageAsync(item.Id, thumb: true);
+            _thumbs[item.Id] = bytes is null ? null : LeafCheckUi.DataUrl("image/jpeg", bytes);
+            StateHasChanged();
+        }
+    }
+
+    private async Task DeleteAsync()
+    {
+        if (_check is not { } check) return;
+        if (!await Toast.ConfirmAsync("Delete this leaf check?", "The photo and the result will be removed. It still counts in today's checks.", "Delete check")) return;
+        _deleting = true;
+        var problem = await Api.DeleteAsync(check.Id);
+        _deleting = false;
+        if (problem is not null)
+        {
+            Toast.Error(problem);
+            return;
+        }
+        Toast.Success("Leaf check deleted.");
+        Nav.NavigateTo("/farmer/leaf-check/history");
+    }
+}

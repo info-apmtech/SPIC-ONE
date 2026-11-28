@@ -221,6 +221,12 @@ public static class ShellNavigation
             ShortLabel = "SPIC AI",
             Rule = s => s.UserRole == AppRole.Farmer
         },
+        // Farmer portal Task 6 (More sheet, after Ask SPIC AI).
+        new(FarmerLeafCheckKey, "Leaf check", "bi-camera", "/farmer/leaf-check", FarmerHomeKey)
+        {
+            ShortLabel = "Leaf check",
+            Rule = s => s.UserRole == AppRole.Farmer
+        },
         // Farmer portal Task 2: More sheet entries (the farmer tab bar / rail stay their priority list).
         new(FarmerDealersKey, "Dealers near me", "bi-shop", "/farmer/dealers", FarmerHomeKey)
         {
@@ -602,6 +608,7 @@ public static class ShellNavigation
     public const string FarmerTrendsKey = "FarmerTrends";
     public const string FarmerCommunityKey = "FarmerCommunity";
     public const string FarmerAssistantKey = "FarmerAssistant";
+    public const string FarmerLeafCheckKey = "FarmerLeafCheck";
 
     public static IReadOnlyList<string> GetRolePriority(AppRole? role) => role switch
     {
@@ -651,7 +658,7 @@ public static class ShellNavigation
     // no designation through (e.g. CSR-1 Create's `!IsAdmin`): only these keys, each still checked.
     private static readonly HashSet<string> FarmerShellKeys = new(StringComparer.OrdinalIgnoreCase)
     {
-        FarmerHomeKey, FarmerProfileKey, FarmerDealersKey, FarmerTeamKey, FarmerMyRequestsKey, FarmerFertilizerKey, FarmerAssistantKey, FarmerTrendsKey, FarmerCommunityKey, "SasMySamples", "SasMyReports", "SasMyPayments", "Help"
+        FarmerHomeKey, FarmerProfileKey, FarmerDealersKey, FarmerTeamKey, FarmerMyRequestsKey, FarmerFertilizerKey, FarmerAssistantKey, FarmerLeafCheckKey, FarmerTrendsKey, FarmerCommunityKey, "SasMySamples", "SasMyReports", "SasMyPayments", "Help"
     };
 
     /// <summary>Every accessible destination NOT already in the phone tab bar, in Candidate order.</summary>

@@ -104,6 +104,7 @@ internal static class Program
 		FarmerPortalTrendsTests.Run();
 		FarmerPortalFertilizerTests.Run();
 		FarmerPortalAssistantTests.Run();
+		FarmerPortalLeafCheckTests.Run();
 
 		return Check.Report("Total");
 	}
