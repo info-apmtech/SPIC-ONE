@@ -523,12 +523,12 @@ Only these totals leave the API: never a farmer's name, phone, village, GPS or u
 
 | Method | Route | Notes |
 |---|---|---|
-| GET | `api/Farmer/fertilizer/options` | `FertilizerOptionsDto`: crops with variants (`normId`, `soilType` when the norm is soil-specific, water regime, basis, plants/ha, spacing), soil types, N / P / K / pH ranges (`lowBelow`, `highAbove`, labels, `fromLabMaster`), products |
-| GET | `api/Farmer/fertilizer/soil-report` | `FertilizerSoilReportDto`: `available`, `reportId`, `reportCode`, `generatedAt`, `n` / `p` / `k` (kg/ha), `ph`, `notes` (conversions, unreadable values); `message` when there is none |
-| POST | `api/Farmer/fertilizer/recommend` `{ normId, soilType, areaAcres, plantCount?, n, p, k, ph, soilReportId? }` | 200 `FertilizerRecommendationDto` (saved as a run, `runId`); 400 `{ message, errors }` |
+| GET | `api/Farmer/fertilizer/options` | `FertilizerOptionsDto`: crops with variants (`normId`, `soilType` when the norm is soil-specific, water regime, basis, plants/ha, spacing), soil types, N / P / K / pH ranges on the elemental basis (`lowBelow`, `highAbove`, labels, `basis` N / P / K, `altBasis` P2O5 / K2O with `altFactor` 2.29 / 1.2; `fromLabMaster` is always false), products |
+| GET | `api/Farmer/fertilizer/soil-report` | `FertilizerSoilReportDto`: `available`, `reportId`, `reportCode`, `generatedAt`, `n` (kg/ha), `p` (**kg P/ha**: the lab's kg/ha value read as P2O5 and divided by 2.29), `k` (kg K/ha), `ph`; `reportPBasis` ("P2O5" for the lab's kg/ha or kg/acre, "P" for ppm) and `pAsReported` (P as printed, on that basis) so the screen shows the report's own number; `missing` (codes the report has no usable value for); `notes` (conversions, unreadable or missing values); `message` when there is none |
+| POST | `api/Farmer/fertilizer/recommend` `{ normId, soilType, areaAcres, plantCount?, n, p, pBasis?, k, kBasis?, ph, soilReportId? }` | `p` / `k` as entered on `pBasis` ("P" default or "P2O5") / `kBasis` ("K" default or "K2O"); rated with `FertilizerAdvisor.RateAs`. 200 `FertilizerRecommendationDto` (saved as a run, `runId`; each nutrient has `soilValue` elemental, `soilValueEntered`, `soilBasis`); 400 `{ message, errors }` (incl. `pBasis` / `kBasis`) |
 | GET | `api/Farmer/fertilizer/history` | latest 20 `FertilizerRunSummaryDto` |
 | GET | `api/Farmer/fertilizer/history/{id}` | one of the caller's runs in full; 404 for anyone else's |
-| GET | `api/Farmer/fertilizer/latest` | the caller's latest run in short, 204 when none. **For the chatbot context and the yield forecast NPK prefill**: `crop`, `variant`, `soilType`, `areaAcres`, `soilN/P/K/Ph`, `nStatus/pStatus/kStatus` (Low / Medium / High), `phBand`, `needN/P/KKgPerAcre` (after the soil test adjustment), `fromSoilReport`, `summary` (one line) |
+| GET | `api/Farmer/fertilizer/latest` | the caller's latest run in short, 204 when none. **For the chatbot context and the yield forecast NPK prefill**: `crop`, `variant`, `soilType`, `areaAcres`, `soilN/P/K/Ph` (**`soilP` in kg P/ha and `soilK` in kg K/ha, elemental**, whatever unit the farmer typed), `nStatus/pStatus/kStatus` (Low / Medium / High), `phBand`, `needN/P/KKgPerAcre` (after the soil test adjustment), `fromSoilReport`, `summary` (one line) |
 
 Contracts: `SPIC.Core/DTOs/FertilizerDtos.cs`. Client: `Services/FarmerFertilizerApi.cs` (no toasts).
 
@@ -539,9 +539,11 @@ Contracts: `SPIC.Core/DTOs/FertilizerDtos.cs`. Client: `Services/FarmerFertilize
   High > 280; pH 6.5 / 7.5. Boundaries as `LabAutoResultEngine` (below Low, above High). The lab parameter master is
   **not** used for the sliders: its S-P band 22-56 is the all-India P2O5 band, so typed Tamil Nadu soil-card values
   (P as P) were rated one band too low.
-- **Unit toggles:** P can be entered as kg P/ha or kg P2O5/ha (x 2.29), K as kg K/ha or kg K2O/ha (x 1.2). The toggle
-  converts the shown value and the slider zones (P2O5 25.2 / 50.4, K2O 141.6 / 336); the request carries `pBasis` /
-  `kBasis` and the API converts to P / K before rating (`FertilizerAdvisor.ToElemental`). The result shows both
+- **Unit toggles:** P can be entered as kg P/ha or kg P2O5/ha (x 2.29), K as kg K/ha or kg K2O/ha (x 1.2). **One rating
+  rule for the chip and the result** (fix round 2): `FertilizerAdvisor.RateAs` compares the value as entered with the
+  thresholds on that basis, exact (`InBasis`: P2O5 25.19 / 50.38, K2O 141.6 / 336); the slider zones, hint and chip use
+  the same function (`FertilizerUi.Shown` / `LevelAs`, `FpZoneSlider.LevelOf`). A toggle converts with 2 decimals and
+  keeps the level (`ConvertKeepingLevel`: P2O5 25.18 Low -> P 10.99). The request carries `pBasis` / `kBasis`. The result shows both
   ("Soil test 18 kg P2O5/ha (7.9 kg P/ha)"); runs store the elemental values.
 - **Adjustment = the soil report's dose factors** (`LabFertilizerSchedule.FactorFor`, `Sas:Lab:DoseFactors`):
   Deficient 1.25, Moderate 1.10, Normal 1.00, Excess 0.75 by default (the soil-test rating approach: low +25 %,
@@ -557,9 +559,9 @@ Contracts: `SPIC.Core/DTOs/FertilizerDtos.cs`. Client: `Services/FarmerFertilize
   22-56 band) and divided by 2.29 (the screen switches P to P2O5 so the farmer sees the report's own number); S-P in
   kg/acre x 2.47105 / 2.29; S-P in ppm (Olsen P, as P) x 2.24 = kg P/ha. S-K (band 110-280, elemental) and N in kg/ha
   as they are, kg/acre x 2.47105, ppm x 2.24. **The P2O5 reading of the lab's S-P must be confirmed by SPIC's lab.**
-- **Partial report:** only the values the report gives are filled; a missing one keeps its slider value with the
-  caution "Not in your report, enter it from your soil card", the strip names it, and the run is saved without the
-  report id (it counts as the farmer's own numbers). The report id is also dropped when a filled value is changed.
+- **Partial report:** only the values the report gives are filled; a missing (or unreadable) one is left "Not set"
+  with the caution "Not in your report, enter it from your soil card", the strip names it, advice is refused until the
+  farmer enters it, and the run is saved without the report id (it counts as the farmer's own numbers). The report id is also dropped when a filled value is changed.
 - **Tips follow the pH** (`CropSoilTips.PhMin` / `PhMax`, migration `V38_FertilizerTipPh`): every tip that names lime
   shows only below pH 6.5 (pulses' lime tip below 6.0); red soil's crust tip has a gypsum-only twin for pH >= 6.5.
 - **Area:** 1 ha = 2.47105 acres. Per-plant crops: plants = acres / 2.47105 x the source's plants per hectare
