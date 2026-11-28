@@ -788,8 +788,8 @@ scope filter.
   Quite sure / Fairly sure / Not sure, the top nutrients, "Checked by SPIC AI" or the gold **"Basic colour check"** tag and
   why), **Likely nutrients** (likelihood bars), **What we saw** (pattern, a six-step leaf colour chart with the score,
   green / yellow / brown shares, which leaves the farmer named, the symptoms), **What to do** (the steps, then per likely
-  nutrient the TNAU correctives: Soil / Leaf spray, product, dose with grams per litre, note, source link; nitrogen links
-  to Fertilizer advice), the soil-test strip, then Get a soil test / Ask my MDO / Check another leaf / My past checks and
+  nutrient the recommended doses with their sources: Soil / Leaf spray, product, dose with grams per litre, note, the
+  TNAU page it comes from; nitrogen links to Fertilizer advice), the soil-test strip, then Get a soil test / Ask my MDO / Check another leaf / My past checks and
   the disclaimer "AI suggestion from a photo. Confirm with a soil test or your MDO." (basic checks: "Basic colour check from
   the leaf colours only, not an expert diagnosis. ..."). Not a leaf: "This does not look like a leaf" with retake tips.
 - **My past leaf checks** `/farmer/leaf-check/history` (latest 30, 240 px thumbnails) and `/farmer/leaf-check/history/{id}`
@@ -802,7 +802,7 @@ scope filter.
 | Method | Route | Notes |
 |---|---|---|
 | GET | `api/Farmer/leaf-check/status` | `LeafCheckStatusDto`: `dailyLimit`, `usedToday`, `leftToday`, `resetsAtUtc`, `fullCheck` (key set, switched on, budget left), `crops`, `maxPhotoBytes` |
-| POST | `api/Farmer/leaf-check` (multipart `photo`, `crop`, `leafAge`) | 200 `LeafCheckResultDto`; 400 `{ message, errors: { photo / crop / leafAge } }` (no photo, over 8 MB, not JPEG / PNG / WebP by magic bytes, HEIC, unreadable, under 64 px / over 60 MP, unknown crop); 429 `{ message, retryAfterSeconds, resetsAtUtc, dailyLimit }` + `Retry-After` |
+| POST | `api/Farmer/leaf-check` (multipart `photo`, `crop`, `leafAge`) | 200 `LeafCheckResultDto`; 400 `{ message, errors: { photo / crop / leafAge } }` (no photo, over 8 MB, not JPEG / PNG / WebP by magic bytes, HEIC, unreadable or incomplete, under 64 px, JPEG over 60 MP, PNG / WebP over 20 MP or too little data for their size, unknown crop); 429 `{ message, retryAfterSeconds, resetsAtUtc, dailyLimit }` + `Retry-After` |
 | GET | `api/Farmer/leaf-check/history` | latest 30 `LeafCheckSummaryDto` (condition, top nutrient, confidence, provider, colour score) |
 | GET | `api/Farmer/leaf-check/{id}` | one check in full; 404 for anyone else's or a deleted one |
 | GET | `api/Farmer/leaf-check/{id}/image[?thumb=true]` | the stored JPEG (owner only, `Cache-Control: private`); `thumb` = 240 px |
@@ -815,13 +815,19 @@ Contracts: `SPIC.Core/DTOs/LeafCheckDtos.cs`. Client: `Services/FarmerLeafCheckA
 1. Validate the form; read at most 8 MB; the format comes from the first bytes only (JPEG `FF D8 FF`, PNG, WebP
    `RIFF....WEBP`; HEIC gets its own message), never from the client's content type (`LeafCheckRules.ValidateUpload`).
 2. `SpicAPI/Services/LeafImageProcessor.cs` (SkiaSharp 3.119.2, the version PDFtoImage already brought; explicit reference
-   added): decode (big JPEGs at a reduced scale), turn upright from the EXIF orientation, transparent parts on white,
-   shrink to at most 1024 px, re-encode as JPEG quality 80 (no EXIF / GPS survives), plus a copy of at most 256 px for the
-   metrics.
+   added): at most 3 decodes at a time per replica (`ProcessAsync`, a static gate; fix round 1); size refused from the
+   header before decoding (JPEG > 60 MP, PNG / WebP > 20 MP, PNG / WebP > 4 MP with < 10 KB per MP); big JPEGs decoded
+   at a reduced scale near 2048 px; drawn once, upright from the EXIF orientation and on white, straight into the at most
+   1024 px result (no second full-size copy); re-encoded as JPEG quality 80 (no EXIF / GPS survives), plus a copy of at
+   most 256 px for the metrics.
 3. Colour metrics (`SPIC.Core/FarmerPortal/LeafColorMetrics.cs`, pure; see below).
-4. The photo is written to `Uploads/FarmerLeaf/{userId}/{guid}.jpg` (the API's Uploads root, as CommunityController); then,
-   under `pg_advisory_xact_lock(hashtextextended('fleaf:' + userId, 0))`, today's checks are counted and the row inserted
-   (over the cap: the file is removed, 429). `api/Community/file/...` refuses the FarmerLeaf folder.
+4. The photo is written to `PrivateUploads/FarmerLeaf/{userId}/{guid}.jpg` (fix round 1: a private root next to, not
+   inside, the shared `Uploads` tree, because `api/DealerFile/view`, `api/Sas/file`, `api/Community/file` and the guest
+   house image route serve any file under `Uploads` to any signed-in user; `FarmerPortal:LeafPhotoRoot` overrides the
+   folder). Only `api/Farmer/leaf-check/{id}/image` (owner only) serves it. Defence in depth: `api/Community/file` refuses a
+   FarmerLeaf folder and `api/DealerFile/view` now checks the path stays inside `Uploads` (it had no containment check, so
+   `..` could have reached the private root). Then, under `pg_advisory_xact_lock(hashtextextended('fleaf:' + userId, 0))`,
+   today's checks are counted and the row inserted (over the cap: the file is removed, 429).
 5. Under 5 % leaf pixels: no AI call ("not a leaf"). Otherwise one unit of the shared daily AI budget
    (`IFarmerAiBudget`, kind `LeafCheck`); allowed: Claude vision (`LeafVisionService` through the shared
    `AnthropicMessagesClient`, same key / model / endpoint / `Assistant:FarmerEffort`): one user message with the image
@@ -854,6 +860,7 @@ Contracts: `SPIC.Core/DTOs/LeafCheckDtos.cs`. Client: `Services/FarmerLeafCheckA
 | Key | Meaning |
 |---|---|
 | `FarmerPortal:LeafCheckDailyLimit` | checks per farmer per IST day; empty = 10 (placeholder in `SpicAPI/appsettings.json`) |
+| `FarmerPortal:LeafPhotoRoot` | folder for the leaf photos; empty = `<content root>/PrivateUploads` (in Azure: the `api-private` share mounted at `/app/PrivateUploads`). Never a folder under `Uploads` |
 | `FarmerPortal:AiKindDailyLimit:LeafCheck` | (Task 5) optional sub-limit of photo checks inside the global AI budget |
 | `FarmerPortal:AssistantEnabled`, `FarmerPortal:AssistantGlobalDailyLimit` | (Task 5) the kill switch and the global budget also cover leaf checks |
 | `Assistant:AnthropicApiKey`, `Model`, `Endpoint`, `FarmerEffort` | (existing) the vision call uses the same settings |
@@ -866,7 +873,9 @@ Contracts: `SPIC.Core/DTOs/LeafCheckDtos.cs`. Client: `Services/FarmerLeafCheckA
 - `NutrientCorrectives` (Id, Nutrient, Crop? (null = general), Product, Method Soil / Foliar, Dose, Note, Source, SourceUrl,
   SortOrder, IsActive): 50 seeded rows (`Spic.Infrastructure/Data/NutrientCorrectiveSeed.cs`; general rows for all ten
   nutrients, own rows for Paddy, Cotton, Groundnut, Maize, Banana), read on TNAU Agritech pages through the Internet
-  Archive.
+  Archive. Fix round 1: every dose is the TNAU page's own value (general urea 1 %, MgSO4 2 % + 1 % urea, FeSO4 1 %; no
+  citric acid figure); a row that is not a TNAU value must have no link and the Source "General guidance (not a TNAU
+  value); ask your SPIC officer" (none today; the in-app "top-dress per Fertilizer advice" row has no link either).
 
 ### Cost (Claude Sonnet 5: $2 / $10 per million input / output tokens)
 
@@ -886,19 +895,23 @@ low-effort thinking ~500 output ($0.005) = **~$0.01 typical, ~$0.02 worst** (150
   brown-edged leaves, a printed page, an EXIF-rotated photo with GPS, a 2400 px PNG, a PDF named .jpg). Nothing downloaded.
 - Smoke: `python tools/farmer-portal-check/smoke_task6.py --leaves <dir>` (no key: 72 checks), `--mode stub --record <f>`
   against `fake_anthropic.py` (now answers image requests with vision JSON; `POST /__mode {"vision": "auto|malformed|fail|
-  refuse|notleaf"}`), `--mode kill`. `cleanup_task6_local.sql` resets the test farmers (delete `SpicAPI/Uploads/FarmerLeaf`
-  by hand).
+  refuse|notleaf"}`), `--mode kill`. `cleanup_task6_local.sql` resets the test farmers (delete
+  `SpicAPI/PrivateUploads/FarmerLeaf` by hand).
 - Screenshots: `python tools/farmer-portal-check/shoot_task6.py --out ... --set stub|basic --leaves <dir>`.
 
 ### Left / for the owner
 
 - Prod migration `V40_LeafCheck` (after V39). The API container needs SkiaSharp's Linux native library: the explicit
   `SkiaSharp.NativeAssets.Linux.NoDependencies` 3.119.2 reference (already brought by PDFtoImage) covers it.
-- Leaf photos live in the API's `Uploads` (Azure Files in production): about 100-200 KB each; a deleted check removes its
-  file; nothing purges old photos yet.
-- **An agronomist should sign off the correctives**, especially the three general values taken from the task brief:
-  magnesium sulphate 1 % (TNAU cotton uses 2 %), ferrous sulphate 0.5 % + citric acid 0.1 % (TNAU groundnut 1 %, paddy
-  2-3 %), urea 1-2 % (TNAU paddy 1 %).
+- **Provision the private photo share before deploying the API with Task 6** (fix round 1): `infra/azure/main.bicep` adds
+  the Azure Files share `api-private` (50 GB quota), its Container Apps environment storage and the API volume mount at
+  `/app/PrivateUploads` (the Dockerfile creates the folder). Run the infra deployment (what-if first) before or with the
+  API release. Without the mount the photos land on the container's own disk: lost on restart, and with two replicas a
+  photo saved on one is "not found" on the other. Photos are about 100-200 KB each; a deleted check removes its file;
+  nothing purges old photos yet.
+- **An agronomist should sign off the correctives.** The general rows now use TNAU's strengths (urea 1 %, MgSO4 2 % + 1 %
+  urea, FeSO4 1 %) instead of the brief's examples (urea 1-2 %, MgSO4 1 %, FeSO4 0.5 % + citric acid), which no fetched
+  TNAU page gives; use the brief's values only once an agronomist approves them (then with no TNAU link).
 - The basic colour check is a hint: lighting changes the colour score, and a brown background right next to the leaf
   (soil, a dark hand) reads as dry edges. The tips ask for a plain background.
 - Android WebView camera capture (`capture="environment"`) was not tried on a device in this task.
