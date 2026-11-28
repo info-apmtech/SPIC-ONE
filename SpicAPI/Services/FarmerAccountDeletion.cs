@@ -11,7 +11,7 @@ namespace SpicAPI.Services
     public sealed record FarmerDeletionResult(
         int ChatMessages, int Conversations, int AiUsagesAnonymised, int LeafChecks, int FertilizerRuns, int YieldForecasts,
         int OpenRequestsDeleted, int RequestsKept, int CommunityPosts, int CommunityReplies,
-        int Reactions, int SasRecordsUnlinked, int RefreshTokens);
+        int Reactions, int SasRecordsUnlinked, int RefreshTokens, int CommunityAttachments);
 
     /// <summary>
     /// "Delete my account" (final fix wave, review I4; DELETE api/Farmer/profile). One transaction for the database:
@@ -27,6 +27,11 @@ namespace SpicAPI.Services
     /// kept with the farmer id replaced by <see cref="FarmerPrivacyRules.DeletedUserTombstone"/> (kind and time only).
     /// The OTP challenges (the per-number / per-IP / global SMS caps) are left to the existing one-day purge in
     /// FarmerAuthController (the privacy notice says sign-in codes are removed after one day).
+    /// </para>
+    /// <para>
+    /// Recheck fix B7: the attachments of the farmer's own discussions and replies are deleted (rows in the transaction,
+    /// files after the commit), the page-view rows lose the user id and name like the request / error logs, and the kept
+    /// (handled) call-backs lose their message text as well as the preferred time.
     /// </para>
     /// </summary>
     public sealed class FarmerAccountDeletion
@@ -81,6 +86,8 @@ namespace SpicAPI.Services
             {
                 r.Status = FarmerContactRequestStatus.Closed;
                 r.PreferredTime = null;
+                // The farmer may have typed a name or number into the message (B7): the officer keeps the row only.
+                r.Message = string.Empty;
                 r.UpdatedAtUtc = now;
             }
 
@@ -102,6 +109,15 @@ namespace SpicAPI.Services
                 r.AuthorLocation = null;
                 r.MentionName = null;
             }
+            // Attachments on the farmer's own discussions (ReplyId null) and on the farmer's own replies (B7). Other members'
+            // reply photos under the farmer's discussion are theirs and stay.
+            var postIds = posts.Select(p => p.Id).ToList();
+            var replyIds = replies.Select(r => r.Id).ToList();
+            var attachments = postIds.Count == 0 && replyIds.Count == 0 ? new List<CommunityPostAttachment>()
+                : await _db.CommunityPostAttachments
+                    .Where(a => (a.ReplyId == null && postIds.Contains(a.PostId)) || (a.ReplyId != null && replyIds.Contains(a.ReplyId.Value)))
+                    .ToListAsync(ct);
+            _db.CommunityPostAttachments.RemoveRange(attachments);
             var reactions = await _db.CommunityReactions.Where(x => x.UserId == userId).ToListAsync(ct);
             var likedPostIds = reactions.Where(x => x.Kind == CommunityReactionKind.Like && x.TargetType == CommunityReactionTarget.Post).Select(x => x.TargetId).ToList();
             var likedReplyIds = reactions.Where(x => x.Kind == CommunityReactionKind.Like && x.TargetType == CommunityReactionTarget.Reply).Select(x => x.TargetId).ToList();
@@ -141,6 +157,8 @@ namespace SpicAPI.Services
                     .ExecuteUpdateAsync(s => s.SetProperty(l => l.UserId, (string?)null).SetProperty(l => l.UserName, (string?)null), ct);
                 await _db.AppErrorLogs.Where(l => l.UserId == userId)
                     .ExecuteUpdateAsync(s => s.SetProperty(l => l.UserId, (string?)null).SetProperty(l => l.UserName, (string?)null), ct);
+                await _db.AppPageViews.Where(l => l.UserId == userId)
+                    .ExecuteUpdateAsync(s => s.SetProperty(l => l.UserId, (string?)null).SetProperty(l => l.UserName, (string?)null), ct);
             }
 
             var deleted = await _users.DeleteAsync(user);
@@ -153,10 +171,11 @@ namespace SpicAPI.Services
             DeleteFolder(Path.Combine(FarmerLeafCheckController.SafePrivateRoot(_env.ContentRootPath, _env.WebRootPath,
                 _config["FarmerPortal:LeafPhotoRoot"], out _), FarmerLeafCheckController.UploadFolder, FarmerLeafCheckController.SafeSegment(userId)));
             DeleteAvatar(userId);
+            foreach (var a in attachments) DeleteUpload(a.StoredPath);
 
             var result = new FarmerDeletionResult(messages.Count, conversations.Count, usages.Count, leaves.Count, runs.Count,
                 forecasts.Count, open.Count, requests.Count - open.Count, posts.Count, replies.Count, reactions.Count,
-                sas.Count, tokens.Count);
+                sas.Count, tokens.Count, attachments.Count);
             _log.LogInformation("Farmer account deleted: {Counts}", result);
             return result;
         }
@@ -170,6 +189,23 @@ namespace SpicAPI.Services
             catch (Exception ex)
             {
                 _log.LogWarning("Could not delete a deleted farmer's leaf photos ({Error})", ex.GetType().Name);
+            }
+        }
+
+        /// <summary>Deletes one Community attachment file (a stored "Community/{postId}/..." path), only inside Uploads/Community.</summary>
+        private void DeleteUpload(string? storedPath)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(storedPath) || storedPath.Contains("..", StringComparison.Ordinal)) return;
+                var uploads = Path.Combine(_env.ContentRootPath, "Uploads");
+                var full = Path.GetFullPath(Path.Combine(uploads, storedPath.TrimStart('/', '\\').Replace('/', Path.DirectorySeparatorChar)));
+                if (FarmerFileScope.IsInside(uploads, full, FarmerFileScope.CommunitySubtree) && File.Exists(full))
+                    File.Delete(full);
+            }
+            catch (Exception ex)
+            {
+                _log.LogWarning("Could not delete a deleted farmer's Community attachment ({Error})", ex.GetType().Name);
             }
         }
 

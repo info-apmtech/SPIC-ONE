@@ -1136,15 +1136,16 @@ delete your account"; sign-in codes one day), how to change or delete, and how t
   and time only) and the number's OTP challenges are left to the existing one-day purge, because the global AI ceiling and
   the OTP send caps count them (residual fix R2: otherwise sign-up, use, delete, sign-up would reset both limits; the
   privacy notice and the deletion sheet say so); open call-backs are deleted, handled ones
-  are kept (closed) for the officer, whose view shows "Farmer" with no phone once the profile is gone (the message text
-  stays as staff history); the farmer's Community discussions and replies are soft-deleted with the author name set to
-  "Deleted account" and the place cleared, reactions and product memberships deleted (like counts adjusted); the SAS farmer
-  record is **unlinked**, never deleted; refresh tokens are deleted; `AppRequestLogs` / `AppErrorLogs` rows of the user keep
-  their numbers but lose the user id and name; finally the Identity user is deleted, so the number can sign up fresh. Leaf
+  are kept (closed) for the officer, whose view shows "Farmer" with no phone once the profile is gone (since the recheck
+  fix B7 the message text is cleared too); the farmer's Community discussions and replies are soft-deleted with the author name set to
+  "Deleted account" and the place cleared, their attachments (rows, and the files after the commit; recheck B7) deleted,
+  reactions and product memberships deleted (like counts adjusted); the SAS farmer
+  record is **unlinked**, never deleted; refresh tokens are deleted; `AppRequestLogs` / `AppErrorLogs` / `AppPageViews` (recheck
+  B7) rows of the user keep their numbers but lose the user id and name; finally the Identity user is deleted, so the number can sign up fresh. Leaf
   photos (`PrivateUploads/FarmerLeaf/{userId}`) and the Community photo are deleted after the commit. The app then signs out.
 - `/farmer/delete-account`: public web page explaining in-app deletion and listing the same items (the Google Play
   "delete account" link).
-- Known limits: attachments on taken-down Community posts stay on disk with the soft-deleted rows; a JWT already issued
+- Known limits: other members' reply photos under a deleted farmer's discussion stay (they are theirs); a JWT already issued
   keeps working until it expires (`Jwt:ExpiryMinutes`, 480 in prod) but finds no profile or data.
 - Telemetry rows now keep a farmer's `f<mobile>` user name masked (`f98xxxxxx21`), so the notice's "your phone number is
   never written to these logs" holds (`TelemetryHttp.SafeUserName`).
@@ -1237,3 +1238,26 @@ writable (the `api-private` share is not mounted). `.dockerignore` excludes `Spi
 11. Out of scope but urgent: Razorpay keys in `SpicAPI/appsettings.json`, the anonymous `seed-default-user` endpoint, a staff
     cap on `api/Library/assistant/ask`, an Admin support view for the farmer portal (M1), identity sequences for seeded
     tables before an editor exists (M5).
+
+## Recheck fixes (2026-11-28)
+
+The owner asked for one more check. Two fresh reviews (`.superpowers/sdd/2026-11-27-farmer-portal/recheck-backend-review.md`
+B1-B8 and `recheck-ui-review.md` U1-U9) found the items below; B4 (teammate migration on `origin/Abirami`) is the owner's
+merge. Harness: `FarmerPortalRecheckTests`. Smoke: `smoke_final.py --group R` (plus the B7 checks in Group C).
+
+### Group 1: data exposure
+
+- **B1 shared SAS collections.** One collection can hold several farmers' samples. For a Farmer caller,
+  `SasController` now builds the collection detail, the consignment detail and every collection summary (name, sample
+  count, sample types) from the caller's own samples only (`FarmerItemScopeAsync`), `GET api/Sas/samples/{itemId}/results`
+  answers 404 unless the sample itself is the caller's, and the list search (`q=`) matches farmer names / mobiles only on
+  the caller's own samples. Staff answers are unchanged.
+- **B2 file routes.** `api/Community/file/*` and `api/Library/file/*` serve a Farmer token only `Uploads/Community`
+  (attachments, avatars, product images) and `Uploads/Library` (covers, videos, documents): `SpicAPI/Services/FarmerFileScope.cs`,
+  checked on the resolved path. Anything else (dealer KYC under `DealerRegistration`, SAS payment proofs, guest-house ID
+  proofs) answers 404 like a missing file. **Owner item:** staff still read the whole `Uploads` tree through these two
+  routes (pre-existing, unchanged).
+- **B7 deletion.** Deleting the account now also deletes the farmer's Community attachments (on their discussions and
+  replies; rows in the transaction, files after the commit), clears `UserId` / `UserName` on `AppPageViews`, and clears the
+  `Message` of the kept (handled) call-backs. `FarmerPrivacyRules`, the privacy page and the "Hardening" text say so.
+  Ruling: EXIF stripping of farmer Community photos is not done (see the recheck report).

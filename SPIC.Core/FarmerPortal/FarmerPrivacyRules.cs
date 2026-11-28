@@ -27,13 +27,14 @@ public static class FarmerPrivacyRules
         "Your questions and answers with SPIC AI",
         "Your saved sign-ins on every phone",
         "Call-back requests your SPIC officer has not answered yet",
-        "Your Community discussions and replies (they are taken down) and your Community photo",
+        "Your Community discussions and replies (they are taken down), the photos and files you attached to them, and your Community photo",
+        "The link between you and the pages you opened and the app errors you met (those logs stay without your name or number)",
     };
 
     /// <summary>What stays, and why (shown on the same sheet and page).</summary>
     public static readonly IReadOnlyList<string> KeptItems = new[]
     {
-        "Call-back requests an officer already handled stay in their work history, without your name or phone number",
+        "Call-back requests an officer already handled stay in their work history, without your name, phone number or message",
         "Soil test samples and reports in the SPIC lab stay with the lab (they are not linked to this app any more)",
         "Daily counts of SPIC AI answers and leaf checks stay, with no name or number, so the app's daily limits stay fair",
         "Sign-in codes already sent stay until they are removed automatically after one day",

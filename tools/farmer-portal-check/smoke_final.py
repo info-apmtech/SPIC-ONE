@@ -11,6 +11,7 @@ Needs the API in the Development environment with Sms:Provider = Log (devCode) o
 Group A (no data changes): the Farmer deny-by-default filter (staff APIs answer 403 to a farmer token, the farmer
 APIs still answer) and the UserController account-admin roles (staff and farmers get 403; a SuperAdmin role is
 refused to an Admin before anything is created).
+Group R (recheck fixes) seeds a shared SAS collection and probe files under SpicAPI/Uploads and removes them again.
 Group C creates its own throw-away farmers (random 6xxxxxxxxx numbers) and deletes them again through the new
 DELETE api/Farmer/profile; cleanup_final_local.sql removes anything a failed run leaves.
 """
@@ -278,6 +279,10 @@ def group_c(base, leaves):
     check("community: a farmer's DOCX attachment -> 400 (photos and PDF only)", st == 400 and "PDF" in str(r), (st, r))
     st, r = multipart(base, f"api/Community/discussions/{post_ids[1]}/attachments", tok, [("leaf.png", TINY_PNG, "image/png")])
     check("community: a farmer's photo attachment -> 200", st == 200, (st, r))
+    # Recheck B7 setup (before the 20 MB seed below): a photo on one of the farmer's replies.
+    reply_id = sql(f'select min("Id") from "CommunityPostReplies" where "AuthorUserId" = {q(uid)} and not "IsDeleted"')
+    st, r = multipart(base, f"api/Community/replies/{reply_id}/attachments", tok, [("reply.png", TINY_PNG, "image/png")])
+    check("deletion setup (B7): a photo on the farmer's reply", st == 200, (st, r))
     sql(f'insert into "CommunityPostAttachments" ("PostId","FileName","StoredPath","ContentType","Size","CreatedAt") '
         f'values ({post_ids[2]}, \'seeded.jpg\', \'Community/none/seeded.jpg\', \'image/jpeg\', {20 * 1024 * 1024 - 10}, now())')
     st, r = multipart(base, f"api/Community/discussions/{post_ids[2]}/attachments", tok, [("leaf.png", TINY_PNG, "image/png")])
@@ -308,6 +313,15 @@ def group_c(base, leaves):
     usage_today = 'select count(*) from "FarmerAiUsages" where "CreatedAtUtc" >= (now() at time zone \'utc\') - interval \'1 hour\''
     usages_before = int(sql(usage_today))
     otps_before = int(sql(f'select count(*) from "FarmerOtpChallenges" where "Phone" = {q(phone)}'))
+
+    # Recheck B7: an attachment on one of the farmer's replies, a page view in the farmer's name, and the stored paths of
+    # the farmer's attachments (checked on disk after the deletion).
+    sql(f'insert into "AppPageViews" ("At","Route","App","UserId","UserName") values (now(), \'/smoke-final-b7\', 1, {q(uid)}, \'f60xxxxxx00\')')
+    own_files = [os.path.join(ROOT, "SpicAPI", "Uploads", *path.split("/")) for path in sql(
+        f'select string_agg("StoredPath", \'|\') from "CommunityPostAttachments" a where "StoredPath" not like \'Community/none/%\' and '
+        f'(("ReplyId" is null and "PostId" in (select "Id" from "CommunityPosts" where "AuthorUserId" = {q(uid)})) or '
+        f'"ReplyId" in (select "Id" from "CommunityPostReplies" where "AuthorUserId" = {q(uid)}))').split("|") if path]
+    check("deletion setup (B7): the farmer's attachment files exist (post and reply)", len(own_files) >= 2 and all(os.path.isfile(f) for f in own_files), own_files)
 
     st, _, _ = call(base, "DELETE", "api/Farmer/profile", token=mdo)
     check("delete: staff calling DELETE api/Farmer/profile -> 403", st == 403, st)
@@ -345,6 +359,16 @@ def group_c(base, leaves):
     check("delete: Community discussions taken down, author name cleared", com == "0,0", com)
     rep = sql(f'select count(*) filter (where not "IsDeleted") from "CommunityPostReplies" where "AuthorUserId" = {q(uid)}')
     check("delete: Community replies taken down", rep == "0", rep)
+    # Recheck B7: attachments (rows and files), page views and kept call-back messages.
+    att = sql(f'select count(*) from "CommunityPostAttachments" where ("ReplyId" is null and "PostId" in (select "Id" from "CommunityPosts" where "AuthorUserId" = {q(uid)})) '
+              f'or "ReplyId" in (select "Id" from "CommunityPostReplies" where "AuthorUserId" = {q(uid)})')
+    check("delete (B7): the farmer's Community attachment rows are gone (posts and replies)", att == "0", att)
+    check("delete (B7): the farmer's Community attachment files are deleted after the commit", not any(os.path.exists(f) for f in own_files), own_files)
+    pv = sql(f'select count(*) from "AppPageViews" where "UserId" = {q(uid)}') + "," + sql('select count(*) from "AppPageViews" where "Route" = \'/smoke-final-b7\' and "UserId" is null and "UserName" is null')
+    check("delete (B7): page views keep their rows but lose the user id and name", pv == "0,1", pv)
+    sql('delete from "AppPageViews" where "Route" = \'/smoke-final-b7\'')
+    msgs = sql(f'select count(*) filter (where "Message" <> \'\') from "FarmerContactRequests" where "FarmerUserId" = {q(uid)}')
+    check("delete (B7): the kept call-backs lose their message text", msgs == "0", msgs)
     sas = sql(f'select count(*) || \',\' || count(*) filter (where "UserId" is null) from "SasFarmers" where "Mobile" = {q(phone)}')
     check("delete: the SAS farmer record stays, unlinked", sas == "1,1", sas)
     if leaves:
@@ -378,11 +402,124 @@ def group_c(base, leaves):
     sql(f'delete from "SasFarmers" where "Mobile" = {q(phone)} and "Name" = \'[smoke-final] SAS\'')
 
 
+# ---------------------------------------------------------------- Group R: recheck fixes (local DB only)
+
+def file_status(base, path, token=None):
+    """GET of a served file: the status code only (the body is binary)."""
+    req = urllib.request.Request(base.rstrip("/") + "/" + path, method="GET")
+    req.add_header("X-Forwarded-For", RUN_IP)
+    if token:
+        req.add_header("Authorization", token if token.startswith("Bearer ") else "Bearer " + token)
+    try:
+        with urllib.request.urlopen(req, timeout=40) as resp:
+            resp.read()
+            return resp.status
+    except urllib.error.HTTPError as e:
+        return e.code
+
+
+def ins(query):
+    """Runs an INSERT ... RETURNING "Id" and gives back the id (psql prints only the SELECT of the CTE)."""
+    return sql(f'with x as ({query} returning "Id") select "Id" from x')
+
+
+def group_r(base):
+    print("Group R: recheck fixes (B1 shared SAS collection, B2 file subtrees)")
+    phone = throwaway_phone()
+    login = sign_in(base, phone)
+    tok = login["token"]
+    uid = sql(f'select "Id" from "AppUsers" where "UserName" = {q("f" + phone)}')
+    mdo = staff_token(base, "qa.mdo", qa_password())
+    other_phone = throwaway_phone()
+
+    # ---- B1: one collection with the caller's sample and another farmer's sample (the other one first).
+    mine = ins(f'insert into "SasFarmers" ("Name","Mobile","UserId","Village","SurveyNumber","CreatedAt","UpdatedAt","IsDeleted") '
+               f'values (\'[smoke-recheck] A\', {q(phone)}, {q(uid)}, \'A village\', \'A-1\', now(), now(), false)')
+    other = ins(f'insert into "SasFarmers" ("Name","Mobile","Village","SurveyNumber","Latitude","Longitude","CreatedAt","UpdatedAt","IsDeleted") '
+                f'values (\'[smoke-recheck] B\', {q(other_phone)}, \'B village\', \'B-7\', 11.1, 78.1, now(), now(), false)')
+    col = ins('insert into "SampleCollections" ("Code","CollectionDate","CollectedByUserId","CollectedByName","PaymentType","Status","TotalAmount","CreatedAt","UpdatedAt","IsDeleted") '
+              "values ('[smoke-recheck] SMP', now(), 'smoke', 'Smoke MDO', 0, 9, 0, now(), now(), false)")
+    item_b = ins(f'insert into "SampleItems" ("CollectionId","Code","FarmerId","SampleType","NoOfTests","Amount","CreatedAt","IsDeleted","AnalysisStatus") '
+                 f"values ({col}, '[smoke-recheck] SMP-1', {other}, 1, 1, 0, now(), false, 2)")
+    item_a = ins(f'insert into "SampleItems" ("CollectionId","Code","FarmerId","SampleType","NoOfTests","Amount","CreatedAt","IsDeleted","AnalysisStatus") '
+                 f"values ({col}, '[smoke-recheck] SMP-2', {mine}, 0, 1, 0, now(), false, 2)")
+    for item, value in ((item_b, "8.9"), (item_a, "6.5")):
+        sql(f'insert into "SampleLabResults" ("SampleItemId","Parameter","EnteredValue","Status","SortOrder","EnteredAt") values ({item}, \'pH\', {q(value)}, 0, 0, now())')
+    try:
+        st, d, _ = call(base, "GET", f"api/Sas/collections/{col}", token=tok)
+        ids = [i.get("id") for i in d.get("items", [])] if st == 200 else None
+        check("B1: the farmer opens the shared collection and sees only their own sample", st == 200 and ids == [int(item_a)], (st, ids))
+        check("B1: no other farmer's mobile or village anywhere in the answer",
+              st == 200 and other_phone not in json.dumps(d) and "B village" not in json.dumps(d), st)
+        check("B1: the summary farmer name and count are the caller's own",
+              st == 200 and d.get("farmerName") == "[smoke-recheck] A" and d.get("sampleCount") == 1,
+              (d.get("farmerName"), d.get("sampleCount")) if isinstance(d, dict) else d)
+        st, _, _ = call(base, "GET", f"api/Sas/samples/{item_b}/results", token=tok)
+        check("B1: another farmer's results in the same collection -> 404", st == 404, st)
+        st, r, _ = call(base, "GET", f"api/Sas/samples/{item_a}/results", token=tok)
+        check("B1: the farmer's own results still answer", st == 200 and isinstance(r, list) and len(r) == 1, (st, r))
+        st, page, _ = call(base, "GET", "api/Sas/collections?q=" + other_phone, token=tok)
+        check("B1: a farmer cannot find the collection by the other farmer's mobile",
+              st == 200 and page.get("total") == 0, (st, page.get("total") if isinstance(page, dict) else page))
+        st, d, _ = call(base, "GET", f"api/Sas/collections/{col}", token=mdo)
+        check("B1: staff still see both samples", st == 200 and len(d.get("items", [])) == 2,
+              (st, len(d.get("items", [])) if isinstance(d, dict) else d))
+    finally:
+        sql(f'delete from "SampleLabResults" where "SampleItemId" in ({item_a}, {item_b})')
+        sql(f'delete from "SampleItems" where "CollectionId" = {col}')
+        sql(f'delete from "SampleCollections" where "Id" = {col}')
+        sql(f'delete from "SasFarmers" where "Id" in ({mine}, {other})')
+
+    # ---- B2: the shared file routes give a Farmer token only the Community / Library subtrees.
+    uploads = os.path.join(ROOT, "SpicAPI", "Uploads")
+    probes = {
+        "DealerRegistration/999999/PAN_20261128000000.pdf": b"%PDF-1.4 smoke",
+        "GuestHouseBookingDocuments/999999/idproof_1.jpg": b"\xff\xd8\xff smoke",
+        "Library/999999/smoke-cover.png": TINY_PNG,
+    }
+    for rel, data in probes.items():
+        full = os.path.join(uploads, *rel.split("/"))
+        os.makedirs(os.path.dirname(full), exist_ok=True)
+        with open(full, "wb") as f:
+            f.write(data)
+    try:
+        for route in ("Community", "Library"):
+            st = file_status(base, f"api/{route}/file/DealerRegistration/999999/PAN_20261128000000.pdf", token=tok)
+            check(f"B2: farmer {route}/file on dealer KYC -> 404", st == 404, st)
+            st = file_status(base, f"api/{route}/file/GuestHouseBookingDocuments/999999/idproof_1.jpg", token=tok)
+            check(f"B2: farmer {route}/file on a guest-house ID proof -> 404", st == 404, st)
+            st = file_status(base, f"api/{route}/file/DealerRegistration/999999/PAN_20261128000000.pdf", token=mdo)
+            check(f"B2: staff {route}/file unchanged (pre-existing, owner item) -> 200", st == 200, st)
+        st = file_status(base, "api/Library/file/Library/999999/smoke-cover.png", token=tok)
+        check("B2: farmer still gets a library file -> 200", st == 200, st)
+        st = file_status(base, "api/Community/file/Library/999999/smoke-cover.png", token=tok)
+        check("B2: farmer Community/file on a library file -> 404 (Community subtree only)", st == 404, st)
+        st, p, _ = call(base, "POST", "api/Community/discussions", {"title": "[smoke-recheck] photo", "body": "Leaf photo."}, token=tok)
+        post_id = p.get("id") if st == 200 and isinstance(p, dict) else 0
+        multipart(base, f"api/Community/discussions/{post_id}/attachments", tok, [("leaf.png", TINY_PNG, "image/png")])
+        stored = sql(f'select coalesce(min("StoredPath"), \'\') from "CommunityPostAttachments" where "PostId" = {post_id or 0}')
+        st = file_status(base, f"api/Community/file/{stored}", token=tok)
+        check("B2: farmer still gets a Community attachment -> 200", bool(stored) and st == 200, (stored, st))
+        st = file_status(base, f"api/Community/file/{stored}?access_token={tok.removeprefix('Bearer ')}")
+        check("B2: the same through ?access_token= (how <img> loads it) -> 200", bool(stored) and st == 200, st)
+    finally:
+        for rel in probes:
+            full = os.path.join(uploads, *rel.split("/"))
+            if os.path.exists(full):
+                os.remove(full)
+            try:
+                os.rmdir(os.path.dirname(full))
+            except OSError:
+                pass
+        st, _, _ = call(base, "DELETE", "api/Farmer/profile", token=tok)
+        check("recheck: the throw-away farmer is deleted again (204)", st == 204, st)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--base", default="http://localhost:5120")
     ap.add_argument("--phone", default="6777777703")
-    ap.add_argument("--group", default="A,C")
+    ap.add_argument("--group", default="A,C,R")
     ap.add_argument("--leaves", default="", help="folder written by make_leaves.py (adds a leaf check to the deletion test)")
     args = ap.parse_args()
     if (urlparse(args.base).hostname or "") not in ("localhost", "127.0.0.1"):
@@ -392,6 +529,8 @@ def main():
         group_a(args.base, args.phone)
     if "C" in groups:
         group_c(args.base, args.leaves)
+    if "R" in groups:
+        group_r(args.base)
     print()
     print("All checks passed." if not failures else f"{len(failures)} check(s) FAILED: {failures}")
     sys.exit(1 if failures else 0)

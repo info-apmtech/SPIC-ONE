@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Spic.Infrastructure.Data;
 using SPIC.Core.DTOs;
 using SPIC.Core.Entities;
+using SpicAPI.Services;
 using System.Security.Claims;
 using System.Text.Json;
 
@@ -489,6 +490,12 @@ namespace SpicAPI.Controllers
         {
             var fullPath = ResolveUploadPath(path);
             if (fullPath == null || !System.IO.File.Exists(fullPath))
+                return NotFound(new { Success = false, Message = "File not found." });
+
+            // Recheck fix B2: a Farmer token reads only Uploads/Library (covers, videos, documents), never the rest of
+            // the tree (dealer KYC, payment proofs, ID proofs). Staff behaviour is unchanged.
+            var uploadsRoot = Path.Combine(_env.ContentRootPath, "Uploads");
+            if (FarmerDenyByDefaultFilter.IsFarmer(User) && !FarmerFileScope.IsInside(uploadsRoot, fullPath, FarmerFileScope.LibrarySubtree))
                 return NotFound(new { Success = false, Message = "File not found." });
 
             var contentType = GetContentType(Path.GetExtension(fullPath).ToLowerInvariant());

@@ -484,11 +484,15 @@ namespace SpicAPI.Controllers
 			if (!string.IsNullOrWhiteSpace(q))
 			{
 				var term = q.Trim().ToLower();
+				// A Farmer's search matches only their own samples' names, so it cannot probe the
+				// other farmers of a shared collection.
+				var ownFarmers = await FarmerItemScopeAsync();
 				query = query.Where(c =>
 					c.Code.ToLower().Contains(term) ||
 					c.CollectedByName.ToLower().Contains(term) ||
 					(c.LocationName != null && c.LocationName.ToLower().Contains(term)) ||
 					c.Items.Any(i => !i.IsDeleted && i.Farmer != null &&
+						(ownFarmers == null || ownFarmers.Contains(i.FarmerId)) &&
 						(i.Farmer.Name.ToLower().Contains(term) || i.Farmer.Mobile.ToLower().Contains(term))));
 			}
 
@@ -1368,6 +1372,11 @@ namespace SpicAPI.Controllers
 			if (collection == null || !await CanReadAsync(collection))
 				return NotFound(new { Success = false, Message = "Sample not found." });
 
+			// A Farmer reads only their own sample, not the other farmers' samples of a shared collection.
+			var ownItems = await FarmerItemScopeAsync();
+			if (ownItems != null && !ownItems.Contains(item.FarmerId))
+				return NotFound(new { Success = false, Message = "Sample not found." });
+
 			var results = await _db.SampleLabResults.AsNoTracking()
 				.Where(r => r.SampleItemId == itemId)
 				.OrderBy(r => r.SortOrder).ThenBy(r => r.Id)
@@ -1688,6 +1697,11 @@ namespace SpicAPI.Controllers
 				.AnyAsync(i => i.CollectionId == collection.Id && !i.IsDeleted && farmerIds.Contains(i.FarmerId));
 		}
 
+		/// <summary>Null for staff (every item of a readable collection). For a Farmer, the caller's own
+		/// SAS farmer ids: one collection may hold several farmers' samples, and a farmer sees only theirs.</summary>
+		private async Task<List<int>?> FarmerItemScopeAsync() =>
+			CurrentRole() == AppRole.Farmer ? await MyFarmerIdsAsync() : null;
+
 		private async Task<bool> CanReadConsignmentAsync(SampleConsignment consignment)
 		{
 			if (CurrentRole() != AppRole.Farmer) return true;
@@ -1724,7 +1738,7 @@ namespace SpicAPI.Controllers
 					ConsignmentCode = c.Consignment != null ? c.Consignment.Code : null,
 					Items = c.Items.Where(i => !i.IsDeleted)
 						.OrderBy(i => i.Id)
-						.Select(i => new { i.SampleType, FarmerName = i.Farmer != null ? i.Farmer.Name : "" })
+						.Select(i => new { i.SampleType, i.FarmerId, FarmerName = i.Farmer != null ? i.Farmer.Name : "" })
 						.ToList(),
 					Payment = c.Payments.OrderByDescending(p => p.Id)
 						.Select(p => new { p.Status, p.ReviewedAt })
@@ -1734,10 +1748,13 @@ namespace SpicAPI.Controllers
 
 			var userId = CurrentUserId();
 			var byId = rows.ToDictionary(r => r.Id);
+			var ownFarmers = await FarmerItemScopeAsync();
 
 			return ids.Where(byId.ContainsKey).Select(id =>
 			{
 				var r = byId[id];
+				// A Farmer's summary is built from their own samples only (name, count, types).
+				var items = ownFarmers == null ? r.Items : r.Items.Where(i => ownFarmers.Contains(i.FarmerId)).ToList();
 				return new SampleCollectionSummaryDto
 				{
 					Id = r.Id,
@@ -1749,9 +1766,9 @@ namespace SpicAPI.Controllers
 					PaidCategory = r.PaidCategory,
 					Status = r.Status,
 					TotalAmount = r.TotalAmount,
-					SampleCount = r.Items.Count,
-					FarmerName = r.Items.Select(i => i.FarmerName).FirstOrDefault(n => !string.IsNullOrWhiteSpace(n)) ?? "",
-					SampleTypes = string.Join(", ", r.Items.Select(i => SampleTypeLabel(i.SampleType)).Distinct()),
+					SampleCount = items.Count,
+					FarmerName = items.Select(i => i.FarmerName).FirstOrDefault(n => !string.IsNullOrWhiteSpace(n)) ?? "",
+					SampleTypes = string.Join(", ", items.Select(i => SampleTypeLabel(i.SampleType)).Distinct()),
 					PaymentStatus = r.Payment?.Status,
 					PaymentReviewedAt = r.Payment?.ReviewedAt,
 					ConsignmentId = r.ConsignmentId,
@@ -1769,8 +1786,10 @@ namespace SpicAPI.Controllers
 			var collection = await _db.SampleCollections.AsNoTracking()
 				.FirstOrDefaultAsync(c => c.Id == source.Id) ?? source;
 
+			var ownFarmers = await FarmerItemScopeAsync();
 			var items = await _db.SampleItems.AsNoTracking()
 				.Where(i => i.CollectionId == collection.Id && !i.IsDeleted)
+				.Where(i => ownFarmers == null || ownFarmers.Contains(i.FarmerId))
 				.OrderBy(i => i.Id)
 				.Include(i => i.Farmer)
 				.ToListAsync();
@@ -1962,8 +1981,10 @@ namespace SpicAPI.Controllers
 				.Select(c => c.Id)
 				.ToListAsync();
 
+			var ownFarmers = await FarmerItemScopeAsync();
 			var items = await _db.SampleItems.AsNoTracking()
 				.Where(i => collectionIds.Contains(i.CollectionId) && !i.IsDeleted)
+				.Where(i => ownFarmers == null || ownFarmers.Contains(i.FarmerId))
 				.OrderBy(i => i.Id)
 				.Include(i => i.Farmer)
 				.ToListAsync();

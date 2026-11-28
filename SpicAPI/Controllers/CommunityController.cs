@@ -897,6 +897,11 @@ namespace SpicAPI.Controllers
 			if (!fullPath.StartsWith(rootWithSep, StringComparison.OrdinalIgnoreCase) || !System.IO.File.Exists(fullPath))
 				return NotFound(new { Success = false, Message = "File not found." });
 
+			// Recheck fix B2: a Farmer token reads only Uploads/Community (attachments, avatars, product images), never
+			// the rest of the tree (dealer KYC, payment proofs, ID proofs). Staff behaviour is unchanged.
+			if (FarmerDenyByDefaultFilter.IsFarmer(User) && !FarmerFileScope.IsInside(root, fullPath, FarmerFileScope.CommunitySubtree))
+				return NotFound(new { Success = false, Message = "File not found." });
+
 			return PhysicalFile(fullPath, ResolveContentType(Path.GetExtension(fullPath).ToLowerInvariant()));
 		}
 
