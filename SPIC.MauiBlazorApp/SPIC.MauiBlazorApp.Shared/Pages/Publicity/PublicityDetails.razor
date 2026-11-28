@@ -9,6 +9,7 @@
 @inject ToastService Toast
 @inject FileDownloadService Downloads
 @inject IJSRuntime JS
+@inject PublicityNotificationState PubNotify
 
 @*
     One details page for every role (Figma "My Publicity Material Request Details" + the admin
@@ -177,14 +178,24 @@
                     }
                 }
 
-                @* Once a Stock Transfer exists for this request (either side), its own cards already show
-                   "Transfer Request Sent / Proof Submitted / Admin Review / ... / Acknowledgement" - a
-                   second, generic "Exception Raised" read of the same underlying Summary here would just
-                   repeat that in a separate place. It only still earns its own banner when there is a
-                   genuine, currently-actionable item for THIS viewer (_ackTarget - "you personally have a
-                   delivered dispatch, original or transfer, awaiting your acknowledgement") that isn't
-                   otherwise surfaced anywhere on this tab. *@
-                @if (d.Dispatches.Count > 0 && (_ackTarget is not null || !(d.Dispatches.Any(x => x.Kind == PublicityDispatchKind.Transfer) || d.OutgoingTransfers.Count > 0)))
+                @* Once a Stock Transfer OR a Re-Initiation dispatch exists for this request (either side),
+                   its own card (PubTransferCard / PubDispatchCard, rendered in the loop above) already
+                   shows its own current status - a second, generic "Exception Raised" read of the same
+                   underlying Summary here would just repeat (and, worse, go stale next to) that dispatch's
+                   own card: the old exception that dispatch was created to resolve is already being acted
+                   on, so re-showing it as still "requiring action" here is misleading (2026-11-27 fix -
+                   this previously only checked Transfer, so a Re-Initiation dispatch - the exact replacement
+                   kind this bug was reported against - fell through and left the stale card visible). It
+                   only still earns its own banner when there is a genuine, currently-actionable item for
+                   THIS viewer (_ackTarget - "you personally have a delivered dispatch, original or
+                   transfer, awaiting your acknowledgement") that isn't otherwise surfaced anywhere on this
+                   tab. Nothing here changes d.Status/Summary.ExceptionStatus themselves (still computed by
+                   SummaryAsync from the real Outstanding/acknowledgement state) or the Exception Handling
+                   tab's own unconditional exception card below (tab=2) - so a FRESH exception raised on
+                   THIS SAME replacement dispatch once it is acknowledged still shows there exactly as
+                   before, and request completion still depends solely on that persisted state, never on
+                   a replacement dispatch merely existing. *@
+                @if (d.Dispatches.Count > 0 && (_ackTarget is not null || !(d.Dispatches.Any(x => x.Kind is PublicityDispatchKind.Transfer or PublicityDispatchKind.ReInitiation) || d.OutgoingTransfers.Count > 0)))
                 {
                     // Full-width status banner only - the actual quantities/condition/remarks/evidence
                     // live exclusively in the Acknowledgement / Exception Handling tab (case 2 below);
@@ -199,7 +210,9 @@
                     if (d.Status == PublicityStatus.Completed)
                     {
                         (icon, heading, tone) = ("bi-patch-check-fill", "Request Completed", "green");
-                        message = "The material has been successfully received and acknowledged. No shortage or damage was reported.";
+                        message = d.Summary.ExcessVerified
+                            ? "The material has been received and excess stock verified. It is now retained and available for future transfers."
+                            : "The material has been successfully received and acknowledged. No shortage or damage was reported.";
                     }
                     else if (d.Summary.ExceptionStatus is "Raised" or "Reported" || d.Status == PublicityStatus.ExceptionRaised)
                     {
@@ -261,56 +274,201 @@
                         <div class="pub-grid pub-grid--5">
                             <PubInfo Label="Dispatch ID" Value="@x.DispatchNo" />
                             <PubInfo Label="Dispatch Date" Value="@PubText.Date(x.DispatchDate)" />
-                            <PubInfo Label="Product / Material" Value="@($"{d.Product} {d.Material}")" />
-                            <PubInfo Label="Dispatch Quantity" Value="@($"{x.Quantity} Nos")" />
+                            @if (IsMultiItemAck)
+                            {
+                                <PubInfo Label="Products" Tone="green" Value="@($"{x.Items.Count} Products")" />
+                                <PubInfo Label="Total Dispatch Quantity" Value="@($"{x.Quantity} Nos")" />
+                            }
+                            else
+                            {
+                                <PubInfo Label="Product / Material" Value="@($"{d.Product} {d.Material}")" />
+                                <PubInfo Label="Dispatch Quantity" Value="@($"{x.Quantity} Nos")" />
+                            }
                             <PubInfo Label="Expected Delivery" Value="@PubText.Date(x.ExpectedDeliveryDate ?? x.DeliveredAt)" />
                         </div>
 
-                        <h2 class="pub-h2">Acknowledgement Details</h2>
-                        <div class="pub-form pub-form--3">
-                            <div class="pub-field">
-                                <label class="pub-label pub-req" for="ack-qty">Quantity Received</label>
-                                <input id="ack-qty" type="number" min="0" class="pub-input" @bind="_ack.ReceivedQty" @bind:event="oninput" />
-                            </div>
-                            <div class="pub-field">
-                                <span class="pub-label pub-req">Material Condition</span>
-                                <div class="pub-radios">
-                                    <label class="pub-radio @(!_ack.IsDamaged ? "is-good" : "")"><input type="radio" name="cond" checked="@(!_ack.IsDamaged)" @onchange="() => _ack.IsDamaged = false" /> In Good Condition</label>
-                                    <label class="pub-radio @(_ack.IsDamaged ? "is-bad" : "")"><input type="radio" name="cond" checked="@_ack.IsDamaged" @onchange="() => _ack.IsDamaged = true" /> In Damaged Condition</label>
-                                </div>
-                            </div>
-                            @if (_ack.IsDamaged)
-                            {
+                        @if (!IsMultiItemAck)
+                        {
+                            <h2 class="pub-h2">Acknowledgement Details</h2>
+                            <div class="pub-form pub-form--3">
                                 <div class="pub-field">
-                                    <label class="pub-label pub-req" for="ack-dmg">Damaged Quantity</label>
-                                    <input id="ack-dmg" type="number" min="1" class="pub-input" @bind="_ack.DamagedQty" @bind:event="oninput" />
+                                    <label class="pub-label pub-req" for="ack-qty">Quantity Received</label>
+                                    <input id="ack-qty" type="number" min="0" class="pub-input" @bind="_ack.ReceivedQty" @bind:event="oninput" />
                                 </div>
-                            }
-                            <div class="pub-field">
-                                <label class="pub-label pub-req">Acknowledged By</label>
-                                @* Always the authenticated user - the server ignores any client-supplied acknowledger
-                                   id and records Uid()/MyNameAsync() regardless, so this is never a choice. *@
-                                <div class="pub-remarks">@(_lookups?.MyName ?? "-")</div>
+                                <div class="pub-field">
+                                    <span class="pub-label pub-req">Material Condition</span>
+                                    <div class="pub-radios">
+                                        <label class="pub-radio @(!_ack.IsDamaged ? "is-good" : "")"><input type="radio" name="cond" checked="@(!_ack.IsDamaged)" @onchange="() => _ack.IsDamaged = false" /> In Good Condition</label>
+                                        <label class="pub-radio @(_ack.IsDamaged ? "is-bad" : "")"><input type="radio" name="cond" checked="@_ack.IsDamaged" @onchange="() => _ack.IsDamaged = true" /> In Damaged Condition</label>
+                                    </div>
+                                </div>
+                                @if (_ack.IsDamaged)
+                                {
+                                    <div class="pub-field">
+                                        <label class="pub-label pub-req" for="ack-dmg">Damaged Quantity</label>
+                                        <input id="ack-dmg" type="number" min="1" class="pub-input" @bind="_ack.DamagedQty" @bind:event="oninput" />
+                                    </div>
+                                }
+                                <div class="pub-field">
+                                    <label class="pub-label pub-req">Acknowledged By</label>
+                                    @* Always the authenticated user - the server ignores any client-supplied acknowledger
+                                       id and records Uid()/MyNameAsync() regardless, so this is never a choice. *@
+                                    <div class="pub-remarks">@(_lookups?.MyName ?? "-")</div>
+                                </div>
+                                <div class="pub-field pub-field--wide">
+                                    <label class="pub-label" for="ack-rem">Remarks</label>
+                                    <input id="ack-rem" class="pub-input" placeholder="Received 90 posters, out of which 5 posters are damaged." @bind="_ack.Remarks" />
+                                </div>
                             </div>
-                            <div class="pub-field pub-field--wide">
-                                <label class="pub-label" for="ack-rem">Remarks</label>
-                                <input id="ack-rem" class="pub-input" placeholder="Received 90 posters, out of which 5 posters are damaged." @bind="_ack.Remarks" />
+                            <PubDrop @bind-Files="_ackFiles" Title="Drag &amp; drop images or click to upload" />
+                        }
+                        else
+                        {
+                            <div class="pub-ack-table">
+                                <SpicDataTable TItem="PubDispatchItemDto"
+                                               Items="x.Items"
+                                               Title="Product Acknowledgement"
+                                               FileName="ProductAcknowledgement"
+                                               InitialPageSize="10"
+                                               PageSizeOptions="new[] { 10, 25, 50, 100 }"
+                                               ShowEntriesText="true"
+                                               EmptyTitle="No products"
+                                               EmptyMessage="This request has no line items.">
+                                    <FilterControls>
+                                        <p class="pub-muted">This request has multiple products - acknowledge each one separately, with its own supporting proof if needed.</p>
+                                    </FilterControls>
+                                    <TableHeader>
+                                        <th>S.No</th>
+                                        <th>Product</th>
+                                        <th>Dispatched Qty</th>
+                                        <th class="pub-req">Received Quantity</th>
+                                        <th class="pub-req">Material Condition</th>
+                                        <th>Shortage</th>
+                                        <th>Excess</th>
+                                        <th>Damaged Quantity</th>
+                                        <th>Remarks</th>
+                                        <th>Upload Proof</th>
+                                    </TableHeader>
+                                    <TableRow Context="item">
+                                        <td>@(x.Items.IndexOf(item) + 1)</td>
+                                        <td><b>@item.ProductName</b></td>
+                                        <td>@item.DispatchedQty Nos</td>
+                                        <td><input type="number" min="0" class="pub-input" @bind="item.ReceivedQty" @bind:event="oninput" /></td>
+                                        <td>
+                                            <div class="pub-radios">
+                                                <label class="pub-radio @(!item.IsDamaged ? "is-good" : "")"><input type="radio" name="@($"cond-{item.RequestItemId}")" checked="@(!item.IsDamaged)" @onchange="() => { item.IsDamaged = false; item.DamagedQty = 0; }" /> Good</label>
+                                                <label class="pub-radio @(item.IsDamaged ? "is-bad" : "")"><input type="radio" name="@($"cond-{item.RequestItemId}")" checked="@item.IsDamaged" @onchange="() => item.IsDamaged = true" /> Damaged</label>
+                                            </div>
+                                        </td>
+                                        <td>@item.ShortageQty Nos</td>
+                                        <td>@item.ExcessQty Nos</td>
+                                        <td>
+                                            @if (item.IsDamaged)
+                                            {
+                                                <input type="number" min="1" class="pub-input" @bind="item.DamagedQty" @bind:event="oninput" />
+                                            }
+                                            else { <span class="pub-muted">-</span> }
+                                        </td>
+                                        <td><input class="pub-input" placeholder="Remarks" @bind="item.Remarks" /></td>
+                                        <td>
+                                            <label class="pub-btn pub-btn--line pub-btn--sm" style="cursor:pointer">
+                                                Upload Proof
+                                                <InputFile style="display:none" accept="@PublicityApi.Accept" OnChange="e => PickItemProofAsync(item, e)" />
+                                            </label>
+                                            @foreach (var f in ItemProofFiles(item))
+                                            {
+                                                <div class="pub-chip">
+                                                    <i class="bi bi-paperclip"></i> @f.FileName
+                                                    <a href="@Api.FileUrl(f.Path)" target="_blank" rel="noopener" title="Preview"><i class="bi bi-eye"></i></a>
+                                                    <button type="button" aria-label="Remove @f.FileName" @onclick="() => RemoveItemProofAsync(item, f)"><i class="bi bi-x"></i></button>
+                                                </div>
+                                            }
+                                        </td>
+                                    </TableRow>
+                                    <CardTemplate Context="item">
+                                        <header class="spic-card-head"><h4 class="spic-card-title">@item.ProductName</h4></header>
+                                        <div class="pub-form pub-form--2">
+                                            <div class="pub-field">
+                                                <span class="pub-label">Dispatched Qty</span>
+                                                <div class="pub-remarks">@item.DispatchedQty Nos</div>
+                                            </div>
+                                            <div class="pub-field">
+                                                <label class="pub-label pub-req">Received Quantity</label>
+                                                <input type="number" min="0" class="pub-input" @bind="item.ReceivedQty" @bind:event="oninput" />
+                                            </div>
+                                            <div class="pub-field pub-field--wide">
+                                                <span class="pub-label pub-req">Material Condition</span>
+                                                <div class="pub-radios">
+                                                    <label class="pub-radio @(!item.IsDamaged ? "is-good" : "")"><input type="radio" name="@($"cond-m-{item.RequestItemId}")" checked="@(!item.IsDamaged)" @onchange="() => { item.IsDamaged = false; item.DamagedQty = 0; }" /> Good</label>
+                                                    <label class="pub-radio @(item.IsDamaged ? "is-bad" : "")"><input type="radio" name="@($"cond-m-{item.RequestItemId}")" checked="@item.IsDamaged" @onchange="() => item.IsDamaged = true" /> Damaged</label>
+                                                </div>
+                                            </div>
+                                            @if (item.IsDamaged)
+                                            {
+                                                <div class="pub-field">
+                                                    <label class="pub-label pub-req">Damaged Quantity</label>
+                                                    <input type="number" min="1" class="pub-input" @bind="item.DamagedQty" @bind:event="oninput" />
+                                                </div>
+                                            }
+                                            <div class="pub-field">
+                                                <span class="pub-label">Shortage</span>
+                                                <div class="pub-remarks">@item.ShortageQty Nos</div>
+                                            </div>
+                                            <div class="pub-field">
+                                                <span class="pub-label">Excess</span>
+                                                <div class="pub-remarks">@item.ExcessQty Nos</div>
+                                            </div>
+                                            <div class="pub-field pub-field--wide">
+                                                <label class="pub-label">Remarks</label>
+                                                <input class="pub-input" placeholder="Remarks" @bind="item.Remarks" />
+                                            </div>
+                                            <div class="pub-field pub-field--wide">
+                                                <span class="pub-label">Upload Proof</span>
+                                                <label class="pub-btn pub-btn--line" style="cursor:pointer">
+                                                    Upload Proof
+                                                    <InputFile style="display:none" accept="@PublicityApi.Accept" OnChange="e => PickItemProofAsync(item, e)" />
+                                                </label>
+                                                @foreach (var f in ItemProofFiles(item))
+                                                {
+                                                    <div class="pub-chip">
+                                                        <i class="bi bi-paperclip"></i> @f.FileName
+                                                        <a href="@Api.FileUrl(f.Path)" target="_blank" rel="noopener" title="Preview"><i class="bi bi-eye"></i></a>
+                                                        <button type="button" aria-label="Remove @f.FileName" @onclick="() => RemoveItemProofAsync(item, f)"><i class="bi bi-x"></i></button>
+                                                    </div>
+                                                }
+                                            </div>
+                                        </div>
+                                    </CardTemplate>
+                                </SpicDataTable>
+                                <p class="pub-muted">Upload Proof accepts PDF, JPG, PNG, DOC or DOCX files up to 10 MB each.</p>
                             </div>
-                        </div>
-                        <PubDrop @bind-Files="_ackFiles" Title="Drag &amp; drop images or click to upload" />
+                        }
                     </section>
 
                     @if (AckShortage > 0 || AckDamaged > 0 || AckExcess > 0)
                     {
                         <section class="pub-card pub-card--danger">
-                            <h2 class="pub-h2"><i class="bi bi-exclamation-circle pub-text-red"></i> Exception Details</h2>
+                            <h2 class="pub-h2"><i class="bi bi-exclamation-circle pub-text-red"></i> Exception Summary</h2>
                             <p class="pub-muted">Auto detected from the quantities entered above</p>
                             <div class="pub-grid pub-grid--3">
                                 <PubInfo Label="Exception Type" Tone="pink" Value="@AckType" Sub="Auto detected" />
-                                <PubInfo Label="@(AckExcess > 0 ? "Excess Quantity" : "Shortage Quantity")" Value="@($"{(AckExcess > 0 ? AckExcess : AckShortage)} Nos")" Sub="Auto calculated" />
-                                <PubInfo Label="Damaged Quantity" Value="@($"{AckDamaged} Nos")" Sub="Auto calculated" />
+                                @if (AckShortage > 0) { <PubInfo Label="Total Shortage Quantity" Value="@($"{AckShortage} Nos")" Sub="Auto calculated" /> }
+                                @if (AckExcess > 0) { <PubInfo Label="Total Excess Quantity" Value="@($"{AckExcess} Nos")" Sub="Auto calculated" /> }
+                                @if (AckDamaged > 0) { <PubInfo Label="Total Damaged Quantity" Value="@($"{AckDamaged} Nos")" Sub="Auto calculated" /> }
+                                @if (IsMultiItemAck)
+                                {
+                                    <PubInfo Label="Total Products" Value="@AckTotalProducts.ToString()" />
+                                    <PubInfo Label="Products With Exceptions" Value="@AckProductsWithExceptions.ToString()" />
+                                }
                             </div>
                         </section>
+                    }
+                    else if (IsMultiItemAck)
+                    {
+                        <div class="pub-banner pub-banner--green">
+                            <span class="pub-banner__icon"><i class="bi bi-check-circle"></i></span>
+                            <div><h3>No Exception</h3><p>Every product is in good condition with no shortage, excess, or damage.</p></div>
+                        </div>
                     }
 
                     <div class="pub-banner pub-banner--amber">
@@ -352,7 +510,14 @@
                             <div class="pub-grid pub-grid--5">
                                 <PubInfo Label="@(x.Kind == PublicityDispatchKind.Transfer ? "Transfer ID" : "Dispatch ID")" Value="@x.DispatchNo" />
                                 <PubInfo Label="Dispatch Date" Value="@PubText.Date(x.DispatchDate)" />
-                                <PubInfo Label="Product / Material" Tone="green" Value="@d.Product" Sub="@d.Material" />
+                                @if (x.Items.Count > 1)
+                                {
+                                    <PubInfo Label="Products" Tone="green" Value="@($"{x.Items.Count} Products")" />
+                                }
+                                else
+                                {
+                                    <PubInfo Label="Product / Material" Tone="green" Value="@d.Product" Sub="@d.Material" />
+                                }
                                 <PubInfo Label="Dispatch Quantity" Value="@($"{x.Quantity} Nos")" Sub="@(x.Kind == PublicityDispatchKind.Original ? null : "(Replacement Quantity)")" />
                                 <PubInfo Label="Responsible Person" Value="@(x.ResponsibleName ?? x.CreatedByName)" Sub="@x.ResponsibleRole" />
                             </div>
@@ -365,13 +530,79 @@
                             }
                             else
                             {
-                                <div class="pub-subcard">
-                                    <h3 class="pub-h3">Acknowledgement Details</h3>
+                                @* Product-wise acknowledgement (Specific Product, multi-item requests only - 2026-11-27).
+                                   x.Items is THIS dispatch's own per-product breakdown (already populated by
+                                   PublicityController.DispatchDtoAsync for every dispatch, original/re-initiation/
+                                   transfer alike), so each dispatch's read-only card here only ever shows the
+                                   products and quantities that actually belong to IT - never another dispatch's. *@
+                                @if (x.Items.Count > 1)
+                                {
+                                    <div class="pub-ack-table">
+                                        <SpicDataTable TItem="PubDispatchItemDto"
+                                                       Items="x.Items"
+                                                       Title="Product-Wise Acknowledgement Details"
+                                                       FileName="ProductAcknowledgement"
+                                                       ExportColumns="ReadOnlyAckExportColumns()"
+                                                       InitialPageSize="10"
+                                                       PageSizeOptions="new[] { 10, 25, 50, 100 }"
+                                                       ShowEntriesText="true"
+                                                       EmptyTitle="No products"
+                                                       EmptyMessage="This request has no line items.">
+                                            <TableHeader>
+                                                <th>S.No</th>
+                                                <th>Product</th>
+                                                <th>Dispatched</th>
+                                                <th>Received</th>
+                                                <th>Shortage</th>
+                                                <th>Excess</th>
+                                                <th>Damaged</th>
+                                                <th>Condition</th>
+                                                <th>Remarks</th>
+                                            </TableHeader>
+                                            <TableRow Context="pitem">
+                                                <td>@(x.Items.IndexOf(pitem) + 1)</td>
+                                                <td><b>@pitem.ProductName</b></td>
+                                                <td>@pitem.DispatchedQty Nos</td>
+                                                <td>@pitem.ReceivedQty Nos</td>
+                                                <td>@(pitem.ShortageQty > 0 ? $"{pitem.ShortageQty} Nos" : "-")</td>
+                                                <td>@(pitem.ExcessQty > 0 ? $"{pitem.ExcessQty} Nos" : "-")</td>
+                                                <td>@(pitem.DamagedQty > 0 ? $"{pitem.DamagedQty} Nos" : "-")</td>
+                                                <td><PubPill Text="@(pitem.IsDamaged ? "Damaged" : "Good")" Tone="@(pitem.IsDamaged ? "red" : "green")" /></td>
+                                                <td>@(string.IsNullOrWhiteSpace(pitem.Remarks) ? "-" : pitem.Remarks)</td>
+                                            </TableRow>
+                                            <CardTemplate Context="pitem">
+                                                <header class="spic-card-head"><h4 class="spic-card-title">@pitem.ProductName</h4></header>
+                                                <dl class="spic-card-rows">
+                                                    <div class="spic-card-row"><dt>Dispatched</dt><dd>@pitem.DispatchedQty Nos</dd></div>
+                                                    <div class="spic-card-row"><dt>Received</dt><dd>@pitem.ReceivedQty Nos</dd></div>
+                                                    @if (pitem.ShortageQty > 0) { <div class="spic-card-row"><dt>Shortage</dt><dd>@pitem.ShortageQty Nos</dd></div> }
+                                                    @if (pitem.ExcessQty > 0) { <div class="spic-card-row"><dt>Excess</dt><dd>@pitem.ExcessQty Nos</dd></div> }
+                                                    @if (pitem.DamagedQty > 0) { <div class="spic-card-row"><dt>Damaged</dt><dd>@pitem.DamagedQty Nos</dd></div> }
+                                                    <div class="spic-card-row"><dt>Condition</dt><dd><PubPill Text="@(pitem.IsDamaged ? "Damaged" : "Good")" Tone="@(pitem.IsDamaged ? "red" : "green")" /></dd></div>
+                                                    @if (!string.IsNullOrWhiteSpace(pitem.Remarks)) { <div class="spic-card-row"><dt>Remarks</dt><dd>@pitem.Remarks</dd></div> }
+                                                </dl>
+                                            </CardTemplate>
+                                        </SpicDataTable>
+                                    </div>
+                                }
+                                <div>
+                                    <h3 class="pub-h3">@(x.Items.Count > 1 ? "Overall Acknowledgement Summary" : "Acknowledgement Details")</h3>
                                     <div class="pub-grid pub-grid--5">
-                                        <PubInfo Label="Received Quantity" Tone="green" Value="@($"{a.ReceivedQty} Nos")" />
-                                        <PubInfo Label="@(a.ExcessQty > 0 ? "Excess Quantity" : "Shortage Quantity")" Tone="pink" Value="@($"{(a.ExcessQty > 0 ? a.ExcessQty : a.ShortageQty)} Nos")" />
-                                        <PubInfo Label="Material Condition" Tone="pink" Value="@(a.IsDamaged ? "Damaged" : "Good Condition")" />
-                                        <PubInfo Label="Damaged Quantity" Tone="pink" Value="@($"{a.DamagedQty} Nos")" />
+                                        @if (x.Items.Count > 1)
+                                        {
+                                            <PubInfo Label="Total Dispatched Quantity" Value="@($"{x.Items.Sum(i => i.DispatchedQty)} Nos")" />
+                                            <PubInfo Label="Total Received Quantity" Tone="green" Value="@($"{a.ReceivedQty} Nos")" />
+                                            <PubInfo Label="Total Shortage Quantity" Tone="pink" Value="@($"{a.ShortageQty} Nos")" />
+                                            <PubInfo Label="Total Excess Quantity" Tone="pink" Value="@($"{a.ExcessQty} Nos")" />
+                                            <PubInfo Label="Total Damaged Quantity" Tone="pink" Value="@($"{a.DamagedQty} Nos")" />
+                                        }
+                                        else
+                                        {
+                                            <PubInfo Label="Received Quantity" Tone="green" Value="@($"{a.ReceivedQty} Nos")" />
+                                            <PubInfo Label="@(a.ExcessQty > 0 ? "Excess Quantity" : "Shortage Quantity")" Tone="pink" Value="@($"{(a.ExcessQty > 0 ? a.ExcessQty : a.ShortageQty)} Nos")" />
+                                            <PubInfo Label="Material Condition" Tone="pink" Value="@(a.IsDamaged ? "Damaged" : "Good Condition")" />
+                                            <PubInfo Label="Damaged Quantity" Tone="pink" Value="@($"{a.DamagedQty} Nos")" />
+                                        }
                                         <PubInfo Label="Status" Tone="pink"><PubPill Text="@(a.ExceptionType == "None" ? "Acknowledgement Completed" : "Exception Raised")" Tone="@(a.ExceptionType == "None" ? "green" : "red")" /></PubInfo>
                                         <PubInfo Label="Submitted By" Tone="green" Value="@a.AcknowledgedByName" Sub="RMDO" />
                                         <PubInfo Label="Received On" Tone="pink" Value="@PubText.DateTime(a.SubmittedAt)" />
@@ -394,12 +625,47 @@
                     </section>
                 }
 
-                @if (d.Summary.ExceptionStatus is "Raised" or "Reported" || d.Status == PublicityStatus.ExceptionRaised)
+                @if (d.Summary.ExcessVerified)
+                {
+                    <section class="pub-card pub-card--flush">
+                        <div class="pub-card__band pub-band--green">
+                            <div><h2 class="pub-h2 pub-text-green">Excess Stock Verified</h2><span class="pub-muted">Reported excess stock verified by @(d.Summary.ExcessVerifiedByName ?? "ADMIN-MD-CS") on @PubText.DateTime(d.Summary.ExcessVerifiedAt). Material retained at @d.Hq and available for future transfers.</span></div>
+                            <PubPill Text="Verified &amp; Available" Tone="green" />
+                        </div>
+                        <div class="pub-grid pub-grid--3">
+                            <PubInfo Label="Exception Type">
+                                <PubPill Text="Excess" Tone="green" />
+                            </PubInfo>
+                            <PubInfo Label="Verified By" Tone="green" Value="@(d.Summary.ExcessVerifiedByName ?? "ADMIN-MD-CS")" />
+                            <PubInfo Label="Verified On" Value="@PubText.DateTime(d.Summary.ExcessVerifiedAt)" />
+                            <div class="pub-grid__wide"><span class="pub-info__label">Holding HQ</span><b class="pub-info__value pub-info__value--sm">@d.Hq (@d.Region, @d.State)</b></div>
+                            @if (d.Items.Count > 1)
+                            {
+                                var refs = ExceptionProductRefs().ToList();
+                                if (refs.Count > 0)
+                                {
+                                    <div class="pub-grid__wide">
+                                        <span class="pub-info__label">Verified Products</span>
+                                        @foreach (var r in refs)
+                                        {
+                                            <div class="pub-muted"><b>@r.Product</b> &ndash; @r.Label: @r.Qty Nos</div>
+                                        }
+                                    </div>
+                                }
+                            }
+                        </div>
+                    </section>
+                }
+                else if (d.Summary.ExceptionStatus is "Raised" or "Reported" || d.Status == PublicityStatus.ExceptionRaised)
                 {
                     <section class="pub-card pub-card--flush">
                         <div class="pub-card__band pub-band--red">
                             <div><h2 class="pub-h2 pub-text-red">@(d.Summary.ExceptionType == "Excess" ? "Excess Reported" : "Exception Raised")</h2><span class="pub-muted">@d.Summary.ExceptionType reported in the acknowledgement.</span></div>
-                            @if (d.CanResolve && d.Summary.Outstanding > 0) { <a class="pub-btn pub-btn--primary" href="@($"/PublicityReview/{d.Id}/resolve-exception")">Resolve Exception <i class="bi bi-arrow-right"></i></a> }
+                            @* A shortage/damage requirement (Outstanding) and a leftover excess-stock
+                               transfer-out obligation are both resolved through this same page - once
+                               the shortage side is fully replaced, the request can already read as
+                               effectively complete (ExceptionResolved) while excess still needs acting on. *@
+                            @if (d.CanResolve && (d.Summary.Outstanding > 0 || (d.Summary.Excess - d.Summary.TransferredOut > 0 && !d.Summary.ExcessVerified))) { <a class="pub-btn pub-btn--primary" href="@($"/PublicityReview/{d.Id}/resolve-exception")">@(d.Summary.Outstanding == 0 && d.Summary.Excess > 0 ? "Verify Excess Stock" : "Resolve Exception") <i class="bi bi-arrow-right"></i></a> }
                         </div>
                         <div class="pub-grid pub-grid--3">
                             <PubInfo Label="Exception Type">
@@ -408,6 +674,20 @@
                             <PubInfo Label="Raised By" Tone="green" Value="@d.ExceptionRaisedBy" />
                             <PubInfo Label="Raised On" Value="@PubText.DateTime(d.ExceptionRaisedAt)" />
                             <div class="pub-grid__wide"><span class="pub-info__label">Remarks</span><b class="pub-info__value pub-info__value--sm">@(d.ExceptionRemarks ?? "-")</b></div>
+                            @if (d.Items.Count > 1)
+                            {
+                                var refs = ExceptionProductRefs().ToList();
+                                if (refs.Count > 0)
+                                {
+                                    <div class="pub-grid__wide">
+                                        <span class="pub-info__label">Affected Products</span>
+                                        @foreach (var r in refs)
+                                        {
+                                            <div class="pub-muted"><b>@r.Product</b> &ndash; @r.Label: @r.Qty Nos</div>
+                                        }
+                                    </div>
+                                }
+                            }
                         </div>
                     </section>
                 }
@@ -470,10 +750,89 @@
     private bool _reviewOpen;
     private string? _reviewRemarks;
 
-    private int AckShortage => _ackTarget is null ? 0 : Math.Max(0, _ackTarget.Quantity - _ack.ReceivedQty);
-    private int AckExcess => _ackTarget is null ? 0 : Math.Max(0, _ack.ReceivedQty - _ackTarget.Quantity);
-    private int AckDamaged => _ack.IsDamaged ? _ack.DamagedQty : 0;
+    // Specific Product requests uploaded with multiple line items (PublicityForm's Excel bulk import)
+    // get the product-wise table below instead of the single Quantity Received/Material Condition
+    // fields - General Product, Gift Articles, and single-item Specific Product requests never have
+    // more than one PubDispatchDto.Items row (see PublicityController.DispatchDtoAsync), so this is
+    // false for every one of them and they keep the original single-field form unchanged.
+    private bool IsMultiItemAck => _ackTarget is { Items.Count: > 1 };
+    private int AckShortage => _ackTarget is null ? 0 : IsMultiItemAck ? _ackTarget.Items.Sum(i => i.ShortageQty) : Math.Max(0, _ackTarget.Quantity - _ack.ReceivedQty);
+    private int AckExcess => _ackTarget is null ? 0 : IsMultiItemAck ? _ackTarget.Items.Sum(i => i.ExcessQty) : Math.Max(0, _ack.ReceivedQty - _ackTarget.Quantity);
+    private int AckDamaged => IsMultiItemAck ? _ackTarget!.Items.Sum(i => i.DamagedQty) : (_ack.IsDamaged ? _ack.DamagedQty : 0);
     private string AckType => string.Join(" + ", new[] { AckShortage > 0 ? "Shortage" : null, AckExcess > 0 ? "Excess" : null, AckDamaged > 0 ? "Damage" : null }.Where(x => x != null));
+
+    // ---- product-wise exception breakdown (Specific Product, multi-item requests only) ----------
+    // All four of these read directly from _ackTarget.Items - the FULL set of product rows, never
+    // just the current SpicDataTable page - so pagination on the acknowledgement table above can
+    // never under/over-count these totals.
+    private int AckTotalProducts => IsMultiItemAck ? _ackTarget!.Items.Count : 0;
+    private int AckProductsWithExceptions => IsMultiItemAck
+        ? _ackTarget!.Items.Count(i => i.ShortageQty > 0 || i.ExcessQty > 0 || i.DamagedQty > 0)
+        : 0;
+
+    // ---- per-product acknowledgement proof uploads (Specific Product, multi-item requests only) --
+    // Uploaded immediately on selection (same established pattern as PublicityForm.razor's per-item
+    // design-file upload), not deferred to Save/Submit - Preview/Download need a real server path, and
+    // "preserve across pagination" falls out for free this way since nothing is re-fetched: the file
+    // list lives on _ackTarget.Files, the SAME PubDispatchDto instance SpicDataTable merely paginates
+    // over, so switching pages never touches it.
+    private List<PubFileDto> ItemProofFiles(PubDispatchItemDto item) =>
+        _ackTarget?.Files.Where(f => f.Kind == PublicityFileKind.AckPhoto && f.RequestItemId == item.RequestItemId).ToList() ?? new();
+
+    // Single-file picker behind the compact "Upload Proof" button (2026-11-27) - replaces the
+    // earlier PubDrop Compact usage, which rendered a full icon+title+subtitle+hint bar per row and
+    // made every row much taller than a compact DataTable needs. Same size/type validation PubDrop
+    // itself already applies, just inline since there's exactly one file per pick here.
+    private async Task PickItemProofAsync(PubDispatchItemDto item, InputFileChangeEventArgs e)
+    {
+        var f = e.File;
+        if (f.Size > PublicityApi.MaxFileBytes) { Toast.Error($"\"{f.Name}\" is larger than 10 MB."); return; }
+        await UploadItemProofAsync(item, new List<IBrowserFile> { f });
+    }
+
+    private async Task UploadItemProofAsync(PubDispatchItemDto item, List<IBrowserFile> files)
+    {
+        if (files.Count == 0 || _ackTarget is null) return;
+        var saved = await Api.UploadAsync(Id, PublicityFileKind.AckPhoto, files, _ackTarget.Id, item.RequestItemId);
+        if (saved is not null) { _ackTarget.Files.AddRange(saved); StateHasChanged(); }
+    }
+
+    private async Task RemoveItemProofAsync(PubDispatchItemDto item, PubFileDto f)
+    {
+        if (_ackTarget is null) return;
+        if (await Api.DeleteFileAsync(f.Id)) { _ackTarget.Files.Remove(f); StateHasChanged(); }
+    }
+
+    private static List<ExportColumn<PubDispatchItemDto>> ReadOnlyAckExportColumns() => new()
+    {
+        new() { Header = "Product", ValueSelector = i => i.ProductName },
+        new() { Header = "Dispatched", ValueSelector = i => i.DispatchedQty.ToString() },
+        new() { Header = "Received", ValueSelector = i => i.ReceivedQty.ToString() },
+        new() { Header = "Shortage", ValueSelector = i => i.ShortageQty.ToString() },
+        new() { Header = "Excess", ValueSelector = i => i.ExcessQty.ToString() },
+        new() { Header = "Damaged", ValueSelector = i => i.DamagedQty.ToString() },
+        new() { Header = "Condition", ValueSelector = i => i.IsDamaged ? "Damaged" : "Good" },
+        new() { Header = "Remarks", ValueSelector = i => i.Remarks ?? "" }
+    };
+
+    // Compact per-product reference for the request-level Exception Raised card (Specific Product,
+    // multi-item requests only) - reads EVERY dispatch's own x.Items (Original/ReInitiation/Transfer
+    // alike, each already scoped to its own products by DispatchDtoAsync), never just the one most
+    // recently acknowledged, so a product whose exception was raised on an earlier dispatch still
+    // shows up here.
+    private IEnumerable<(string Product, string Label, int Qty)> ExceptionProductRefs()
+    {
+        if (_d is null) yield break;
+        foreach (var x in _d.Dispatches)
+        {
+            foreach (var i in x.Items)
+            {
+                if (i.ShortageQty > 0) yield return (i.ProductName, "Shortage", i.ShortageQty);
+                if (i.ExcessQty > 0) yield return (i.ProductName, "Excess", i.ExcessQty);
+                if (i.DamagedQty > 0) yield return (i.ProductName, "Damage", i.DamagedQty);
+            }
+        }
+    }
 
     protected override async Task OnParametersSetAsync()
     {
@@ -482,6 +841,12 @@
         _lookups = await Api.LookupsAsync();
         await LoadAsync();
     }
+
+    // Guards MarkReadByRequestAsync below to once per Id per component instance - LoadAsync can rerun
+    // for the SAME request (tab switch via OnParametersSetAsync, acknowledgement submit, etc.); the
+    // server call is already idempotent (only rows still unread are touched) so a repeat would be
+    // harmless, but there is no reason to re-fire it over and over for a request already acknowledged.
+    private int? _markedReadForId;
 
     private async Task LoadAsync()
     {
@@ -492,6 +857,18 @@
         _ack = _ackTarget?.Ack is { } a
             ? new PubAckUpsertDto { ReceivedQty = a.ReceivedQty, IsDamaged = a.IsDamaged, DamagedQty = a.DamagedQty, AcknowledgedByUserId = a.AcknowledgedByUserId, Remarks = a.Remarks }
             : new PubAckUpsertDto { ReceivedQty = _ackTarget?.Quantity ?? 0, AcknowledgedByUserId = _lookups?.MyUserId };
+
+        // Auto-mark-as-read: only after the request's own details are confirmed loaded above (a
+        // failed/unauthorized load already returned before reaching here), so viewing IND-2026-0006
+        // directly from the Submitted Request list - without ever opening Notifications - still
+        // acknowledges that request's notifications, exactly like opening them from the Notifications
+        // page already does.
+        if (_markedReadForId != Id)
+        {
+            _markedReadForId = Id;
+            var res = await Api.MarkReadByRequestAsync(Id);
+            if (res is not null) PubNotify.SetUnreadCount(res.Count);
+        }
     }
 
     // A Transfer-kind dispatch landing on this request (this request is the transfer's destination)
@@ -537,6 +914,7 @@
         if (!ok) return;
         _reviewOpen = false;
         Toast.Success(done);
+        await PubNotify.RefreshAsync();
         Nav.NavigateTo(Api.Home);
     }
 
@@ -560,8 +938,25 @@
     private async Task SaveAckAsync(bool submit)
     {
         if (_ackTarget is null) return;
-        if (_ack.ReceivedQty < 0) { Toast.Error("Enter the received quantity."); return; }
-        if (_ack.IsDamaged && (_ack.DamagedQty <= 0 || _ack.DamagedQty > _ack.ReceivedQty)) { Toast.Error("Damaged quantity must be between 1 and the received quantity."); return; }
+        if (IsMultiItemAck)
+        {
+            foreach (var item in _ackTarget.Items)
+            {
+                if (item.ReceivedQty < 0) { Toast.Error($"Enter the received quantity for {item.ProductName}."); return; }
+                if (item.IsDamaged && (item.DamagedQty <= 0 || item.DamagedQty > item.ReceivedQty))
+                { Toast.Error($"Damaged quantity for {item.ProductName} must be between 1 and the received quantity."); return; }
+            }
+            _ack.Items = _ackTarget.Items.Select(item => new PubAckItemUpsertDto
+            {
+                RequestItemId = item.RequestItemId ?? 0, ReceivedQty = item.ReceivedQty,
+                IsDamaged = item.IsDamaged, DamagedQty = item.IsDamaged ? item.DamagedQty : 0, Remarks = item.Remarks
+            }).ToList();
+        }
+        else
+        {
+            if (_ack.ReceivedQty < 0) { Toast.Error("Enter the received quantity."); return; }
+            if (_ack.IsDamaged && (_ack.DamagedQty <= 0 || _ack.DamagedQty > _ack.ReceivedQty)) { Toast.Error("Damaged quantity must be between 1 and the received quantity."); return; }
+        }
         if (submit && !await Toast.ConfirmAsync("Submit acknowledgement", AckType.Length > 0
                 ? $"{AckType} will be raised as an exception to the ADMIN - MD CS. Submit?" : "Confirm that the material is received in good condition.", "Submit")) return;
         _busy = true;

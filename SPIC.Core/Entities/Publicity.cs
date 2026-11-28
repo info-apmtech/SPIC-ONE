@@ -210,6 +210,10 @@ namespace SPIC.Core.Entities
         public int DispatchedQty { get; set; }
         public int ReceivedQty { get; set; }
         public int DamagedQty { get; set; }
+        // Per-product acknowledgement remarks (2026-11-27, product-wise acknowledgement feature) -
+        // the only field this already-migrated, previously-unused table was missing; IsDamaged is
+        // deliberately NOT a persisted column - DamagedQty > 0 already reconstructs it losslessly.
+        public string? Remarks { get; set; }
     }
 
     public class PublicityAcknowledgement

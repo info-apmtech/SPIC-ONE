@@ -299,12 +299,29 @@ else
     {
         PubNotify.OnChange += HandlePubNotifyChanged;
         PubNotify.OnNewNotification += HandleNewPublicityNotification;
-        if (HasPublicityAccess)
-        {
-            try { PubNotify.SetMuted(await JS.InvokeAsync<bool>("pubNotifySound.isMuted")); }
-            catch (Exception) { /* JS interop not ready yet during prerender - defaults to unmuted */ }
-            PubNotify.EnsurePolling();
-        }
+        await StartPublicityNotificationsIfEligibleAsync();
+    }
+
+    // Confirmed root cause (traced, not guessed - see OnAfterRenderAsync below for the second call
+    // site this exists to fix): on a FRESH circuit (first load right after the login redirect, or any
+    // hard browser refresh) OnInitialized()'s synchronous branches (line ~341) find no token yet -
+    // LoginState.Token/Http.DefaultRequestHeaders.Authorization are only populated later, inside
+    // OnAfterRenderAsync, after an awaited SessionStore (JS interop) round-trip. That means
+    // HasPublicityAccess (which reads PubApi.IsApprover/IsDispatcher/CanCreate, all derived from
+    // LoginState.UserRole) is STILL FALSE when THIS method runs on a fresh circuit - so the previous
+    // single call site here was a complete no-op, not just "slow": PubNotify.EnsurePolling() was never
+    // called at all, and the bell/Review badge only ever started working once some OTHER page's own
+    // OnInitializedAsync (e.g. PublicityList.razor, reached only after a further navigation) happened
+    // to call EnsurePolling() itself. Reordering the mute-check inside this same gated block (the
+    // previous fix) could never have helped, because the gate itself was false the whole time.
+    // EnsurePolling() is documented idempotent/safe to call from multiple places, so calling it again
+    // once auth is actually confirmed ready (below) is the correct fix, not a duplicate poll loop.
+    private async Task StartPublicityNotificationsIfEligibleAsync()
+    {
+        if (!HasPublicityAccess) return;
+        PubNotify.EnsurePolling();
+        try { PubNotify.SetMuted(await JS.InvokeAsync<bool>("pubNotifySound.isMuted")); }
+        catch (Exception) { /* JS interop not ready yet during prerender - defaults to unmuted */ }
     }
 
     /* =========================================================
@@ -497,6 +514,14 @@ else
 
 
                 _isReady = true;
+
+                // The real fix for the slow badge: this is the first point on a FRESH circuit where
+                // LoginState.UserRole/Http's Authorization header are BOTH guaranteed to be populated
+                // (OnInitializedAsync's own call above ran too early on this exact path and was a
+                // no-op). EnsurePolling() is idempotent, so this never creates a second poll loop for
+                // the synchronous-token-already-present case (there, OnAfterRenderAsync's restore
+                // block above never runs at all, because _isReady was already true before it got here).
+                await StartPublicityNotificationsIfEligibleAsync();
 
                 StateHasChanged();
             }

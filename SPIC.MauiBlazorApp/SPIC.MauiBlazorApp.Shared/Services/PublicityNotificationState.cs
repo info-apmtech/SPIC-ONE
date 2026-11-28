@@ -43,6 +43,20 @@ public sealed class PublicityNotificationState : IDisposable
         _lastKnownCount = null;
         UnreadCount = 0;
         OnChange?.Invoke();
+
+        // Root-cause fix for the slow first badge: LoginState.Token is restored asynchronously
+        // (MainLayout.razor's OnAfterRenderAsync awaits a SessionStore/JS-interop round-trip before
+        // setting it), but EnsurePolling() gets called from component OnInitializedAsync methods that
+        // can run BEFORE that - on a fresh circuit (first load after login, or any hard refresh), the
+        // poll loop's very first tick fires with no Authorization header yet, 401s, and is silently
+        // swallowed (RefreshAsync below now skips it instead - see the IsLoggedIn guard), leaving the
+        // badge to wait up to PollSeconds for the next tick. LoginState.Token's setter already fires
+        // OnChange on every change, including the moment it goes from not-set to set - that is the
+        // one authoritative, timing-independent signal that an authenticated request will now actually
+        // succeed, regardless of which component happened to call EnsurePolling() first or when.
+        // Firing the real fetch from here means the badge updates the instant auth is ready, not on
+        // whatever the next poll tick happens to be.
+        if (_login.IsLoggedIn) _ = RefreshAsync();
     }
 
     public void SetMuted(bool muted) => Muted = muted;
@@ -92,6 +106,12 @@ public sealed class PublicityNotificationState : IDisposable
     /// Mark as Read/Mark All as Read so both badges update without waiting up to PollSeconds.</summary>
     public async Task RefreshAsync()
     {
+        // Skip the call entirely (not just let it fail) when auth isn't ready yet - a poll tick or an
+        // EnsurePolling() first-fetch that races LoginState.Token's async restore would otherwise go
+        // out with no bearer token, get a guaranteed 401, and trigger ApiClientBase's "Your session
+        // has expired" toast for someone who is, in fact, still logged in. HandleLoginChanged above
+        // fires the real fetch the instant IsLoggedIn actually becomes true.
+        if (!_login.IsLoggedIn) return;
         var result = await _api.UnreadCountAsync();
         if (result is null) return;
         SetUnreadCount(result.Count);
