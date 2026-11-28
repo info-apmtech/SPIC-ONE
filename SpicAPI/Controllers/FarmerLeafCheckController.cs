@@ -80,7 +80,64 @@ namespace SpicAPI.Controllers
         public static string PrivateRoot(string contentRoot, string? configured) =>
             string.IsNullOrWhiteSpace(configured) ? Path.Combine(contentRoot, "PrivateUploads") : configured.Trim();
 
-        private string PhotoRoot => PrivateRoot(_env.ContentRootPath, _config["FarmerPortal:LeafPhotoRoot"]);
+        /// <summary>
+        /// The photo root actually used (final fix wave, review #49): a configured FarmerPortal:LeafPhotoRoot that
+        /// resolves inside the shared Uploads tree or wwwroot (both served by file routes) is REFUSED and the default
+        /// private root is used instead; <paramref name="refused"/> says so (Program.cs logs it once at startup).
+        /// </summary>
+        public static string SafePrivateRoot(string contentRoot, string? webRoot, string? configured, out bool refused)
+        {
+            refused = false;
+            var fallback = PrivateRoot(contentRoot, null);
+            if (string.IsNullOrWhiteSpace(configured)) return fallback;
+            var chosen = Path.GetFullPath(PrivateRoot(contentRoot, configured), Path.GetFullPath(contentRoot));
+            var served = new List<string> { Path.Combine(contentRoot, "Uploads") };
+            if (!string.IsNullOrWhiteSpace(webRoot)) served.Add(webRoot);
+            else served.Add(Path.Combine(contentRoot, "wwwroot"));
+            foreach (var root in served)
+            {
+                var full = Path.GetFullPath(root, Path.GetFullPath(contentRoot)).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                if (string.Equals(chosen.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar), full, StringComparison.OrdinalIgnoreCase)
+                    || chosen.StartsWith(full + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
+                    || chosen.StartsWith(full + Path.AltDirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+                {
+                    refused = true;
+                    return fallback;
+                }
+            }
+            return chosen;
+        }
+
+        private string PhotoRoot => SafePrivateRoot(_env.ContentRootPath, _env.WebRootPath, _config["FarmerPortal:LeafPhotoRoot"], out _);
+
+        /// <summary>
+        /// One-time startup check (review M7 / #49), called from Program.cs: logs an ERROR when a configured root was
+        /// refused (inside Uploads / wwwroot), and in Production a WARNING when the root is missing or not writable
+        /// (in Azure it must be the api-private share mounted at /app/PrivateUploads; otherwise photos land on the
+        /// container's own disk and are lost on the next revision). Never throws.
+        /// </summary>
+        public static void CheckPhotoRootAtStartup(IWebHostEnvironment env, IConfiguration config, ILogger log)
+        {
+            try
+            {
+                var root = SafePrivateRoot(env.ContentRootPath, env.WebRootPath, config["FarmerPortal:LeafPhotoRoot"], out var refused);
+                if (refused)
+                    log.LogError("FarmerPortal:LeafPhotoRoot points inside Uploads or wwwroot (served by file routes); using the default private root {Root} instead", root);
+                if (!env.IsProduction()) return;
+                if (!Directory.Exists(root))
+                {
+                    log.LogWarning("Leaf photo root {Root} does not exist: mount the api-private share there (infra/azure/main.bicep) or leaf photos will not persist", root);
+                    return;
+                }
+                var probe = Path.Combine(root, $".write-check-{Guid.NewGuid():N}");
+                System.IO.File.WriteAllText(probe, "ok");
+                System.IO.File.Delete(probe);
+            }
+            catch (Exception ex)
+            {
+                log.LogWarning("Leaf photo root is not writable ({Error}): leaf checks will fail to save photos", ex.GetType().Name);
+            }
+        }
 
         /// <summary>Checks the farmer made since IST midnight (deleted ones included).</summary>
         private Task<int> UsedTodayAsync(string userId, DateTime utcNow, CancellationToken ct)

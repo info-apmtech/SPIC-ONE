@@ -7,7 +7,8 @@ using SPIC.Core.FarmerPortal;
 namespace SpicAPI.Services
 {
     /// <summary>
-    /// Farmer portal Task 3: the 7-day forecast from Open-Meteo (free, no key). The ONLY thing sent is the
+    /// Farmer portal Task 3: the 7-day forecast from Open-Meteo (free endpoint, or the commercial customer endpoint
+    /// with FarmerPortal:WeatherApiKey). The ONLY thing sent is the
     /// farm point rounded to 0.1 degree (about 11 km; <see cref="FarmerWeatherRules.RoundForForecast"/>):
     /// no name, phone or user id. 8 s timeout (named HttpClient "OpenMeteo"); an answer is cached for one
     /// hour per rounded point, a failure for 5 minutes (so a broken service is not hammered). Any failure
@@ -23,6 +24,8 @@ namespace SpicAPI.Services
     {
         public const string HttpClientName = "OpenMeteo";
         public const string DefaultUrl = "https://api.open-meteo.com/v1/forecast";
+        /// <summary>The commercial endpoint, used when FarmerPortal:WeatherApiKey is set (final fix wave, I6).</summary>
+        public const string CustomerUrl = "https://customer-api.open-meteo.com/v1/forecast";
         public static readonly TimeSpan Timeout = TimeSpan.FromSeconds(8);
         public static readonly TimeSpan CacheFor = TimeSpan.FromHours(1);
         public static readonly TimeSpan FailureCacheFor = TimeSpan.FromMinutes(5);
@@ -57,11 +60,9 @@ namespace SpicAPI.Services
 
         private async Task<FarmerWeatherDto> FetchAsync(double lat, double lng, CancellationToken ct)
         {
-            var baseUrl = _config["FarmerPortal:WeatherUrl"];
-            if (string.IsNullOrWhiteSpace(baseUrl)) baseUrl = DefaultUrl;
-            var url = FormattableString.Invariant($"{baseUrl}?latitude={lat:0.0}&longitude={lng:0.0}")
-                + "&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,wind_speed_10m_max"
-                + FormattableString.Invariant($"&timezone=Asia%2FKolkata&forecast_days={FarmerWeatherRules.ForecastDays}");
+            // The URL may carry the commercial key: it is never logged (the "OpenMeteo" client has no HTTP
+            // loggers, Program.cs, and failures below log only the status code or the exception type).
+            var url = BuildUrl(_config["FarmerPortal:WeatherUrl"], _config["FarmerPortal:WeatherApiKey"], lat, lng);
 
             try
             {
@@ -102,6 +103,21 @@ namespace SpicAPI.Services
                 _log.LogWarning("Open-Meteo forecast failed: {Error}", ex.GetType().Name);
                 return Unavailable();
             }
+        }
+
+        /// <summary>
+        /// The forecast URL. FarmerPortal:WeatherUrl (a base URL) wins when set; otherwise the free endpoint, or the
+        /// customer endpoint when FarmerPortal:WeatherApiKey is set. A key is appended as &amp;apikey= (escaped).
+        /// </summary>
+        public static string BuildUrl(string? configuredBaseUrl, string? apiKey, double lat, double lng)
+        {
+            var hasKey = !string.IsNullOrWhiteSpace(apiKey);
+            var baseUrl = !string.IsNullOrWhiteSpace(configuredBaseUrl) ? configuredBaseUrl.Trim()
+                : hasKey ? CustomerUrl : DefaultUrl;
+            var url = FormattableString.Invariant($"{baseUrl}?latitude={lat:0.0}&longitude={lng:0.0}")
+                + "&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,wind_speed_10m_max"
+                + FormattableString.Invariant($"&timezone=Asia%2FKolkata&forecast_days={FarmerWeatherRules.ForecastDays}");
+            return hasKey ? url + "&apikey=" + Uri.EscapeDataString(apiKey!.Trim()) : url;
         }
 
         /// <summary>Reads Open-Meteo's "daily" arrays (any of them may be missing or hold nulls).</summary>

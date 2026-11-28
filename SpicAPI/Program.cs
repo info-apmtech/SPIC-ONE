@@ -100,7 +100,9 @@ builder.Services.AddSpicSms(builder.Configuration);
 // Farmer portal Task 3 (docs/farmer-portal.md): Open-Meteo forecast (8 s timeout, cached 1 h per
 // 0.1-degree point), area trends cache (1 h per district) and the Community "near me" author lookup.
 builder.Services.AddMemoryCache();
-builder.Services.AddHttpClient(FarmerWeatherService.HttpClientName, c => c.Timeout = FarmerWeatherService.Timeout);
+// No HTTP loggers on this client: with FarmerPortal:WeatherApiKey the request URL carries the key.
+builder.Services.AddHttpClient(FarmerWeatherService.HttpClientName, c => c.Timeout = FarmerWeatherService.Timeout)
+    .RemoveAllLoggers();
 builder.Services.AddSingleton<IFarmerWeatherService, FarmerWeatherService>();
 builder.Services.AddScoped<CommunityNearResolver>();
 builder.Services.AddScoped<FarmerAssistantContextLoader>();
@@ -327,6 +329,11 @@ builder.Services.AddCors(options =>
 });
 
 var app = builder.Build();
+
+// Farmer portal (final fix wave, review M7 / #49): warn once when the private leaf photo root is not a usable
+// volume in Production, and refuse a FarmerPortal:LeafPhotoRoot inside Uploads / wwwroot.
+SpicAPI.Controllers.FarmerLeafCheckController.CheckPhotoRootAtStartup(
+    app.Environment, app.Configuration, app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("FarmerPortal.LeafPhotoRoot"));
 
 // Telemetry FIRST: the exception middleware (outermost; unhandled exception -> error row + JSON 500)
 // and the request middleware (one row per request, written after the pipeline ran so the JWT claims

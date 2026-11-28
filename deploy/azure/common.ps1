@@ -109,6 +109,12 @@ function New-SecretParametersFile {
         ifmsConnectionString  = 'ifms-connection'
         databaseConnectionString = 'db-connection-override'
         dataExplorerPassword  = 'data-explorer-password'
+        # Farmer portal (optional): read back once a deploy that passed them stored them in Key Vault.
+        farmerTrustedClientKey = 'farmer-trusted-client-key'
+        farmerOtpPepper        = 'farmer-otp-pepper'
+        msg91AuthKey           = 'msg91-auth-key'
+        anthropicApiKey        = 'assistant-anthropic-key'
+        farmerWeatherApiKey    = 'farmer-weather-key'
     }
     $parameters = @{}
     foreach ($param in $map.Keys) {

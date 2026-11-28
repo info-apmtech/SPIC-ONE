@@ -88,6 +88,31 @@ param webCustomDomains array = []
 @secure()
 param databaseConnectionString string = ''
 
+// Farmer portal (docs/farmer-portal.md "Hardening (final fix wave)"). Every value is optional: empty = the env
+// entry is not added at all, so a deploy without them produces exactly today's apps. Secrets go to Key Vault on
+// the first deploy that passes them; deploy/azure/common.ps1 reads them back on every later deploy.
+@description('Farmer portal: shared key the web host sends with the browser IP on OTP requests (FarmerPortal__TrustedClientKey). Same value on API and web.')
+@secure()
+param farmerTrustedClientKey string = ''
+@description('Farmer portal: pepper of the OTP hash (FarmerPortal__OtpPepper).')
+@secure()
+param farmerOtpPepper string = ''
+@description('Farmer portal: SMS provider for OTP (Sms__Provider). Msg91 sends real SMS; empty keeps the Log provider (prod answers 503).')
+param smsProvider string = ''
+@description('Farmer portal: Msg91 auth key (Sms__Msg91__AuthKey).')
+@secure()
+param msg91AuthKey string = ''
+@description('Farmer portal: Msg91 DLT flow template id (Sms__Msg91__TemplateId); its OTP variable must be named otp.')
+param msg91TemplateId string = ''
+@description('Farmer portal: optional 6-letter DLT sender id (Sms__Msg91__SenderId).')
+param msg91SenderId string = ''
+@description('Anthropic API key for SPIC AI (library and farmer assistants, leaf check): Assistant__AnthropicApiKey.')
+@secure()
+param anthropicApiKey string = ''
+@description('Farmer portal: Open-Meteo commercial API key (FarmerPortal__WeatherApiKey); set = customer-api.open-meteo.com.')
+@secure()
+param farmerWeatherApiKey string = ''
+
 @description('Help Desk voice: deploy an Azure AI Speech account (S0, pay per character) and give its key to the API.')
 param deploySpeech bool = true
 @description('Region of the Speech account; must offer the en-IN, ta-IN, te-IN, mr-IN and hi-IN neural voices.')
@@ -453,6 +478,37 @@ resource secretIfmsConnection 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = i
   properties: { value: ifmsConnectionString }
 }
 
+// Farmer portal secrets (optional).
+resource secretFarmerTrustedClientKey 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = if (!empty(farmerTrustedClientKey)) {
+  parent: kv
+  name: 'farmer-trusted-client-key'
+  properties: { value: farmerTrustedClientKey }
+}
+
+resource secretFarmerOtpPepper 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = if (!empty(farmerOtpPepper)) {
+  parent: kv
+  name: 'farmer-otp-pepper'
+  properties: { value: farmerOtpPepper }
+}
+
+resource secretMsg91AuthKey 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = if (!empty(msg91AuthKey)) {
+  parent: kv
+  name: 'msg91-auth-key'
+  properties: { value: msg91AuthKey }
+}
+
+resource secretAnthropicApiKey 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = if (!empty(anthropicApiKey)) {
+  parent: kv
+  name: 'assistant-anthropic-key'
+  properties: { value: anthropicApiKey }
+}
+
+resource secretFarmerWeatherApiKey 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = if (!empty(farmerWeatherApiKey)) {
+  parent: kv
+  name: 'farmer-weather-key'
+  properties: { value: farmerWeatherApiKey }
+}
+
 // ---------------------------------------------------------------- Help Desk voice (Azure AI Speech)
 // Text to speech for the Help Desk Listen button. The API generates each clip once and saves it
 // under Uploads/Help/audio, so this is billed only for new or changed guide text.
@@ -552,6 +608,26 @@ var apiEnvIfms = concat(
   empty(ifmsConnectionString) ? [] : [{ name: 'ConnectionStrings__IfmsConnection', secretRef: 'ifms-connection' }],
   empty(dataExplorerPassword) ? [] : [{ name: 'DataExplorer__Password', secretRef: 'data-explorer-password' }]
 )
+// Farmer portal (optional; addressed by name like the IFMS secrets).
+var apiSecretsFarmer = concat(
+  empty(farmerTrustedClientKey) ? [] : [{ name: 'farmer-trusted-client-key', keyVaultUrl: '${kv.properties.vaultUri}secrets/farmer-trusted-client-key', identity: uai.id }],
+  empty(farmerOtpPepper) ? [] : [{ name: 'farmer-otp-pepper', keyVaultUrl: '${kv.properties.vaultUri}secrets/farmer-otp-pepper', identity: uai.id }],
+  empty(msg91AuthKey) ? [] : [{ name: 'msg91-auth-key', keyVaultUrl: '${kv.properties.vaultUri}secrets/msg91-auth-key', identity: uai.id }],
+  empty(anthropicApiKey) ? [] : [{ name: 'assistant-anthropic-key', keyVaultUrl: '${kv.properties.vaultUri}secrets/assistant-anthropic-key', identity: uai.id }],
+  empty(farmerWeatherApiKey) ? [] : [{ name: 'farmer-weather-key', keyVaultUrl: '${kv.properties.vaultUri}secrets/farmer-weather-key', identity: uai.id }]
+)
+var apiEnvFarmer = concat(
+  empty(farmerTrustedClientKey) ? [] : [{ name: 'FarmerPortal__TrustedClientKey', secretRef: 'farmer-trusted-client-key' }],
+  empty(farmerOtpPepper) ? [] : [{ name: 'FarmerPortal__OtpPepper', secretRef: 'farmer-otp-pepper' }],
+  empty(smsProvider) ? [] : [{ name: 'Sms__Provider', value: smsProvider }],
+  empty(msg91AuthKey) ? [] : [{ name: 'Sms__Msg91__AuthKey', secretRef: 'msg91-auth-key' }],
+  empty(msg91TemplateId) ? [] : [{ name: 'Sms__Msg91__TemplateId', value: msg91TemplateId }],
+  empty(msg91SenderId) ? [] : [{ name: 'Sms__Msg91__SenderId', value: msg91SenderId }],
+  empty(anthropicApiKey) ? [] : [{ name: 'Assistant__AnthropicApiKey', secretRef: 'assistant-anthropic-key' }],
+  empty(farmerWeatherApiKey) ? [] : [{ name: 'FarmerPortal__WeatherApiKey', secretRef: 'farmer-weather-key' }]
+)
+var webSecretsFarmer = empty(farmerTrustedClientKey) ? [] : [{ name: 'farmer-trusted-client-key', keyVaultUrl: '${kv.properties.vaultUri}secrets/farmer-trusted-client-key', identity: uai.id }]
+var webEnvFarmer = empty(farmerTrustedClientKey) ? [] : [{ name: 'FarmerPortal__TrustedClientKey', secretRef: 'farmer-trusted-client-key' }]
 var apiSecretsHelp = deploySpeech
   ? [{ name: 'help-speech-key', keyVaultUrl: '${kv.properties.vaultUri}secrets/help-speech-key', identity: uai.id }]
   : []
@@ -585,7 +661,7 @@ resource apiApp 'Microsoft.App/containerApps@2024-03-01' = if (deployApps) {
       registries: [
         { server: acr.properties.loginServer, identity: uai.id }
       ]
-      secrets: concat(apiSecretsBase, apiSecretsIfms, apiSecretsHelp)
+      secrets: concat(apiSecretsBase, apiSecretsIfms, apiSecretsHelp, apiSecretsFarmer)
     }
     template: {
       containers: [
@@ -593,7 +669,7 @@ resource apiApp 'Microsoft.App/containerApps@2024-03-01' = if (deployApps) {
           name: 'api'
           image: apiImage
           resources: { cpu: json(apiCpu), memory: apiMemory }
-          env: concat(apiEnvBase, apiEnvIfms, apiEnvHelp)
+          env: concat(apiEnvBase, apiEnvIfms, apiEnvHelp, apiEnvFarmer)
           probes: probes
           volumeMounts: [
             { volumeName: 'uploads', mountPath: '/app/Uploads' }
@@ -618,7 +694,7 @@ resource apiApp 'Microsoft.App/containerApps@2024-03-01' = if (deployApps) {
       ]
     }
   }
-  dependsOn: [acrPull, kvSecretsUser, caeStorages, secretIfmsDeviceKey, secretIfmsAutomationKey, secretIfmsConnection, secretDataExplorerPassword]
+  dependsOn: [acrPull, kvSecretsUser, caeStorages, secretIfmsDeviceKey, secretIfmsAutomationKey, secretIfmsConnection, secretDataExplorerPassword, secretFarmerTrustedClientKey, secretFarmerOtpPepper, secretMsg91AuthKey, secretAnthropicApiKey, secretFarmerWeatherApiKey]
 }
 
 var apiBaseUrl = !empty(webApiBaseUrl) ? webApiBaseUrl : (deployApps ? 'https://${apiApp.properties.configuration.ingress.fqdn}/' : '')
@@ -649,9 +725,9 @@ resource webApp 'Microsoft.App/containerApps@2024-03-01' = if (deployApps) {
       registries: [
         { server: acr.properties.loginServer, identity: uai.id }
       ]
-      secrets: [
+      secrets: concat([
         { name: 'telemetry-ingest-key', keyVaultUrl: secretTelemetryIngestKey.properties.secretUri, identity: uai.id }
-      ]
+      ], webSecretsFarmer)
     }
     template: {
       containers: [
@@ -659,7 +735,7 @@ resource webApp 'Microsoft.App/containerApps@2024-03-01' = if (deployApps) {
           name: 'web'
           image: webImage
           resources: { cpu: json(webCpu), memory: webMemory }
-          env: [
+          env: concat([
             { name: 'ASPNETCORE_ENVIRONMENT', value: 'Production' }
             { name: 'DetailedErrors', value: 'false' }
             { name: 'ApiBaseUrl', value: apiBaseUrl }
@@ -667,7 +743,7 @@ resource webApp 'Microsoft.App/containerApps@2024-03-01' = if (deployApps) {
             // Metrics & error telemetry: App Insights + the key its logger provider posts with.
             { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: appInsights.properties.ConnectionString }
             { name: 'Telemetry__IngestKey', secretRef: 'telemetry-ingest-key' }
-          ]
+          ], webEnvFarmer)
           probes: probes
           volumeMounts: [
             { volumeName: 'keys', mountPath: '/app/keys' }
@@ -686,7 +762,7 @@ resource webApp 'Microsoft.App/containerApps@2024-03-01' = if (deployApps) {
       ]
     }
   }
-  dependsOn: [acrPull, kvSecretsUser, caeStorages]
+  dependsOn: [acrPull, kvSecretsUser, caeStorages, secretFarmerTrustedClientKey]
 }
 
 // ---------------------------------------------------------------- nightly database dump job

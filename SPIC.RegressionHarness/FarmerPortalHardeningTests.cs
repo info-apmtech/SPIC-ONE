@@ -9,7 +9,10 @@ using Microsoft.AspNetCore.Mvc.Routing;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Logging.Abstractions;
 using SPIC.Core.Entities;
+using SPIC.Core.FarmerPortal;
+using Spic.Infrastructure.Data;
 using SpicAPI.Controllers;
+using SpicAPI.Services;
 
 namespace SPIC.RegressionHarness;
 
@@ -26,6 +29,105 @@ internal static class FarmerPortalHardeningTests
 		Filter();
 		AllowList();
 		UserAdmin();
+		Correctives();
+		Weather();
+		PhotoRoot();
+		Infra();
+	}
+
+	private static string RepoFile(params string[] parts)
+	{
+		var dir = new DirectoryInfo(AppContext.BaseDirectory);
+		while (dir != null && !File.Exists(Path.Combine(dir.FullName, "SpicOne.sln")))
+			dir = dir.Parent;
+		return Path.Combine(new[] { dir?.FullName ?? throw new InvalidOperationException("SpicOne.sln not found") }.Concat(parts).ToArray());
+	}
+
+	// ---------------------------------------------------------------- Group B: correctives (V42)
+
+	private static readonly System.Text.RegularExpressions.Regex NutrientKg = new(@"kg (Mn|P|B|S|Zn|N|K)\b");
+
+	private static void Correctives()
+	{
+		var seed = NutrientCorrectiveSeed.Rows;
+		var active = seed.Where(r => r.IsActive).ToList();
+		var mn = active.Where(r => r.Nutrient == "Mn" && r.Crop is null).ToList();
+		Check.That("V42: general Mn foliar is TNAU's 0.5 % spray, 5 g manganese sulphate per litre",
+			mn.Any(r => r.Method == "Foliar" && r.Dose == "0.5 % spray: 5 g manganese sulphate per litre of water"
+				&& r.SourceUrl == "https://agritech.tnau.ac.in/agriculture/plant_nutri/gnut_mangan.html"));
+		Check.That("V42: general Mn soil is 5-10 kg manganese sulphate per hectare (TNAU groundnut page)",
+			mn.Any(r => r.Method == "Soil" && r.Dose.StartsWith("5-10 kg manganese sulphate per hectare") && r.SourceUrl!.Contains("gnut_mangan")));
+		var nutrientDoses = active.Where(r => NutrientKg.IsMatch(r.Dose)).Select(r => r.Id).ToList();
+		Check.That("V42: no active dose is given in kg of nutrient (kg Mn / P / B / S / Zn per hectare)", nutrientDoses.Count == 0, string.Join("; ", nutrientDoses));
+		Check.That("V42: the kg-of-nutrient rows are inactive (22, 31, 32, 61, 62)",
+			new[] { 22, 31, 32, 61, 62 }.All(id => !seed.Single(r => r.Id == id).IsActive));
+		var noPerLitre = active.Where(r => r.Method == "Foliar" && r.Dose.Contains('%') && !r.Dose.Contains("per litre")).Select(r => r.Id).ToList();
+		Check.That("V42: every active percentage spray also gives grams per litre", noPerLitre.Count == 0, string.Join("; ", noPerLitre));
+		var paddyMn = LeafCheckRules.SelectCorrectives(seed, "Paddy", new[] { new LeafNutrientGuess("Mn", 0.7) });
+		Check.That("V42: paddy manganese now gets the general 0.5 % spray and soil rows",
+			paddyMn.Count == 2 && paddyMn.All(c => c.Crop is null) && paddyMn.Any(c => c.Dose.StartsWith("0.5 %")));
+		var maizeB = LeafCheckRules.SelectCorrectives(seed, "Maize", new[] { new LeafNutrientGuess("B", 0.7) });
+		Check.That("V42: maize boron gets the general borax row", maizeB.Count == 1 && maizeB[0].Dose.StartsWith("10 kg per hectare"));
+		Check.That("V42: banana mixed spray gives grams per litre", seed.Where(r => r.Crop == "Banana").All(r => r.Dose.Contains("5 g + 2 g + 2 g + 1 g per litre")));
+	}
+
+	// ---------------------------------------------------------------- Group B: weather key (I6)
+
+	private static void Weather()
+	{
+		var free = FarmerWeatherService.BuildUrl(null, null, 9.2, 77.9);
+		Check.That("weather: no key = the free endpoint, no apikey", free.StartsWith(FarmerWeatherService.DefaultUrl + "?") && !free.Contains("apikey"));
+		var paid = FarmerWeatherService.BuildUrl(null, " k&y ", 9.2, 77.9);
+		Check.That("weather: key = customer-api.open-meteo.com with an escaped apikey",
+			paid.StartsWith("https://customer-api.open-meteo.com/v1/forecast?") && paid.EndsWith("&apikey=k%26y"));
+		Check.That("weather: a configured WeatherUrl wins", FarmerWeatherService.BuildUrl("https://example.test/f", "k", 9.2, 77.9).StartsWith("https://example.test/f?latitude=9.2"));
+		Check.That("weather: the point stays rounded to 0.1 deg", paid.Contains("latitude=9.2&longitude=77.9"));
+	}
+
+	// ---------------------------------------------------------------- Group B: leaf photo root guard (#49)
+
+	private static void PhotoRoot()
+	{
+		var root = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "spic-app"));
+		var web = Path.Combine(root, "wwwroot");
+		var def = Path.Combine(root, "PrivateUploads");
+		Check.Equal("photo root: not configured = PrivateUploads", def, FarmerLeafCheckController.SafePrivateRoot(root, web, null, out var r0));
+		Check.That("photo root: not configured is not refused", !r0);
+		var outside = Path.Combine(Path.GetTempPath(), "spic-private");
+		Check.Equal("photo root: an outside folder is kept", Path.GetFullPath(outside), FarmerLeafCheckController.SafePrivateRoot(root, web, outside, out var r1));
+		Check.That("photo root: an outside folder is not refused", !r1);
+		Check.Equal("photo root: under Uploads falls back to the default", def,
+			FarmerLeafCheckController.SafePrivateRoot(root, web, Path.Combine(root, "Uploads", "Leaf"), out var r2));
+		Check.That("photo root: under Uploads is refused", r2);
+		FarmerLeafCheckController.SafePrivateRoot(root, web, Path.Combine(root, "wwwroot"), out var r3);
+		Check.That("photo root: wwwroot itself is refused", r3);
+		FarmerLeafCheckController.SafePrivateRoot(root, web, "Uploads/../Uploads/x", out var r4);
+		Check.That("photo root: a relative path into Uploads is refused", r4);
+		FarmerLeafCheckController.SafePrivateRoot(root, web, Path.Combine(root, "UploadsPrivate"), out var r5);
+		Check.That("photo root: a sibling named UploadsPrivate is allowed", !r5);
+	}
+
+	// ---------------------------------------------------------------- Group B: bicep wiring (I2) and docker (#48)
+
+	private static void Infra()
+	{
+		var bicep = File.ReadAllText(RepoFile("infra", "azure", "main.bicep")).Replace("\r\n", "\n");
+		foreach (var param in new[] { "farmerTrustedClientKey", "farmerOtpPepper", "msg91AuthKey", "anthropicApiKey", "farmerWeatherApiKey" })
+			Check.That($"bicep: @secure() {param} with an empty default", bicep.Contains($"@secure()\nparam {param} string = ''"));
+		foreach (var param in new[] { "smsProvider", "msg91TemplateId", "msg91SenderId" })
+			Check.That($"bicep: {param} with an empty default", bicep.Contains($"param {param} string = ''"));
+		foreach (var env in new[] { "FarmerPortal__TrustedClientKey", "FarmerPortal__OtpPepper", "Sms__Provider", "Sms__Msg91__AuthKey",
+			"Sms__Msg91__TemplateId", "Sms__Msg91__SenderId", "Assistant__AnthropicApiKey", "FarmerPortal__WeatherApiKey" })
+			Check.That($"bicep: {env} is added only when its value is set",
+				System.Text.RegularExpressions.Regex.IsMatch(bicep, @"empty\(\w+\) \? \[\] : \[\{ name: '" + env + "'"));
+		Check.That("bicep: the trusted key is on the web app too", bicep.Contains("], webEnvFarmer)") && bicep.Contains("], webSecretsFarmer)"));
+		Check.That("bicep: the API env and secrets take the farmer arrays",
+			bicep.Contains("concat(apiEnvBase, apiEnvIfms, apiEnvHelp, apiEnvFarmer)") && bicep.Contains("concat(apiSecretsBase, apiSecretsIfms, apiSecretsHelp, apiSecretsFarmer)"));
+		var common = File.ReadAllText(RepoFile("deploy", "azure", "common.ps1"));
+		Check.That("deploy: the farmer secrets are read back from Key Vault on every deploy",
+			new[] { "farmer-trusted-client-key", "farmer-otp-pepper", "msg91-auth-key", "assistant-anthropic-key", "farmer-weather-key" }.All(common.Contains));
+		var docker = File.ReadAllText(RepoFile(".dockerignore"));
+		Check.That("docker: SpicAPI/PrivateUploads/ is not copied into the image", docker.Split('\n').Any(l => l.Trim() == "SpicAPI/PrivateUploads/"));
 	}
 
 	// ---------------------------------------------------------------- Group A: filter

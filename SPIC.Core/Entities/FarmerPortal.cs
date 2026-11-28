@@ -61,6 +61,13 @@ public class FarmerProfile
     public string PreferredLanguage { get; set; } = "en";
     public DateTime CreatedAtUtc { get; set; }
     public DateTime UpdatedAtUtc { get; set; }
+
+    /// <summary>When (UTC) the farmer last accepted the privacy notice (final fix wave, V42): at the first profile
+    /// save, and at a sign-in that continues past the login consent line when the version moved on.</summary>
+    public DateTime? PrivacyAcceptedAt { get; set; }
+
+    /// <summary>The privacy notice version accepted (FarmerPrivacyRules.Version).</summary>
+    public string? PrivacyVersion { get; set; }
 }
 
 // Farmer Portal Task 2 (docs/farmer-portal.md, 2026-11-28): call-back requests a farmer sends to one of

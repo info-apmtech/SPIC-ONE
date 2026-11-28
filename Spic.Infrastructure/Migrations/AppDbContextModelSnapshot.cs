@@ -5793,6 +5793,13 @@ namespace Spic.Infrastructure.Migrations
                         .HasMaxLength(700)
                         .HasColumnType("character varying(700)");
 
+                    b.Property<DateTime?>("PrivacyAcceptedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("PrivacyVersion")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
                     b.Property<int>("StateId")
                         .HasColumnType("integer");
 
@@ -11386,15 +11393,27 @@ namespace Spic.Infrastructure.Migrations
                         new
                         {
                             Id = 17,
-                            Dose = "1-5 kg Mn per hectare in about 200 litres of water",
+                            Dose = "0.5 % spray: 5 g manganese sulphate per litre of water",
                             IsActive = true,
                             Method = "Foliar",
-                            Note = "On high-pH soil use ammonium sulphate instead of urea.",
+                            Note = "Spray every two weeks until the new leaves are green.",
                             Nutrient = "Mn",
-                            Product = "Manganese sulphate",
+                            Product = "Manganese sulphate (MnSO4)",
                             SortOrder = 1,
-                            Source = "TNAU Agritech Expert System for Paddy: nutritional disorders and corrective measures",
-                            SourceUrl = "https://agritech.tnau.ac.in/expert_system/paddy/nutrientmanagement.html"
+                            Source = "TNAU Agritech: Mineral nutrition, Groundnut manganese deficiency (correction measure)",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/plant_nutri/gnut_mangan.html"
+                        },
+                        new
+                        {
+                            Id = 18,
+                            Dose = "5-10 kg manganese sulphate per hectare (about 2-4 kg per acre)",
+                            IsActive = true,
+                            Method = "Soil",
+                            Nutrient = "Mn",
+                            Product = "Manganese sulphate (MnSO4)",
+                            SortOrder = 2,
+                            Source = "TNAU Agritech: Mineral nutrition, Groundnut manganese deficiency (correction measure)",
+                            SourceUrl = "https://agritech.tnau.ac.in/agriculture/plant_nutri/gnut_mangan.html"
                         },
                         new
                         {
@@ -11429,7 +11448,7 @@ namespace Spic.Infrastructure.Migrations
                             Id = 22,
                             Crop = "Paddy",
                             Dose = "15-30 kg P per hectare",
-                            IsActive = true,
+                            IsActive = false,
                             Method = "Soil",
                             Note = "Phosphobacteria as seed coating or seedling dip also helps.",
                             Nutrient = "P",
@@ -11553,7 +11572,7 @@ namespace Spic.Infrastructure.Migrations
                             Id = 31,
                             Crop = "Paddy",
                             Dose = "1-5 kg Mn per hectare in about 200 litres of water",
-                            IsActive = true,
+                            IsActive = false,
                             Method = "Foliar",
                             Note = "Use ammonium sulphate instead of urea.",
                             Nutrient = "Mn",
@@ -11567,7 +11586,7 @@ namespace Spic.Infrastructure.Migrations
                             Id = 32,
                             Crop = "Paddy",
                             Dose = "0.5-3 kg B per hectare, before planting or as a spray during growth",
-                            IsActive = true,
+                            IsActive = false,
                             Method = "Soil",
                             Note = "Avoid too much water draining through the field.",
                             Nutrient = "B",
@@ -11787,7 +11806,7 @@ namespace Spic.Infrastructure.Migrations
                             Id = 61,
                             Crop = "Maize",
                             Dose = "40 kg S with 5 kg Zn and 1.5 kg B per hectare",
-                            IsActive = true,
+                            IsActive = false,
                             Method = "Soil",
                             Note = "In deficient soils.",
                             Nutrient = "S",
@@ -11801,7 +11820,7 @@ namespace Spic.Infrastructure.Migrations
                             Id = 62,
                             Crop = "Maize",
                             Dose = "1.5 kg B with 5 kg Zn and 40 kg S per hectare",
-                            IsActive = true,
+                            IsActive = false,
                             Method = "Soil",
                             Note = "In deficient soils.",
                             Nutrient = "B",
@@ -11814,7 +11833,7 @@ namespace Spic.Infrastructure.Migrations
                         {
                             Id = 70,
                             Crop = "Banana",
-                            Dose = "Zinc sulphate 0.5 % + ferrous sulphate 0.2 % + copper sulphate 0.2 % + boric acid 0.1 %",
+                            Dose = "Zinc sulphate 0.5 % + ferrous sulphate 0.2 % + copper sulphate 0.2 % + boric acid 0.1 %: 5 g + 2 g + 2 g + 1 g per litre",
                             IsActive = true,
                             Method = "Foliar",
                             Note = "At 3, 5 and 7 months after planting.",
@@ -11828,7 +11847,7 @@ namespace Spic.Infrastructure.Migrations
                         {
                             Id = 71,
                             Crop = "Banana",
-                            Dose = "Zinc sulphate 0.5 % + ferrous sulphate 0.2 % + copper sulphate 0.2 % + boric acid 0.1 %",
+                            Dose = "Zinc sulphate 0.5 % + ferrous sulphate 0.2 % + copper sulphate 0.2 % + boric acid 0.1 %: 5 g + 2 g + 2 g + 1 g per litre",
                             IsActive = true,
                             Method = "Foliar",
                             Note = "At 3, 5 and 7 months after planting.",
@@ -11842,7 +11861,7 @@ namespace Spic.Infrastructure.Migrations
                         {
                             Id = 72,
                             Crop = "Banana",
-                            Dose = "Zinc sulphate 0.5 % + ferrous sulphate 0.2 % + copper sulphate 0.2 % + boric acid 0.1 %",
+                            Dose = "Zinc sulphate 0.5 % + ferrous sulphate 0.2 % + copper sulphate 0.2 % + boric acid 0.1 %: 5 g + 2 g + 2 g + 1 g per litre",
                             IsActive = true,
                             Method = "Foliar",
                             Note = "At 3, 5 and 7 months after planting.",

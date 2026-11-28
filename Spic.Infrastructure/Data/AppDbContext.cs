@@ -422,6 +422,7 @@ namespace Spic.Infrastructure.Data
                 entity.Property(x => x.LandAcres).HasColumnType("numeric(10,2)");
                 entity.Property(x => x.IrrigationType).HasConversion<string>().HasMaxLength(20);
                 entity.Property(x => x.PreferredLanguage).HasMaxLength(5);
+                entity.Property(x => x.PrivacyVersion).HasMaxLength(20);
             });
             // Farmer portal Task 2: call-back requests (farmer -> one of their SPIC staff).
             builder.Entity<FarmerContactRequest>(entity =>

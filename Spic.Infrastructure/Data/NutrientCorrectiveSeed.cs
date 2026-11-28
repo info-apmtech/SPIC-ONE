@@ -13,6 +13,14 @@ namespace Spic.Infrastructure.Data;
 /// in-app row (top-dress per Fertilizer advice) has no link either. An agronomist should sign the seed off before
 /// go-live (docs/farmer-portal.md, Task 6). Spray strengths also give grams per litre, which is how farmers mix them
 /// (1 % = 10 g per litre).
+/// <para>
+/// Final fix wave (migration V42_FarmerPortalHardening): every dose is product per litre or kg of PRODUCT per hectare /
+/// acre, never kg of nutrient. The manganese spray (was "1-5 kg Mn per hectare in 200 litres", an ~8 % spray at the top
+/// of the range) now uses TNAU's 0.5 % MnSO4 spray (5 g per litre) and 5-10 kg MnSO4 per hectare from the TNAU groundnut
+/// manganese page; TNAU's rice page gives manganese only as kg Mn, so the Paddy Mn row is inactive and paddy gets the
+/// general rows. The other kg-of-nutrient rows (Paddy P, Paddy B, Maize S and B) are inactive too, so those crops get
+/// the general rows (all product doses). Banana's mixed spray also gives grams per litre.
+/// </para>
 /// </summary>
 public static class NutrientCorrectiveSeed
 {
@@ -28,15 +36,17 @@ public static class NutrientCorrectiveSeed
     private const string GroundnutUrl = "https://agritech.tnau.ac.in/govt_schemes_services/aas/groundnut.html";
     private const string Banana = "TNAU Agritech Horticulture: Banana (micronutrient spray)";
     private const string BananaUrl = "https://agritech.tnau.ac.in/horticulture/horti_fruits_banana.html";
+    private const string GroundnutMn = "TNAU Agritech: Mineral nutrition, Groundnut manganese deficiency (correction measure)";
+    private const string GroundnutMnUrl = "https://agritech.tnau.ac.in/agriculture/plant_nutri/gnut_mangan.html";
 
     /// <summary>The Source of a row whose value is not from a TNAU page (then SourceUrl is null).</summary>
     public const string GeneralGuidance = "General guidance (not a TNAU value); ask your SPIC officer";
 
     private static NutrientCorrective C(int id, string nutrient, string? crop, string product, string method, string dose,
-        string? note, string source, string? url, int sort) => new()
+        string? note, string source, string? url, int sort, bool active = true) => new()
     {
         Id = id, Nutrient = nutrient, Crop = crop, Product = product, Method = method, Dose = dose, Note = note,
-        Source = source, SourceUrl = url, SortOrder = sort, IsActive = true
+        Source = source, SourceUrl = url, SortOrder = sort, IsActive = active
     };
 
     public static readonly NutrientCorrective[] Rows =
@@ -76,8 +86,10 @@ public static class NutrientCorrectiveSeed
             "Not on calcareous soil. On acid soil, lime (as per a lime requirement test) gives calcium.", Groundnut, GroundnutUrl, 1),
         C(16, "Ca", null, "Calcium chloride", "Foliar", "A calcium chloride spray for quick correction of a severe shortage",
             "Ask your SPIC officer for the strength for your crop.", PaddyExpert, PaddyExpertUrl, 2),
-        C(17, "Mn", null, "Manganese sulphate", "Foliar", "1-5 kg Mn per hectare in about 200 litres of water",
-            "On high-pH soil use ammonium sulphate instead of urea.", PaddyExpert, PaddyExpertUrl, 1),
+        C(17, "Mn", null, "Manganese sulphate (MnSO4)", "Foliar", "0.5 % spray: 5 g manganese sulphate per litre of water",
+            "Spray every two weeks until the new leaves are green.", GroundnutMn, GroundnutMnUrl, 1),
+        C(18, "Mn", null, "Manganese sulphate (MnSO4)", "Soil", "5-10 kg manganese sulphate per hectare (about 2-4 kg per acre)",
+            null, GroundnutMn, GroundnutMnUrl, 2),
 
         // ---- Paddy ----
         C(20, "N", "Paddy", "Urea (46 % N)", "Foliar", "1 % spray: 10 g per litre of water, every week until the symptoms go",
@@ -85,8 +97,9 @@ public static class NutrientCorrectiveSeed
             PaddyExpert, PaddyExpertUrl, 1),
         C(21, "N", "Paddy", "Urea (46 % N)", "Soil", "25 % more nitrogen than the recommended dose",
             "Keep the field flooded; do not let water run off over the bunds just after applying.", PaddyExpert, PaddyExpertUrl, 2),
+        // Inactive (V42): the dose is kg of nutrient (P), not product; paddy gets the general P rows.
         C(22, "P", "Paddy", "SSP or DAP", "Soil", "15-30 kg P per hectare",
-            "Phosphobacteria as seed coating or seedling dip also helps.", PaddyExpert, PaddyExpertUrl, 1),
+            "Phosphobacteria as seed coating or seedling dip also helps.", PaddyExpert, PaddyExpertUrl, 1, active: false),
         C(23, "K", "Paddy", "Muriate of potash (KCl)", "Foliar", "1 % spray: 10 g per litre of water", null, PaddyExpert, PaddyExpertUrl, 1),
         C(24, "K", "Paddy", "Muriate of potash (KCl)", "Soil", "25 % more potash than the recommended dose",
             "Spread the straw back on the field instead of burning it.", PaddyExpert, PaddyExpertUrl, 2),
@@ -102,10 +115,12 @@ public static class NutrientCorrectiveSeed
             "Gives sulphur and calcium.", Rice, RiceUrl, 1),
         C(30, "Mg", "Paddy", "Magnesium chloride", "Foliar", "2 % spray: 20 g per litre of water",
             "Kieserite in the soil corrects it quickly too.", PaddyExpert, PaddyExpertUrl, 1),
+        // Inactive (V42): kg of nutrient (Mn, B), not product; the top of the Mn range is an ~8 % spray. Paddy gets the
+        // general rows (0.5 % MnSO4 spray, borax 10 kg per hectare).
         C(31, "Mn", "Paddy", "Manganese sulphate", "Foliar", "1-5 kg Mn per hectare in about 200 litres of water",
-            "Use ammonium sulphate instead of urea.", PaddyExpert, PaddyExpertUrl, 1),
+            "Use ammonium sulphate instead of urea.", PaddyExpert, PaddyExpertUrl, 1, active: false),
         C(32, "B", "Paddy", "Borax", "Soil", "0.5-3 kg B per hectare, before planting or as a spray during growth",
-            "Avoid too much water draining through the field.", PaddyExpert, PaddyExpertUrl, 1),
+            "Avoid too much water draining through the field.", PaddyExpert, PaddyExpertUrl, 1, active: false),
         C(33, "Ca", "Paddy", "Gypsum or lime", "Soil", "Gypsum on high-pH (sodic) soil; lime on acid soil",
             "A calcium chloride spray corrects a severe shortage quickly.", PaddyExpert, PaddyExpertUrl, 1),
 
@@ -136,15 +151,16 @@ public static class NutrientCorrectiveSeed
 
         // ---- Maize ----
         C(60, "Zn", "Maize", "Zinc sulphate", "Soil", "37.5 kg per hectare (about 15 kg per acre) for hybrid maize", "In zinc-deficient soil.", Maize, MaizeUrl, 1),
-        C(61, "S", "Maize", "Sulphur with zinc and boron", "Soil", "40 kg S with 5 kg Zn and 1.5 kg B per hectare", "In deficient soils.", Maize, MaizeUrl, 1),
-        C(62, "B", "Maize", "Boron with zinc and sulphur", "Soil", "1.5 kg B with 5 kg Zn and 40 kg S per hectare", "In deficient soils.", Maize, MaizeUrl, 1),
+        // Inactive (V42): kg of nutrient (S, Zn, B), not product; maize gets the general gypsum and borax rows.
+        C(61, "S", "Maize", "Sulphur with zinc and boron", "Soil", "40 kg S with 5 kg Zn and 1.5 kg B per hectare", "In deficient soils.", Maize, MaizeUrl, 1, active: false),
+        C(62, "B", "Maize", "Boron with zinc and sulphur", "Soil", "1.5 kg B with 5 kg Zn and 40 kg S per hectare", "In deficient soils.", Maize, MaizeUrl, 1, active: false),
 
         // ---- Banana ----
-        C(70, "Zn", "Banana", "Micronutrient spray", "Foliar", "Zinc sulphate 0.5 % + ferrous sulphate 0.2 % + copper sulphate 0.2 % + boric acid 0.1 %",
+        C(70, "Zn", "Banana", "Micronutrient spray", "Foliar", "Zinc sulphate 0.5 % + ferrous sulphate 0.2 % + copper sulphate 0.2 % + boric acid 0.1 %: 5 g + 2 g + 2 g + 1 g per litre",
             "At 3, 5 and 7 months after planting.", Banana, BananaUrl, 1),
-        C(71, "Fe", "Banana", "Micronutrient spray", "Foliar", "Zinc sulphate 0.5 % + ferrous sulphate 0.2 % + copper sulphate 0.2 % + boric acid 0.1 %",
+        C(71, "Fe", "Banana", "Micronutrient spray", "Foliar", "Zinc sulphate 0.5 % + ferrous sulphate 0.2 % + copper sulphate 0.2 % + boric acid 0.1 %: 5 g + 2 g + 2 g + 1 g per litre",
             "At 3, 5 and 7 months after planting.", Banana, BananaUrl, 1),
-        C(72, "B", "Banana", "Micronutrient spray", "Foliar", "Zinc sulphate 0.5 % + ferrous sulphate 0.2 % + copper sulphate 0.2 % + boric acid 0.1 %",
+        C(72, "B", "Banana", "Micronutrient spray", "Foliar", "Zinc sulphate 0.5 % + ferrous sulphate 0.2 % + copper sulphate 0.2 % + boric acid 0.1 %: 5 g + 2 g + 2 g + 1 g per litre",
             "At 3, 5 and 7 months after planting.", Banana, BananaUrl, 1),
     };
 }
