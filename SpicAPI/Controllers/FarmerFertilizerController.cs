@@ -27,6 +27,7 @@ namespace SpicAPI.Controllers
     /// kg K/ha, pH 6.5 / 7.5; P may be entered as P2O5 and K as K2O); the dose factors are the soil report's
     /// (<see cref="LabFertilizerSchedule"/>, Sas:Lab:DoseFactors). The arithmetic is <see cref="FertilizerAdvisor"/>.
     /// </summary>
+    [FarmerAccess]
     [Authorize(Roles = nameof(AppRole.Farmer))]
     [ApiController]
     [Route("api/Farmer/fertilizer")]

@@ -35,6 +35,7 @@ namespace SpicAPI.Controllers
     /// (FarmerPortal:AssistantDailyLimit), counted and stored under a PostgreSQL advisory lock per farmer before
     /// the answer is made, so parallel taps and both API replicas cannot pass the cap together.
     /// </summary>
+    [FarmerAccess]
     [Authorize(Roles = nameof(AppRole.Farmer))]
     [ApiController]
     [Route("api/Farmer/assistant")]

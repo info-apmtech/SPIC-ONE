@@ -125,6 +125,7 @@ namespace SpicAPI.Controllers
 		}
 
 		// GET api/Lab/languages   (every signed-in user; farmers get the farmer subset)
+		[FarmerAccess]
 		[HttpGet("languages")]
 		public async Task<IActionResult> GetLanguages()
 		{

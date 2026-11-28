@@ -24,6 +24,7 @@ namespace SpicAPI.Controllers
     /// comes from <see cref="IFarmerWeatherService"/> (Open-Meteo, the GPS of the profile rounded to 0.1
     /// degree; no GPS = no weather, the app asks the farmer to add the location).
     /// </summary>
+    [FarmerAccess]
     [Authorize(Roles = nameof(AppRole.Farmer))]
     [ApiController]
     [Route("api/Farmer")]

@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using SPIC.Core.DTOs;
 using SPIC.Core.Entities;
 using SPIC.Core.Interfaces;
+using System.Security.Claims;
 
 namespace SpicAPI.Controllers
 {
@@ -17,6 +18,24 @@ namespace SpicAPI.Controllers
         {
             _userService = userService;
         }   
+
+        /// <summary>
+        /// The roles that may create, edit, delete or (de)activate accounts here (final fix wave,
+        /// docs/farmer-portal.md "Hardening"). No page in this repository calls these four endpoints
+        /// (git grep: none), so the restriction cannot break a staff flow; it closes them to every
+        /// dealer, field role and farmer, which a bare [Authorize] let through.
+        /// </summary>
+        public const string AccountAdminRoles = "Admin,SuperAdmin,CorporateAdmin";
+
+        /// <summary>
+        /// SuperAdmin and Farmer accounts are made only by a SuperAdmin: a SuperAdmin bypasses every
+        /// rule, and Farmer accounts come from phone sign-up (FarmerAuthController), never from here.
+        /// </summary>
+        public static bool MayAssignRole(AppRole? callerRole, AppRole requested) =>
+            requested is not (AppRole.SuperAdmin or AppRole.Farmer) || callerRole == AppRole.SuperAdmin;
+
+        private AppRole? CallerRole =>
+            Enum.TryParse<AppRole>(User.FindFirstValue(ClaimTypes.Role), out var r) ? r : null;
 
         [AllowAnonymous]
         [HttpGet("seed-default-user")]
@@ -44,12 +63,15 @@ namespace SpicAPI.Controllers
             });
         }
 
-        //[Authorize(Roles = "Admin")]
+        [Authorize(Roles = AccountAdminRoles)]
         [HttpPost("create-user")]
         public async Task<IActionResult> CreateUser([FromBody] UserDto dto)
         {
             if (!ModelState.IsValid)
                 return BadRequest(ModelState);
+
+            if (!MayAssignRole(CallerRole, dto.Role))
+                return StatusCode(StatusCodes.Status403Forbidden, new { message = "Only a SuperAdmin can create this kind of account." });
 
             var user = await _userService.CreateUserAsync(dto);
 
@@ -65,11 +87,15 @@ namespace SpicAPI.Controllers
             });
         }
 
+        [Authorize(Roles = AccountAdminRoles)]
         [HttpPut("update-user")]
         public async Task<IActionResult> UpdateUser([FromBody] UserDto dto)
         {
             if (!ModelState.IsValid)
                 return BadRequest(ModelState);
+
+            if (!MayAssignRole(CallerRole, dto.Role))
+                return StatusCode(StatusCodes.Status403Forbidden, new { message = "Only a SuperAdmin can give an account this role." });
 
             var user = await _userService.UpdateUserAsync(dto);
 
@@ -85,6 +111,7 @@ namespace SpicAPI.Controllers
             });
         }
 
+        [Authorize(Roles = AccountAdminRoles)]
         [HttpDelete("delete-user/{userId}")]
         public async Task<IActionResult> DeleteUser(string userId)
         {
@@ -99,6 +126,7 @@ namespace SpicAPI.Controllers
             });
         }
 
+        [Authorize(Roles = AccountAdminRoles)]
         [HttpPatch("update-status/{userId}")]
         public async Task<IActionResult> UpdateStatus(string userId, [FromQuery] bool isActive)
         {

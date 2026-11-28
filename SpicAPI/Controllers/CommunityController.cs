@@ -73,6 +73,7 @@ namespace SpicAPI.Controllers
 		// ---------------------------------------------------------------- stats
 
 		// GET /api/Community/stats
+		[FarmerAccess]
 		[HttpGet("stats")]
 		public async Task<IActionResult> GetStats()
 		{
@@ -116,6 +117,7 @@ namespace SpicAPI.Controllers
 		// ---------------------------------------------------------------- lists
 
 		// GET /api/Community/recent?take=6
+		[FarmerAccess]
 		[HttpGet("recent")]
 		public async Task<IActionResult> GetRecent([FromQuery] int take = 6)
 		{
@@ -133,6 +135,7 @@ namespace SpicAPI.Controllers
 		}
 
 		// GET /api/Community/discussions?tab=&category=&product=&crop=&status=&tags=&from=&to=&q=&sort=&page=&pageSize=
+		[FarmerAccess]
 		[HttpGet("discussions")]
 		public async Task<IActionResult> GetDiscussions(
 			[FromQuery] string? tab,
@@ -250,6 +253,7 @@ namespace SpicAPI.Controllers
 		// GET /api/Community/near?page=&pageSize=
 		// Farmer portal Task 3 ("Community near me"): discussions whose authors are near the caller
 		// (a farmer's profile district, else the state; staff: their state). Latest activity first.
+		[FarmerAccess]
 		[HttpGet("near")]
 		public async Task<IActionResult> GetNear([FromQuery] int page = 1, [FromQuery] int pageSize = 10)
 		{
@@ -280,6 +284,7 @@ namespace SpicAPI.Controllers
 
 		// GET /api/Community/discussions/{id}   (Views += 1)
 		// GET /api/Community/discussions/{id}?countView=false  (edit form / posted page: no view counted)
+		[FarmerAccess]
 		[HttpGet("discussions/{id:int}")]
 		public async Task<IActionResult> GetDiscussion(int id, [FromQuery] bool countView = true)
 		{
@@ -297,6 +302,7 @@ namespace SpicAPI.Controllers
 		}
 
 		// POST /api/Community/discussions/similar
+		[FarmerAccess]
 		[HttpPost("discussions/similar")]
 		public async Task<IActionResult> GetSimilar([FromBody] SimilarRequest request)
 		{
@@ -343,6 +349,7 @@ namespace SpicAPI.Controllers
 		// ---------------------------------------------------------------- write
 
 		// POST /api/Community/discussions
+		[FarmerAccess]
 		[HttpPost("discussions")]
 		public async Task<IActionResult> CreateDiscussion([FromBody] DiscussionUpsertDto request)
 		{
@@ -378,6 +385,7 @@ namespace SpicAPI.Controllers
 		}
 
 		// PUT /api/Community/discussions/{id}
+		[FarmerAccess]
 		[HttpPut("discussions/{id:int}")]
 		public async Task<IActionResult> UpdateDiscussion(int id, [FromBody] DiscussionUpsertDto request)
 		{
@@ -406,6 +414,7 @@ namespace SpicAPI.Controllers
 		}
 
 		// DELETE /api/Community/discussions/{id}  (soft)
+		[FarmerAccess]
 		[HttpDelete("discussions/{id:int}")]
 		public async Task<IActionResult> DeleteDiscussion(int id)
 		{
@@ -424,6 +433,7 @@ namespace SpicAPI.Controllers
 		}
 
 		// PATCH /api/Community/discussions/{id}/status?status=Resolved|Open
+		[FarmerAccess]
 		[HttpPatch("discussions/{id:int}/status")]
 		public async Task<IActionResult> SetStatus(int id, [FromQuery] string status)
 		{
@@ -447,6 +457,7 @@ namespace SpicAPI.Controllers
 		// ---------------------------------------------------------------- replies
 
 		// POST /api/Community/discussions/{id}/replies
+		[FarmerAccess]
 		[HttpPost("discussions/{id:int}/replies")]
 		public async Task<IActionResult> CreateReply(int id, [FromBody] ReplyCreateDto request)
 		{
@@ -503,6 +514,7 @@ namespace SpicAPI.Controllers
 		}
 
 		// DELETE /api/Community/replies/{id}  (soft)
+		[FarmerAccess]
 		[HttpDelete("replies/{id:int}")]
 		public async Task<IActionResult> DeleteReply(int id)
 		{
@@ -529,14 +541,17 @@ namespace SpicAPI.Controllers
 		// ---------------------------------------------------------------- reactions
 
 		// POST /api/Community/discussions/{id}/like
+		[FarmerAccess]
 		[HttpPost("discussions/{id:int}/like")]
 		public Task<IActionResult> LikePost(int id) => TogglePostReaction(id, CommunityReactionKind.Like);
 
 		// POST /api/Community/discussions/{id}/save
+		[FarmerAccess]
 		[HttpPost("discussions/{id:int}/save")]
 		public Task<IActionResult> SavePost(int id) => TogglePostReaction(id, CommunityReactionKind.Save);
 
 		// POST /api/Community/discussions/{id}/follow
+		[FarmerAccess]
 		[HttpPost("discussions/{id:int}/follow")]
 		public Task<IActionResult> FollowPost(int id) => TogglePostReaction(id, CommunityReactionKind.Follow);
 
@@ -561,6 +576,7 @@ namespace SpicAPI.Controllers
 		}
 
 		// POST /api/Community/replies/{id}/like
+		[FarmerAccess]
 		[HttpPost("replies/{id:int}/like")]
 		public async Task<IActionResult> LikeReply(int id)
 		{
@@ -610,6 +626,7 @@ namespace SpicAPI.Controllers
 		// ---------------------------------------------------------------- attachments
 
 		// POST /api/Community/discussions/{id}/attachments   (multipart, field name "files")
+		[FarmerAccess]
 		[HttpPost("discussions/{id:int}/attachments")]
 		[RequestSizeLimit(64 * 1024 * 1024)]
 		public async Task<IActionResult> UploadAttachments(int id, [FromForm] List<IFormFile> files)
@@ -684,6 +701,7 @@ namespace SpicAPI.Controllers
 		}
 
 		// POST /api/Community/replies/{id}/attachments   (multipart, field name "files"; images only, max 3)
+		[FarmerAccess]
 		[HttpPost("replies/{id:int}/attachments")]
 		[RequestSizeLimit(32 * 1024 * 1024)]
 		public async Task<IActionResult> UploadReplyAttachments(int id, [FromForm] List<IFormFile> files)
@@ -758,6 +776,7 @@ namespace SpicAPI.Controllers
 		}
 
 		// DELETE /api/Community/attachments/{id}
+		[FarmerAccess]
 		[HttpDelete("attachments/{id:int}")]
 		public async Task<IActionResult> DeleteAttachment(int id)
 		{
@@ -802,6 +821,7 @@ namespace SpicAPI.Controllers
 		}
 
 		// GET /api/Community/file/{*path}   (also accepts ?access_token=, see Program.cs)
+		[FarmerAccess]
 		[HttpGet("file/{*path}")]
 		public IActionResult ViewFile(string path)
 		{
@@ -832,6 +852,7 @@ namespace SpicAPI.Controllers
 		// ---------------------------------------------------------------- me / avatar
 
 		// GET /api/Community/me
+		[FarmerAccess]
 		[HttpGet("me")]
 		public async Task<IActionResult> GetMe()
 		{
@@ -840,6 +861,7 @@ namespace SpicAPI.Controllers
 		}
 
 		// POST /api/Community/me/avatar   (multipart, field name "file")
+		[FarmerAccess]
 		[HttpPost("me/avatar")]
 		[RequestSizeLimit(8 * 1024 * 1024)]
 		public async Task<IActionResult> UploadAvatar(IFormFile? file)
@@ -887,6 +909,7 @@ namespace SpicAPI.Controllers
 		}
 
 		// DELETE /api/Community/me/avatar
+		[FarmerAccess]
 		[HttpDelete("me/avatar")]
 		public IActionResult DeleteAvatar()
 		{
@@ -904,6 +927,7 @@ namespace SpicAPI.Controllers
 		// ---------------------------------------------------------------- products and lookups
 
 		// GET /api/Community/products
+		[FarmerAccess]
 		[HttpGet("products")]
 		public async Task<IActionResult> GetProducts()
 		{
@@ -1003,6 +1027,7 @@ namespace SpicAPI.Controllers
 		}
 
 		// POST /api/Community/products/{name}/join   (toggle)
+		[FarmerAccess]
 		[HttpPost("products/{name}/join")]
 		public async Task<IActionResult> ToggleProductMembership(string name)
 		{
@@ -1039,6 +1064,7 @@ namespace SpicAPI.Controllers
 		}
 
 		// GET /api/Community/lookups
+		[FarmerAccess]
 		[HttpGet("lookups")]
 		public async Task<IActionResult> GetLookups()
 		{

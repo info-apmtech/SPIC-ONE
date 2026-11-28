@@ -245,6 +245,7 @@ namespace SpicAPI.Controllers
         }
 
         // GET /api/Library/{id}
+        [FarmerAccess]
         [HttpGet("{id:int}")]
         public async Task<IActionResult> GetDetail(int id)
         {
@@ -482,6 +483,7 @@ namespace SpicAPI.Controllers
         // =====================================================================
 
         // GET /api/Library/file/{*path}  (also reachable with ?access_token= for <img>/<video>)
+        [FarmerAccess]
         [HttpGet("file/{*path}")]
         public IActionResult GetFile(string path)
         {

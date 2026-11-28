@@ -106,6 +106,7 @@ internal static class Program
 		FarmerPortalAssistantTests.Run();
 		FarmerPortalLeafCheckTests.Run();
 		FarmerPortalYieldTests.Run();
+		FarmerPortalHardeningTests.Run();
 
 		return Check.Report("Total");
 	}

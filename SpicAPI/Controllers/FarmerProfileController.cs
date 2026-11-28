@@ -20,6 +20,7 @@ namespace SpicAPI.Controllers
     ///
     /// State and district dropdowns use the existing api/State and api/District/byState/{id}.
     /// </summary>
+    [FarmerAccess]
     [Authorize(Roles = nameof(AppRole.Farmer))]
     [ApiController]
     [Route("api/Farmer/profile")]

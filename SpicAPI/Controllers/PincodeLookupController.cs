@@ -36,6 +36,7 @@ namespace SpicAPI.Controllers
         /// Proxies the public pincode-lookup API.
         /// Route: GET api/PincodeLookup/{pincode}
         /// </summary>
+        [FarmerAccess]
         [HttpGet("{pincode}")]
         [Authorize]
         public async Task<IActionResult> Lookup(string pincode)

@@ -227,6 +227,7 @@ namespace SpicAPI.Controllers
         // ================================================================ sample-wise reports
 
         // GET api/Lab/reports
+        [FarmerAccess]
         [HttpGet("reports")]
         public async Task<IActionResult> GetReports(
             [FromQuery] int? batchId, [FromQuery] string? sampleType, [FromQuery] string? status, [FromQuery] string? crop,
@@ -290,6 +291,7 @@ namespace SpicAPI.Controllers
         }
 
         // GET api/Lab/reports/{id}
+        [FarmerAccess]
         [HttpGet("reports/{id:int}")]
         public async Task<IActionResult> GetReport(int id, CancellationToken ct)
         {
@@ -335,6 +337,7 @@ namespace SpicAPI.Controllers
         }
 
         // GET api/Lab/reports/{id}/pdf?lang=
+        [FarmerAccess]
         [HttpGet("reports/{id:int}/pdf")]
         public async Task<IActionResult> GetPdf(int id, [FromQuery] string? lang, CancellationToken ct)
         {

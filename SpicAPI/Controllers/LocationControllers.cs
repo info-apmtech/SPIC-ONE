@@ -13,12 +13,19 @@ namespace SpicAPI.Controllers
 
     [Route("api/[controller]")]
     public class StateController(IGenericRepository<State> repo, AppDbContext db)
-        : LocationCrudController<State>(repo, db, "StateId");
+        : LocationCrudController<State>(repo, db, "StateId")
+    {
+        // Farmer portal: the farmer profile's state dropdown (GET api/State). Same action as the base;
+        // overridden only to carry [FarmerAccess] (the route is inherited from GenericCrudController).
+        [FarmerAccess]
+        public override Task<IActionResult> GetAll() => base.GetAll();
+    }
 
     [Route("api/[controller]")]
     public class DistrictController(IGenericRepository<District> repo, AppDbContext db)
         : LocationCrudController<District>(repo, db, "DistrictId")
     {
+        [FarmerAccess] // farmer profile district dropdown
         [HttpGet("byState/{stateId}")]
         public async Task<IActionResult> GetByState(int stateId)
         {
@@ -43,6 +50,7 @@ namespace SpicAPI.Controllers
     public class RegionController(IGenericRepository<Region> repo, AppDbContext db)
         : LocationCrudController<Region>(repo, db, "RegionId", "Region")
     {
+        [FarmerAccess] // SAS Payments filter (farmer read-only mode)
         [HttpGet("byState/{stateId}")]
         public async Task<IActionResult> GetByState(int stateId)
         {

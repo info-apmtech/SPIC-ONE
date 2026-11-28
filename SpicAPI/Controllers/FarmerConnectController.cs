@@ -24,6 +24,7 @@ namespace SpicAPI.Controllers
     /// data. Team: <see cref="FarmerTeamRules.Resolve"/>. Staff phone numbers only when
     /// FarmerPortal:ShowStaffPhoneNumbers is true (default false). GPS is never logged.
     /// </summary>
+    [FarmerAccess]
     [Authorize(Roles = nameof(AppRole.Farmer))]
     [ApiController]
     [Route("api/Farmer")]

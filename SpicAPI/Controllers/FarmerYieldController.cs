@@ -24,6 +24,7 @@ namespace SpicAPI.Controllers
     /// fertilizer run says what to apply, not what was applied (the latest run's crop and date are returned so the
     /// screen can remind the farmer of it).
     /// </summary>
+    [FarmerAccess]
     [Authorize(Roles = nameof(AppRole.Farmer))]
     [ApiController]
     [Route("api/Farmer/yield")]

@@ -30,6 +30,7 @@ namespace SpicAPI.Controllers
     /// (<see cref="LeafVisionService"/>) and, with no key / budget / switch or an unreadable answer, give the labelled
     /// "basic colour check" (<see cref="LeafCheckRules.RuleDiagnosis"/>). Correctives come from NutrientCorrectives.
     /// </summary>
+    [FarmerAccess]
     [Authorize(Roles = nameof(AppRole.Farmer))]
     [ApiController]
     [Route("api/Farmer/leaf-check")]

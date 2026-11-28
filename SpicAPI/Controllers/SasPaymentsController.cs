@@ -50,6 +50,7 @@ namespace SpicAPI.Controllers
 		// ---------------------------------------------------------------- me / stats
 
 		// GET api/Sas/payments/me
+		[FarmerAccess]
 		[HttpGet("me")]
 		public async Task<IActionResult> GetMe()
 		{
@@ -65,6 +66,7 @@ namespace SpicAPI.Controllers
 		}
 
 		// GET api/Sas/payments/stats
+		[FarmerAccess]
 		[HttpGet("stats")]
 		public async Task<IActionResult> GetStats()
 		{
@@ -113,6 +115,7 @@ namespace SpicAPI.Controllers
 		// ---------------------------------------------------------------- list
 
 		// GET api/Sas/payments?tab=&stateId=&regionId=&mode=&adminStatus=&financeStatus=&crop=&q=&from=&to=&page=&pageSize=
+		[FarmerAccess]
 		[HttpGet]
 		public async Task<IActionResult> GetPayments(
 			[FromQuery] string? tab,
@@ -215,6 +218,7 @@ namespace SpicAPI.Controllers
 		// ---------------------------------------------------------------- detail
 
 		// GET api/Sas/payments/{id}
+		[FarmerAccess]
 		[HttpGet("{id:int}")]
 		public async Task<IActionResult> GetPayment(int id)
 		{
@@ -229,6 +233,7 @@ namespace SpicAPI.Controllers
 		}
 
 		// GET api/Sas/payments/{id}/proof   (also ?access_token=, see Program.cs)
+		[FarmerAccess]
 		[HttpGet("{id:int}/proof")]
 		public async Task<IActionResult> GetProof(int id)
 		{

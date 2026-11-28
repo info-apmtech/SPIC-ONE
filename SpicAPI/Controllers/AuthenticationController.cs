@@ -109,6 +109,7 @@ namespace SpicAPI.Controllers
             });
         }
 
+        [FarmerAccess]
         [HttpPost("logout")]
         public async Task<IActionResult> Logout()
         {
@@ -147,6 +148,7 @@ namespace SpicAPI.Controllers
         /// Returns "" when the user has no active designation or no grant, matching the shape of
         /// the login response.
         /// </summary>
+        [FarmerAccess]
         [HttpGet("permissions")]
         public async Task<IActionResult> Permissions()
         {

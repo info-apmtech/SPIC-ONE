@@ -76,6 +76,7 @@ namespace SpicAPI.Controllers
 		// ---------------------------------------------------------------- lookups
 
 		// GET /api/Sas/lookups
+		[FarmerAccess]
 		[HttpGet("lookups")]
 		public async Task<IActionResult> GetLookups()
 		{
@@ -431,6 +432,7 @@ namespace SpicAPI.Controllers
 		// ---------------------------------------------------------------- collection list
 
 		// GET /api/Sas/collections?status=&paymentType=&paymentStatus=&location=&from=&to=&q=&sort=&page=&pageSize=
+		[FarmerAccess]
 		[HttpGet("collections")]
 		public async Task<IActionResult> GetCollections(
 			[FromQuery] string? status,
@@ -542,6 +544,7 @@ namespace SpicAPI.Controllers
 		}
 
 		// GET /api/Sas/collections/{id}
+		[FarmerAccess]
 		[HttpGet("collections/{id:int}")]
 		public async Task<IActionResult> GetCollection(int id)
 		{
@@ -1065,6 +1068,7 @@ namespace SpicAPI.Controllers
 		}
 
 		// GET /api/Sas/consignments/{id}
+		[FarmerAccess]
 		[HttpGet("consignments/{id:int}")]
 		public async Task<IActionResult> GetConsignment(int id)
 		{
@@ -1348,6 +1352,7 @@ namespace SpicAPI.Controllers
 		// ---------------------------------------------------------------- lab results
 
 		// GET /api/Sas/samples/{itemId}/results
+		[FarmerAccess]
 		[HttpGet("samples/{itemId:int}/results")]
 		public async Task<IActionResult> GetResults(int itemId)
 		{

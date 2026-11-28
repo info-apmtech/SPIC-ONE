@@ -25,7 +25,10 @@ AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddControllers();
+// Farmer portal hardening (docs/farmer-portal.md): a Farmer JWT comes from open phone sign-up, so the
+// Farmer role is denied by default on every signed-in endpoint not marked [FarmerAccess]. Anonymous
+// endpoints and every staff / dealer caller are untouched (SpicAPI/Controllers/FarmerAccessAttribute.cs).
+builder.Services.AddControllers(o => o.Filters.Add<SpicAPI.Controllers.FarmerDenyByDefaultFilter>());
 builder.Services.AddHttpClient();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddHealthChecks();
