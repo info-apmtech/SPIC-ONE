@@ -33,12 +33,12 @@ RUN apt-get update \
  && test -e /usr/lib/x86_64-linux-gnu/libdl.so
 
 WORKDIR /app
-# Mount points for Azure Files: uploads, logistics uploads, data-protection keys.
+# Mount points for Azure Files: uploads, private uploads (farmer leaf photos), logistics uploads, data-protection keys.
 # Created (and owned) before the app is copied so no layer has to re-copy the app.
 # The Tesseract wrapper (InteropDotNet) never searches the system library path: it only
 # loads <app dir>/x64/<name> if that file exists, so the distro libraries are linked
 # there under the names it asks for. test -e fails the build if a link would dangle.
-RUN mkdir -p /app/Uploads /app/wwwroot/uploads /app/keys /app/x64 \
+RUN mkdir -p /app/Uploads /app/PrivateUploads /app/wwwroot/uploads /app/keys /app/x64 \
  && ln -s /usr/lib/x86_64-linux-gnu/liblept.so.5 /app/x64/libleptonica-1.82.0.so \
  && ln -s /usr/lib/x86_64-linux-gnu/libtesseract.so.5 /app/x64/libtesseract50.so \
  && test -e /app/x64/libleptonica-1.82.0.so && test -e /app/x64/libtesseract50.so \

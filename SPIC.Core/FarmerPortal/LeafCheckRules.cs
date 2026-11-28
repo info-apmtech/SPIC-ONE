@@ -53,8 +53,18 @@ public static class LeafCheckRules
     public const int MetricsSide = 256;
     /// <summary>Smallest photo side accepted.</summary>
     public const int MinSide = 64;
-    /// <summary>Largest photo accepted, in megapixels (a decompression-bomb guard).</summary>
+    /// <summary>Largest JPEG accepted, in pixels (a decompression-bomb guard). JPEG is decoded at a reduced scale
+    /// (1/2 .. 1/8), so even this size costs only a few MB.</summary>
     public const long MaxPixels = 60_000_000;
+    /// <summary>Largest PNG / WebP accepted, in pixels (fix round 1, review I2): these are decoded at full size (4 bytes a
+    /// pixel), and a phone's PNG / WebP export of a photo is far smaller than 20 MP within the 8 MB limit.</summary>
+    public const long MaxPixelsOther = 20_000_000;
+    /// <summary>A PNG / WebP over <see cref="SparseCheckFromPixels"/> must carry at least this many bytes per megapixel: a
+    /// real photo does; a header-only or flat "bomb" file declaring a huge size does not (refused before decoding).</summary>
+    public const int MinBytesPerMegapixelOther = 10_000;
+    public const long SparseCheckFromPixels = 4_000_000;
+    /// <summary>Photos decoded at the same time per API replica (a static gate around the decoder).</summary>
+    public const int MaxConcurrentDecodes = 3;
     /// <summary>History entries listed.</summary>
     public const int HistoryLimit = 30;
 

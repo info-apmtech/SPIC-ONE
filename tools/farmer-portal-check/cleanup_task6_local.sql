@@ -1,6 +1,6 @@
 -- Farmer portal Task 6: removes the leaf checks of the LOCAL test farmers (and so resets their daily allowance) and
--- their LeafCheck AI budget rows. LOCAL spicone_dev only. The photo files stay in SpicAPI/Uploads/FarmerLeaf/:
--- delete that folder by hand.
+-- their LeafCheck AI budget rows. LOCAL spicone_dev only. The photo files stay in SpicAPI/PrivateUploads/FarmerLeaf/
+-- (before fix round 1: SpicAPI/Uploads/FarmerLeaf/): delete that folder by hand.
 --     psql -h localhost -U postgres -d spicone_dev -v ON_ERROR_STOP=1 -f tools/farmer-portal-check/cleanup_task6_local.sql
 DO $$
 BEGIN

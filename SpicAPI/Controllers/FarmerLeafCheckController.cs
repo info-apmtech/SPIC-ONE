@@ -23,7 +23,8 @@ namespace SpicAPI.Controllers
     ///   DELETE api/Farmer/leaf-check/{id}          soft delete (the row stays for the daily count; the photo file is removed)
     ///
     /// A check: validate, decode / turn upright / shrink / re-encode (<see cref="LeafImageProcessor"/>, EXIF and GPS
-    /// dropped), colour metrics (<see cref="LeafColorAnalyzer"/>), save the photo under Uploads/FarmerLeaf/{userId}/,
+    /// dropped), colour metrics (<see cref="LeafColorAnalyzer"/>), save the photo under PrivateUploads/FarmerLeaf/{userId}/ (a
+    /// root no generic file route serves, <see cref="PrivateRoot"/>),
     /// count and store the check under a per-farmer advisory lock (10 per IST day, FarmerPortal:LeafCheckDailyLimit), take
     /// one unit of the shared daily AI budget (<see cref="IFarmerAiBudget"/>, kind LeafCheck), ask Claude vision
     /// (<see cref="LeafVisionService"/>) and, with no key / budget / switch or an unreadable answer, give the labelled
@@ -69,7 +70,16 @@ namespace SpicAPI.Controllers
 
         private int DailyLimit => LeafCheckRules.Limit(_config["FarmerPortal:LeafCheckDailyLimit"]);
 
-        private string UploadsRoot => Path.Combine(_env.ContentRootPath, "Uploads");
+        /// <summary>
+        /// Where leaf photos are kept (fix round 1, review I1): a PRIVATE root outside the shared Uploads tree, which several
+        /// generic file routes (api/DealerFile/view, api/Sas/file, api/Community/file, the guest house image route) serve to
+        /// any signed-in user. Default ContentRootPath/PrivateUploads; FarmerPortal:LeafPhotoRoot overrides it. In Azure it
+        /// must be a persistent volume (the api-private Azure Files share mounted at /app/PrivateUploads, infra/azure/main.bicep).
+        /// </summary>
+        public static string PrivateRoot(string contentRoot, string? configured) =>
+            string.IsNullOrWhiteSpace(configured) ? Path.Combine(contentRoot, "PrivateUploads") : configured.Trim();
+
+        private string PhotoRoot => PrivateRoot(_env.ContentRootPath, _config["FarmerPortal:LeafPhotoRoot"]);
 
         /// <summary>Checks the farmer made since IST midnight (deleted ones included).</summary>
         private Task<int> UsedTodayAsync(string userId, DateTime utcNow, CancellationToken ct)
@@ -136,7 +146,7 @@ namespace SpicAPI.Controllers
             var uploadProblem = LeafCheckRules.ValidateUpload(bytes.Length, bytes.AsSpan(0, Math.Min(bytes.Length, 16)));
             if (uploadProblem is not null) return Problem400(new() { ["photo"] = uploadProblem });
 
-            var image = LeafImageProcessor.Process(bytes, out var decodeError);
+            var (image, decodeError) = await LeafImageProcessor.ProcessAsync(bytes, ct);
             if (image is null) return Problem400(new() { ["photo"] = decodeError ?? "We could not read this photo." });
             var metrics = LeafColorAnalyzer.Analyze(image.MetricsRgb, image.MetricsWidth, image.MetricsHeight);
 
@@ -374,11 +384,11 @@ namespace SpicAPI.Controllers
         public static string SafeSegment(string userId) =>
             new string(userId.Where(c => char.IsAsciiLetterOrDigit(c) || c == '-').ToArray()) is { Length: > 0 } s ? s : "unknown";
 
-        /// <summary>The file for a stored relative path, or null when it is empty or would leave the Uploads root.</summary>
+        /// <summary>The file for a stored relative path, or null when it is empty or would leave the private photo root.</summary>
         private string? FullPath(string? relative)
         {
             if (string.IsNullOrWhiteSpace(relative) || relative.Contains("..", StringComparison.Ordinal)) return null;
-            var root = UploadsRoot;
+            var root = PhotoRoot;
             var full = Path.GetFullPath(Path.Combine(root, relative.TrimStart('/', '\\').Replace('/', Path.DirectorySeparatorChar)));
             var rootWithSep = root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
             return full.StartsWith(rootWithSep, StringComparison.OrdinalIgnoreCase) ? full : null;

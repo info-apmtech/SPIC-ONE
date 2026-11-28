@@ -6,11 +6,13 @@ namespace Spic.Infrastructure.Data;
 /// Seed of the leaf-check correctives (farmer portal Task 6, migration V40_LeafCheck): what to do for each nutrient
 /// shortage. Crop rows were read on the TNAU Agritech page named in the row (fetched 2026-11-28 through the Internet
 /// Archive, web.archive.org/web/2024id_/..., because agritech.tnau.ac.in refused direct connections, as in Task 4).
-/// General rows (Crop null) are used when a crop has no row of its own for that nutrient. Three general values come
-/// from the task brief (Mg 1 % spray, Fe 0.5 % + citric acid, urea 1-2 % spray; their Source reads "General guidance;"
-/// and names the TNAU value): the TNAU pages give 2 % MgSO4 (cotton), 1 % FeSO4 (groundnut) / 2-3 % (paddy) and 1 % urea (paddy). An agronomist should
-/// sign these off before go-live (docs/farmer-portal.md, Task 6). Spray strengths also give grams per litre, which is
-/// how farmers mix them (1 % = 10 g per litre).
+/// General rows (Crop null) are used when a crop has no row of its own for that nutrient. Every dose is a value read on
+/// the TNAU page its row links (fix round 1: the general urea, magnesium and iron sprays use TNAU's 1 % urea (paddy),
+/// 2 % MgSO4 + 1 % urea (cotton) and 1 % FeSO4 (groundnut) instead of the brief's example strengths). A row that is not
+/// a TNAU value must have SourceUrl null and Source <see cref="GeneralGuidance"/> (the harness checks it); the one
+/// in-app row (top-dress per Fertilizer advice) has no link either. An agronomist should sign the seed off before
+/// go-live (docs/farmer-portal.md, Task 6). Spray strengths also give grams per litre, which is how farmers mix them
+/// (1 % = 10 g per litre).
 /// </summary>
 public static class NutrientCorrectiveSeed
 {
@@ -27,6 +29,9 @@ public static class NutrientCorrectiveSeed
     private const string Banana = "TNAU Agritech Horticulture: Banana (micronutrient spray)";
     private const string BananaUrl = "https://agritech.tnau.ac.in/horticulture/horti_fruits_banana.html";
 
+    /// <summary>The Source of a row whose value is not from a TNAU page (then SourceUrl is null).</summary>
+    public const string GeneralGuidance = "General guidance (not a TNAU value); ask your SPIC officer";
+
     private static NutrientCorrective C(int id, string nutrient, string? crop, string product, string method, string dose,
         string? note, string source, string? url, int sort) => new()
     {
@@ -37,9 +42,9 @@ public static class NutrientCorrectiveSeed
     public static readonly NutrientCorrective[] Rows =
     {
         // ---- General rows (any crop without its own row) ----
-        C(1, "N", null, "Urea (46 % N)", "Foliar", "1-2 % spray: 10-20 g urea per litre of water",
+        C(1, "N", null, "Urea (46 % N)", "Foliar", "1 % spray: 10 g urea per litre of water",
             "Repeat every week until the new leaves are green, then top-dress urea as in your fertilizer advice.",
-            "General guidance; the TNAU Paddy expert system sprays 1 % urea weekly until the symptoms go", PaddyExpertUrl, 1),
+            PaddyExpert, PaddyExpertUrl, 1),
         C(2, "N", null, "Urea (46 % N)", "Soil", "Top-dress the next urea split as in your Fertilizer advice",
             "Apply on moist soil, not just before heavy rain. Fertilizer advice gives the dose for your crop and soil.",
             "SPIC ONE Fertilizer advice (TNAU crop norms)", null, 2),
@@ -51,18 +56,16 @@ public static class NutrientCorrectiveSeed
             null, PaddyExpert, PaddyExpertUrl, 1),
         C(6, "K", null, "Muriate of potash (KCl, 60 % K2O)", "Soil", "25 % more potash than the recommended dose",
             "In the next top-dressing and the next crop.", PaddyExpert, PaddyExpertUrl, 2),
-        C(7, "Mg", null, "Magnesium sulphate", "Foliar", "1 % spray: 10 g per litre of water",
-            "TNAU's cotton schedule uses a 2 % magnesium sulphate spray with 1 % urea at boll formation.",
-            "General guidance; TNAU Cotton sprays 2 % magnesium sulphate with 1 % urea", CottonUrl, 1),
+        C(7, "Mg", null, "Magnesium sulphate + urea", "Foliar", "2 % magnesium sulphate with 1 % urea: 20 g and 10 g per litre of water",
+            "TNAU sprays it at boll formation in cotton.", Cotton, CottonUrl, 1),
         C(8, "Mg", null, "Magnesium sulphate", "Soil", "20 kg per hectare (about 8 kg per acre) as basal",
             "In magnesium-deficient areas.", Cotton, CottonUrl, 2),
         C(9, "Zn", null, "Zinc sulphate", "Soil", "25 kg per hectare (about 10 kg per acre), mixed with 50 kg dry sand",
             "Before sowing or transplanting.", Rice, RiceUrl, 1),
         C(10, "Zn", null, "Zinc sulphate", "Foliar", "0.5 % spray: 5 g per litre of water",
             "Repeat every 7-15 days until the symptoms go.", Rice, RiceUrl, 2),
-        C(11, "Fe", null, "Ferrous sulphate + citric acid", "Foliar", "0.5 % spray with 0.1 % citric acid: 5 g ferrous sulphate and 1 g citric acid per litre",
-            "Citric acid keeps the iron active in the spray. Spray 2-3 times, 10-15 days apart.",
-            "General guidance; TNAU Groundnut sprays 1 % ferrous sulphate at 30, 40 and 50 days", GroundnutUrl, 1),
+        C(11, "Fe", null, "Ferrous sulphate", "Foliar", "1 % spray: 10 g per litre of water",
+            "TNAU sprays it three times, on the 30th, 40th and 50th day after sowing (groundnut).", Groundnut, GroundnutUrl, 1),
         C(12, "Fe", null, "Ferrous sulphate", "Soil", "50 kg per hectare with 12.5 t farmyard manure",
             "When the soil is short of iron.", Rice, RiceUrl, 2),
         C(13, "S", null, "Gypsum", "Soil", "500 kg per hectare (about 200 kg per acre) at the last ploughing",

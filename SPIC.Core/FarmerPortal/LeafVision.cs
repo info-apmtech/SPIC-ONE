@@ -36,7 +36,7 @@ public static class LeafVision
         + "- confidence: your honest confidence from 0 to 1. One photo rarely justifies more than 0.8.\n"
         + "- symptoms: up to 5 short phrases of what you can see on the leaf.\n"
         + $"- advice: up to 4 short, practical steps in simple words, written in {languageName}. Do NOT give fertilizer doses, "
-        + "pesticide names or doses: the app adds the TNAU doses for the nutrients you name. For a disease or pest, advise "
+        + "pesticide names or doses: the app adds recommended doses, with their sources, for the nutrients you name. For a disease or pest, advise "
         + "showing the plant to the local SPIC officer (MDO) before spraying anything.\n"
         + $"- symptoms are also written in {languageName}; every other field uses the exact English values of the schema.\n"
         + "- needsSoilTest: true when a soil test would confirm or rule out the cause.\n"

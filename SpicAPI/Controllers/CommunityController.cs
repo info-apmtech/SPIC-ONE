@@ -817,8 +817,8 @@ namespace SpicAPI.Controllers
 			var fullPath = Path.GetFullPath(Path.Combine(root, normalized));
 			var rootWithSep = root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
 
-			// Farmer portal Task 6: farmers' leaf photos share the Uploads root but are served only to their owner
-			// (api/Farmer/leaf-check/{id}/image), never through this open file route.
+			// Farmer portal Task 6: leaf photos live in the private root (PrivateUploads, outside Uploads) and are served only
+			// to their owner (api/Farmer/leaf-check/{id}/image). Defence in depth: never serve a FarmerLeaf folder from here.
 			var leafRoot = Path.Combine(root, FarmerLeafCheckController.UploadFolder) + Path.DirectorySeparatorChar;
 			if (fullPath.StartsWith(leafRoot, StringComparison.OrdinalIgnoreCase))
 				return NotFound(new { Success = false, Message = "File not found." });

@@ -12,7 +12,7 @@ products deploy.
 | Container app `ca-spicone-api-<env>` | SpicAPI, 8080, public HTTPS, 1–2 replicas (staging) / 2–4 (prod) |
 | Container app `ca-spicone-web-<env>` | Blazor Server web portal, sticky sessions, same scaling |
 | PostgreSQL Flexible Server `pg-spicone-<env>-xxxxxx` | Database `spicone`, automated backups, optional zone-redundant standby |
-| Storage account, Azure Files shares | `api-uploads` (Uploads), `api-webuploads` (wwwroot/uploads), `api-keys`, `web-keys`; deleted shares recoverable for 14 days |
+| Storage account, Azure Files shares | `api-uploads` (Uploads), `api-private` (PrivateUploads: farmer leaf photos, owner-only), `api-webuploads` (wwwroot/uploads), `api-keys`, `web-keys`; deleted shares recoverable for 14 days |
 | Backup storage account `stspiconebk<env>xxxxxx` | Nightly `pg_dump` copies in container `pg-dumps`, kept 35 days, delete-locked in prod |
 | Container Apps job `caj-spicone-dbbackup-<env>` | Runs the nightly dump at 02:00 IST (image `spicone-backup`) |
 | Container Registry `crspicone<env>xxxxxx` | Images `spicone-api`, `spicone-web` |

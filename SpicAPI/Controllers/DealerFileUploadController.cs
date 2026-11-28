@@ -23,8 +23,15 @@ namespace SpicAPI.Controllers
 		[HttpGet("view/{*filePath}")]
 		public IActionResult ViewFile(string filePath)
 		{
-			var fullPath = Path.Combine(_env.ContentRootPath, "Uploads", filePath);
-			if (!System.IO.File.Exists(fullPath))
+			// Containment (farmer portal Task 6 fix round 1): the file must be inside the Uploads root. Without it a ".."
+			// path could reach the private root next to it (PrivateUploads: farmers' leaf photos). Real dealer files are
+			// all under Uploads, so they are served as before.
+			var uploadsRoot = Path.GetFullPath(Path.Combine(_env.ContentRootPath, "Uploads"));
+			var fullPath = string.IsNullOrWhiteSpace(filePath) || filePath.Contains("..", StringComparison.Ordinal)
+				? ""
+				: Path.GetFullPath(Path.Combine(uploadsRoot, filePath));
+			var rootWithSep = uploadsRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+			if (fullPath.Length == 0 || !fullPath.StartsWith(rootWithSep, StringComparison.OrdinalIgnoreCase) || !System.IO.File.Exists(fullPath))
 				return NotFound("File not found.");
 
 			var ext = Path.GetExtension(fullPath).ToLowerInvariant();

@@ -10801,14 +10801,14 @@ namespace Spic.Infrastructure.Migrations
                         new
                         {
                             Id = 1,
-                            Dose = "1-2 % spray: 10-20 g urea per litre of water",
+                            Dose = "1 % spray: 10 g urea per litre of water",
                             IsActive = true,
                             Method = "Foliar",
                             Note = "Repeat every week until the new leaves are green, then top-dress urea as in your fertilizer advice.",
                             Nutrient = "N",
                             Product = "Urea (46 % N)",
                             SortOrder = 1,
-                            Source = "General guidance; the TNAU Paddy expert system sprays 1 % urea weekly until the symptoms go",
+                            Source = "TNAU Agritech Expert System for Paddy: nutritional disorders and corrective measures",
                             SourceUrl = "https://agritech.tnau.ac.in/expert_system/paddy/nutrientmanagement.html"
                         },
                         new
@@ -10877,14 +10877,14 @@ namespace Spic.Infrastructure.Migrations
                         new
                         {
                             Id = 7,
-                            Dose = "1 % spray: 10 g per litre of water",
+                            Dose = "2 % magnesium sulphate with 1 % urea: 20 g and 10 g per litre of water",
                             IsActive = true,
                             Method = "Foliar",
-                            Note = "TNAU's cotton schedule uses a 2 % magnesium sulphate spray with 1 % urea at boll formation.",
+                            Note = "TNAU sprays it at boll formation in cotton.",
                             Nutrient = "Mg",
-                            Product = "Magnesium sulphate",
+                            Product = "Magnesium sulphate + urea",
                             SortOrder = 1,
-                            Source = "General guidance; TNAU Cotton sprays 2 % magnesium sulphate with 1 % urea",
+                            Source = "TNAU Agritech: Nutrient management, Cotton (nutritional disorders correction, updated 19.03.2013)",
                             SourceUrl = "https://agritech.tnau.ac.in/agriculture/agri_nutrientmgt_cotton.html"
                         },
                         new
@@ -10929,14 +10929,14 @@ namespace Spic.Infrastructure.Migrations
                         new
                         {
                             Id = 11,
-                            Dose = "0.5 % spray with 0.1 % citric acid: 5 g ferrous sulphate and 1 g citric acid per litre",
+                            Dose = "1 % spray: 10 g per litre of water",
                             IsActive = true,
                             Method = "Foliar",
-                            Note = "Citric acid keeps the iron active in the spray. Spray 2-3 times, 10-15 days apart.",
+                            Note = "TNAU sprays it three times, on the 30th, 40th and 50th day after sowing (groundnut).",
                             Nutrient = "Fe",
-                            Product = "Ferrous sulphate + citric acid",
+                            Product = "Ferrous sulphate",
                             SortOrder = 1,
-                            Source = "General guidance; TNAU Groundnut sprays 1 % ferrous sulphate at 30, 40 and 50 days",
+                            Source = "TNAU Agritech: Groundnut crop production advisory (nutritional disorders, gypsum)",
                             SourceUrl = "https://agritech.tnau.ac.in/govt_schemes_services/aas/groundnut.html"
                         },
                         new

@@ -21,7 +21,7 @@ Stub mode (Claude vision against tools/farmer-portal-check/fake_anthropic.py, ne
 Kill switch: the stub API plus $env:FarmerPortal__AssistantEnabled = "false":  --mode kill
 
 Each run uses up leaf checks of the test farmers for today's IST day; cleanup_task6_local.sql removes the local test
-farmers' checks and LeafCheck AI usage rows (delete SpicAPI/Uploads/FarmerLeaf by hand for the photo files).
+farmers' checks and LeafCheck AI usage rows (delete SpicAPI/PrivateUploads/FarmerLeaf by hand for the photo files).
 """
 import argparse
 import base64
@@ -37,7 +37,9 @@ import uuid
 sys.path.insert(0, os.path.dirname(__file__))
 from smoke_task3 import RUN_IP, ROOT, call, check, failures, farmer_token, staff_token, qa_password  # noqa: E402
 
-UPLOADS = os.path.join(ROOT, "SpicAPI", "Uploads", "FarmerLeaf")
+# Fix round 1: leaf photos live in the private root (SpicAPI/PrivateUploads), outside the shared Uploads tree.
+UPLOADS = os.path.join(ROOT, "SpicAPI", "PrivateUploads", "FarmerLeaf")
+SHARED_UPLOADS = os.path.join(ROOT, "SpicAPI", "Uploads", "FarmerLeaf")
 
 
 def post_photo(base, token, data, crop="Paddy", leaf_age=None, content_type="image/jpeg", filename="leaf.jpg"):
@@ -196,13 +198,23 @@ def basic_mode(base, args):
         check("image: another farmer gets 404", st == 404, st)
         st, _, _ = get_bytes(base, f"api/Farmer/leaf-check/{body['id']}/image", staff)
         check("image: staff get 403", st == 403, st)
-        # the open Community file route must not serve leaf photos
+        # the generic Uploads routes (any signed-in user) must not reach leaf photos (fix round 1, review I1)
         files = []
         for dirpath, _, names in os.walk(UPLOADS):
             files += [os.path.relpath(os.path.join(dirpath, x), os.path.dirname(UPLOADS)).replace(os.sep, "/") for x in names]
+        check("photo stored in the private root, nothing under Uploads/FarmerLeaf", len(files) > 0 and not os.path.exists(SHARED_UPLOADS), files[:1])
         if files:
-            st, _, _ = get_bytes(base, f"api/Community/file/{files[0]}", other)
-            check("api/Community/file does not serve FarmerLeaf photos", st == 404, st)
+            rel = files[0]
+            routes = ["api/Community/file/", "api/DealerFile/view/", "api/Sas/file/", "api/GuestHouseBooking/image/"]
+            tries = [rel, "..%2FPrivateUploads%2F" + rel.replace("/", "%2F"), "%2E%2E%2FPrivateUploads%2F" + rel.replace("/", "%2F"),
+                     "..%5CPrivateUploads%5C" + rel.replace("/", "%5C")]
+            served = []
+            for route in routes:
+                for t in tries:
+                    st, body, _ = get_bytes(base, route + t, other)
+                    if st == 200 and body[:2] == b"\xff\xd8":
+                        served.append(route + t)
+            check("no generic file route (Community, DealerFile, Sas, GuestHouse; plain or ../ paths) serves a leaf photo", not served, served)
     st, body, _ = post_photo(base, tok, leaf(args, "big.png"), crop="Cotton", content_type="image/png", filename="leaf.png")
     check("2400 px PNG: 200, stored at most 1024 px", st == 200, (st, body))
     if st == 200:

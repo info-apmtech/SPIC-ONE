@@ -122,12 +122,14 @@ var shares = [
   'api-uploads'      // SpicAPI/Uploads       (dealer registration documents, sample downloads)
   'api-webuploads'   // SpicAPI/wwwroot/uploads (logistics files)
   'api-keys'         // API data-protection key ring
+  'api-private'      // SpicAPI/PrivateUploads (farmer leaf photos: owner-only, no generic file route serves this root)
   'web-keys'         // Web data-protection key ring
 ]
 var shareQuotaGb = {
   'api-uploads': 100
   'api-webuploads': 100
   'api-keys': 1
+  'api-private': 50
   'web-keys': 1
 }
 
@@ -595,6 +597,7 @@ resource apiApp 'Microsoft.App/containerApps@2024-03-01' = if (deployApps) {
           probes: probes
           volumeMounts: [
             { volumeName: 'uploads', mountPath: '/app/Uploads' }
+            { volumeName: 'private', mountPath: '/app/PrivateUploads' }
             { volumeName: 'webuploads', mountPath: '/app/wwwroot/uploads' }
             { volumeName: 'keys', mountPath: '/app/keys' }
           ]
@@ -609,6 +612,7 @@ resource apiApp 'Microsoft.App/containerApps@2024-03-01' = if (deployApps) {
       }
       volumes: [
         { name: 'uploads', storageType: 'AzureFile', storageName: 'api-uploads' }
+        { name: 'private', storageType: 'AzureFile', storageName: 'api-private' }
         { name: 'webuploads', storageType: 'AzureFile', storageName: 'api-webuploads' }
         { name: 'keys', storageType: 'AzureFile', storageName: 'api-keys' }
       ]

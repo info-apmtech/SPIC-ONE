@@ -286,6 +286,10 @@ internal static class FarmerPortalLeafCheckTests
 		Check.That("cap: message names the limit and midnight", L.CapMessage(10).Contains("10 leaf checks") && L.CapMessage(10).Contains("midnight"));
 		Check.Equal("folder: a GUID user id is kept", "2b1c-9f", FarmerLeafCheckController.SafeSegment("2b1c-9f"));
 		Check.Equal("folder: path characters are dropped", "etcpasswd", FarmerLeafCheckController.SafeSegment("../etc/passwd"));
+		// fix round 1 (review I1): photos live outside the shared Uploads tree that generic file routes serve
+		var privateRoot = FarmerLeafCheckController.PrivateRoot("app", null);
+		Check.That("folder: leaf photos go to PrivateUploads, not under Uploads", privateRoot == Path.Combine("app", "PrivateUploads") && !privateRoot.Contains("Uploads" + Path.DirectorySeparatorChar));
+		Check.Equal("folder: FarmerPortal:LeafPhotoRoot overrides it", "/mnt/private", FarmerLeafCheckController.PrivateRoot("app", " /mnt/private "));
 	}
 
 	// ------------------------------------------------------------------ the image pipeline
@@ -334,9 +338,10 @@ internal static class FarmerPortalLeafCheckTests
 	{
 		using var paint = new SKPaint { Color = new SKColor(Green.R, Green.G, Green.B) };
 		using var big = Draw(3000, 2000, c => c.DrawOval(new SKRect(300, 300, 2700, 1700), paint));
-		var png = Encode(big, SKEncodedImageFormat.Png);
-		var leaf = LeafImageProcessor.Process(png, out var error);
-		Check.That("image: a large PNG is shrunk to 1024 px on the long side, shape kept", leaf is { Width: 1024, Height: 683 }, error ?? $"{leaf?.Width}x{leaf?.Height}");
+		// fix round 1: a flat 6 MP drawing is the "sparse PNG" case, so the resize check uses a JPEG of it
+		var bigJpeg = Encode(big, SKEncodedImageFormat.Jpeg, 90);
+		var leaf = LeafImageProcessor.Process(bigJpeg, out var error);
+		Check.That("image: a large photo is shrunk to 1024 px on the long side, shape kept", leaf is { Width: 1024, Height: 683 }, error ?? $"{leaf?.Width}x{leaf?.Height}");
 		Check.That("image: stored as JPEG", leaf is not null && leaf.Jpeg.Length > 100 && leaf.Jpeg[0] == 0xFF && leaf.Jpeg[1] == 0xD8);
 		Check.That("image: the metrics copy is at most 256 px", leaf is { MetricsWidth: 256, MetricsHeight: 171 } && leaf.MetricsRgb.Length == 256 * 171 * 3);
 		var m = LeafColorAnalyzer.Analyze(leaf!.MetricsRgb, leaf.MetricsWidth, leaf.MetricsHeight);
@@ -376,6 +381,59 @@ internal static class FarmerPortalLeafCheckTests
 		Check.That("image: a corrupt file is refused with a plain message", LeafImageProcessor.Process(Bytes(0xFF, 0xD8, 0xFF, 0xE0, 1, 2, 3, 4, 5), out error) is null && error!.Contains("could not read"));
 		using var tiny = Draw(40, 40, _ => { });
 		Check.That("image: a tiny photo is refused", LeafImageProcessor.Process(Encode(tiny, SKEncodedImageFormat.Png), out error) is null && error!.Contains("too small"));
+
+		// Fix round 1 (review I2): decompression-bomb guards, refused from the header before any pixel is decoded.
+		using var small = Draw(64, 64, c => c.DrawCircle(32, 32, 20, paint));
+		var jpegHeader = WithJpegSize(Encode(small, SKEncodedImageFormat.Jpeg, 90), 10_000, 7_000);
+		Check.That("bomb: a JPEG declaring 70 MP (over 60 MP) is refused as too large", LeafImageProcessor.Process(jpegHeader, out error) is null && error!.Contains("too large"), error);
+		var jpegBig = WithJpegSize(Encode(small, SKEncodedImageFormat.Jpeg, 90), 8_000, 6_000);
+		var fromBig = LeafImageProcessor.Process(jpegBig, out error);
+		Check.That("bomb: a 48 MP JPEG header with almost no data is refused or decoded only at a reduced scale (at most 1024 px out)",
+			fromBig is null ? error!.Contains("could not read") : Math.Max(fromBig.Width, fromBig.Height) <= 1024, error);
+		var pngHuge = WithPngSize(Encode(small, SKEncodedImageFormat.Png), 5_000, 5_000);
+		Check.That("bomb: a PNG declaring 25 MP (over the 20 MP PNG / WebP limit) is refused as too large", LeafImageProcessor.Process(pngHuge, out error) is null && error!.Contains("too large"), error);
+		var pngSparse = WithPngSize(Encode(small, SKEncodedImageFormat.Png), 4_000, 3_000);
+		Check.That("bomb: a 12 MP PNG of a few hundred bytes is refused before decoding", LeafImageProcessor.Process(pngSparse, out error) is null && error!.Contains("could not read"), error);
+		Check.That("bomb: a flat 6 MP PNG drawing (not a photo) is refused as sparse", LeafImageProcessor.Process(Encode(big, SKEncodedImageFormat.Png), out error) is null, error);
+		Check.That("bomb: limits", L.MaxPixels == 60_000_000 && L.MaxPixelsOther == 20_000_000 && L.MaxConcurrentDecodes is > 0 and <= 4);
+		var gated = Task.WhenAll(Enumerable.Range(0, 6).Select(_ => LeafImageProcessor.ProcessAsync(Encode(block, SKEncodedImageFormat.Jpeg, 90), CancellationToken.None))).GetAwaiter().GetResult();
+		Check.That("gate: parallel decodes through the gate all finish", gated.All(g => g.Image is { Width: 160, Height: 80 }));
+	}
+
+	/// <summary>A JPEG with its SOF0 frame header patched to the given size (no image data to match).</summary>
+	private static byte[] WithJpegSize(byte[] jpeg, int width, int height)
+	{
+		var b = (byte[])jpeg.Clone();
+		for (var i = 2; i + 8 < b.Length; i++)
+		{
+			if (b[i] != 0xFF || b[i + 1] is not (0xC0 or 0xC1 or 0xC2)) continue;
+			b[i + 5] = (byte)(height >> 8); b[i + 6] = (byte)height;
+			b[i + 7] = (byte)(width >> 8); b[i + 8] = (byte)width;
+			return b;
+		}
+		throw new InvalidOperationException("no SOF marker");
+	}
+
+	/// <summary>A PNG with its IHDR patched to the given size (CRC fixed), keeping the small original image data.</summary>
+	private static byte[] WithPngSize(byte[] png, int width, int height)
+	{
+		var b = (byte[])png.Clone();
+		b[16] = (byte)(width >> 24); b[17] = (byte)(width >> 16); b[18] = (byte)(width >> 8); b[19] = (byte)width;
+		b[20] = (byte)(height >> 24); b[21] = (byte)(height >> 16); b[22] = (byte)(height >> 8); b[23] = (byte)height;
+		var crc = Crc32(b.AsSpan(12, 17));
+		b[29] = (byte)(crc >> 24); b[30] = (byte)(crc >> 16); b[31] = (byte)(crc >> 8); b[32] = (byte)crc;
+		return b;
+	}
+
+	private static uint Crc32(ReadOnlySpan<byte> data)
+	{
+		var crc = 0xFFFFFFFFu;
+		foreach (var x in data)
+		{
+			crc ^= x;
+			for (var k = 0; k < 8; k++) crc = (crc & 1) != 0 ? (crc >> 1) ^ 0xEDB88320u : crc >> 1;
+		}
+		return ~crc;
 	}
 
 	private static void VisionRequest()
@@ -417,16 +475,23 @@ internal static class FarmerPortalLeafCheckTests
 		Check.That("seed: method is Soil or Foliar", seed.All(r => r.Method is "Soil" or "Foliar"));
 		Check.That("seed: every nutrient has a general row", L.NutrientCodes.All(c => seed.Any(r => r.Nutrient == c && r.Crop is null)));
 		Check.That("seed: crop rows use listed crops", seed.Where(r => r.Crop is not null).All(r => L.Crops.Contains(r.Crop!)));
-		Check.That("seed: sources are TNAU pages or the task's stated values", seed.All(r => r.Source.Contains("TNAU") || r.Source.Contains("SPIC ONE")));
+		// Fix round 1 (review I3 / minor 5): every row with a TNAU link names a TNAU page as its source; a row whose value is
+		// not from TNAU (general guidance, the in-app Fertilizer advice) never carries a TNAU link.
+		Check.That("seed: a linked row names its TNAU page as the source", seed.Where(r => r.SourceUrl is not null).All(r => r.Source.StartsWith("TNAU Agritech")));
+		Check.That("seed: a non-TNAU value never has a TNAU link", seed.Where(r => !r.Source.StartsWith("TNAU Agritech")).All(r => r.SourceUrl is null));
+		Check.That("seed: unlinked rows are the general-guidance wording or the in-app Fertilizer advice", seed.Where(r => r.SourceUrl is null)
+			.All(r => r.Source == NutrientCorrectiveSeed.GeneralGuidance || r.Source.StartsWith("SPIC ONE Fertilizer advice")));
+		Check.That("seed: no 'General guidance;' source with a TNAU link is left", !seed.Any(r => r.Source.StartsWith("General guidance") && r.SourceUrl is not null));
 		Check.That("seed: links are https TNAU Agritech", seed.Where(r => r.SourceUrl is not null).All(r => r.SourceUrl!.StartsWith("https://agritech.tnau.ac.in/")));
 		Check.That("seed: lengths fit the columns", seed.All(r => r.Product.Length <= 120 && r.Dose.Length <= 200 && (r.Note?.Length ?? 0) <= 400 && r.Source.Length <= 300));
-		// the brief's values
-		Check.That("seed: Zn zinc sulphate 25 kg/ha soil and 0.5 % foliar", seed.Any(r => r.Nutrient == "Zn" && r.Crop is null && r.Dose.StartsWith("25 kg per hectare"))
+		Check.That("seed: no unsourced citric acid figure", !seed.Any(r => r.Dose.Contains("citric")));
+		// the general rows use TNAU's strengths
+		Check.That("seed: Zn zinc sulphate 25 kg/ha soil and 0.5 % foliar (TNAU rice)", seed.Any(r => r.Nutrient == "Zn" && r.Crop is null && r.Dose.StartsWith("25 kg per hectare"))
 			&& seed.Any(r => r.Nutrient == "Zn" && r.Crop is null && r.Method == "Foliar" && r.Dose.StartsWith("0.5 %")));
-		Check.That("seed: Mg magnesium sulphate 1 % foliar", seed.Any(r => r.Nutrient == "Mg" && r.Crop is null && r.Method == "Foliar" && r.Product == "Magnesium sulphate" && r.Dose.StartsWith("1 %")));
-		Check.That("seed: Fe ferrous sulphate 0.5 % + citric acid", seed.Any(r => r.Nutrient == "Fe" && r.Crop is null && r.Dose.StartsWith("0.5 %") && r.Dose.Contains("citric acid")));
-		Check.That("seed: N urea 1-2 % foliar and top-dress per the fertilizer advice", seed.Any(r => r.Nutrient == "N" && r.Crop is null && r.Dose.StartsWith("1-2 %"))
-			&& seed.Any(r => r.Nutrient == "N" && r.Crop is null && r.Method == "Soil" && r.Dose.Contains("Fertilizer advice")));
+		Check.That("seed: Mg 2 % magnesium sulphate + 1 % urea foliar (TNAU cotton)", seed.Any(r => r.Nutrient == "Mg" && r.Crop is null && r.Method == "Foliar" && r.Dose.StartsWith("2 % magnesium sulphate with 1 % urea") && r.SourceUrl!.Contains("cotton")));
+		Check.That("seed: Fe 1 % ferrous sulphate foliar (TNAU groundnut)", seed.Any(r => r.Nutrient == "Fe" && r.Crop is null && r.Method == "Foliar" && r.Dose.StartsWith("1 %") && r.SourceUrl!.Contains("groundnut")));
+		Check.That("seed: N urea 1 % foliar (TNAU paddy) and top-dress per the fertilizer advice", seed.Any(r => r.Nutrient == "N" && r.Crop is null && r.Method == "Foliar" && r.Dose.StartsWith("1 % spray") && r.SourceUrl!.Contains("paddy"))
+			&& seed.Any(r => r.Nutrient == "N" && r.Crop is null && r.Method == "Soil" && r.Dose.Contains("Fertilizer advice") && r.SourceUrl is null));
 
 		var guesses = new[] { new LeafNutrientGuess("Zn", 0.7), new LeafNutrientGuess("Fe", 0.5), new LeafNutrientGuess("K", 0.3), new LeafNutrientGuess("Mg", 0.29), new LeafNutrientGuess("B", 0.2) };
 		var paddy = L.SelectCorrectives(seed, "Paddy", guesses);
