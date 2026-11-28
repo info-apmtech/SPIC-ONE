@@ -3357,12 +3357,17 @@ namespace SpicAPI.Controllers
         // 2026-11-27 fix: notifies whoever becomes responsible for r.Stage right after it was just
         // set - called from Submit()'s and ReviewOneAsync()'s normal (non-return/reject/final) branches,
         // which previously advanced Stage/Status with no notification at all, so an RM (and every other
-        // approver in the chain) never learned a request was waiting on them. RM/SMD/SMM are a single
-        // region/state-scoped person with no reliable HQ claim to broadcast against (see PersonForAsync -
-        // an RM's scope is RegionId, not HQ), so those three are targeted by specific UserId via
-        // PersonIdForAsync; AdminMdCsReview/DgmMdCsReview are genuinely all-India roles with potentially
-        // several matching users, so they reuse the exact MDAdmin/MDHOD role-broadcast pattern already
-        // used elsewhere in this file (e.g. NotifyReadyForDispatchAsync) rather than inventing a new one.
+        // approver in the chain) never learned a request was waiting on them. Every stage is now targeted
+        // by specific UserId, never a role+HQ broadcast: RM/SMD/SMM are a single region/state-scoped
+        // person with no reliable HQ claim to broadcast against (see PersonForAsync - an RM's scope is
+        // RegionId, not HQ); AdminMdCsReview/DgmMdCsReview can genuinely have MORE THAN ONE matching user
+        // (confirmed in practice - e.g. a dedicated MDAdmin-role account AND a separate CommonRole user
+        // with the "ADMIN MD CS" designation can both exist at once), and PublicityNotification.ReadAt is
+        // a single column with no per-recipient tracking - a role+HQ broadcast row's ReadAt is shared by
+        // every matching user, so marking it read for the admin who just approved would incorrectly mark
+        // it read for every OTHER admin too, who never opened or acted on it. Fanning out one row per
+        // matching user (via ApproverUserIdsAsync) gives each admin their own independent ReadAt, exactly
+        // like RM/SMD/SMM already have - never a shared row two different people's read-state can collide on.
         private async Task NotifyNextApproverAsync(PublicityRequest r)
         {
             const string title = "Publicity Request Awaiting Your Approval";
@@ -3377,12 +3382,31 @@ namespace SpicAPI.Controllers
                         await NotifyAsync(PublicityNotificationType.Approval, r, null, userId, null, null, title, message, null);
                     break;
                 case PublicityStage.AdminMdCsReview:
-                    await NotifyAsync(PublicityNotificationType.Approval, r, null, null, AppRole.MDAdmin, null, title, message, null);
-                    break;
                 case PublicityStage.DgmMdCsReview:
-                    await NotifyAsync(PublicityNotificationType.Approval, r, null, null, AppRole.MDHOD, null, title, message, null);
+                    foreach (var id in await ApproverUserIdsAsync(r.Stage))
+                        await NotifyAsync(PublicityNotificationType.Approval, r, null, id, null, null, title, message, null);
                     break;
             }
+        }
+
+        /// <summary>Every user currently qualified to act at an all-India stage (AdminMdCsReview/
+        /// DgmMdCsReview) - unlike RM/SMD/SMM, there is no single region/state owner, so this returns
+        /// every match rather than the first one (see NotifyNextApproverAsync's doc comment).</summary>
+        private async Task<List<string>> ApproverUserIdsAsync(PublicityStage stage)
+        {
+            var q = from u in _db.Users.AsNoTracking()
+                    join e in _db.Employeelogins.AsNoTracking() on u.Id equals e.UserId
+                    where e.IsActive
+                    select new { u.Id, u.Role, Designation = u.Designation != null ? u.Designation.Name : null };
+            q = stage switch
+            {
+                PublicityStage.AdminMdCsReview => q.Where(x => x.Role == AppRole.MDAdmin ||
+                    (x.Role == AppRole.CommonRole && AdminMdCsDesignations.Contains(x.Designation))),
+                PublicityStage.DgmMdCsReview => q.Where(x => x.Role == AppRole.MDHOD ||
+                    (x.Role == AppRole.CommonRole && DgmMdCsDesignations.Contains(x.Designation))),
+                _ => q.Where(_ => false)
+            };
+            return await q.Select(x => x.Id).Distinct().ToListAsync();
         }
 
         /// <summary>Same geographic-scope rules as <see cref="PersonForAsync"/>, returning the specific
