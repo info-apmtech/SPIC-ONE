@@ -993,6 +993,101 @@ namespace SpicAPI.Controllers
             // once someone else has already taken the room, would double-book it.
             await using var transaction = await _db.Database.BeginTransactionAsync(IsolationLevel.Serializable);
 
+            // Handle race condition: Razorpay already captured payment before or during cancellation.
+            // If the booking was already cancelled, we verify the signature, record the payment as Paid,
+            // queue the captured amount for manual refund, but DO NOT revive the booking to Confirmed.
+            if (booking.BookingStatus == GuestHouseBookingStatus.Cancelled)
+            {
+                var verifiedCancelled = _razorpay.VerifySignature(request.RazorpayOrderId, request.RazorpayPaymentId, request.RazorpaySignature);
+                if (!verifiedCancelled)
+                {
+                    await transaction.RollbackAsync();
+                    _logger.LogWarning("Razorpay signature verification failed for cancelled booking {BookingId}, order {OrderId}.", booking.Id, request.RazorpayOrderId);
+                    return BadRequest(new { Success = false, Message = "Payment verification failed." });
+                }
+
+                payment.PaymentStatus = GuestHousePaymentStatus.Paid;
+                payment.TransactionId = request.RazorpayPaymentId;
+                payment.PaymentDate = DateTime.Now;
+                payment.GatewayResponse = JsonSerializer.Serialize(new
+                {
+                    verified = true,
+                    orderId = request.RazorpayOrderId,
+                    paymentId = request.RazorpayPaymentId,
+                    at = DateTime.Now,
+                    capturedAfterCancellation = true
+                });
+                payment.UpdatedAt = DateTime.Now;
+
+                booking.PaymentStatus = GuestHousePaymentStatus.Paid;
+                booking.UpdatedAt = DateTime.Now;
+                booking.UpdatedBy = actorId;
+
+                // Ensure captured payment is included in manual refund tracking
+                var existingCancellation = await _db.Set<GuestHouseBookingCancellation>()
+                    .FirstOrDefaultAsync(c => c.GuestHouseBookingId == booking.Id);
+                if (existingCancellation == null)
+                {
+                    existingCancellation = new GuestHouseBookingCancellation
+                    {
+                        CancellationReference = GenerateCancellationReference(),
+                        GuestHouseBookingId = booking.Id,
+                        CancellationReason = "Payment captured after/during cancellation",
+                        CancelledBy = actorId,
+                        CancelledAt = DateTime.Now,
+                        CancellationCharge = 0m,
+                        TaxAdjustment = 0m,
+                        RefundAmount = payment.Amount,
+                        RefundMethod = "Original Payment Method",
+                        RefundStatus = GuestHouseRefundStatus.Pending,
+                        ApprovalStatus = GuestHouseCancellationApprovalStatus.Approved,
+                        EstimatedRefundDate = GuestHouseRefundStatusSync.AddWorkingDays(DateTime.Now, 2),
+                        Remarks = $"Payment of Rs. {payment.Amount:0.00} captured on Razorpay for cancelled booking. Pending manual refund."
+                    };
+                    _db.Set<GuestHouseBookingCancellation>().Add(existingCancellation);
+                }
+                else
+                {
+                    existingCancellation.RefundAmount = payment.Amount;
+                    existingCancellation.RefundStatus = GuestHouseRefundStatus.Pending;
+                    existingCancellation.EstimatedRefundDate = GuestHouseRefundStatusSync.AddWorkingDays(DateTime.Now, 2);
+                    existingCancellation.Remarks = $"Payment of Rs. {payment.Amount:0.00} captured on Razorpay for cancelled booking. Pending manual refund.";
+                }
+
+                var existingRefund = await _db.Set<GuestHouseBookingRefund>()
+                    .FirstOrDefaultAsync(r => r.GuestHouseBookingId == booking.Id);
+                if (existingRefund == null)
+                {
+                    existingRefund = new GuestHouseBookingRefund
+                    {
+                        GuestHouseBookingId = booking.Id,
+                        GuestHouseBookingCancellation = existingCancellation,
+                        CreatedAt = DateTime.Now
+                    };
+                    _db.Set<GuestHouseBookingRefund>().Add(existingRefund);
+                }
+                existingRefund.OriginalAmount = payment.Amount;
+                existingRefund.CancellationCharge = existingCancellation.CancellationCharge ?? 0m;
+                existingRefund.TaxAdjustment = existingCancellation.TaxAdjustment ?? 0m;
+                existingRefund.RefundAmount = payment.Amount;
+                existingRefund.RefundMethod = "Manual (processed outside the application)";
+                existingRefund.RefundStatus = GuestHouseRefundStatus.Pending;
+                existingRefund.ProcessedAt = null;
+                existingRefund.UpdatedAt = DateTime.Now;
+
+                await _db.SaveChangesAsync();
+                await transaction.CommitAsync();
+
+                return Ok(new
+                {
+                    Success = true,
+                    AlreadyProcessed = false,
+                    BookingStatus = booking.BookingStatus,
+                    PaymentStatus = booking.PaymentStatus,
+                    Message = "Payment was captured by Razorpay, but this booking was cancelled. A manual refund of Rs. " + payment.Amount.ToString("0.00") + " has been queued."
+                });
+            }
+
             bool stillAvailable;
             try
             {
@@ -1053,15 +1148,9 @@ namespace SpicAPI.Controllers
             payment.UpdatedAt = DateTime.Now;
 
             booking.PaymentStatus = GuestHousePaymentStatus.Paid;
-            // Includes Cancelled: Razorpay Checkout can let a customer retry a different payment
-            // method after a payment.failed event without closing the modal, and we mark the
-            // booking Cancelled/Failed as soon as either that event or a dismiss fires (see
-            // MarkPaymentFailed). A server-verified success must always win regardless of what
-            // that interim signal set - the room-availability re-check above already guarantees
-            // this can't double-book (it fails first if someone else has since taken the room).
+            // Prevent reviving Cancelled bookings: only Draft or PendingPayment move to Confirmed
             if (booking.BookingStatus == GuestHouseBookingStatus.Draft
-                || booking.BookingStatus == GuestHouseBookingStatus.PendingPayment
-                || booking.BookingStatus == GuestHouseBookingStatus.Cancelled)
+                || booking.BookingStatus == GuestHouseBookingStatus.PendingPayment)
             {
                 booking.BookingStatus = GuestHouseBookingStatus.Confirmed;
             }
@@ -1584,19 +1673,15 @@ namespace SpicAPI.Controllers
 		public async Task<IActionResult> RequestCancellation(int id, [FromBody] CreateCancellationRequest? request)
 		{
 			var userName = User.Identity?.Name;
-			if (string.IsNullOrWhiteSpace(userName) || ActorId() is null)
+			var actorId = ActorId();
+			if (string.IsNullOrWhiteSpace(userName) || actorId is null)
 				return Unauthorized(new { Success = false, Message = "Authentication required." });
 
-			var booking = await _db.GuestHouseBookings.FirstOrDefaultAsync(b => b.Id == id);
+			var booking = await _db.GuestHouseBookings
+				.Include(b => b.Payments)
+				.FirstOrDefaultAsync(b => b.Id == id);
 			if (booking == null || !IsBookingOwner(booking.CreatedBy))
 				return NotFound(new { Success = false, Message = "Booking not found." });
-
-			if (booking.BookingStatus == GuestHouseBookingStatus.Cancelled)
-				return BadRequest(new { Success = false, Message = "This booking has already been cancelled." });
-			if (booking.BookingStatus == GuestHouseBookingStatus.Completed)
-				return BadRequest(new { Success = false, Message = "A completed stay cannot be cancelled." });
-			if (booking.BookingStatus == GuestHouseBookingStatus.CheckedIn)
-				return BadRequest(new { Success = false, Message = "This booking is already checked in and cannot be cancelled online. Please contact the Front Office." });
 
 			var existing = await _db.Set<GuestHouseBookingCancellation>()
 				.FirstOrDefaultAsync(c => c.GuestHouseBookingId == id);
@@ -1608,40 +1693,123 @@ namespace SpicAPI.Controllers
 					AlreadyRequested = true,
 					CancellationId = existing.Id,
 					CancellationReference = existing.CancellationReference,
-					ApprovalStatus = existing.ApprovalStatus.ToString()
+					ApprovalStatus = existing.ApprovalStatus.ToString(),
+					RefundStatus = existing.RefundStatus.ToString(),
+					RefundAmount = existing.RefundAmount ?? 0m
 				});
 			}
+
+			if (booking.BookingStatus == GuestHouseBookingStatus.Cancelled)
+				return BadRequest(new { Success = false, Message = "This booking has already been cancelled." });
+			if (booking.BookingStatus == GuestHouseBookingStatus.Completed)
+				return BadRequest(new { Success = false, Message = "A completed stay cannot be cancelled." });
+			if (booking.BookingStatus == GuestHouseBookingStatus.CheckedIn)
+				return BadRequest(new { Success = false, Message = "This booking is already checked in and cannot be cancelled online. Please contact the Front Office." });
 
 			if (string.IsNullOrWhiteSpace(request?.Reason))
 				return BadRequest(new { Success = false, Message = "Please select a reason for cancellation." });
 
-			var calc = await GuestHouseCancellationHelper.CalculateAsync(_db, booking);
+			await using var tx = await _db.Database.BeginTransactionAsync();
 
-			var cancellation = new GuestHouseBookingCancellation
+			var now = DateTime.Now;
+
+			// 1. Immediately cancel the booking and release physical allocations in the same transaction
+			booking.BookingStatus = GuestHouseBookingStatus.Cancelled;
+			booking.UpdatedAt = now;
+			booking.UpdatedBy = actorId;
+
+			var allocations = await _db.GuestHouseRoomAllocations
+				.Where(a => a.GuestHouseBookingId == booking.Id)
+				.ToListAsync();
+			if (allocations.Count > 0)
 			{
-				CancellationReference = GenerateCancellationReference(),
-				GuestHouseBookingId = booking.Id,
-				CancellationReason = request.Reason,
-				CancelledBy = ActorId(),
-				CancelledAt = DateTime.Now,
-				CancellationCharge = calc.CancellationCharge,
-				TaxAdjustment = calc.TaxAdjustment,
-				RefundAmount = calc.RefundAmount,
-				RefundMethod = "Original Payment Method",
-				RefundStatus = GuestHouseRefundStatus.Pending,
-				ApprovalStatus = GuestHouseCancellationApprovalStatus.PendingApproval,
-				// Set on Admin approval (2 working days from then) - unknown until approved.
-				EstimatedRefundDate = null
-			};
+				_db.GuestHouseRoomAllocations.RemoveRange(allocations);
+			}
 
-			_db.Set<GuestHouseBookingCancellation>().Add(cancellation);
+			// 2. Check actual payments received (do not rely solely on PaymentStatus)
+			var isEmployeeComplimentary = booking.Payments.Any(p => p.PaymentMethod == GuestHousePaymentMethod.Complimentary);
+			var successfulPayments = booking.Payments
+				.Where(p => p.PaymentStatus == GuestHousePaymentStatus.Paid)
+				.ToList();
+			var actualCollectedAmount = isEmployeeComplimentary ? 0m : successfulPayments.Sum(p => p.Amount);
+			var hasPaymentReceived = actualCollectedAmount > 0;
+
+			GuestHouseBookingCancellation cancellation;
+			if (hasPaymentReceived)
+			{
+				var calc = await GuestHouseCancellationHelper.CalculateAsync(_db, booking);
+				var refundAmount = Math.Min(Math.Max(0m, calc.RefundAmount), actualCollectedAmount);
+				var refundDue = refundAmount > 0;
+				var refundStatus = refundDue ? GuestHouseRefundStatus.Pending : GuestHouseRefundStatus.Completed;
+
+				cancellation = new GuestHouseBookingCancellation
+				{
+					CancellationReference = GenerateCancellationReference(),
+					GuestHouseBookingId = booking.Id,
+					CancellationReason = request.Reason,
+					CancelledBy = actorId,
+					CancelledAt = now,
+					CancellationCharge = calc.CancellationCharge,
+					TaxAdjustment = calc.TaxAdjustment,
+					RefundAmount = refundAmount,
+					RefundMethod = "Original Payment Method",
+					RefundStatus = refundStatus,
+					ApprovalStatus = GuestHouseCancellationApprovalStatus.Approved,
+					EstimatedRefundDate = refundDue ? GuestHouseRefundStatusSync.AddWorkingDays(now, 2) : null,
+					Remarks = refundDue
+						? $"Refund of Rs. {refundAmount:0.00} to be processed manually outside the application."
+						: "No refund due under the cancellation policy."
+				};
+				_db.Set<GuestHouseBookingCancellation>().Add(cancellation);
+
+				var refund = new GuestHouseBookingRefund
+				{
+					GuestHouseBookingId = booking.Id,
+					GuestHouseBookingCancellation = cancellation,
+					OriginalAmount = actualCollectedAmount,
+					CancellationCharge = calc.CancellationCharge,
+					TaxAdjustment = calc.TaxAdjustment,
+					RefundAmount = refundAmount,
+					RefundMethod = refundDue ? "Manual (processed outside the application)" : cancellation.RefundMethod,
+					RefundStatus = refundStatus,
+					ProcessedAt = refundStatus == GuestHouseRefundStatus.Completed ? now : null,
+					CreatedAt = now,
+					UpdatedAt = now
+				};
+				_db.Set<GuestHouseBookingRefund>().Add(refund);
+			}
+			else
+			{
+				// Bookings with no payment received: Employee Complimentary, Dealer Pay After Stay, or unpaid
+				cancellation = new GuestHouseBookingCancellation
+				{
+					CancellationReference = GenerateCancellationReference(),
+					GuestHouseBookingId = booking.Id,
+					CancellationReason = request.Reason,
+					CancelledBy = actorId,
+					CancelledAt = now,
+					CancellationCharge = 0m,
+					TaxAdjustment = 0m,
+					RefundAmount = 0m,
+					RefundMethod = "None",
+					RefundStatus = GuestHouseRefundStatus.Completed,
+					ApprovalStatus = GuestHouseCancellationApprovalStatus.Approved,
+					EstimatedRefundDate = null,
+					Remarks = isEmployeeComplimentary
+						? "Employee complimentary booking; no payment was captured."
+						: "No payment was captured for this booking; no refund due."
+				};
+				_db.Set<GuestHouseBookingCancellation>().Add(cancellation);
+			}
 
 			try
 			{
 				await _db.SaveChangesAsync();
+				await tx.CommitAsync();
 			}
 			catch (DbUpdateException)
 			{
+				await tx.RollbackAsync();
 				// Unique-index race: someone else's concurrent request won - return that one.
 				var raced = await _db.Set<GuestHouseBookingCancellation>()
 					.AsNoTracking()
@@ -1654,7 +1822,9 @@ namespace SpicAPI.Controllers
 					AlreadyRequested = true,
 					CancellationId = raced.Id,
 					CancellationReference = raced.CancellationReference,
-					ApprovalStatus = raced.ApprovalStatus.ToString()
+					ApprovalStatus = raced.ApprovalStatus.ToString(),
+					RefundStatus = raced.RefundStatus.ToString(),
+					RefundAmount = raced.RefundAmount ?? 0m
 				});
 			}
 
@@ -1664,7 +1834,12 @@ namespace SpicAPI.Controllers
 				AlreadyRequested = false,
 				CancellationId = cancellation.Id,
 				CancellationReference = cancellation.CancellationReference,
-				ApprovalStatus = cancellation.ApprovalStatus.ToString()
+				ApprovalStatus = cancellation.ApprovalStatus.ToString(),
+				RefundStatus = cancellation.RefundStatus.ToString(),
+				RefundAmount = cancellation.RefundAmount ?? 0m,
+				Message = cancellation.RefundStatus == GuestHouseRefundStatus.Pending
+					? "Booking cancelled immediately and room released. Refund will be processed manually."
+					: "Booking cancelled immediately and room released. No refund due."
 			});
 		}
 

@@ -866,9 +866,17 @@ namespace SpicAPI.Controllers
 			if (scope != null)
 				query = query.Where(c => scope.Contains(c.GuestHouseBooking!.GuestHouseId));
 
-			if (string.IsNullOrWhiteSpace(status))
+			if (string.IsNullOrWhiteSpace(status) || string.Equals(status, "PendingRefund", StringComparison.OrdinalIgnoreCase))
+			{
+				query = query.Where(c => c.RefundStatus == GuestHouseRefundStatus.Pending);
+			}
+			else if (string.Equals(status, "PendingApproval", StringComparison.OrdinalIgnoreCase))
 			{
 				query = query.Where(c => c.ApprovalStatus == GuestHouseCancellationApprovalStatus.PendingApproval);
+			}
+			else if (string.Equals(status, "Completed", StringComparison.OrdinalIgnoreCase) || string.Equals(status, "CompletedRefund", StringComparison.OrdinalIgnoreCase))
+			{
+				query = query.Where(c => c.RefundStatus == GuestHouseRefundStatus.Completed);
 			}
 			else if (!string.Equals(status, "All", StringComparison.OrdinalIgnoreCase))
 			{
@@ -1078,6 +1086,123 @@ namespace SpicAPI.Controllers
 			if (existing.ApprovalStatus == GuestHouseCancellationApprovalStatus.Approved)
 				return BadRequest(new { Success = false, Message = "This request has already been approved and cannot be rejected." });
 			return Conflict(new { Success = false, Message = "A refund for this request is in progress or unconfirmed, so it cannot be rejected now." });
+		}
+
+		// POST /api/GuestHouseFrontOffice/cancellations/{id}/complete-refund
+		// Marks a manual refund as Completed with UTR / reference number and actual refund date.
+		// STRICT: Allowed ONLY for SDWA Admin.
+		[HttpPost("cancellations/{id:int}/complete-refund")]
+		public async Task<IActionResult> CompleteManualRefund(int id, [FromBody] CompleteManualRefundRequest? request)
+		{
+			var actorId = GuestHouseReceptionistScope.ActorId(User);
+			if (actorId is null)
+				return Unauthorized(new { Success = false, Message = "Authentication required." });
+
+			// Strict SDWA Admin authorization
+			var designation = await GuestHouseReceptionistScope.GetDesignationAsync(_db, User);
+			var isSdwaAdmin = designation != null && (
+				string.Equals(designation.Name, "SDWA_Admin", StringComparison.OrdinalIgnoreCase)
+				|| RoleAccessPermissions.HasPage(designation.RoleAccess, PagePermission.SDWAAdmin)
+			);
+
+			if (!isSdwaAdmin)
+			{
+				return StatusCode(StatusCodes.Status403Forbidden, new
+				{
+					Success = false,
+					Message = "Only SDWA Admin is permitted to complete manual refunds."
+				});
+			}
+
+			if (request == null || string.IsNullOrWhiteSpace(request.RefundReference))
+				return BadRequest(new { Success = false, Message = "Please provide a refund reference / UTR number." });
+
+			if (request.RefundDate > DateTime.Today.AddDays(1))
+				return BadRequest(new { Success = false, Message = "Refund date cannot be in the future." });
+
+			var refundDate = request.RefundDate == default ? DateTime.Now : request.RefundDate;
+
+			var cancellation = await _db.Set<GuestHouseBookingCancellation>()
+				.Include(c => c.GuestHouseBooking!)
+				.FirstOrDefaultAsync(c => c.Id == id);
+			if (cancellation == null || cancellation.GuestHouseBooking == null)
+				return NotFound(new { Success = false, Message = "Cancellation request not found." });
+
+			if (cancellation.RefundStatus == GuestHouseRefundStatus.Completed)
+			{
+				return Ok(new
+				{
+					Success = true,
+					AlreadyProcessed = true,
+					RefundStatus = GuestHouseRefundStatus.Completed.ToString(),
+					Message = "This refund has already been marked as Completed."
+				});
+			}
+
+			if (cancellation.RefundStatus != GuestHouseRefundStatus.Pending)
+			{
+				return BadRequest(new
+				{
+					Success = false,
+					Message = $"Cannot complete refund with status {cancellation.RefundStatus}."
+				});
+			}
+
+			if (cancellation.GuestHouseBooking.BookingStatus != GuestHouseBookingStatus.Cancelled)
+			{
+				return BadRequest(new
+				{
+					Success = false,
+					Message = "Only cancelled bookings can have refunds completed."
+				});
+			}
+
+			await using var tx = await _db.Database.BeginTransactionAsync();
+
+			var now = DateTime.Now;
+			cancellation.RefundStatus = GuestHouseRefundStatus.Completed;
+			cancellation.AdminDecisionBy = actorId;
+			cancellation.AdminDecisionAt = now;
+			if (!string.IsNullOrWhiteSpace(request.Remarks))
+			{
+				cancellation.Remarks = request.Remarks;
+			}
+			else
+			{
+				cancellation.Remarks = $"Manual refund completed. Ref/UTR: {request.RefundReference}";
+			}
+
+			var refund = await _db.Set<GuestHouseBookingRefund>()
+				.FirstOrDefaultAsync(r => r.GuestHouseBookingId == cancellation.GuestHouseBookingId);
+			if (refund == null)
+			{
+				refund = new GuestHouseBookingRefund
+				{
+					GuestHouseBookingId = cancellation.GuestHouseBookingId,
+					GuestHouseBookingCancellationId = cancellation.Id,
+					OriginalAmount = cancellation.GuestHouseBooking.TotalAmount ?? cancellation.RefundAmount ?? 0m,
+					RefundAmount = cancellation.RefundAmount ?? 0m,
+					CreatedAt = now
+				};
+				_db.Set<GuestHouseBookingRefund>().Add(refund);
+			}
+			refund.RefundStatus = GuestHouseRefundStatus.Completed;
+			refund.RefundReference = request.RefundReference.Trim();
+			refund.ProcessedAt = refundDate;
+			refund.UpdatedAt = now;
+
+			await _db.SaveChangesAsync();
+			await tx.CommitAsync();
+
+			return Ok(new
+			{
+				Success = true,
+				AlreadyProcessed = false,
+				RefundStatus = GuestHouseRefundStatus.Completed.ToString(),
+				RefundReference = refund.RefundReference,
+				ProcessedAt = refundDate,
+				Message = "Manual refund marked as Completed successfully."
+			});
 		}
 
 		// =====================================================================
@@ -2105,6 +2230,13 @@ namespace SpicAPI.Controllers
 		public string? Reason { get; set; }
 	}
 
+	public class CompleteManualRefundRequest
+	{
+		public string RefundReference { get; set; } = string.Empty;
+		public DateTime RefundDate { get; set; }
+		public string? Remarks { get; set; }
+	}
+
 	public class CancellationRequestListItemDto
 	{
 		public int CancellationId { get; set; }
@@ -2163,6 +2295,23 @@ namespace SpicAPI.Controllers
 				return;
 			}
 
+			var path = context.HttpContext.Request.Path.Value ?? string.Empty;
+			if (path.EndsWith("/complete-refund", StringComparison.OrdinalIgnoreCase))
+			{
+				var dbCheck = context.HttpContext.RequestServices.GetRequiredService<AppDbContext>();
+				var desigCheck = await GuestHouseReceptionistScope.GetDesignationAsync(dbCheck, user);
+				var isSdwa = desigCheck != null && (
+					string.Equals(desigCheck.Name, "SDWA_Admin", StringComparison.OrdinalIgnoreCase)
+					|| RoleAccessPermissions.HasPage(desigCheck.RoleAccess, PagePermission.SDWAAdmin)
+				);
+				if (!isSdwa)
+				{
+					context.Result = Forbidden();
+					return;
+				}
+				return;
+			}
+
 			// Existing role rule, verbatim from [Authorize(Roles = "Admin,CorporateAdmin")].
 			// SuperAdmin is preserved alongside Admin/CorporateAdmin.
 			if (user.IsInRole(nameof(AppRole.Admin))
@@ -2175,7 +2324,7 @@ namespace SpicAPI.Controllers
 			// Generate Bill actions, which users with GHAdmin or SDWAAdmin page permission, or a Receptionist
 			// whose Designation grants that page, may perform.
 			var isGet = string.Equals(context.HttpContext.Request.Method, "GET", StringComparison.OrdinalIgnoreCase);
-			var path = context.HttpContext.Request.Path.Value ?? string.Empty;
+			path = context.HttpContext.Request.Path.Value ?? string.Empty;
 			var requiredPermission = isGet ? RequiredReadPermission(path) : RequiredActionPermission(path);
 			if (requiredPermission is null)
 			{
@@ -2222,7 +2371,7 @@ namespace SpicAPI.Controllers
 				|| path.EndsWith("/checkout", StringComparison.OrdinalIgnoreCase) ? PagePermission.FrontOffice
 			: path.EndsWith("/generate-bill", StringComparison.OrdinalIgnoreCase) ? PagePermission.GenerateBill
 			: (path.Contains("/cancellations/", StringComparison.OrdinalIgnoreCase)
-				&& (path.EndsWith("/approve", StringComparison.OrdinalIgnoreCase) || path.EndsWith("/reject", StringComparison.OrdinalIgnoreCase)))
+				&& (path.EndsWith("/approve", StringComparison.OrdinalIgnoreCase) || path.EndsWith("/reject", StringComparison.OrdinalIgnoreCase) || path.EndsWith("/complete-refund", StringComparison.OrdinalIgnoreCase)))
 				? PagePermission.GuestHouseCancellations
 			: null;
 
