@@ -168,16 +168,19 @@ namespace SpicAPI.Controllers
             dto.P = ReadValue(rows, pCode, "Phosphorus", "Phosphorus", "P", dto.Notes, out var pUnit);
             dto.K = ReadValue(rows, kCode, "Potassium", "Potassium", "K", dto.Notes, out _);
             dto.Ph = ReadValue(rows, PhCode, "pH", "pH", null, dto.Notes, out _);
-            if (dto.P is not null)
+            if (dto.P is { } pElemental)
             {
                 var u = (pUnit ?? "").Trim().ToLowerInvariant().Replace(" ", "");
-                dto.ReportPBasis = u is "ppm" or "mg/kg" ? FertilizerAdvisor.BasisP : FertilizerAdvisor.BasisP2O5;
+                var ppm = u is "ppm" or "mg/kg";
+                dto.ReportPBasis = ppm ? FertilizerAdvisor.BasisP : FertilizerAdvisor.BasisP2O5;
+                // kg/ha P2O5 as printed (kg/acre x 2.47105); ppm is already elemental P.
+                dto.PAsReported = ppm ? pElemental : ReadValue(rows, pCode, "Phosphorus", "Phosphorus", "N", new List<string>(), out _);
             }
             foreach (var (code, label, value) in new[] { ("N", "Nitrogen", dto.N), ("P", "Phosphorus", dto.P), ("K", "Potassium", dto.K), ("pH", "Soil pH", dto.Ph) })
             {
                 if (value is not null) continue;
                 dto.Missing.Add(code);
-                dto.Notes.Add($"{label} is not in your report: enter it from your soil card.");
+                dto.Notes.Add($"{label} is not in your report or could not be read: enter it from your soil card.");
             }
             if (dto.Missing.Count == 4)
             {

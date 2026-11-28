@@ -66,6 +66,13 @@ public static class FertilizerUi
     public static double Factor(FertilizerRangeDto r, string? basis) =>
         r.AltBasis is not null && string.Equals(basis, r.AltBasis, StringComparison.Ordinal) && r.AltFactor is { } f ? f : 1.0;
 
+    /// <summary>The range's thresholds as the shared rating rule's threshold (elemental basis).</summary>
+    public static SPIC.Core.FarmerPortal.FertilizerAdvisor.Threshold ThresholdOf(FertilizerRangeDto r) =>
+        new(r.Code, r.Label, r.Unit, (decimal)r.LowBelow, (decimal)r.HighAbove, r.ModerateFrom is { } m ? (decimal)m : null,
+            r.LowLabel, r.MediumLabel, r.HighLabel, r.FromLabMaster);
+
+    /// <summary>The slider on a basis. The zones come from <c>FertilizerAdvisor.InBasis</c>, the same exact numbers the
+    /// server rates against (P2O5 25.19 / 50.38), so the chip always matches the result.</summary>
     public static ShownRange Shown(FertilizerRangeDto r, string? basis)
     {
         var f = Factor(r, basis);
@@ -73,21 +80,29 @@ public static class FertilizerUi
         var label = r.Code == "pH" ? r.Label : $"{r.Label} ({name})";
         var unit = "kg/ha";   // the basis is in the label ("Available Phosphorus (P2O5)") and on the unit chips
         var max = f == 1.0 ? r.Max : Math.Ceiling(r.Max * f / 10) * 10;
-        return new ShownRange(label, unit, r.Min, max, r.Step, Math.Round(r.LowBelow * f, 1), Math.Round(r.HighAbove * f, 1),
+        var zones = SPIC.Core.FarmerPortal.FertilizerAdvisor.InBasis(ThresholdOf(r), f == 1.0 ? null : r.AltBasis);
+        return new ShownRange(label, unit, r.Min, max, r.Step, (double)zones.LowBelow, (double)zones.HighAbove,
             r.LowLabel, r.MediumLabel, r.HighLabel);
     }
 
-    /// <summary>"Low below 25.2, Medium 25.2 - 50.4, High above 50.4".</summary>
-    public static string Thresholds(ShownRange v) =>
-        $"{v.LowLabel} below {v.LowBelow:0.#}, {v.MediumLabel} {v.LowBelow:0.#} - {v.HighAbove:0.#}, {v.HighLabel} above {v.HighAbove:0.#}";
+    /// <summary>The chip's level for a value on a basis: the shared server rule (FertilizerAdvisor.RateAs).</summary>
+    public static FpLevel LevelAs(double? value, FertilizerRangeDto r, string? basis)
+    {
+        if (value is not { } v || double.IsNaN(v)) return FpLevel.Unknown;
+        var b = Factor(r, basis) == 1.0 ? null : r.AltBasis;
+        return Level(SPIC.Core.FarmerPortal.FertilizerAdvisor.Level(SPIC.Core.FarmerPortal.FertilizerAdvisor.RateAs((decimal)v, ThresholdOf(r), b)));
+    }
 
-    /// <summary>A value moved between bases (P &lt;-&gt; P2O5, K &lt;-&gt; K2O), 2 decimals so a round trip keeps the number; null stays null.</summary>
-    public static double? Convert(double? value, string? from, string? to)
+    /// <summary>"Low below 25.19, Medium 25.19 - 50.38, High above 50.38" (exact thresholds, up to 2 decimals).</summary>
+    public static string Thresholds(ShownRange v) =>
+        $"{v.LowLabel} below {v.LowBelow:0.##}, {v.MediumLabel} {v.LowBelow:0.##} - {v.HighAbove:0.##}, {v.HighLabel} above {v.HighAbove:0.##}";
+
+    /// <summary>A value moved between bases (P &lt;-&gt; P2O5, K &lt;-&gt; K2O), 2 decimals, keeping its Low / Medium / High
+    /// (<c>FertilizerAdvisor.ConvertKeepingLevel</c>); null stays null.</summary>
+    public static double? Convert(double? value, FertilizerRangeDto r, string? from, string? to)
     {
         if (value is not { } v) return null;
-        var f = (double)SPIC.Core.FarmerPortal.FertilizerAdvisor.BasisFactor(from);
-        var t = (double)SPIC.Core.FarmerPortal.FertilizerAdvisor.BasisFactor(to);
-        return Math.Round(v / f * t, 2, MidpointRounding.AwayFromZero);
+        return (double)SPIC.Core.FarmerPortal.FertilizerAdvisor.ConvertKeepingLevel((decimal)v, ThresholdOf(r), from, to);
     }
 
     /// <summary>The strip after "Use my soil report": which values came from it and which the farmer must set.</summary>
@@ -98,7 +113,7 @@ public static class FertilizerUi
         var names = new Dictionary<string, string> { ["N"] = "nitrogen", ["P"] = "phosphorus", ["K"] = "potassium", ["pH"] = "pH" };
         var filled = names.Keys.Where(k => !report.Missing.Contains(k)).Select(k => names[k]).ToList();
         var missing = report.Missing.Select(k => names.TryGetValue(k, out var n) ? n : k).ToList();
-        return $"Filled {Join(filled)} from your soil report {report.ReportCode}{when}. Your report has no {Join(missing)}: set it from your soil card. This advice will count as your own numbers.";
+        return $"Filled {Join(filled)} from your soil report {report.ReportCode}{when}. Your report has no usable {Join(missing)}: set it from your soil card. This advice will count as your own numbers.";
     }
 
     private static string Join(List<string> items) =>
@@ -107,7 +122,9 @@ public static class FertilizerUi
     /// <summary>"Soil test 18 kg P2O5/ha (7.9 kg P/ha)" / "Soil test 100 kg/ha".</summary>
     public static string SoilLine(FertilizerNutrientResultDto n)
     {
-        var entered = n.SoilValueEntered.ToString("0.#", CultureInfo.InvariantCulture);
+        // Runs saved before fix round 1 have no entered value / basis: show the rating value.
+        var value = string.IsNullOrEmpty(n.SoilBasis) ? n.SoilValue : n.SoilValueEntered;
+        var entered = value.ToString("0.##", CultureInfo.InvariantCulture);
         var basis = string.IsNullOrEmpty(n.SoilBasis) ? n.Code : n.SoilBasis;
         if (n.Code == "N" || basis == n.Code) return n.Code == "N" ? $"Soil test {entered} kg/ha" : $"Soil test {entered} kg {basis}/ha";
         return $"Soil test {entered} kg {basis}/ha ({n.SoilValue.ToString("0.#", CultureInfo.InvariantCulture)} kg {n.Code}/ha)";

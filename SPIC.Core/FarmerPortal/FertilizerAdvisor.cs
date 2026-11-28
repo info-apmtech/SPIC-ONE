@@ -96,6 +96,42 @@ public static class FertilizerAdvisor
     /// <summary>A value as entered (P or P2O5, K or K2O) on the elemental basis the ratings use.</summary>
     public static decimal ToElemental(decimal value, string? basis) => value / BasisFactor(basis);
 
+    /// <summary>
+    /// The thresholds on a basis: elemental x the oxide factor, EXACT (P2O5 25.19 / 50.38, K2O 141.6 / 336; no rounding).
+    /// The ONE source of truth for ratings (fix round 2): the server rates the value the farmer entered against these
+    /// (<see cref="RateAs"/>), and the slider chip and hint use the same numbers (FertilizerUi.Shown), so the chip and
+    /// the result agree at every boundary in both units.
+    /// </summary>
+    public static Threshold InBasis(Threshold t, string? basis)
+    {
+        var f = BasisFactor(basis);
+        return f == 1m ? t : t with { LowBelow = t.LowBelow * f, HighAbove = t.HighAbove * f, ModerateFrom = t.ModerateFrom * f };
+    }
+
+    /// <summary>The status of a value entered on a basis (P or P2O5, K or K2O), against <see cref="InBasis"/>.</summary>
+    public static LabResultStatus RateAs(decimal value, Threshold t, string? basis) => Rate(value, InBasis(t, basis));
+
+    /// <summary>
+    /// A value moved between bases with 2 decimals, keeping its rating: when the rounding would cross a boundary, the
+    /// result is moved to the nearest 2-decimal value on the original side (e.g. P2O5 25.18 = Low becomes P 10.99, not
+    /// 11.00; P2O5 50.38 = Medium becomes P 22.00).
+    /// </summary>
+    public static decimal ConvertKeepingLevel(decimal value, Threshold t, string? from, string? to)
+    {
+        var c = Math.Round(value / BasisFactor(from) * BasisFactor(to), 2, MidpointRounding.AwayFromZero);
+        var want = Level(RateAs(value, t, from));
+        if (Level(RateAs(c, t, to)) == want) return c;
+        var z = InBasis(t, to);
+        var lowestMedium = Math.Ceiling(z.LowBelow * 100m) / 100m;     // smallest 2-decimal value >= LowBelow
+        var highestMedium = Math.Floor(z.HighAbove * 100m) / 100m;     // largest 2-decimal value <= HighAbove
+        return want switch
+        {
+            "Low" => lowestMedium - 0.01m,
+            "High" => highestMedium + 0.01m,
+            _ => Math.Clamp(c, lowestMedium, highestMedium)
+        };
+    }
+
     /// <summary>True when the basis is one the nutrient accepts (P: P / P2O5; K: K / K2O; blank = elemental).</summary>
     public static bool ValidBasis(string nutrient, string? basis)
     {
@@ -365,11 +401,13 @@ public static class FertilizerAdvisor
         }
 
         // Rating and factor per nutrient, on the elemental basis (P entered as P2O5 / K as K2O is converted).
+        // The rating compares the value as entered with the thresholds on that basis (RateAs: exact, no rounding,
+        // the same numbers the slider chip uses); the elemental value is only shown.
         var soilP = Math.Round(ToElemental(r.P, r.PBasis), 2, MidpointRounding.AwayFromZero);
         var soilK = Math.Round(ToElemental(r.K, r.KBasis), 2, MidpointRounding.AwayFromZero);
         var nStatus = Rate(r.N, input.N);
-        var pStatus = Rate(soilP, input.P);
-        var kStatus = Rate(soilK, input.K);
+        var pStatus = RateAs(r.P, input.P, r.PBasis);
+        var kStatus = RateAs(r.K, input.K, r.KBasis);
         var nFactor = input.Factor("N", nStatus);
         var pFactor = input.Factor("P", pStatus);
         var kFactor = input.Factor("K", kStatus);

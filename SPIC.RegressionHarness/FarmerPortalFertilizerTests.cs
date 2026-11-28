@@ -60,15 +60,56 @@ internal static class FarmerPortalFertilizerTests
 		Check.Equal("rating: K 281 is High", "High", Lv(281m, A.DefaultK));
 
 		// P2O5 / K2O entry is converted to P / K before rating (x 2.29, x 1.2).
-		Check.Equal("basis: 25.2 kg P2O5 = 11.0 kg P", 11.00m, Math.Round(A.ToElemental(25.19m, "P2O5"), 2));
-		Check.Equal("basis: P2O5 25.1 is Low (10.96 P)", "Low", Lv(A.ToElemental(25.1m, "P2O5"), A.DefaultP));
-		Check.Equal("basis: P2O5 25.2 is Medium (11.0 P)", "Medium", Lv(A.ToElemental(25.2m, "P2O5"), A.DefaultP));
-		Check.Equal("basis: P2O5 50.4 is Medium (22.0 P)", "Medium", Lv(A.ToElemental(50.38m, "P2O5"), A.DefaultP));
-		Check.Equal("basis: P2O5 50.5 is High (22.05 P)", "High", Lv(A.ToElemental(50.5m, "P2O5"), A.DefaultP));
-		Check.Equal("basis: K2O 141.5 is Low (117.9 K)", "Low", Lv(A.ToElemental(141.5m, "K2O"), A.DefaultK));
-		Check.Equal("basis: K2O 141.6 is Medium (118 K)", "Medium", Lv(A.ToElemental(141.6m, "K2O"), A.DefaultK));
-		Check.Equal("basis: K2O 336 is Medium (280 K)", "Medium", Lv(A.ToElemental(336m, "K2O"), A.DefaultK));
-		Check.Equal("basis: K2O 337 is High (280.8 K)", "High", Lv(A.ToElemental(337m, "K2O"), A.DefaultK));
+		// Fix round 2: ONE rule (RateAs on the entered value against the exact InBasis thresholds) for the chip and the
+		// result, checked through Build (the real path) and the slider's chip at every edge in both units.
+		Check.Equal("basis: P2O5 thresholds are exact 25.19 / 50.38", "25.19/50.38",
+			$"{A.InBasis(A.DefaultP, "P2O5").LowBelow:0.##}/{A.InBasis(A.DefaultP, "P2O5").HighAbove:0.##}");
+		Check.Equal("basis: K2O thresholds are exact 141.6 / 336", "141.6/336",
+			$"{A.InBasis(A.DefaultK, "K2O").LowBelow:0.##}/{A.InBasis(A.DefaultK, "K2O").HighAbove:0.##}");
+		var rangesForChip = FarmerFertilizerController.Ranges();
+		var pRange = rangesForChip.Single(x => x.Code == "P");
+		var kRange = rangesForChip.Single(x => x.Code == "K");
+		foreach (var (value, basis, expected) in new (decimal, string, string)[]
+		{
+			(10.99m, "P", "Low"), (11m, "P", "Medium"), (22m, "P", "Medium"), (22.01m, "P", "High"),
+			(25.18m, "P2O5", "Low"), (25.19m, "P2O5", "Medium"), (25.2m, "P2O5", "Medium"),
+			(50.38m, "P2O5", "Medium"), (50.39m, "P2O5", "High"), (50.4m, "P2O5", "High")
+		})
+		{
+			var r = Build(6, "Black Cotton Soil", 1m, 300m, value, 150m, 7m, pBasis: basis);
+			var chip = FertilizerUi.LevelAs((double)value, pRange, basis);
+			var shown = FertilizerUi.Shown(pRange, basis);
+			var zoneChip = FpUi.ZoneLevel((double)value, shown.LowBelow, shown.HighAbove);
+			Check.Equal($"basis (Build): P {value} kg {basis}/ha is {expected}", expected, r.Nutrients[1].Level);
+			Check.Equal($"basis (chip = result): P {value} {basis}", r.Nutrients[1].Level, FpUi.LevelLabel(chip));
+			Check.Equal($"basis (slider zones = result): P {value} {basis}", r.Nutrients[1].Level, FpUi.LevelLabel(zoneChip));
+		}
+		foreach (var (value, basis, expected) in new (decimal, string, string)[]
+		{
+			(117.99m, "K", "Low"), (118m, "K", "Medium"), (280m, "K", "Medium"), (280.01m, "K", "High"),
+			(141.59m, "K2O", "Low"), (141.6m, "K2O", "Medium"), (336m, "K2O", "Medium"), (336.01m, "K2O", "High")
+		})
+		{
+			var r = Build(6, "Black Cotton Soil", 1m, 300m, 15m, value, 7m, kBasis: basis);
+			var shown = FertilizerUi.Shown(kRange, basis);
+			Check.Equal($"basis (Build): K {value} kg {basis}/ha is {expected}", expected, r.Nutrients[2].Level);
+			Check.Equal($"basis (chip = result): K {value} {basis}", r.Nutrients[2].Level, FpUi.LevelLabel(FertilizerUi.LevelAs((double)value, kRange, basis)));
+			Check.Equal($"basis (slider zones = result): K {value} {basis}", r.Nutrients[2].Level, FpUi.LevelLabel(FpUi.ZoneLevel((double)value, shown.LowBelow, shown.HighAbove)));
+		}
+
+		// Toggling keeps the level (ConvertKeepingLevel), so the chip never flips on a unit switch.
+		foreach (var v in new[] { 25.18, 25.19, 25.2, 50.38, 50.39, 50.4, 18.0, 40.0 })
+		{
+			var before = FertilizerUi.LevelAs(v, pRange, "P2O5");
+			var asP = FertilizerUi.Convert(v, pRange, "P2O5", "P");
+			var back = FertilizerUi.Convert(asP, pRange, "P", "P2O5");
+			Check.That($"toggle: P2O5 {v} -> P {asP} -> P2O5 {back} keeps {FpUi.LevelLabel(before)}",
+				FertilizerUi.LevelAs(asP, pRange, "P") == before && FertilizerUi.LevelAs(back, pRange, "P2O5") == before);
+		}
+		Check.Equal("toggle: P2O5 25.18 (Low) becomes P 10.99, not 11.00", 10.99, FertilizerUi.Convert(25.18, pRange, "P2O5", "P"));
+		Check.Equal("toggle: P2O5 50.38 (Medium) becomes P 22.00", 22.0, FertilizerUi.Convert(50.38, pRange, "P2O5", "P"));
+		Check.Equal("toggle: P 11 (Medium) becomes P2O5 25.19", 25.19, FertilizerUi.Convert(11.0, pRange, "P", "P2O5"));
+		Check.Equal("toggle: K 280 (Medium) becomes K2O 336", 336.0, FertilizerUi.Convert(280.0, kRange, "K", "K2O"));
 		Check.Equal("basis: blank or P is elemental", 18m, A.ToElemental(18m, null));
 		Check.That("basis: P accepts P / P2O5, K accepts K / K2O", A.ValidBasis("P", "P2O5") && A.ValidBasis("P", "P") && A.ValidBasis("K", "K2O")
 			&& !A.ValidBasis("P", "K2O") && !A.ValidBasis("K", "P2O5") && A.ValidBasis("K", null));
@@ -425,14 +466,14 @@ internal static class FarmerPortalFertilizerTests
 		var dto = new FertilizerSoilReportDto { Available = true };
 		FarmerFertilizerController.Fill(dto, spic, "S-N", "S-P", "S-K");
 		Check.Equal("report: SPIC P 18 kg/ha read as P2O5 = 7.86 kg P/ha", 7.86, dto.P);
-		Check.Equal("ui: shown back on P2O5 it is the report's 18", 18.0, FertilizerUi.Convert(dto.P, "P", "P2O5"));
+		Check.Equal("report: the report's own P2O5 number is passed on (18)", 18.0, dto.PAsReported);
 		Check.Equal("report: the P basis to show is P2O5", "P2O5", dto.ReportPBasis);
 		Check.Equal("report: N stays 180", 180.0, dto.N);
 		Check.That("report: K missing is listed, not invented", dto.K is null && dto.Missing.SequenceEqual(new[] { "K" }));
-		Check.That("report: a note tells the farmer to enter K", dto.Notes.Any(n => n.StartsWith("Potassium is not in your report")));
+		Check.That("report: a note tells the farmer to enter K", dto.Notes.Any(n => n.StartsWith("Potassium is not in your report or could not be read")));
 		Check.That("report: no 'converted' note for the lab's own P2O5 value", !dto.Notes.Any(n => n.StartsWith("Phosphorus")));
 		Check.That("report: still available with three values", dto.Available);
-		Check.That("ui: the strip names the missing value", FertilizerUi.ReportLine(new FertilizerSoilReportDto { ReportCode = "R1", Missing = new() { "K" } }).Contains("Your report has no potassium"));
+		Check.That("ui: the strip names the missing value", FertilizerUi.ReportLine(new FertilizerSoilReportDto { ReportCode = "R1", Missing = new() { "K" } }).Contains("Your report has no usable potassium"));
 		var empty = new FertilizerSoilReportDto { Available = true };
 		FarmerFertilizerController.Fill(empty, new List<FarmerFertilizerController.SoilReportRow>(), "S-N", "S-P", "S-K");
 		Check.That("report: nothing usable -> not available", !empty.Available && empty.Message is not null);
@@ -448,14 +489,17 @@ internal static class FarmerPortalFertilizerTests
 		Check.That("range: P switches to P2O5 x 2.29, K to K2O x 1.2", rp.AltBasis == "P2O5" && rp.AltFactor == 2.29 && rk.AltBasis == "K2O" && rk.AltFactor == 1.2);
 		Check.That("range: never the lab master", ranges.All(x => !x.FromLabMaster));
 		var p2o5 = FertilizerUi.Shown(rp, "P2O5");
-		Check.Equal("ui: P2O5 view zones 25.2 / 50.4, max 140", "25.2/50.4 140", $"{p2o5.LowBelow}/{p2o5.HighAbove} {p2o5.Max}");
+		Check.Equal("ui: P2O5 view zones 25.19 / 50.38 (the server's), max 140", "25.19/50.38 140", $"{p2o5.LowBelow}/{p2o5.HighAbove} {p2o5.Max}");
+		Check.Equal("ui: P2O5 hint is exact", "Low below 25.19, Medium 25.19 - 50.38, High above 50.38", FertilizerUi.Thresholds(p2o5));
 		Check.Equal("ui: P2O5 view label and unit", "Available Phosphorus (P2O5) kg/ha", $"{p2o5.Label} {p2o5.Unit}");
 		var k2o = FertilizerUi.Shown(rk, "K2O");
 		Check.Equal("ui: K2O view zones 141.6 / 336, max 600", "141.6/336 600", $"{k2o.LowBelow}/{k2o.HighAbove} {k2o.Max}");
 		Check.Equal("ui: P view label", "Available Phosphorus (P) kg/ha", $"{FertilizerUi.Shown(rp, "P").Label} {FertilizerUi.Shown(rp, "P").Unit}");
-		Check.Equal("ui: switching 18 kg P2O5 to P gives 7.86", 7.86, FertilizerUi.Convert(18, "P2O5", "P"));
-		Check.Equal("ui: switching back gives 18 again", 18.0, FertilizerUi.Convert(FertilizerUi.Convert(18, "P2O5", "P"), "P", "P2O5"));
-		Check.Equal("ui: K 125 to K2O = 150", 150.0, FertilizerUi.Convert(125, "K", "K2O"));
+		Check.Equal("ui: switching 18 kg P2O5 to P gives 7.86", 7.86, FertilizerUi.Convert(18, rp, "P2O5", "P"));
+		Check.Equal("ui: switching back gives 18 again", 18.0, FertilizerUi.Convert(FertilizerUi.Convert(18, rp, "P2O5", "P"), rp, "P", "P2O5"));
+		Check.Equal("ui: K 125 to K2O = 150", 150.0, FertilizerUi.Convert(125, rk, "K", "K2O"));
+		Check.Equal("ui: an old run without a basis shows its rating value", "Soil test 12.5 kg P/ha",
+			FertilizerUi.SoilLine(new FertilizerNutrientResultDto { Code = "P", SoilValue = 12.5m }));
 	}
 
 	private static void UiAndMenu()

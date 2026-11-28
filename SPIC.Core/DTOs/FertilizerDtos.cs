@@ -99,6 +99,9 @@ public class FertilizerSoilReportDto
     /// <summary>The basis the report printed P on ("P2O5" for kg/ha values of the SPIC lab, "P" for ppm), so the screen
     /// can show the farmer the same number as the report.</summary>
     public string? ReportPBasis { get; set; }
+    /// <summary>P exactly as on the report, on <see cref="ReportPBasis"/> (kg/ha; a kg/acre value already x 2.47105), so the
+    /// screen shows the report's own number without a round trip through P.</summary>
+    public double? PAsReported { get; set; }
     /// <summary>"N", "P", "K", "pH" codes the report does not give (the farmer sets those).</summary>
     public List<string> Missing { get; set; } = new();
     /// <summary>Notes on unit conversions or values that could not be read.</summary>

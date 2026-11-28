@@ -113,7 +113,11 @@
         _ => null
     };
 
-    private FpLevel Level => FpUi.ZoneLevel(Value, LowBelow, HighAbove);
+    /// <summary>Optional level from the caller's own rule (fertilizer advice: the server's FertilizerAdvisor.RateAs);
+    /// null = from the zones (FpUi.ZoneLevel).</summary>
+    [Parameter] public Func<double?, FpLevel>? LevelOf { get; set; }
+
+    private FpLevel Level => LevelOf?.Invoke(Value) ?? FpUi.ZoneLevel(Value, LowBelow, HighAbove);
 
     private double Fraction(double v) => FpUi.Fraction(v, Min, Max);
 

@@ -76,10 +76,10 @@
                     <div class="fpfz-sliders">
                         @{ var nv = FertilizerUi.Shown(N, "N"); var pv = FertilizerUi.Shown(P, _pBasis); var kv = FertilizerUi.Shown(K, _kBasis); }
                         <FpZoneSlider Id="fz-n" Label="@nv.Label" Unit="@nv.Unit" Min="@nv.Min" Max="@SliderMax(nv.Max, _n)" Step="@nv.Step"
-                                      LowBelow="@nv.LowBelow" HighAbove="@nv.HighAbove" @bind-Value="_n" @bind-Value:after="@(() => SoilEdited("N"))"
+                                      LowBelow="@nv.LowBelow" HighAbove="@nv.HighAbove" @bind-Value="_n" @bind-Value:after="@(() => SoilEdited("N"))" LevelOf="@(v => FertilizerUi.LevelAs(v, N, "N"))"
                                       Hint="@HintFor("N", nv)" HintWarn="@_missing.Contains("N")" />
                         <FpZoneSlider Id="fz-p" Label="@pv.Label" Unit="@pv.Unit" Min="@pv.Min" Max="@SliderMax(pv.Max, _p)" Step="@pv.Step" Decimals="1" ScaleDecimals="0"
-                                      LowBelow="@pv.LowBelow" HighAbove="@pv.HighAbove" @bind-Value="_p" @bind-Value:after="@(() => SoilEdited("P"))"
+                                      LowBelow="@pv.LowBelow" HighAbove="@pv.HighAbove" @bind-Value="_p" @bind-Value:after="@(() => SoilEdited("P"))" LevelOf="@(v => FertilizerUi.LevelAs(v, P, _pBasis))"
                                       Hint="@HintFor("P", pv)" HintWarn="@_missing.Contains("P")">
                             <Footer>
                                 <div class="fpfz-basis" role="group" aria-label="Phosphorus unit">
@@ -91,7 +91,7 @@
                             </Footer>
                         </FpZoneSlider>
                         <FpZoneSlider Id="fz-k" Label="@kv.Label" Unit="@kv.Unit" Min="@kv.Min" Max="@SliderMax(kv.Max, _k)" Step="@kv.Step"
-                                      LowBelow="@kv.LowBelow" HighAbove="@kv.HighAbove" @bind-Value="_k" @bind-Value:after="@(() => SoilEdited("K"))"
+                                      LowBelow="@kv.LowBelow" HighAbove="@kv.HighAbove" @bind-Value="_k" @bind-Value:after="@(() => SoilEdited("K"))" LevelOf="@(v => FertilizerUi.LevelAs(v, K, _kBasis))"
                                       Hint="@HintFor("K", kv)" HintWarn="@_missing.Contains("K")">
                             <Footer>
                                 <div class="fpfz-basis" role="group" aria-label="Potassium unit">
@@ -278,15 +278,17 @@
     {
         if (nutrient == "P")
         {
-            _p = FertilizerUi.Convert(_p, _pBasis, basis);
+            _p = FertilizerUi.Convert(_p, P, _pBasis, basis);
             _pBasis = basis;
         }
         else
         {
-            _k = FertilizerUi.Convert(_k, _kBasis, basis);
+            _k = FertilizerUi.Convert(_k, K, _kBasis, basis);
             _kBasis = basis;
         }
     }
+
+    private static readonly Dictionary<string, string> NutrientNames = new() { ["N"] = "nitrogen", ["P"] = "phosphorus", ["K"] = "potassium", ["pH"] = "pH" };
 
     private static string CropOptionText(FertilizerCropOptionDto c)
     {
@@ -412,9 +414,9 @@
         if (report.N is { } n) _n = n;
         if (report.P is { } p)
         {
-            // Show P on the basis the report printed it (SPIC lab: kg P2O5/ha) so the number matches the report.
+            // Show P on the basis the report printed it (SPIC lab: kg P2O5/ha), with the report's own number.
             _pBasis = report.ReportPBasis ?? "P";
-            _p = FertilizerUi.Convert(p, "P", _pBasis);
+            _p = report.PAsReported ?? FertilizerUi.Convert(p, P, "P", _pBasis);
         }
         if (report.K is { } k)
         {
@@ -427,6 +429,11 @@
             if (ph < Ph.Min || ph > Ph.Max) report.Notes.Add($"Soil pH {ph:0.0} is outside the slider, so it shows {_ph:0.0}.");
         }
         _missing = report.Missing.ToHashSet();
+        // A value the report does not give is left "Not set": the farmer must enter it before getting advice.
+        if (_missing.Contains("N")) _n = null;
+        if (_missing.Contains("P")) _p = null;
+        if (_missing.Contains("K")) _k = null;
+        if (_missing.Contains("pH")) _ph = null;
         _reportId = report.ReportId;
         _reportComplete = report.Missing.Count == 0;
         _reportEdited = false;
@@ -454,11 +461,16 @@
         if (selected is null) errors["normId"] = "Please choose your crop.";
         if (string.IsNullOrEmpty(_soil)) errors["soilType"] = "Please choose your soil type.";
         if (_acres is not { } acres || acres < 0.1m || acres > 1000m) errors["areaAcres"] = "Enter your area in acres (0.1 to 1000).";
-        if (_n is null || _p is null || _k is null || _ph is null) errors["n"] = "Please set all four soil test values.";
+        if (_missing.Count > 0)
+        {
+            foreach (var code in _missing) errors[code.ToLowerInvariant()] = $"Set {NutrientNames.GetValueOrDefault(code, code)}: it is not in your report.";
+            errors["missing"] = $"Your report has no usable {string.Join(", ", _missing.Select(c => NutrientNames.GetValueOrDefault(c, c)))}. Enter it from your soil card (move the slider or type the value) before getting advice.";
+        }
+        else if (_n is null || _p is null || _k is null || _ph is null) errors["n"] = "Please set all four soil test values.";
         if (errors.Count > 0)
         {
             _errors = errors;
-            _formError = "Please check the marked fields.";
+            _formError = errors.TryGetValue("missing", out var missingText) ? missingText : "Please check the marked fields.";
             return;
         }
 

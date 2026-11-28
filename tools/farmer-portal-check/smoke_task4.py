@@ -82,7 +82,8 @@ def main():
     check("soil report: linked farmer gets the demo report", st == 200 and report.get("available") and report.get("reportCode") == "DEMO-T4-RPT-1", report)
     check("soil report: N 180 / P 18 kg P2O5 = 7.86 kg P / K 95 / pH 8.1, P shown as P2O5, nothing missing",
           report.get("n") == 180 and report.get("p") == 7.86 and report.get("reportPBasis") == "P2O5" and report.get("k") == 95
-          and report.get("ph") == 8.1 and not report.get("missing") and not report.get("notes"), report)
+          and report.get("ph") == 8.1 and not report.get("missing") and not report.get("notes")
+          and report.get("pAsReported") == 18, report)
     st, none, _ = call(base, "GET", "api/Farmer/fertilizer/soil-report", token=other)
     check("soil report: an unlinked farmer gets a plain message", st == 200 and not none.get("available") and none.get("message"), none)
 

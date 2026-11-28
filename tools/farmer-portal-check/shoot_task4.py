@@ -145,12 +145,38 @@ def screens(browser, base, out, storage, size):
     ctx.close()
 
 
+def partial(browser, base, out, storage, size):
+    """A report without potassium: K stays "Not set" and advice is refused until the farmer enters it."""
+    ctx = shoot.new_context(browser, size, storage)
+    page = ctx.new_page()
+    open_page(page, base)
+    page.click("text=Use my soil report")
+    page.wait_for_selector(".fpfz-report.fp-alert--success", timeout=20000)
+    shoot.settle(page, 600)
+    crop(page, "Paddy", "Medium duration", "Alluvial Soil", 1)
+    page.click(".fpfz-actionbar .fp-btn--primary")
+    page.wait_for_selector(".fp-alert--error", timeout=10000)
+    shoot.settle(page, 400)
+    text = page.inner_text(".fp-alert--error")
+    if "no usable potassium" not in text or page.query_selector(".fpfr") is not None:
+        sys.exit(f"partial report: advice was not blocked ({text!r})")
+    scroll_to(page, ".fp-zone:has(#fz-k)")
+    shoot.shot(page, out, f"fertilizer-partial-blocked-{size}", full=False)
+    # Entering K unblocks it.
+    set_value(page, "fz-k", 140)
+    submit(page)
+    print(f"  partial report ({size}): blocked until K was entered, then advice shown")
+    ctx.close()
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--base", default="http://localhost:5027")
     ap.add_argument("--out", required=True)
     ap.add_argument("--phone", default="6777777703", help="local test farmer linked to the demo soil report")
     ap.add_argument("--sizes", default="phone,desktop")
+    ap.add_argument("--partial-phone", default="", help="local test farmer linked to the report without potassium (e.g. 6614843176)")
+    ap.add_argument("--only-partial", action="store_true")
     args = ap.parse_args()
     base = args.base.rstrip("/")
     shoot.refuse_non_local(base)
@@ -165,8 +191,17 @@ def main():
         shoot.farmer_sign_in(page, base, args.phone)
         storage = ctx.storage_state()
         ctx.close()
-        for size in sizes:
-            screens(browser, base, out, storage, size)
+        if not args.only_partial:
+            for size in sizes:
+                screens(browser, base, out, storage, size)
+        if args.partial_phone:
+            ctx = shoot.new_context(browser, sizes[0])
+            page = ctx.new_page()
+            shoot.farmer_sign_in(page, base, args.partial_phone)
+            pstorage = ctx.storage_state()
+            ctx.close()
+            for size in sizes:
+                partial(browser, base, out, pstorage, size)
         browser.close()
 
 
