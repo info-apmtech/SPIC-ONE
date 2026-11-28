@@ -772,3 +772,133 @@ scope filter.
   old rows can be deleted at any time (only today's are read).
 - The library has few published items today; answers (the basic ones especially) are only as good as the library.
 - An agronomist should read a sample of real answers (Tamil especially) before go-live.
+
+## 6. Leaf check, the leaf-photo deficiency check (Task 6, 2026-11-28)
+
+### What it does
+
+- **Leaf check** `/farmer/leaf-check` (third home tile "Leaf check", More sheet after Ask SPIC AI, desktop sidebar under
+  Ask SPIC AI). The farmer picks the crop (chips; profile crops first and the first one chosen), takes a photo ("Take a
+  photo" opens the back camera: `<InputFile capture="environment">`) or chooses one from the gallery, sees the preview
+  (Retake / Another photo), optionally says which leaves have the problem (Older / Young / All / Not sure) and taps
+  "Check my leaf". Tips for a good photo: one leaf, daylight, plain background (white paper or plain cloth), sharp. The
+  browser shrinks the photo to a 1600 px JPEG first (`RequestImageFileAsync`; falls back to the original file up to 8 MB).
+- While it is checked, the preview shows a scanning line and "Checking your leaf..." with the three steps.
+- **Result** (`Components/FarmerPortal/LeafCheckResultView.razor`): summary band (photo, condition, confidence bar with
+  Quite sure / Fairly sure / Not sure, the top nutrients, "Checked by SPIC AI" or the gold **"Basic colour check"** tag and
+  why), **Likely nutrients** (likelihood bars), **What we saw** (pattern, a six-step leaf colour chart with the score,
+  green / yellow / brown shares, which leaves the farmer named, the symptoms), **What to do** (the steps, then per likely
+  nutrient the TNAU correctives: Soil / Leaf spray, product, dose with grams per litre, note, source link; nitrogen links
+  to Fertilizer advice), the soil-test strip, then Get a soil test / Ask my MDO / Check another leaf / My past checks and
+  the disclaimer "AI suggestion from a photo. Confirm with a soil test or your MDO." (basic checks: "Basic colour check from
+  the leaf colours only, not an expert diagnosis. ..."). Not a leaf: "This does not look like a leaf" with retake tips.
+- **My past leaf checks** `/farmer/leaf-check/history` (latest 30, 240 px thumbnails) and `/farmer/leaf-check/history/{id}`
+  (the saved result with the photo, and "Delete this check and its photo" with a confirm dialog).
+- **Daily cap**: 10 checks per farmer per IST day (`FarmerPortal:LeafCheckDailyLimit`); the hero shows "N of 10 checks left
+  today"; at the cap a "That's all for today" card. Deleted checks still count.
+
+### Endpoints (`SpicAPI/Controllers/FarmerLeafCheckController.cs`, Farmer role, scoped to the caller)
+
+| Method | Route | Notes |
+|---|---|---|
+| GET | `api/Farmer/leaf-check/status` | `LeafCheckStatusDto`: `dailyLimit`, `usedToday`, `leftToday`, `resetsAtUtc`, `fullCheck` (key set, switched on, budget left), `crops`, `maxPhotoBytes` |
+| POST | `api/Farmer/leaf-check` (multipart `photo`, `crop`, `leafAge`) | 200 `LeafCheckResultDto`; 400 `{ message, errors: { photo / crop / leafAge } }` (no photo, over 8 MB, not JPEG / PNG / WebP by magic bytes, HEIC, unreadable, under 64 px / over 60 MP, unknown crop); 429 `{ message, retryAfterSeconds, resetsAtUtc, dailyLimit }` + `Retry-After` |
+| GET | `api/Farmer/leaf-check/history` | latest 30 `LeafCheckSummaryDto` (condition, top nutrient, confidence, provider, colour score) |
+| GET | `api/Farmer/leaf-check/{id}` | one check in full; 404 for anyone else's or a deleted one |
+| GET | `api/Farmer/leaf-check/{id}/image[?thumb=true]` | the stored JPEG (owner only, `Cache-Control: private`); `thumb` = 240 px |
+| DELETE | `api/Farmer/leaf-check/{id}` | 204; soft delete: the row stays (daily count), the photo file is removed |
+
+Contracts: `SPIC.Core/DTOs/LeafCheckDtos.cs`. Client: `Services/FarmerLeafCheckApi.cs` (no toasts).
+
+### How a check is made
+
+1. Validate the form; read at most 8 MB; the format comes from the first bytes only (JPEG `FF D8 FF`, PNG, WebP
+   `RIFF....WEBP`; HEIC gets its own message), never from the client's content type (`LeafCheckRules.ValidateUpload`).
+2. `SpicAPI/Services/LeafImageProcessor.cs` (SkiaSharp 3.119.2, the version PDFtoImage already brought; explicit reference
+   added): decode (big JPEGs at a reduced scale), turn upright from the EXIF orientation, transparent parts on white,
+   shrink to at most 1024 px, re-encode as JPEG quality 80 (no EXIF / GPS survives), plus a copy of at most 256 px for the
+   metrics.
+3. Colour metrics (`SPIC.Core/FarmerPortal/LeafColorMetrics.cs`, pure; see below).
+4. The photo is written to `Uploads/FarmerLeaf/{userId}/{guid}.jpg` (the API's Uploads root, as CommunityController); then,
+   under `pg_advisory_xact_lock(hashtextextended('fleaf:' + userId, 0))`, today's checks are counted and the row inserted
+   (over the cap: the file is removed, 429). `api/Community/file/...` refuses the FarmerLeaf folder.
+5. Under 5 % leaf pixels: no AI call ("not a leaf"). Otherwise one unit of the shared daily AI budget
+   (`IFarmerAiBudget`, kind `LeafCheck`); allowed: Claude vision (`LeafVisionService` through the shared
+   `AnthropicMessagesClient`, same key / model / endpoint / `Assistant:FarmerEffort`): one user message with the image
+   block (base64 JPEG) and a text block (crop, the farmer's leaf note, the metrics), `output_config.format` = the JSON
+   schema (structured output), max 1500 tokens. The answer is validated by `LeafVision.Parse`.
+6. No key / switched off / budget used up / unreadable or failed answer: the **basic colour check**
+   (`LeafCheckRules.RuleDiagnosis`), labelled with the reason (`no-key`, `paused`, `budget`, `ai-failed`, `not-a-leaf`).
+7. Correctives for the likely nutrients (likelihood >= 0.25, top three): the crop's own rows, else the general rows.
+8. The result is saved as JSON on the row (`Provider` ai / basic, `Condition`, `TopNutrient`, `Confidence`).
+
+### Colour metrics and rules (pinned by the harness)
+
+- Leaf pixels: saturation >= 0.18 and value >= 0.12; green hue 70-170 deg, yellow 40-70 deg, brown below 40 deg (or a dark
+  red-brown) with value <= 0.65 and within 6 % of the shorter side of green / yellow tissue. White / grey / black, blue,
+  bright red, light tan (palm, card) and brown far from the leaf (table, soil) are background.
+- Measured: leaf share of the photo, mean hue, green ratio G/(R+G+B), green / yellow / brown shares, brown share of the
+  leaf's edge band (distance to the background <= max(2, 6 % of sqrt(leaf pixels)); the photo border is not an edge) and
+  of the inside, mixed-block share (blocks of 1/24 of the shorter side with >= 15 % yellow that also hold >= 10 % green
+  and >= 20 % yellow), uniformity = 1 - mixed share.
+- Leaf colour score 1-6 (IRRI LCC idea, not calibrated): mean hue < 55 deg = 1; else by the brightness of the mean colour
+  0.78+ = 1, 0.68+ = 2, 0.58+ = 3, 0.48+ = 4, 0.38+ = 5, darker = 6; a hue below 75 deg caps it at 2.
+- Pattern: none (yellow < 8 %, brown < 5 %), margin (brown >= 5 %, edge band >= 25 % brown and >= 2x the inside),
+  interveinal (yellow >= 8 %, mixed >= 40 %), uniform (yellow >= 60 %), patchy (other yellow), spots (brown only).
+- Basic colour check (full table in `.superpowers/sdd/2026-11-27-farmer-portal/task-6-report.md`): uniform yellow on older /
+  unknown leaves: N 0.6 (S 0.25), on young leaves: S 0.5 (N 0.3); interveinal on young leaves: Fe 0.55, Zn 0.45, Mn 0.3,
+  on older: Mg 0.6; brown edges on older: K 0.6, on young: Ca / B; confidence always <= 0.5.
+
+### Config keys
+
+| Key | Meaning |
+|---|---|
+| `FarmerPortal:LeafCheckDailyLimit` | checks per farmer per IST day; empty = 10 (placeholder in `SpicAPI/appsettings.json`) |
+| `FarmerPortal:AiKindDailyLimit:LeafCheck` | (Task 5) optional sub-limit of photo checks inside the global AI budget |
+| `FarmerPortal:AssistantEnabled`, `FarmerPortal:AssistantGlobalDailyLimit` | (Task 5) the kill switch and the global budget also cover leaf checks |
+| `Assistant:AnthropicApiKey`, `Model`, `Endpoint`, `FarmerEffort` | (existing) the vision call uses the same settings |
+
+### Tables (migration `V40_LeafCheck`)
+
+- `LeafDiagnoses` (Id bigint, FarmerUserId, Crop varchar(40), LeafAgeHint, ImagePath varchar(200)?, ImageWidth / Height /
+  Bytes, MetricsJson, ResultJson?, Provider ai / basic, BasicReason?, Condition?, TopNutrient?, Confidence?, CreatedAtUtc,
+  IsDeleted, DeletedAtUtc?); index (FarmerUserId, CreatedAtUtc). No foreign keys, like the other farmer tables.
+- `NutrientCorrectives` (Id, Nutrient, Crop? (null = general), Product, Method Soil / Foliar, Dose, Note, Source, SourceUrl,
+  SortOrder, IsActive): 50 seeded rows (`Spic.Infrastructure/Data/NutrientCorrectiveSeed.cs`; general rows for all ten
+  nutrients, own rows for Paddy, Cotton, Groundnut, Maize, Banana), read on TNAU Agritech pages through the Internet
+  Archive.
+
+### Cost (Claude Sonnet 5: $2 / $10 per million input / output tokens)
+
+One check: image ~1,050 tokens (1024 x 768) + prompt, schema and metrics ~1,000 = ~2,100 input ($0.004) + JSON answer and
+low-effort thinking ~500 output ($0.005) = **~$0.01 typical, ~$0.02 worst** (1500 output tokens). 10 a day per farmer =
+~$0.10. Leaf checks share `AssistantGlobalDailyLimit` (2000 AI calls a day) with the chat.
+
+### Tests and tools
+
+- Harness: `FarmerPortalLeafCheckTests` (pixel classes; metrics on synthetic bitmaps: all green, half yellow, uniform
+  yellow, interveinal stripes, brown edges, brown spots, a leaf on white, a brown table, a blank page; LCC mapping;
+  pattern thresholds; the rule fallback; JSON parsing incl. fences, truncated / array / unknown condition, codes,
+  percentages, duplicates, limits; magic bytes and sizes; the image pipeline incl. EXIF orientation 6 and no EXIF / GPS in
+  the output, PNG transparency, WebP, corrupt and tiny files; the vision request; the correctives seed and choice; the
+  result labels; screen helpers, tile, More sheet and routes); updated tile / More-sheet expectations.
+- `python tools/farmer-portal-check/make_leaves.py --out <dir>` draws the test photos (healthy, yellow, interveinal and
+  brown-edged leaves, a printed page, an EXIF-rotated photo with GPS, a 2400 px PNG, a PDF named .jpg). Nothing downloaded.
+- Smoke: `python tools/farmer-portal-check/smoke_task6.py --leaves <dir>` (no key: 72 checks), `--mode stub --record <f>`
+  against `fake_anthropic.py` (now answers image requests with vision JSON; `POST /__mode {"vision": "auto|malformed|fail|
+  refuse|notleaf"}`), `--mode kill`. `cleanup_task6_local.sql` resets the test farmers (delete `SpicAPI/Uploads/FarmerLeaf`
+  by hand).
+- Screenshots: `python tools/farmer-portal-check/shoot_task6.py --out ... --set stub|basic --leaves <dir>`.
+
+### Left / for the owner
+
+- Prod migration `V40_LeafCheck` (after V39). The API container needs SkiaSharp's Linux native library: the explicit
+  `SkiaSharp.NativeAssets.Linux.NoDependencies` 3.119.2 reference (already brought by PDFtoImage) covers it.
+- Leaf photos live in the API's `Uploads` (Azure Files in production): about 100-200 KB each; a deleted check removes its
+  file; nothing purges old photos yet.
+- **An agronomist should sign off the correctives**, especially the three general values taken from the task brief:
+  magnesium sulphate 1 % (TNAU cotton uses 2 %), ferrous sulphate 0.5 % + citric acid 0.1 % (TNAU groundnut 1 %, paddy
+  2-3 %), urea 1-2 % (TNAU paddy 1 %).
+- The basic colour check is a hint: lighting changes the colour score, and a brown background right next to the leaf
+  (soil, a dark hand) reads as dry edges. The tips ask for a plain background.
+- Android WebView camera capture (`capture="environment"`) was not tried on a device in this task.
