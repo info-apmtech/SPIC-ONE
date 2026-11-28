@@ -90,13 +90,17 @@
                     <h3 class="cb-card-title">Cancellation Reason</h3>
                     <div class="cb-form-group">
                         <label class="cb-form-label">Select reason for cancellation</label>
-                        <select class="cb-form-control" @bind="_selectedReason" disabled="@_preview.AlreadyRequested">
+                        <select class="@ReasonSelectClass" @bind="_selectedReason" @bind:after="OnReasonSelected" disabled="@_preview.AlreadyRequested">
                             <option value="" disabled selected>Choose a reason</option>
                             @foreach (var reason in _preview.CancellationReasons)
                             {
                                 <option value="@reason">@reason</option>
                             }
                         </select>
+                        @if (_showReasonValidation)
+                        {
+                            <span class="cb-validation-message">Please select a cancellation reason.</span>
+                        }
                     </div>
                 </div>
 
@@ -309,11 +313,15 @@
     private bool _isSubmitting;
     private string? _loadError;
     private string _selectedReason = "";
+    private bool _showReasonValidation;
     private string? _cancellationReference;
     private string? _approvalStatus;
 
     private bool showConfirmPopup = false;
     private bool showSuccessPopup = false;
+
+    private string ReasonSelectClass =>
+        _showReasonValidation ? "cb-form-control cb-form-control-invalid" : "cb-form-control";
 
     private static readonly string FallbackImage =
         "_content/SPIC.MauiBlazorApp.Shared/Images/Gallery/image20.jpg";
@@ -366,10 +374,19 @@
     {
         if (string.IsNullOrWhiteSpace(_selectedReason))
         {
+            _showReasonValidation = true;
             Toast.Warning("Please select a reason for cancellation.");
             return;
         }
         showConfirmPopup = true;
+    }
+
+    private void OnReasonSelected()
+    {
+        if (!string.IsNullOrWhiteSpace(_selectedReason))
+        {
+            _showReasonValidation = false;
+        }
     }
 
     private void CloseConfirmPopup()
